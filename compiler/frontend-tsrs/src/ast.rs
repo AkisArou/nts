@@ -254,11 +254,16 @@ impl<'p, S: ViewPhase> Node<'p, S> {
                 });
             }
             NodeData::MetaProperty(data) => {
-                attributes.meta_property = Some(if data.keyword_token == Kind::ImportKeyword {
-                    MetaProperty::ImportMeta
-                } else {
-                    MetaProperty::NewTarget
-                });
+                attributes.meta_property =
+                    Some(if tsrs_ast::is_import_source_meta_property(native) {
+                        MetaProperty::ImportSource
+                    } else if tsrs_ast::is_import_defer_meta_property(native) {
+                        MetaProperty::ImportDefer
+                    } else if data.keyword_token == Kind::ImportKeyword {
+                        MetaProperty::ImportMeta
+                    } else {
+                        MetaProperty::NewTarget
+                    });
             }
             _ => {}
         }
@@ -371,6 +376,8 @@ pub enum ExportAssignmentKind {
 pub enum MetaProperty {
     ImportMeta,
     NewTarget,
+    ImportSource,
+    ImportDefer,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HeritageKind {
@@ -547,7 +554,7 @@ impl<'p, S: ViewPhase> List<'p, S> {
         let _scope = self.parent.file.native_scope();
         match self.storage {
             ListStorage::List(list) => list.has_trailing_comma(),
-            ListStorage::Modifiers(list) => list.has_trailing_comma(),
+            ListStorage::Modifiers(list) => list.list.has_trailing_comma(),
             ListStorage::Slice(_) => false,
         }
     }

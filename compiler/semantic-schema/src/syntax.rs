@@ -1,13 +1,15 @@
-//! `ast.SyntaxKind` values, for tsgo 7.0.2.
+//! Stable nts syntax tags, initially numbered from TypeScript 7.0.2.
 //!
 //! Lives with the schema rather than with the transport because
 //! [`crate::NodeKind::Syntax`] stores one of these numbers: without the table
 //! the snapshot's node kinds are opaque, so any consumer needs it and none
 //! should have to depend on the frontend to get it.
 //!
-//! Read off a real encoded program rather than transcribed from the Go `iota`
-//! list, and pinned by a test against a checked-in fixture — a tsgo bump that
-//! renumbers a kind should fail loudly rather than silently mis-identify nodes.
+//! Native kinds are projected into this table before capture. The role and
+//! child-layout exhaustiveness tests detect new upstream fields without
+//! renumbering these consumer tags.
+/// Source-phase imports have their own tag without shifting existing syntax.
+pub const SOURCE_KEYWORD: u16 = 352;
 pub const NUMERIC_LITERAL: u16 = 8;
 /// `123n`. Its own kind, because a `bigint` is its own type: TypeScript refuses
 /// to mix one with a `number` at all, which is what lets the lowering treat the
@@ -58,6 +60,8 @@ pub const QUESTION_QUESTION_EQUALS_TOKEN: u16 = 77;
 pub const MINUS_TOKEN: u16 = 40;
 pub const ASTERISK_TOKEN: u16 = 41;
 pub const ASTERISK_ASTERISK_TOKEN: u16 = 42;
+pub const PLUS_PLUS_TOKEN: u16 = 45;
+pub const MINUS_MINUS_TOKEN: u16 = 46;
 pub const SLASH_TOKEN: u16 = 43;
 pub const PERCENT_TOKEN: u16 = 44;
 pub const LESS_THAN_LESS_THAN_TOKEN: u16 = 47;
@@ -67,6 +71,7 @@ pub const AMPERSAND_TOKEN: u16 = 50;
 pub const BAR_TOKEN: u16 = 51;
 pub const CARET_TOKEN: u16 = 52;
 pub const EXCLAMATION_TOKEN: u16 = 53;
+pub const TILDE_TOKEN: u16 = 54;
 pub const AMPERSAND_AMPERSAND_TOKEN: u16 = 55;
 /// `??`, which differs from `||` in what it treats as absent: only `null` and
 /// `undefined`, where `||` takes any falsy value.
@@ -209,7 +214,7 @@ pub const TEMPLATE_TAIL: u16 = 17;
 /// order with the static field initialisers beside it.
 pub const CLASS_STATIC_BLOCK: u16 = 176;
 pub const CONSTRUCTOR: u16 = 177;
-/// `get x() { … }`. Immediately after [`CONSTRUCTOR`] in tsgo's enumeration,
+/// `get x() { … }`. Immediately after [`CONSTRUCTOR`] in the normalized tag table,
 /// which is where TypeScript's own `SyntaxKind` puts it.
 pub const GET_ACCESSOR: u16 = 178;
 /// `set x(v) { … }`.
@@ -236,11 +241,16 @@ pub const TAGGED_TEMPLATE_EXPRESSION: u16 = 216;
 /// One substitution and the literal text that follows it.
 pub const TEMPLATE_SPAN: u16 = 240;
 pub const PROPERTY_ACCESS_EXPRESSION: u16 = 212;
+pub const JSX_SELF_CLOSING_ELEMENT: u16 = 286;
+pub const JSX_OPENING_ELEMENT: u16 = 287;
+pub const JSX_CLOSING_ELEMENT: u16 = 288;
 pub const ELEMENT_ACCESS_EXPRESSION: u16 = 213;
 pub const TYPE_ASSERTION_EXPRESSION: u16 = 217;
 pub const PARENTHESIZED_EXPRESSION: u16 = 218;
 pub const AS_EXPRESSION: u16 = 235;
 pub const NON_NULL_EXPRESSION: u16 = 236;
+/// `small`: 0 = import.meta, 1 = new.target, 2 = import.source,
+/// 3 = import.defer. Phase callees are grammar, not independent expressions.
 pub const META_PROPERTY: u16 = 237;
 pub const SATISFIES_EXPRESSION: u16 = 239;
 pub const CONDITIONAL_EXPRESSION: u16 = 228;
@@ -272,6 +282,7 @@ pub const ENUM_DECLARATION: u16 = 267;
 /// carry the headers its declarations describe; nothing else reads it.
 pub const MODULE_DECLARATION: u16 = 268;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
+pub const TYPE_REFERENCE: u16 = 184;
 /// `T` in `class Box<T>`: the declaration of a type parameter, whose parent
 /// is the class, interface or function that owns it.
 pub const TYPE_PARAMETER: u16 = 169;
@@ -293,6 +304,7 @@ pub const SOURCE_FILE: u16 = 307;
 /// `import ... from "..."`. Read off real output: a file with exactly two
 /// imports has exactly two children of this kind.
 pub const IMPORT_DECLARATION: u16 = 273;
+pub const IMPORT_CLAUSE: u16 = 274;
 /// `{ nextTick }` in `import { nextTick } from "./tick"`: the identifier under
 /// it binds a local name to the declaring module's, and is not a read of it.
 /// Read off real output: the parent of `nextTick` in exactly that import.
@@ -351,8 +363,7 @@ pub mod postfix_operator {
 
 /// Whether a syntax kind is a *type* rather than an expression.
 ///
-/// A transcription of tsgo's `ast.IsTypeNodeKind`, and it has to be one rather
-/// than an approximation: a call's children arrive flattened, so
+/// This classification must be complete rather than approximate: a call's children arrive flattened, so
 /// `new Box<number>([1, 2, 3])` reaches a lowering as
 /// `[Box, number, [1, 2, 3]]` with nothing structural to say that the middle one
 /// is a type argument. Guessing wrong in one direction lowers a type as an
@@ -393,18 +404,18 @@ pub fn is_modifier(kind: u16) -> bool {
     )
 }
 
-/// tsgo's `NodeFlagsAmbient`: the node is in an ambient context -- a
+/// The node is in an ambient context -- a
 /// declaration file, or under a `declare` (including `declare global`).
 pub const NODE_FLAGS_AMBIENT: u32 = 1 << 23;
+/// Every link belonging to an optional chain, including links without `?.`.
+pub const NODE_FLAGS_OPTIONAL_CHAIN: u32 = 1 << 5;
 
-/// Whether a kind is one of tsgo's `JSDoc` nodes: a documentation comment or a
-/// part of one, from `KindFirstJSDocNode` (`KindJSDocTypeExpression`) to
-/// `KindLastJSDocNode` (`KindJSDocImportTag`).
+/// Whether a normalized kind is a documentation comment or part of one.
 #[must_use]
 pub fn is_jsdoc(kind: u16) -> bool {
-    /// `KindJSDocTypeExpression`, tsgo's `KindFirstJSDocNode`.
+    /// First normalized documentation kind: a `JSDoc` type expression.
     const FIRST_JSDOC_NODE: u16 = 308;
-    /// `KindJSDocImportTag`, tsgo's `KindLastJSDocNode`.
+    /// Last normalized documentation kind: a `JSDoc` import tag.
     const LAST_JSDOC_NODE: u16 = 343;
 
     (FIRST_JSDOC_NODE..=LAST_JSDOC_NODE).contains(&kind)
@@ -412,9 +423,9 @@ pub fn is_jsdoc(kind: u16) -> bool {
 
 #[must_use]
 pub fn is_type_node(kind: u16) -> bool {
-    /// `KindTypePredicate`, tsgo's `KindFirstTypeNode`.
+    /// First normalized type-node kind: a type predicate.
     const FIRST_TYPE_NODE: u16 = 183;
-    /// `KindImportType`, tsgo's `KindLastTypeNode`.
+    /// Last normalized type-node kind: an import type.
     const LAST_TYPE_NODE: u16 = 206;
 
     matches!(
@@ -442,13 +453,8 @@ pub fn is_type_node(kind: u16) -> bool {
 /// knowing that is the difference between a number in a report and an item on a
 /// queue.
 ///
-/// Transcribed from tsgo's `iota` list -- which the constants above deliberately
-/// are not, because a mis-numbered *constant* mis-identifies nodes silently
-/// while a mis-numbered *name* only misspells a diagnostic. It is checked
-/// against every constant in this file all the same, and that check found the
-/// first attempt off by one: two entries carry trailing comments, the parse
-/// skipped them, and every name after came out shifted. `216` read as a type
-/// assertion when it is a tagged template.
+/// Checked against every constant in this file. A mistyped name affects a
+/// diagnostic; a mistyped kind would select the wrong lowering operation.
 #[must_use]
 pub fn name_of(kind: u16) -> Option<&'static str> {
     KIND_NAMES
@@ -810,4 +816,5 @@ static KIND_NAMES: &[(u16, &str)] = &[
     (349, "synthetic reference expression"),
     (350, "not emitted type element"),
     (351, "count"),
+    (352, "source keyword"),
 ];

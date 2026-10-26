@@ -233,13 +233,20 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
             // reach, even when its result is primitive.
             TypeKind::Function(_) if effect.nested => return true,
             TypeKind::Any
+            | TypeKind::NonPrimitive
             | TypeKind::Unknown
             | TypeKind::Evolving
             | TypeKind::TypeParameter { .. }
             | TypeKind::Conditional { .. }
             | TypeKind::IndexedAccess { .. }
-            | TypeKind::Structured { .. }
+            | TypeKind::Structured
             | TypeKind::Unsupported { .. } => return true,
+            // A symbol is a primitive and cannot retain the object owner.
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::UniqueSymbol => {}
             _ => {}
         }
     }

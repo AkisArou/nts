@@ -27,24 +27,34 @@ fn content_addressed_case_roots_obey_their_contracts() {
 }
 
 #[test]
-fn a_materialised_case_reuses_the_real_frontend_capture() {
-    assert_frontend_reuse("assert.sameValue(1, 1);", 0);
+fn a_materialised_case_has_identical_native_captures_at_one_and_four_checkers() {
+    assert_frontend_capture("assert.sameValue(1, 1);", 0);
 }
 
 #[test]
-fn cached_checker_errors_keep_their_count_diagnostics_and_exit() {
+fn native_checker_errors_keep_their_count_diagnostics_and_exit() {
     // Plain-JS mode filters type-only errors; TS1189 is a real early error.
-    assert_frontend_reuse(
+    assert_frontend_capture(
         "for (const key = 0 in {}) {} for (const other = 0 in {}) {}",
         2,
     );
 }
 
-fn assert_frontend_reuse(text: &str, errors: usize) {
-    assert!(
-        nts_frontend_ts::tsgo::locate().is_some(),
-        "set NTS_TSGO; this test must measure the frontend"
-    );
+#[test]
+fn frontend_load_failure_is_distinct_from_completed_diagnostics() {
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("frontend")
+        .arg(repository().join(format!(
+            "target/missing-frontend-status-config-{}.json",
+            std::process::id()
+        )))
+        .arg("--no-acquire")
+        .output()
+        .expect("frontend load failure");
+    assert_eq!(output.status.code(), Some(1));
+}
+
+fn assert_frontend_capture(text: &str, errors: usize) {
     let repo = repository();
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -53,7 +63,6 @@ fn assert_frontend_reuse(text: &str, errors: usize) {
     let base = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("live-case-root-{}-{unique}", std::process::id()));
     let roots = base.join("inputs");
-    let cache = base.join("snapshots");
     let script = "import {caseRoot,workspace,materialise} from './tooling/census/project.ts';\n\
                   const result=caseRoot(d=>{workspace(d);materialise(d,process.argv[2]);},{base:process.argv[1]});\n\
                   process.stdout.write(JSON.stringify(result));";
@@ -71,18 +80,17 @@ fn assert_frontend_reuse(text: &str, errors: usize) {
     );
     let case: serde_json::Value = serde_json::from_slice(&output.stdout).expect("case root");
     let config = Path::new(case["root"].as_str().expect("root")).join("tsconfig.json");
-    let run = |cache_on| {
+    let run = |checkers: u16| {
         let output = Command::new(env!("CARGO_BIN_EXE_nts"))
             .arg("frontend")
             .arg(&config)
-            .args(["--decompose", "--calls"])
-            .env("NTS_SNAPSHOT_CACHE", &cache)
-            .env("NTS_NO_SNAPSHOT_CACHE", if cache_on { "0" } else { "1" })
+            .env("NTS_CHECKERS", checkers.to_string())
             .current_dir(&repo)
             .output()
             .expect("frontend");
-        assert!(
-            output.status.success() == (errors == 0),
+        assert_eq!(
+            output.status.code(),
+            Some(if errors == 0 { 0 } else { 2 }),
             "{}\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -95,7 +103,9 @@ fn assert_frontend_reuse(text: &str, errors: usize) {
                 .trim()
                 .to_owned()
         };
-        let trips = field("round trips").parse::<u64>().expect("trip count");
+        let nodes = field("nodes captured")
+            .parse::<u64>()
+            .expect("captured node count");
         let diagnostics = text
             .lines()
             .filter(|line| line.starts_with("  Error TS"))
@@ -110,26 +120,25 @@ fn assert_frontend_reuse(text: &str, errors: usize) {
             );
         }
         (
-            trips,
+            nodes,
             field("snapshot digest"),
             output.status.code(),
             diagnostics,
             stderr,
         )
     };
-    let cold = run(true);
-    let warm = run(true);
-    let disabled = run(false);
-    assert!(cold.0 > 0, "the cold control must ask the actual checker");
-    assert_eq!(warm.0, 0, "the warm request must avoid the checker");
-    assert!(disabled.0 > 0, "disabling reuse must ask again");
-    assert_eq!(cold.1, warm.1);
-    assert_eq!(cold.1, disabled.1);
-    assert_eq!((&cold.2, &cold.3, &cold.4), (&warm.2, &warm.3, &warm.4));
-    assert_eq!(
-        (&cold.2, &cold.3, &cold.4),
-        (&disabled.2, &disabled.3, &disabled.4)
+    let first = run(1);
+    let repeated = run(1);
+    let four = run(4);
+    assert!(
+        first.0 > 0,
+        "each request must capture the materialized program"
     );
+    assert_eq!(
+        first, repeated,
+        "repeating a native capture changes no facts"
+    );
+    assert_eq!(first, four, "checker count changes no facts or diagnostics");
     let cleanup = "import {collectCaseRoots} from './tooling/census/project.ts'; collectCaseRoots({base:process.argv[1],now:Date.now()+60000,maxAge:0});";
     let status = Command::new("node")
         .args(["--input-type=module", "-e", cleanup])

@@ -58,7 +58,7 @@ pub(crate) mod tag {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Key {
-    Utf8(String),
+    Utf8(nts_semantic_schema::JsText),
     Integer(i32),
     /// Bits rather than the float, so `NaN` interns with itself and `-0.0`
     /// does not intern with `0.0` -- both of which a JavaScript program can
@@ -74,7 +74,7 @@ enum Key {
 
 #[derive(Debug, Clone)]
 enum Entry {
-    Utf8(String),
+    Utf8(nts_semantic_schema::JsText),
     Integer(i32),
     Float(u32),
     Long(i64),
@@ -159,7 +159,11 @@ impl Pool {
     }
 
     pub fn utf8(&mut self, text: &str) -> u16 {
-        self.push(Key::Utf8(text.to_owned()), Entry::Utf8(text.to_owned()))
+        self.utf8_text(&text.into())
+    }
+
+    fn utf8_text(&mut self, text: &nts_semantic_schema::JsText) -> u16 {
+        self.push(Key::Utf8(text.clone()), Entry::Utf8(text.clone()))
     }
 
     /// A class, named the way the JVM names one: `java/lang/String`, with
@@ -173,6 +177,12 @@ impl Pool {
 
     pub fn string(&mut self, text: &str) -> u16 {
         let utf8 = self.utf8(text);
+        self.push(Key::String(utf8), Entry::String(utf8))
+    }
+
+    /// Java string constants preserve every UTF-16 unit in modified UTF-8.
+    pub fn string_text(&mut self, text: &nts_semantic_schema::JsText) -> u16 {
+        let utf8 = self.utf8_text(text);
         self.push(Key::String(utf8), Entry::String(utf8))
     }
 
@@ -243,7 +253,7 @@ impl Pool {
                 Entry::Filler => {}
                 Entry::Utf8(text) => {
                     out.push(tag::UTF8);
-                    let bytes = modified_utf8(text);
+                    let bytes = modified_utf8_units(text.encode_utf16());
                     // The length is a `u2`, so a literal past 65,535 bytes has
                     // no representation. `Class::to_bytes` refuses one before
                     // reaching here; this truncation is unreachable and is
@@ -301,6 +311,11 @@ impl Pool {
     pub fn utf8_length(text: &str) -> usize {
         modified_utf8(text).len()
     }
+
+    #[must_use]
+    pub fn string_text_length(text: &nts_semantic_schema::JsText) -> usize {
+        modified_utf8_units(text.encode_utf16()).len()
+    }
 }
 
 /// Java's modified UTF-8, which is not UTF-8.
@@ -319,9 +334,13 @@ impl Pool {
 // state a range check the mask has just performed.
 #[allow(clippy::cast_possible_truncation)]
 fn modified_utf8(text: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(text.len());
-    for ch in text.chars() {
-        let code = ch as u32;
+    modified_utf8_units(text.encode_utf16())
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn modified_utf8_units(units: impl IntoIterator<Item = u16>) -> Vec<u8> {
+    let mut out = Vec::new();
+    for code in units {
         if code == 0 {
             out.extend_from_slice(&[0xC0, 0x80]);
         } else if code < 0x80 {
@@ -329,20 +348,10 @@ fn modified_utf8(text: &str) -> Vec<u8> {
         } else if code < 0x800 {
             out.push(0xC0 | (code >> 6) as u8);
             out.push(0x80 | (code & 0x3F) as u8);
-        } else if code < 0x1_0000 {
+        } else {
             out.push(0xE0 | (code >> 12) as u8);
             out.push(0x80 | ((code >> 6) & 0x3F) as u8);
             out.push(0x80 | (code & 0x3F) as u8);
-        } else {
-            // The surrogate pair, each half encoded as three bytes.
-            let value = code - 0x1_0000;
-            let high = 0xD800 + (value >> 10);
-            let low = 0xDC00 + (value & 0x3FF);
-            for half in [high, low] {
-                out.push(0xE0 | (half >> 12) as u8);
-                out.push(0x80 | ((half >> 6) & 0x3F) as u8);
-                out.push(0x80 | (half & 0x3F) as u8);
-            }
         }
     }
     out

@@ -11,7 +11,7 @@
 //! 2^31 times 2^31, is past the safe-integer range, where a whole number no
 //! longer adds exactly, so it stays a double.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -21,7 +21,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const SOURCE: &str = r"
 export function small(rounds: number): number {
@@ -59,10 +59,6 @@ fn carried(program: &hir::Program, name: &str) -> Vec<HirType> {
 
 #[test]
 fn an_accumulator_bounded_by_a_32_bit_count_is_an_integer() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP accumulator widths: tsgo is required");
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
@@ -74,7 +70,8 @@ fn an_accumulator_bounded_by_a_32_bit_count_is_an_integer() {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");

@@ -1253,13 +1253,13 @@ node tooling/conformance/ecmascript/test262.ts --under test/built-ins/Temporal/P
 node tooling/conformance/ecmascript/test262.ts --under test/intl402/NumberFormat
 node tooling/conformance/ecmascript/test262.ts --under test/intl402/Collator
 node tooling/conformance/ecmascript/test262.ts --under test/intl402/DurationFormat
-NTS_BACKEND=c NTS_RC=1 NTS_TSGO=target/tsgo target/debug/nts check tooling/conformance/ecmascript/date-compiled/tsconfig.iso-parser.json
+NTS_BACKEND=c NTS_RC=1 target/debug/nts check tooling/conformance/ecmascript/date-compiled/tsconfig.iso-parser.json
 node runtime/ecmascript/tools/icu.ts --pinned-native --all-backends --sanitize
 node runtime/ecmascript/tools/icu.ts --pinned-native --bench
 node runtime/ecmascript/tools/icu.ts --pinned-native --android
 node runtime/ecmascript/tools/icu.ts --pinned-native --date-fields --android-device emulator-5560
-NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --duration --all-backends --sanitize
-NTS_BIN=target/debug/nts NTS_TSGO=target/tsgo node runtime/ecmascript/tools/icu.ts --pinned-native --calendar --all-backends --sanitize
+NTS_BIN=target/debug/nts node runtime/ecmascript/tools/icu.ts --pinned-native --duration --all-backends --sanitize
+NTS_BIN=target/debug/nts node runtime/ecmascript/tools/icu.ts --pinned-native --calendar --all-backends --sanitize
 ```
 
 The DurationFormat command is a required pending gate and currently exposes the

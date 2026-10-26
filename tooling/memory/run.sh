@@ -55,8 +55,8 @@
 set -eu
 cd "$(cd "$(dirname "$0")/../.." && pwd)"
 
-NTS_TSGO=${NTS_TSGO:-$PWD/target/tsgo}
-export NTS_TSGO
+NTS_CHECKERS=1
+export NTS_CHECKERS
 out=target/memory
 mkdir -p "$out"
 

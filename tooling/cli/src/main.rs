@@ -13,6 +13,7 @@ mod bind_header;
 mod bind_objc;
 mod bind_scratch;
 mod bind_winmd;
+mod checkers;
 mod emission;
 mod expect_ir;
 #[cfg(test)]
@@ -36,7 +37,7 @@ use nts_core::hir::facts;
 use nts_core::hir::{self, ArrayFill, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
 use nts_diagnostics::SourceLocations;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SCHEMA_VERSION;
 
 /// The tsconfig a command was pointed at, *and* its dependencies acquired.
@@ -89,7 +90,7 @@ fn acquire_to(tsconfig: &Utf8Path, report: &mut EmissionReport) -> Result<Utf8Pa
             // The checker resolves the program this compiler compiles, so it is
             // the authority on which specifier means which file. Without it,
             // acquisition falls back to reading manifests and says so.
-            tsgo: nts_frontend_ts::tsgo::locate(),
+            checker_count: checkers::from_process()?,
             ..nts_deps::Options::default()
         },
     )?;
@@ -225,7 +226,8 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
 /// `nts check`: run a compiled program and node side by side.
 fn check(rest: &[String]) -> Result<()> {
     let tsconfig = project(rest)?;
-    let report = nts_differential::check(&tsconfig, |source| for_project(source, &tsconfig))?;
+    let mut source = frontend_for(&tsconfig)?;
+    let report = nts_differential::check(&tsconfig, &mut source)?;
     if report.functions == 0 {
         println!(
             "nothing to check: no exported function has scalar arguments \
@@ -647,7 +649,15 @@ INSPECTING
   receivers    every field access, by what its receiver is typed as
 
   help         this
-  version      version, snapshot schema, and the pinned tsgo
+  version      version, snapshot schema, and the native frontend
+
+CHECKER
+  --checkers <n>     native checker count (1..256); overrides NTS_CHECKERS
+  NTS_CHECKERS       checker count for batch runners (1 per worker process)
+                     Default: the native compiler chooses its pool size
+
+`nts frontend` exit status
+  0 clean capture; 2 completed capture with checker errors; 1 capture failed
 
 `nts build` options
   --out <dir>        where artifacts go. Default `<project>/.nts/build`
@@ -721,10 +731,26 @@ fn arguments() -> Result<Option<Vec<String>>> {
     Ok(Some(given))
 }
 
+fn main() -> Result<std::process::ExitCode> {
+    let worker = std::thread::Builder::new()
+        .name("nts".to_owned())
+        .stack_size(nts_core::COMPILER_STACK_BYTES)
+        .spawn(run_command)
+        .context("starting the compiler thread")?;
+    match worker.join() {
+        Ok(Err(error)) if error.is::<CompletedFrontendDiagnostics>() => {
+            eprintln!("Error: {error}");
+            Ok(std::process::ExitCode::from(2))
+        }
+        Ok(result) => result.map(|()| std::process::ExitCode::SUCCESS),
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
+}
+
 // A dispatch table, one arm per command: it grows by one line a command, and
 // the usage test reads its arms as written, so it is not folded to fit.
 #[allow(clippy::too_many_lines)]
-fn main() -> Result<()> {
+fn run_command() -> Result<()> {
     let Some(given) = arguments()? else {
         return Ok(());
     };
@@ -732,11 +758,8 @@ fn main() -> Result<()> {
     match args.next().as_deref() {
         Some("frontend") => {
             let rest: Vec<String> = args.collect();
-            let decompose = rest.iter().any(|a| a == "--decompose");
-            let calls = rest.iter().any(|a| a == "--calls");
-            let constants = rest.iter().any(|a| a == "--constants");
             let tsconfig = project(&rest)?;
-            frontend(&tsconfig, decompose, calls, constants)
+            frontend(&tsconfig)
         }
         Some("build") => build(&args.collect::<Vec<String>>()),
         Some("check") => check(&args.collect::<Vec<String>>()),
@@ -935,7 +958,15 @@ fn main() -> Result<()> {
         Some("version") => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
-            println!("pinned tsgo {}", tsgo::PINNED_TSGO);
+            let frontend = nts_frontend_tsrs::VERSION;
+            println!(
+                "frontend tsrs {} ({})",
+                frontend.tsrs_version, frontend.tsrs_commit
+            );
+            println!("TypeScript commit {}", frontend.typescript_commit);
+            for patch in frontend.patches {
+                println!("tsrs local patch {} {}", patch.id, patch.sha256);
+            }
             binary_identity();
             Ok(())
         }
@@ -1243,15 +1274,9 @@ fn report_snapshot_diagnostics(snapshot: &nts_semantic_schema::SemanticSnapshot)
 
 /// Whether the type graph is whole, and if not why.
 ///
-/// Both of these mean the same thing downstream: a placeholder the lowering
-/// will refuse while naming the construct rather than the cause.
+/// A budget stop is explicit; native checker views have no transport-level
+/// unanswered-query state.
 fn report_graph_health(stats: &nts_frontend_ts::FrontendStats) {
-    if stats.types_unanswered > 0 {
-        println!(
-            "  UNANSWERED     {} type(s) the checker could not answer for",
-            stats.types_unanswered
-        );
-    }
     if stats.decomposition_exhausted {
         println!("  NOTE           budget exhausted; the type graph is partial");
     }
@@ -1314,49 +1339,41 @@ fn print_public_api(program: &hir::Program) {
     }
 }
 
-/// Where the frontend binary is.
-///
-/// `NTS_TSGO` first, then the one this repository builds, and only then the
-/// bare name through `PATH`. The bare name was the whole of it, in ten places,
-/// and it is the worst of the three defaults: it reaches an asdf shim on this
-/// machine, which fails; on a machine with some other `tsgo` installed it
-/// **succeeds**, against an unpinned frontend, which is quietly wrong rather
-/// than loudly broken.
-///
-/// Every gate script exports `NTS_TSGO`, so nothing in the gate ever saw it --
-/// `all.sh` carries a note about `0 of 128` from exactly this cause, and a
-/// two-binary measurement here reported zero diagnostics from both binaries,
-/// which reads like a perfect result and was 22 modules failing at the
-/// frontend.
-///
-/// [`tsgo::locate`] already answers this question and was called in one place.
-/// Its own doc says why it exists: a suite run with the variable unset "is
-/// green whatever it would have found". The same sentence is true of every
-/// command here.
-///
-/// The bare name is kept as the last resort rather than removed, for a checkout
-/// that has not run the bootstrap and a `tsgo` the user installed themselves.
-/// The frontend for the project at `tsconfig`, as the project configures
-/// it: with the React stage installed when its `nts.config.ts` has a `react`
-/// section, so that every command reads the program nts builds.
-fn frontend_for(tsconfig: &Utf8Path, tsgo_binary: String) -> Result<TsgoApi> {
-    for_project(TsgoApi::for_compilation(tsgo_binary), tsconfig)
+/// Construct the requested project's native checker and install its source stages.
+fn frontend_for(tsconfig: &Utf8Path) -> Result<Frontend> {
+    let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir()?)
+        .map_err(|path| anyhow!("the current directory is not UTF-8: {}", path.display()))?;
+    let mut source = Frontend::new(cwd);
+    if let Some(count) = checkers::from_process()? {
+        source = source.with_checkers(count);
+    }
+    for_project(source, tsconfig)
 }
 
-/// `source` given what the project beside `tsconfig` compiles with: its
-/// platform's generated bindings, and React's transform where its config
-/// asks for one. Every command that reads a project goes through this, the
-/// build and `nts frontend` alike, so an instrument describes the program a
-/// build compiles -- `nts frontend` on a GTK project once reported 3 files
-/// and `Cannot find module 'c:Gtk-4.0'`, having made its own frontend.
-///
-/// **And that sentence was false for a fortnight of `nts check`**, which lives in
-/// another crate and so could not call this: it built `TsgoApi::for_compilation`
-/// itself and answered `Cannot find module 'objc:Blink'` for a project `nts build`
-/// builds. It is passed in now (`nts_differential::check`'s `configure`), which is
-/// why this function rather than `frontend_for` is the one to keep reaching --
-/// locating `tsgo` is a convenience and *this* is the invariant.
-fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
+/// Capture once, then preserve dependency evidence from those same diagnostics.
+fn capture_project(
+    source: &mut Frontend,
+    tsconfig: &Utf8Path,
+) -> Result<nts_semantic_schema::SemanticSnapshot> {
+    let snapshot = source.snapshot(tsconfig)?;
+    let diagnostics: Vec<_> = snapshot
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == nts_diagnostics::Severity::Error)
+        .map(|diagnostic| nts_deps::resolution::Diagnostic {
+            file: snapshot.sources[diagnostic.primary.file.0 as usize]
+                .display_path
+                .clone(),
+            code: diagnostic.code.clone(),
+            message: diagnostic.message.clone(),
+        })
+        .collect();
+    nts_deps::record_compilation(tsconfig, &diagnostics)?;
+    Ok(snapshot)
+}
+
+/// Every project command installs the same generated bindings and React stage.
+fn for_project(mut source: Frontend, tsconfig: &Utf8Path) -> Result<Frontend> {
     let Some(config) = nts_build::config::beside(tsconfig) else {
         // Without a project config, use the same host OS the build derives
         // its default ABI from. GIR bindings only add files for a GIR import.
@@ -1451,16 +1468,9 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     Ok(source.with_transform(Box::new(stage)))
 }
 
-fn frontend_binary() -> String {
-    std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
-        tsgo::locate().map_or_else(|| "tsgo".to_owned(), |path| path.to_string())
-    })
-}
-
 fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1540,7 +1550,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
                 "  base   {}",
                 base.fields
                     .iter()
-                    .map(|f| f.name.as_str())
+                    .map(|f| f.name.to_string())
                     .collect::<Vec<_>>()
                     .join(" ")
             );
@@ -1549,7 +1559,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
                 layout
                     .fields
                     .iter()
-                    .map(|f| f.name.as_str())
+                    .map(|f| f.name.to_string())
                     .collect::<Vec<_>>()
                     .join(" ")
             );
@@ -1592,9 +1602,8 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
 /// One line per entry, `name<TAB>reason`, because a reason contains commas,
 /// backticks and parentheses and a reader is usually a script.
 fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1622,9 +1631,8 @@ fn refused(
 /// `nts facts --strict`: what the strict check ([`hir::obligations::check`])
 /// says of the program, one error per line.
 fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
     let mut lowered = hir::lower::lower(&snapshot);
     lowered.program.targets = configured_abis(tsconfig)?;
@@ -1649,9 +1657,8 @@ fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
 /// local facts only (decision Q2).
 fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
     use hir::obligations::{Into, Source, Why};
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1746,9 +1753,8 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
 }
 
 fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
@@ -1822,53 +1828,35 @@ fn render_bound(value: f64) -> String {
     }
 }
 
-/// Run the frontend against a project and report what it cost.
-///
-/// This exists before `nts build` on purpose. Gate G1 is the measurement that
-/// validates the `tsgo --api` transport decision, and a gate nobody can run is
-/// not a gate.
-fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = for_project(TsgoApi::new(tsgo_binary), tsconfig)?;
-    if decompose {
-        source = source.with_decomposition(Budget::DEFAULT);
-    }
-    if calls {
-        source = source.with_call_resolution(Budget::DEFAULT);
-    }
-    if constants {
-        source = source.with_constant_folding(Budget::DEFAULT);
-    }
+/// A completed capture with checker errors, distinct from a failed capture.
+#[derive(Debug)]
+struct CompletedFrontendDiagnostics(usize);
 
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+impl std::fmt::Display for CompletedFrontendDiagnostics {
+    fn fmt(&self, output: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(output, "{} type error(s); refusing to proceed", self.0)
+    }
+}
+
+impl std::error::Error for CompletedFrontendDiagnostics {}
+
+/// Run the complete native frontend against a project and report what it cost.
+fn frontend(tsconfig: &Utf8Path) -> Result<()> {
+    let mut source = frontend_for(tsconfig)?;
+
+    let snapshot = capture_project(&mut source, tsconfig)?;
     let stats = source.stats();
 
-    println!(
-        "checker work this run{}",
-        if stats.round_trips == 0 {
-            " (snapshot reused)"
-        } else {
-            ""
-        }
-    );
+    println!("frontend         tsrs (in process)");
     println!("files            {}", stats.files);
-    println!("nodes decoded    {}", stats.nodes_decoded);
+    println!("nodes captured    {}", stats.nodes_captured);
     println!("types resolved   {}", stats.types_resolved);
     println!("  distinct       {}", stats.distinct_types);
     println!("symbols          {}", stats.symbols);
     println!("modules          {}", stats.modules);
-    if calls {
-        println!("calls resolved   {}", stats.calls_resolved);
-    }
-    if constants {
-        println!("constants folded {}", stats.constants_folded);
-    }
-    if decompose {
-        println!("  decomposed     {}", stats.decomposed);
-        report_graph_health(&stats);
-    }
-    println!("round trips      {}", stats.round_trips);
-    println!("  per file       {:.2}", stats.round_trips_per_file());
+    println!("calls resolved   {}", stats.calls_resolved);
+    println!("constants folded {}", stats.constants_folded);
+    report_graph_health(&stats);
     println!("elapsed          {} ms", stats.elapsed_ms);
     println!("snapshot digest  {}", hex(&snapshot.digest()?));
 
@@ -1916,7 +1904,7 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
             .iter()
             .filter(|diagnostic| diagnostic.severity == nts_diagnostics::Severity::Error)
             .count();
-        bail!("{errors} type error(s); refusing to proceed");
+        return Err(CompletedFrontendDiagnostics(errors).into());
     }
 
     Ok(())
@@ -1969,9 +1957,8 @@ fn list_sites(
 fn dump_receivers(args: &[String]) -> Result<()> {
     let tsconfig = project(args)?;
     let per_site = args.iter().any(|arg| arg == "--sites");
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(&tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, &tsconfig, "nts-build")?;
+    let mut source = frontend_for(&tsconfig)?;
+    let snapshot = capture_project(&mut source, &tsconfig)?;
     let census = nts_core::receivers::classify(&snapshot);
     let mut locations = SourceLocations::new(&snapshot.sources);
 
@@ -2265,9 +2252,8 @@ fn list_receiver_sites(census: &nts_core::receivers::Census, locations: &mut Sou
 fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
     use nts_core::erasure::{Checker, Declaration, Verdict};
 
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     let erasure = nts_core::erasure::classify(&snapshot);
     // The control. Judging each site by its own uses alone is what a
     // per-signature rule could do; the difference between the two columns is
@@ -2344,13 +2330,11 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
 /// inspectable, and the point of this layer is that its decisions are visible.
 /// Every module, what it imports, and what its file has at top level.
 ///
-/// The kinds are printed as numbers on purpose: tsgo's `SyntaxKind` numbering is
-/// not TypeScript's, and every constant in `syntax.rs` was read off real output
-/// rather than taken from a table. This is the tool that reads them off.
+/// Kinds use nts's stable syntax tags. The adapter maps native variants to
+/// those tags, so the dump stays comparable when the checker is re-pinned.
 fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
 
     let mut roots: Vec<(u32, usize)> = snapshot
         .modules
@@ -2426,7 +2410,11 @@ fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
                     .collect();
                 println!(
                     "    {:?} symbol {} declared at {:?}",
-                    record.text.as_deref().unwrap_or(""),
+                    record
+                        .text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                        .unwrap_or(""),
                     symbol.0,
                     homes
                 );
@@ -2449,10 +2437,85 @@ fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
     }
 }
 
+/// Exactly the body bytes printed below, also binding the proof to its CFG.
+fn render_function_body(func: &hir::Func) -> String {
+    let mut text = String::new();
+    for (index, block) in func.blocks.iter().enumerate() {
+        let params: Vec<String> = block
+            .params
+            .iter()
+            .map(|p| format!("%{}: {}", p.0, render(&func.value(*p).ty)))
+            .collect();
+        let label = if params.is_empty() {
+            format!("b{index}:")
+        } else {
+            format!("b{index}({}):", params.join(", "))
+        };
+        text.push_str(&label);
+        text.push('\n');
+        for value in &block.ops {
+            text.push_str("  ");
+            text.push_str(&render_op(value.0 as usize, func.value(*value)));
+            text.push('\n');
+        }
+        text.push_str("  ");
+        text.push_str(&render_terminator(&block.terminator));
+        text.push('\n');
+    }
+    text
+}
+
 /// One function per header, one block per label, one operation per line.
 fn print_program(program: &hir::Program, locations: &mut SourceLocations<'_>) {
     for face in &program.cast_faces {
         println!("cast-face {}", face.0);
+    }
+    // Final owned proof facts, before function headers: existing readers keep
+    // the same function/operation populations. Raw lowering has no contracts.
+    let mut body_hashes = std::collections::BTreeMap::new();
+    for proof in hir::interface_access::read_contracts(program) {
+        let func = &program.funcs[proof.function];
+        let body_hash = body_hashes
+            .entry(proof.function)
+            .or_insert_with(|| {
+                nts_build::dependencies::digest(render_function_body(func).as_bytes())
+            })
+            .clone();
+        let dependencies: Vec<_> = proof
+            .dependencies
+            .iter()
+            .map(|at| {
+                let dependency = &program.funcs[*at];
+                let hash = body_hashes
+                    .entry(*at)
+                    .or_insert_with(|| {
+                        nts_build::dependencies::digest(render_function_body(dependency).as_bytes())
+                    })
+                    .clone();
+                serde_json::json!({"function": dependency.name, "body_sha256": hash})
+            })
+            .collect();
+        let payload = serde_json::json!({
+                "version": 1,
+                "eager": proof.eager,
+                "dependencies": dependencies,
+                "body_sha256": body_hash,
+                "function": func.name,
+                "operation": proof.operation.0,
+                "root": proof.root.0,
+                "receiver": proof.receiver.0,
+                "argument": proof.argument,
+                "face": proof.face.0,
+                "field": proof.field,
+                "member": proof.member,
+                "representation": render(&proof.representation),
+                "owners": proof.owners.iter().map(|(id, prefix)| serde_json::json!({"id": id.0, "field_prefix": prefix})).collect::<Vec<_>>(),
+                "prefix_receivers": proof.prefix_receivers.iter().map(|id| id.0).collect::<Vec<_>>(),
+                "other_receivers": proof.other_receivers.iter().map(|id| id.0).collect::<Vec<_>>(),
+                "mode": proof.mode,
+                "rendered": render_op(proof.operation.0 as usize, func.value(proof.operation)),
+            }).to_string();
+        println!("field-read-contract {}", hex(payload.as_bytes()));
     }
     for func in &program.funcs {
         let params: Vec<String> = func
@@ -2490,23 +2553,7 @@ fn print_program(program: &hir::Program, locations: &mut SourceLocations<'_>) {
             render(&func.return_type),
             locations.where_it_spans(&func.origin.location),
         );
-        for (index, block) in func.blocks.iter().enumerate() {
-            let params: Vec<String> = block
-                .params
-                .iter()
-                .map(|p| format!("%{}: {}", p.0, render(&func.value(*p).ty)))
-                .collect();
-            let label = if params.is_empty() {
-                format!("b{index}:")
-            } else {
-                format!("b{index}({}):", params.join(", "))
-            };
-            println!("{label}");
-            for value in &block.ops {
-                println!("  {}", render_op(value.0 as usize, func.value(*value)));
-            }
-            println!("  {}", render_terminator(&block.terminator));
-        }
+        print!("{}", render_function_body(func));
         println!("}}");
     }
 }
@@ -2745,11 +2792,10 @@ fn check_expectations(tsconfig: &Utf8Path) -> Result<()> {
 /// The project's snapshot, with its warnings printed, refused if it does not
 /// typecheck: what `hir` and `stats` read.
 fn typechecked_snapshot(tsconfig: &Utf8Path) -> Result<nts_semantic_schema::SemanticSnapshot> {
-    let tsgo_binary = frontend_binary();
     // Call resolution is not optional here: without it a call site has no known
     // target and lowering refuses it.
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     let mut locations = SourceLocations::new(&snapshot.sources);
 
     // Warnings are printed whether or not the program typechecks. A partial
@@ -3608,9 +3654,8 @@ const fn render_bin(op: BinOp) -> &'static str {
 
 /// Every type the frontend resolved, as the schema records it.
 fn print_types(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut source = frontend_for(tsconfig)?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     for (index, record) in snapshot.types.iter().enumerate() {
         let named = record
             .symbol
@@ -3991,27 +4036,6 @@ fn build(rest: &[String]) -> Result<()> {
             // whole class of project. A correctness refusal that runs only
             // sometimes is worth less than what the gate costs.
             //
-            // **It cost a second `tsgo` snapshot, and then it did not.** This
-            // comment said "+0.15s, 0.26 to 0.41 ... the fix that makes it free
-            // is one snapshot handed to both this and the emitter; priced, not
-            // built" -- and both halves were falsified an hour later by the
-            // author of the sentence. The fix was not threading a snapshot: it
-            // was that `nts build` had been walking past
-            // `nts_frontend_ts::cache::snapshot` at all twelve of its call
-            // sites, so the second snapshot is now a cache hit and the number
-            // measured the wrong thing.
-            //
-            // Controlled with `NTS_NO_SNAPSHOT_CACHE=1` on one binary,
-            // alternating on warm state: **0.26s with the cache, 1.5s without**.
-            //
-            // **That number stopped being true for six hours and nothing said
-            // so.** Canonicalising the cache key moved one of two derivations
-            // of the config chain and not the other, so no entry ever matched
-            // and the cache was dead. `cache.rs` owns the current figure and
-            // the argument; this comment is the date-stamped one above and is
-            // kept for what it records rather than as a claim about today.
-            // A number in a comment is a claim with a date on it; this one had
-            // no date and outlived the code it described by one commit.
             let config_roots = generate_bindings(&tsconfig, std::slice::from_ref(&target.id))?;
             let mut native = native_sources(&config_roots, target)?;
             // **At configuration time, naming the package**, which is the whole
@@ -4218,10 +4242,9 @@ fn imported_names(file: &Utf8Path, module: &str) -> Result<(Vec<String>, Vec<Str
 /// native roots with a header for android-29" for a module only `linux.ts`
 /// imports, which is a true sentence about the wrong question.
 fn generate_bindings(tsconfig: &Utf8Path, targets: &[String]) -> Result<Vec<Utf8PathBuf>> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
+    let mut source = frontend_for(tsconfig)?;
     // Errors are the point of this snapshot, so they are not reported here.
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let snapshot = capture_project(&mut source, tsconfig)?;
     let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
     let wanted = unresolved_foreign(&snapshot);
     // Every package the program's files belong to, whether or not it needed a
@@ -9513,9 +9536,10 @@ fn deps(rest: &[String]) -> Result<()> {
         .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf);
     let options = nts_deps::Options {
         dry_run: rest.iter().any(|arg| arg == "--dry-run"),
-        tsgo: nts_frontend_ts::tsgo::locate(),
+        checker_count: checkers::from_process()?,
     };
-    let acquisition = nts_deps::acquire(&dir, &tsconfig, &options)?;
+    let mut acquisition = nts_deps::acquire(&dir, &tsconfig, &options)?;
+    nts_deps::check_acquisition(&mut acquisition, &tsconfig, &options)?;
     if rest.iter().any(|arg| arg == "--json") {
         println!("{}", nts_deps::report::json(&acquisition));
     } else {

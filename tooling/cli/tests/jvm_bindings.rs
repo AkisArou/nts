@@ -15,20 +15,12 @@ fn success(result: &Output) {
     );
 }
 
-fn project(name: &str) -> Option<PathBuf> {
-    if std::env::var_os("NTS_TSGO").is_none() {
-        assert!(
-            std::env::var_os("NTS_TESTS_REQUIRE_TOOLING").is_none(),
-            "NTS_TSGO required"
-        );
-        eprintln!("SKIP JVM bindings: no NTS_TSGO");
-        return None;
-    }
+fn project(name: &str) -> PathBuf {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).expect("project");
     std::fs::write(root.join("tsconfig.json"), r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","strict":true,"skipLibCheck":true},"include":["*.ts"]}"#).expect("config");
-    Some(root)
+    root
 }
 
 fn emit(root: &Path, directory: &str) -> Output {
@@ -70,9 +62,7 @@ declare module "java:foreign" {
 
 #[test]
 fn annotations_select_overloads_after_unicode_and_formatting_edits() {
-    let Some(root) = project("jvm-annotated-overloads") else {
-        return;
-    };
+    let root = project("jvm-annotated-overloads");
     std::fs::write(
         root.join("Probe.java"),
         r"
@@ -177,9 +167,7 @@ export function run(): string {
 
 #[test]
 fn malformed_jvm_descriptor_fails_the_build_at_its_declaration() {
-    let Some(root) = project("jvm-malformed-contract") else {
-        return;
-    };
+    let root = project("jvm-malformed-contract");
     std::fs::write(
         root.join("foreign.d.ts"),
         r#"declare module "java:foreign" {

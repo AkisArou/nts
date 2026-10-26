@@ -10,7 +10,7 @@
 //
 // AGENTS.md asks for the gate's commands before a landing: `cargo fmt`, clippy
 // over the workspace, `cargo test --no-fail-fast` over every crate touched and
-// the four backends with `NTS_TSGO` set, and `agree.mjs` on all four backends.
+// the four backends with one checker per process, and `agree.mjs` on all four backends.
 // Run as the gate builds -- release, one code generation unit, thin LTO -- the
 // tests alone took 30 to 45 minutes beside a gate (2026-10-22), and the gate
 // then built them again. This runs the same tests in the `nts-dev` profile
@@ -24,7 +24,7 @@
 //    runtime C the change edited.
 // 2. `cargo clippy --workspace --all-targets -- -D warnings`.
 // 3. `cargo test --profile nts-dev --no-fail-fast` over the touched crates
-//    and the four backends, with `NTS_TSGO` this tree's frontend.
+//    and the four backends, with the frontend compiled into this tree's binary.
 // 4. `agree.mjs` on c, llvm, jvm and wasm, main's pinned compiler before and
 //    this tree's `nts-dev` build after -- and with `NTS_RC=1` on c and llvm
 //    when the change reaches the compiler or a runtime, since reference
@@ -166,11 +166,6 @@ function main(argv: readonly string[]): number {
   const keepGoing = argv.includes("--keep-going");
   const changed = changedPaths(base);
   const crates = [...new Set([...cratesTouched(changed, packages()), ...BACKENDS])].sort();
-  const tsgo = join(ROOT, "target/tsgo");
-  if (!existsSync(tsgo)) {
-    console.log("  no target/tsgo in this tree: run tooling/lanes/inputs.sh first");
-    return 2;
-  }
   console.log(`inner loop over ${base}..HEAD: ${changed.length} path(s), crates ${crates.join(" ")}`);
 
   const steps: Step[] = [];
@@ -183,15 +178,15 @@ function main(argv: readonly string[]): number {
   };
   const tests = ["test", "--profile", "nts-dev", "--no-fail-fast", ...crates.flatMap((name) => ["-p", name])];
   const runtimeC = formattedRuntimeC(changed).filter((path) => existsSync(join(ROOT, path)));
-  const nativeFrontend = changed.some((path) => /^(compiler\/frontend-tsrs|third_party\/tsrs)\//.test(path) || /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path));
+  const nativeFrontend = changed.some((path) => /^(compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema|third_party\/tsrs)\//.test(path) || /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path));
   const going =
     step("fmt", () => run("cargo", ["fmt", "--check"])) &&
     (runtimeC.length === 0 ||
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
     step("clippy", () => heavy("clippy", "14G", "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&
-    step("tests", () => heavy("the tests", "16G", "cargo", tests, { NTS_TSGO: tsgo })) &&
-    // Transitional: delete this branch with the feature at the native switch.
-    (!nativeFrontend || step("frontend-tsrs", () => heavy("native frontend checks", "16G", "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_TSGO: tsgo })));
+    step("tests", () => heavy("the tests", "16G", "cargo", tests, { NTS_CHECKERS: "1", NTS_BIN: join(ROOT, "target/nts-dev/nts") })) &&
+    // Native vendor integrity and complete reachable graphs over the corpus.
+    (!nativeFrontend || step("frontend-tsrs", () => heavy("native frontend checks", "16G", "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_CHECKERS: "1" })));
 
   if (going && agree) {
     const before = text("node", ["tooling/conformance/pin.ts", base]).trim().split("\n").at(-1) ?? "";
@@ -211,7 +206,7 @@ function main(argv: readonly string[]): number {
           NTS_BACKEND: backend,
           NTS_RC: rc,
           NTS_AGREE_JOBS: "4",
-          NTS_TSGO: tsgo,
+          NTS_CHECKERS: "1",
         }),
       );
     }

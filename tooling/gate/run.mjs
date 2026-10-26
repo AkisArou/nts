@@ -142,7 +142,6 @@ const STEPS = [
   // (NTS_COMPILE_TIMES_FROM); lowers the modules itself when it runs alone.
   { name: "compile-time", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module lowers 2x slower than recorded" },
   { name: "integrity-runtime", elastic: true, slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
-  { name: "snapshot-cache", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "a cached snapshot gives the same program" },
   { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
   { name: "c-compiles", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, after: ["profile"], doc: "every runtime program's emitted C compiles" },
   { name: "types", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "snapshot type tables consistent" },
@@ -163,7 +162,7 @@ const STEPS = [
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
   // Measured offline inventory: 0.03 s wall, 64 MiB peak RSS (2026-10-24).
   { name: "licenses", slots: 1, treeOnly: true, mem: 0.1, doc: "compiler dependency license texts match the locked closure" },
-  // Transitional feature-on path. Cold four-job run: 190.39s, peak process
+  // Native frontend capture checks. Initial cold four-job run: 190.39s, peak process
   // RSS 1,586,488 KiB. Reserve ceil(4 * peak GiB) = 7 GiB for concurrent
   // compiler processes; share the ordinary cargo target/lock.
   { name: "frontend-tsrs", slots: 4, min: 4, mem: 7, lock: "cargo", doc: "native source inventory, attributions, Clippy and adapter tests pass" },
@@ -239,7 +238,7 @@ Environment (see the header of tooling/gate/run.mjs for the rest):
   NTS_GATE_FAIL_FAST=1  stop at the first FAIL
   NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
   NTS_GATE_TIME_STRICT=1  a step much slower than its baseline is a FAIL
-  NTS_BIN, NTS_SUITE_BIN, NTS_TSGO, CARGO_TARGET_DIR   what is gated
+  NTS_BIN, NTS_SUITE_BIN, NTS_CHECKERS, CARGO_TARGET_DIR   what is gated
 `;
 const argSteps = [];
 for (const a of process.argv.slice(2)) {
@@ -278,7 +277,6 @@ const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
 // last built into ./target (the-gate-drives-target-release-nts).
 const ntsBin = resolve(env.NTS_BIN ?? join(target, "release/nts"));
 const suiteBin = resolve(env.NTS_SUITE_BIN ?? join(dirname(ntsBin), "nts-suite"));
-const tsgo = resolve(env.NTS_TSGO ?? join(ROOT, "target/tsgo"));
 const cores = cpus().length;
 const intEnv = (name, fallback) => {
   const v = env[name];
@@ -403,7 +401,7 @@ function stepEnv(step, slots) {
   delete e.NTS_GATE_STEPS;
   e.NTS_BIN = pinned.nts ?? ntsBin;
   e.NTS_SUITE_BIN = pinned.suite ?? suiteBin;
-  e.NTS_TSGO = tsgo;
+  e.NTS_CHECKERS = "1";
   e.CARGO_TARGET_DIR = target;
   // clippy checks the same tree in a profile nothing else builds, so its
   // artefacts live apart and it runs beside the release build and `cargo test`
@@ -442,7 +440,7 @@ function stepEnv(step, slots) {
   const protocol = pinned.protocol ?? join(dirname(ntsBin), "nts-test262-protocol");
   if (existsSync(protocol)) e.NTS_TEST262_PROTOCOL = protocol;
   for (const knob of [
-    "NTS_INTEGRITY_JOBS", "NTS_DEFINITIONS_JOBS", "NTS_SNAPSHOT_CACHE_JOBS",
+    "NTS_INTEGRITY_JOBS", "NTS_DEFINITIONS_JOBS",
     "NTS_ASSEMBLES_JOBS", "NTS_TYPES_CHECK_JOBS", "NTS_JVM_VERIFIES_JOBS",
   ]) e[knob] = s;
   return e;
@@ -518,14 +516,6 @@ function blockedBy(step) {
 
 function preflight(step) {
   if (!step.nts) return null;
-  if (!existsSync(tsgo) || !(statSync(tsgo).mode & 0o111)) {
-    // The frontend is not cargo's, but it lives in cargo's directory -- so
-    // `cargo clean` takes it, and every step afterwards reports a number that
-    // is true and means something else. The corpus said `frontend failed 184`,
-    // which reads as the compiler having lost the ability to parse anything
-    // and meant that a 39MB Go binary was absent.
-    return `no frontend at ${tsgo}; run tooling/bootstrap/bootstrap.sh -- \`cargo clean\` removes it`;
-  }
   if (!existsSync(ntsBin)) return `no compiler at ${ntsBin}`;
   return null;
 }
@@ -764,11 +754,8 @@ function stop(why) {
 // **The binaries every step runs are a copy named by their content**, made once
 // the build has passed: `<cache>/nts-gate/bin/<sha256>/`. A session relinking
 // `target/release/nts` halfway through a run cannot change the compiler between
-// two steps (assembles, jvm-verifies, types and snapshot-cache each copied it
-// to a fresh directory to protect themselves; every other step did not), and a
-// stable path is what the frontend snapshot cache keys a compiler by
-// (path, length, mtime), so steps -- and later runs of the same binary -- hit
-// each other's snapshots instead of missing on a fresh copy every time.
+// two steps. Every step and later run of the same binary therefore uses the
+// same immutable executable identity, even when a worktree rebuilds its output.
 const pinned = {};
 const PIN_ROOT = join(env.XDG_CACHE_HOME ?? join(env.HOME ?? "/tmp", ".cache"), "nts-gate", "bin");
 function pinBinaries() {
@@ -832,7 +819,6 @@ function done() {
   if (summaryWritten) return;
   summaryWritten = true;
   if (!identities.nts) identify();
-  identities.tsgo = { path: tsgo, sha256: sha256(tsgo) };
   identities.node = process.version;
   for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
 
@@ -857,7 +843,7 @@ function done() {
 
   const lines = [];
   lines.push("");
-  lines.push(color(1, "gate summary") + `  ${identities.commit ?? "?"}${identities.dirty ? ` +${identities.dirty} uncommitted` : ""}  nts ${identities.nts?.sha256?.slice(0, 12) ?? "missing"}  tsgo ${identities.tsgo?.sha256?.slice(0, 12) ?? "missing"}`);
+  lines.push(color(1, "gate summary") + `  ${identities.commit ?? "?"}${identities.dirty ? ` +${identities.dirty} uncommitted` : ""}  nts ${identities.nts?.sha256?.slice(0, 12) ?? "missing"}`);
   for (const name of plan) {
     const r = results.get(name);
     const tag = { PASS: color(32, "PASS    "), FAIL: color(31, "FAIL    "), SKIPPED: color(33, "SKIPPED "), "NOT RUN": color(33, "NOT RUN ") }[r.verdict];
@@ -1007,7 +993,7 @@ function settings() {
 }
 process.stdout.write(
   `gate: ${plan.length} step(s), ${SLOTS} slots, ${MEM}G, ${FRONTENDS} frontends; logs in ${RUN_DIR}\n` +
-    `  nts ${ntsBin}${pinned.nts ? ` (run as ${pinned.nts})` : ""}\n  tsgo ${tsgo}\n` + settings() +
+    `  nts ${ntsBin}${pinned.nts ? ` (run as ${pinned.nts})` : ""}\n` + settings() +
     `  steps: ${plan.join(" ")}\n`,
 );
 tokenAddr = await tok.start();

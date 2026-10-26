@@ -30,7 +30,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const SOURCE: &str = r#"
 import type { c_size_t, Uint32 } from "@nts/scalars";
@@ -42,10 +42,6 @@ export function size(): c_size_t { return 7n as c_size_t; }
 
 #[test]
 fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -59,7 +55,8 @@ fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

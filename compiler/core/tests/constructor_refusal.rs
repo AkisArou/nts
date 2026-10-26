@@ -10,28 +10,25 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, lower::Lowered};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lower_at(relative: &str) -> Option<Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lower_at(relative: &str) -> Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("{relative} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 #[test]
 fn a_refused_constructor_is_recorded_under_the_name_a_wrapper_asks_with() {
-    let Some(lowered) = lower_at("tests/programs/constructor-refusal") else {
-        eprintln!("SKIP constructor refusal: tsgo is required");
-        return;
-    };
+    let lowered = lower_at("tests/programs/constructor-refusal");
 
     // The control: the refusal happened at all, and named the cause. Without
     // this the assertion below could pass on a program that compiled cleanly.

@@ -150,7 +150,7 @@ impl Inhabitants {
     pub fn of(snapshot: &SemanticSnapshot) -> Self {
         let mut implemented = FxHashSet::default();
         let mut unexamined: FxHashSet<u32> = FxHashSet::default();
-        let mut class_members: Vec<FxHashSet<&str>> = Vec::new();
+        let mut class_members: Vec<FxHashSet<&nts_semantic_schema::PropertyKey>> = Vec::new();
         let mut interfaces_unexamined = 0;
         let mut classes_unexamined = 0;
 
@@ -189,10 +189,17 @@ impl Inhabitants {
                 .map(|record| &record.kind)
             {
                 Some(TypeKind::Object { properties }) => {
-                    class_members.push(properties.iter().map(|p| p.name.as_str()).collect());
+                    class_members.push(properties.iter().map(|p| &p.name).collect());
                     class_heritage.push(mine);
                     class_types.push(instance);
                 }
+                // Neither abstract `object` nor a unique symbol is a class
+                // instance with an enumerable member layout.
+                #[expect(
+                    clippy::match_same_arms,
+                    reason = "keep audited semantic type variants explicit"
+                )]
+                Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => classes_unexamined += 1,
                 _ => classes_unexamined += 1,
             }
         }
@@ -219,10 +226,10 @@ impl Inhabitants {
                 continue;
             };
             let symbol = u32::try_from(index).unwrap_or(u32::MAX);
-            let required: Vec<&str> = properties
+            let required: Vec<&nts_semantic_schema::PropertyKey> = properties
                 .iter()
                 .filter(|property| !property.optional)
-                .map(|property| property.name.as_str())
+                .map(|property| &property.name)
                 .collect();
             // **A class that says `implements I` inhabits it whether or not the
             // name proxy agrees**, and leaving it out would be unsound in the one

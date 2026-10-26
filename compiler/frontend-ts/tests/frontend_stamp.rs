@@ -92,6 +92,7 @@ fn stamp_names_content_and_configuration_but_not_copy_metadata() {
     );
     for prefix in [
         "compiler/frontend-ts/src/",
+        "compiler/frontend-tsrs/src/",
         "compiler/semantic-schema/src/",
         "compiler/diagnostics/src/",
     ] {

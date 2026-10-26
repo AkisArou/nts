@@ -66,14 +66,12 @@ fn extensions(ir: &str, name: &str) -> Vec<Vec<&'static str>> {
 
 #[test]
 fn narrow_integer_extensions_follow_the_platform() {
-    let Some((dir, prepared)) = prepare_with_files(
+    let (dir, prepared) = prepare_with_files(
         "narrow-extension",
         SOURCE,
         hir::Provider::NoGc,
         &[("narrow.d.ts", DECLARATIONS)],
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

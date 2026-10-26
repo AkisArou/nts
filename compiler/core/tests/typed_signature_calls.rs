@@ -13,16 +13,14 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn a_signature_call_is_typed_only_where_every_arriving_closure_agrees() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/typed-signature-calls/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
@@ -84,12 +82,10 @@ fn a_signature_call_is_typed_only_where_every_arriving_closure_agrees() {
 /// iteration, and the row ran slower than the uniform entry it replaced.
 #[test]
 fn a_typed_signature_over_whole_numbers_is_narrowed_with_its_closures() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/typed-signature-narrowed/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());

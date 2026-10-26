@@ -504,6 +504,16 @@ impl Code {
         self.ldc(origin, index, 1);
     }
 
+    pub fn const_text(
+        &mut self,
+        origin: &Origin,
+        pool: &mut Pool,
+        text: &nts_semantic_schema::JsText,
+    ) {
+        let index = pool.string_text(text);
+        self.ldc(origin, index, 1);
+    }
+
     pub fn const_null(&mut self, origin: &Origin) {
         self.op(origin, insn::ACONST_NULL, 0, 1);
     }

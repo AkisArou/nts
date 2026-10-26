@@ -55,7 +55,7 @@ J
 node --experimental-strip-types "$D/src/main.ts" >/dev/null 2>"$D/node.txt" && ns=0 || ns=$?
 nmsg=$(grep -o "message: '[^']*'" "$D/node.txt" | head -1 | cut -d"'" -f2)
 rm -rf "$D/out"
-NTS_NO_SNAPSHOT_CACHE=1 "${NTS_BIN:-./target/release/nts}" emit-c "$D/tsconfig.json" \
+"${NTS_BIN:-./target/release/nts}" emit-c "$D/tsconfig.json" \
   --out "$D/out" --main >/dev/null 2>"$D/r.txt" && es=0 || es=$?
 # **The compiler crashing is its own outcome.** It was reported as `C DID NOT
 # COMPILE` -- the output directory is simply absent, and `cc` fails the same way

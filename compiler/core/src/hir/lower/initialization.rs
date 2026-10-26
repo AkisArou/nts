@@ -103,11 +103,11 @@ impl FuncBuilder<'_> {
         );
         let text = HirType::Managed(ManagedType::String);
         let initialized = self.push(
-            OpKind::ConstString(spelling.to_owned()),
+            OpKind::ConstString(spelling.to_owned().into()),
             text.clone(),
             origin.clone(),
         );
-        let undefined = self.push(OpKind::ConstString("undefined".to_owned()), text, origin);
+        let undefined = self.push(OpKind::ConstString("undefined".into()), text, origin);
         Some(self.lower_branching_value(
             at,
             ready,
@@ -147,7 +147,7 @@ impl FuncBuilder<'_> {
              which this compiler cannot carry where `{name}`'s type is {declared}"
         );
         let what = self.push(
-            OpKind::ConstString(reason),
+            OpKind::ConstString(reason.into()),
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
@@ -730,7 +730,8 @@ impl Summaries<'_, '_> {
         self.probe
             .node(callee)
             .text
-            .as_deref()
+            .as_ref()
+            .and_then(|text| text.as_utf8())
             .and_then(super::primitive_builtin)
             .is_some_and(|builtin| {
                 builtin == PrimitiveBuiltin::Boolean
@@ -966,7 +967,13 @@ impl Summaries<'_, '_> {
             return false;
         };
         self.provided_global(object)
-            && self.probe.node(object).text.as_deref() == Some("Object")
+            && self
+                .probe
+                .node(object)
+                .text
+                .as_ref()
+                .and_then(|text| text.as_utf8())
+                == Some("Object")
             && !matches!(member.as_str(), "create" | "prototype")
             && FuncBuilder::reflection_of_a_layout("Object", &member).is_some()
     }

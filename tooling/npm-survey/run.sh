@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 export NTS_BIN="${NTS_BIN:-../../target/release/nts}"
-export NTS_TSGO="${NTS_TSGO:-../../target/tsgo}"
+export NTS_CHECKERS=1
 
 node resolve.ts "$(tr -d '\n' < roots.json)"   # roots     -> closure.json
 node classify.ts                               # closure   -> classified.json, and the tables

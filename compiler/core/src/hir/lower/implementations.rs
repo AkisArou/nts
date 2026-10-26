@@ -102,7 +102,12 @@ fn named(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&str> {
     }
     children(snapshot, id)
         .find(|child| snapshot.nodes[child.0 as usize].kind == NodeKind::Syntax(syntax::IDENTIFIER))
-        .and_then(|child| snapshot.nodes[child.0 as usize].text.as_deref())
+        .and_then(|child| {
+            snapshot.nodes[child.0 as usize]
+                .text
+                .as_ref()
+                .and_then(|text| text.as_utf8())
+        })
 }
 
 /// Memoise List ancestry too: a nested List chain must not become another

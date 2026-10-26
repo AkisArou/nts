@@ -52,6 +52,7 @@ fn a_previously_missing_module_index_invalidates_native_inputs() {
         let inputs = session
             .open(project.clone())
             .expect("project")
+            .diagnose_fixture_files()
             .finish()
             .inputs();
         assert_eq!(session.inputs_match(&project, &inputs), Ok(()));
@@ -78,7 +79,11 @@ fn a_previously_missing_types_package_invalidates_native_inputs() {
         "export const value = 1;",
     );
     run(scratch.options(), |session| {
-        let checked = session.open(project.clone()).expect("project").finish();
+        let checked = session
+            .open(project.clone())
+            .expect("project")
+            .diagnose_fixture_files()
+            .finish();
         assert!(checked.diagnostics().iter().any(|d| d.code == 2688));
         let inputs = checked.inputs();
         assert_eq!(session.inputs_match(&project, &inputs), Ok(()));
@@ -219,6 +224,7 @@ fn non_unicode_observations_remain_permanently_absent_on_replay() {
         let inputs = session
             .open(project.clone())
             .expect("project")
+            .diagnose_fixture_files()
             .finish()
             .inputs();
         assert!(inputs.iter().any(|i| i.path.utf8().is_none()));
@@ -236,7 +242,11 @@ fn a_missing_sibling_module_outside_the_config_directory_invalidates_reuse() {
     options.cwd = scratch.0.join("app");
     run(options, |session| {
         let project = ProjectSpec::new("tsconfig.json");
-        let checked = session.open(project.clone()).expect("project").finish();
+        let checked = session
+            .open(project.clone())
+            .expect("project")
+            .diagnose_fixture_files()
+            .finish();
         assert!(checked.diagnostics().iter().any(|d| d.code == 2307));
         let inputs = checked.inputs();
         assert_eq!(session.inputs_match(&project, &inputs), Ok(()));
@@ -253,7 +263,11 @@ fn a_missing_sibling_module_outside_the_config_directory_invalidates_reuse() {
         );
         assert_eq!(changed.recorded, InputObservation::Missing);
         assert!(matches!(changed.current, InputObservation::Present { .. }));
-        let revised = session.open(project).expect("reopened project").finish();
+        let revised = session
+            .open(project)
+            .expect("reopened project")
+            .diagnose_fixture_files()
+            .finish();
         assert!(!revised.diagnostics().iter().any(|d| d.code == 2307));
     });
 }
@@ -269,7 +283,11 @@ fn a_new_file_takes_precedence_over_a_directory_from_a_sibling_importer() {
     options.cwd = scratch.0.join("app");
     run(options, |session| {
         let project = ProjectSpec::new("tsconfig.json");
-        let checked = session.open(project.clone()).expect("project").finish();
+        let checked = session
+            .open(project.clone())
+            .expect("project")
+            .diagnose_fixture_files()
+            .finish();
         assert!(!checked.diagnostics().iter().any(|d| d.code == 2307));
         assert!(
             checked
@@ -294,7 +312,11 @@ fn a_new_file_takes_precedence_over_a_directory_from_a_sibling_importer() {
         );
         assert_eq!(changed.recorded, InputObservation::Missing);
         assert!(matches!(changed.current, InputObservation::Present { .. }));
-        let revised = session.open(project).expect("reopened project").finish();
+        let revised = session
+            .open(project)
+            .expect("reopened project")
+            .diagnose_fixture_files()
+            .finish();
         let files: Vec<_> = revised
             .projects()
             .next()

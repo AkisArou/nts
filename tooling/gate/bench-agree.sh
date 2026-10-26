@@ -50,8 +50,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
-NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
-export NTS_TSGO
+NTS_CHECKERS=1
+export NTS_CHECKERS
 # `NTS_BIN` for the reason every other step takes it: three sessions build into
 # different directories, and a hard-coded path measures somebody else's binary
 # and reports a floor for code nobody is looking at.

@@ -29,7 +29,10 @@
 //! proposal. No `StackMapTable` parsing, for the same reason. Both are additive
 //! and neither changes the shape here.
 
+use std::fmt::Write as _;
+
 use crate::pool::tag;
+use nts_semantic_schema::JsText;
 
 /// Anything that makes a class file unreadable.
 ///
@@ -161,24 +164,46 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    fn utf8(&mut self, len: usize) -> Result<String, Error> {
+    fn utf8(&mut self, len: usize) -> Result<JsText, Error> {
         if self.at + len > self.bytes.len() {
             return fail("the class file ends inside a string");
         }
         let raw = &self.bytes[self.at..self.at + len];
         self.at += len;
-        // Modified UTF-8 differs from UTF-8 for the null byte and for
-        // supplementary characters. Neither appears in a name or a descriptor,
-        // which is all this reader asks for, so a lossy decode here is exact in
-        // practice and never panics on the jars that are not.
-        Ok(String::from_utf8_lossy(raw).into_owned())
+        // A pool entry can hold a string constant as well as a name. Decode
+        // modified UTF-8 into its actual code units, including lone surrogates.
+        let mut units = Vec::new();
+        let mut at = 0;
+        while let Some(&first) = raw.get(at) {
+            let (width, mut unit) = match first {
+                1..=0x7f => (1, u16::from(first)),
+                0xc0..=0xdf => (2, u16::from(first & 0x1f)),
+                0xe0..=0xef => (3, u16::from(first & 0x0f)),
+                _ => return fail("invalid modified UTF-8 in a constant pool entry"),
+            };
+            for offset in 1..width {
+                let Some(&next) = raw.get(at + offset) else {
+                    return fail("a modified UTF-8 code unit is truncated");
+                };
+                if next & 0xc0 != 0x80 {
+                    return fail("invalid modified UTF-8 continuation byte");
+                }
+                unit = (unit << 6) | u16::from(next & 0x3f);
+            }
+            if (width == 2 && unit != 0 && unit < 0x80) || (width == 3 && unit < 0x800) {
+                return fail("overlong modified UTF-8 in a constant pool entry");
+            }
+            units.push(unit);
+            at += width;
+        }
+        Ok(JsText::from_utf16(units))
     }
 }
 
 /// The subset of the pool this reader resolves: everything is looked up by
 /// index and only `Utf8` and `Class` are ever dereferenced.
 struct Pool {
-    utf8: Vec<Option<String>>,
+    utf8: Vec<Option<JsText>>,
     class: Vec<Option<u16>>,
     /// A `ConstantValue`'s value, rendered as the TypeScript literal for it.
     ///
@@ -194,7 +219,12 @@ struct Pool {
 impl Pool {
     fn text(&self, index: u16) -> Result<String, Error> {
         match self.utf8.get(index as usize).and_then(Clone::clone) {
-            Some(text) => Ok(text),
+            Some(text) => match text.as_utf8() {
+                Some(text) => Ok(text.to_owned()),
+                None => fail(format!(
+                    "constant pool name at index {index} contains unpaired UTF-16 code units"
+                )),
+            },
             None => fail(format!("constant pool index {index} is not a Utf8")),
         }
     }
@@ -305,7 +335,17 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
         if let Some(at) = string[index]
             && let Some(Some(text)) = utf8.get(at as usize)
         {
-            constant[index] = Some(format!("{text:?}"));
+            constant[index] = Some(match text.as_utf8() {
+                Some(text) => format!("{text:?}"),
+                None => format!(
+                    "\"{}\"",
+                    text.encode_utf16()
+                        .fold(String::new(), |mut escaped, unit| {
+                            let _ = write!(escaped, "\\u{unit:04x}");
+                            escaped
+                        })
+                ),
+            });
         }
     }
     Ok(Pool {
@@ -313,6 +353,25 @@ fn constant_pool(reader: &mut Reader) -> Result<Pool, Error> {
         class,
         constant,
     })
+}
+
+#[cfg(test)]
+mod modified_string_tests {
+    use super::*;
+
+    #[test]
+    fn a_pool_string_round_trips_lone_units_pairs_and_nul_without_loss() {
+        let text = JsText::from_utf16(vec![0xd800, 0, 0xd83d, 0xde00, 0xdc00]);
+        let mut written = crate::Pool::new();
+        let index = written.string_text(&text);
+        let mut bytes = written.count().to_be_bytes().to_vec();
+        written.write(&mut bytes);
+        let read = constant_pool(&mut Reader::new(&bytes)).expect("valid constant pool");
+        assert_eq!(
+            read.constant[index as usize].as_deref(),
+            Some("\"\\ud800\\u0000\\ud83d\\ude00\\udc00\"")
+        );
+    }
 }
 
 /// Everything a member or a class can carry that this slice reads.

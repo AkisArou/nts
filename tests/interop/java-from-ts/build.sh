@@ -37,7 +37,7 @@ mkdir -p "$out"
 # Everything below is an assertion rather than a build step, which is why this
 # file is not a one-line call: the declaration drift check, the consumer, its
 # exact output, and the refusal check are what the example is *for*.
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
+NTS_CHECKERS=1 "$nts" build "$here/tsconfig.json" \
   --out "$out/build" > "$out/build.log" 2>&1 || { cat "$out/build.log"; exit 1; }
 built="$out/build/api/java-8"
 

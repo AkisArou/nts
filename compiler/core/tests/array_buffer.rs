@@ -12,24 +12,24 @@
 //! the `RangeError` for `new ArrayBuffer(1, { maxByteLength: NaN })` simply did
 //! not happen.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/array-buffer/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/array-buffer is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -57,9 +57,7 @@ fn calls(func: &hir::Func) -> Vec<String> {
 /// An `ArrayBuffer` is its own managed type, not an object with a layout.
 #[test]
 fn a_buffer_is_a_managed_type_of_its_own() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let made = func(&lowered, "length");
     assert!(
         made.values
@@ -79,9 +77,7 @@ fn a_buffer_is_a_managed_type_of_its_own() {
 /// many bytes are allocated — so the size and the check cannot drift apart.
 #[test]
 fn the_maximum_is_compared_after_conversion_to_an_index() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let growable = func(&lowered, "growableMaximum");
     let names = calls(growable);
     assert!(
@@ -104,9 +100,7 @@ fn the_maximum_is_compared_after_conversion_to_an_index() {
 /// crash rather than a disagreement.
 #[test]
 fn an_allocation_that_fails_is_checked_rather_than_trusted() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let made = func(&lowered, "length");
     assert!(
         made.values
@@ -123,9 +117,7 @@ fn an_allocation_that_fails_is_checked_rather_than_trusted() {
 /// that only looked at one of them.
 #[test]
 fn the_two_transfers_are_told_apart_by_a_constant_this_lowering_supplies() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let keeps = func(&lowered, "transferKeepsResizable");
     let drops = func(&lowered, "fixedTransferDropsResizable");
     let flag = |func: &hir::Func| {
@@ -157,14 +149,17 @@ fn the_two_transfers_are_told_apart_by_a_constant_this_lowering_supplies() {
 /// pass any test that only caught *that it threw*.
 #[test]
 fn a_wrong_receiver_and_a_wrong_length_are_told_apart() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let text = |func: &hir::Func| {
         func.values
             .iter()
             .filter_map(|op| match &op.kind {
-                OpKind::ConstString(value) => Some(value.clone()),
+                OpKind::ConstString(value) => Some(
+                    value
+                        .as_utf8()
+                        .expect("compiler-generated refusal messages are Unicode")
+                        .to_owned(),
+                ),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -194,15 +189,18 @@ fn a_wrong_receiver_and_a_wrong_length_are_told_apart() {
 /// message would agree with node on the class and disagree on the text.
 #[test]
 fn the_length_and_the_maximum_have_their_own_sentences() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let growable = func(&lowered, "growableMaximum");
     let messages: Vec<String> = growable
         .values
         .iter()
         .filter_map(|op| match &op.kind {
-            OpKind::ConstString(value) => Some(value.clone()),
+            OpKind::ConstString(value) => Some(
+                value
+                    .as_utf8()
+                    .expect("compiler-generated refusal messages are Unicode")
+                    .to_owned(),
+            ),
             _ => None,
         })
         .collect();

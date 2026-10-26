@@ -133,7 +133,7 @@ pub(crate) fn call(
             b.load(source)?;
             crate::arrays::number(b, args[2])?;
             // The function's name, for a refusal inside the helper.
-            strings::constant(b, &b.func.name.clone());
+            strings::constant(b, b.func.name.clone());
         }
         Op::Join => {
             let separator = args[1];

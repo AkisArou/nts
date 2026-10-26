@@ -26,12 +26,12 @@ import json
 import os
 import re
 
-from checkout import TYPESCRIPT_GO
+from checkout import TSRS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-# typescript-go is a submodule: the shared checkout's copy (checkout.py).
-LIB_DOM = os.path.join(TYPESCRIPT_GO, "internal", "bundled", "libs", "lib.dom.d.ts")
+# The DOM library is part of the immutable native frontend vendor tree.
+LIB_DOM = os.path.join(TSRS, "crates", "tsrs_vfs", "libs", "lib.dom.d.ts")
 REPORT = os.path.join(HERE, "report-libdom.json")
 
 MEMBER = re.compile(r"^\s{4}(?:readonly\s+)?(?:get\s+|set\s+)?([A-Za-z_$][\w$]*)\??\s*[(<:]", re.M)
@@ -162,7 +162,7 @@ def coverage(declarations, skips, allowlist, literals):
             totals["absent: " + kind] += len(names)
     reasons = collections.Counter(" ".join(why.split()[:2]) for row in rows.values() for why in row["skipped"].values())
     proven, unproven = literals
-    return {"libDom": os.path.join("third_party", "typescript-go", os.path.relpath(LIB_DOM, TYPESCRIPT_GO)),
+    return {"libDom": os.path.join("third_party", "tsrs", os.path.relpath(LIB_DOM, TSRS)),
             "totals": dict(totals), "skippedBy": dict(reasons.most_common()),
             "literals": {"proven": proven, "noFold": [f"{owner}.{member}: {literal} ({kind})"
                                                       for kind, owner, member, literal in unproven]},

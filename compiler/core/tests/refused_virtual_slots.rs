@@ -3,7 +3,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 fn stops(func: &hir::Func) -> Vec<&str> {
     func.blocks
@@ -22,7 +22,7 @@ fn stops(func: &hir::Func) -> Vec<&str> {
                 return None;
             }
             match &func.value(args[0]).kind {
-                OpKind::ConstString(message) => Some(message.as_str()),
+                OpKind::ConstString(message) => message.as_utf8(),
                 _ => panic!("the stop must carry its reason"),
             }
         })
@@ -31,11 +31,12 @@ fn stops(func: &hir::Func) -> Vec<&str> {
 
 #[test]
 fn a_refused_override_uses_its_nearest_ancestors_slot_contract() {
-    let tsgo =
-        nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/refused-virtual-slot-arity/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     for provider in [
         Provider::NoGc,
@@ -83,11 +84,12 @@ fn a_refused_override_uses_its_nearest_ancestors_slot_contract() {
 
 #[test]
 fn a_synthetic_stop_does_not_publish_a_class_with_no_surviving_source_member() {
-    let tsgo =
-        nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/refused-virtual-slots/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let before = hir::lower::lower(&snapshot).program;
     let published = |program: &hir::Program| {
@@ -126,11 +128,12 @@ fn a_synthetic_stop_does_not_publish_a_class_with_no_surviving_source_member() {
 
 #[test]
 fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies() {
-    let tsgo =
-        nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/refused-virtual-slots/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     for provider in [
         Provider::NoGc,

@@ -3,17 +3,14 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, reachable::Roots};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn shared_and_unique_layout_classes_keep_their_public_members() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP class export roots: tsgo is required");
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
@@ -66,12 +63,12 @@ fn shared_and_unique_layout_classes_keep_their_public_members() {
 
 #[test]
 fn same_display_names_resolve_to_their_own_semantic_declarations() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/class-export-identities/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors());
     let mut program = hir::lower::lower(&snapshot).program;
     let classes: Vec<_> = program.published_classes().collect();
@@ -100,12 +97,12 @@ fn same_display_names_resolve_to_their_own_semantic_declarations() {
 
 #[test]
 fn a_live_layout_test_keeps_the_shape_but_a_dead_test_does_not() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     let mut program = hir::lower::lower(&snapshot).program;
     let layout = program
         .layouts

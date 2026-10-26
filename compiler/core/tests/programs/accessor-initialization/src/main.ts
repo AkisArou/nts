@@ -70,6 +70,17 @@ export class PrivateReadFirst {
   value: number;
   constructor(n: number) { inspect(this.#secret); this.value = n; }
 }
+const ownKey: unique symbol = Symbol("ownKey");
+export class SymbolWriteFirst {
+  [ownKey] = 0;
+  value: number;
+  constructor(n: number) { this[ownKey] = n; this.value = n; }
+}
+export class SymbolWriteLast {
+  [ownKey] = 0;
+  value: number;
+  constructor(n: number) { this.value = n; this[ownKey] = n; }
+}
 const holder: { last?: object } = {};
 function tag(_strings: TemplateStringsArray, ..._values: unknown[]): void {}
 function inspect(_value: unknown): void {}

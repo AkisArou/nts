@@ -10,7 +10,11 @@ use super::{Field, HirType, Layout, Program, TypeId};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Shape {
     base: Option<TypeId>,
-    fields: Vec<(String, HirType, Option<super::super::native::Scalar>)>,
+    fields: Vec<(
+        nts_semantic_schema::PropertyKey,
+        HirType,
+        Option<super::super::native::Scalar>,
+    )>,
     methods: Vec<Option<String>>,
 }
 

@@ -257,10 +257,6 @@ fn constants_carry_their_values(messaging: &str, refused: &str) {
 /// Same generated declarations and caller, changing only a text argument to
 /// an atom. Listed `LoadCursorW` admits it; unlisted `MessageBoxW` must not.
 fn resource_typecheck(out: &std::path::Path) {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipping resource call typecheck: set NTS_TSGO");
-        return;
-    };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -302,8 +298,9 @@ EnumResourceNamesW(null, "NAMED", onName, 0n);
             source.into()
         };
         std::fs::write(out.join("calls.ts"), text).unwrap();
-        let run = Command::new(&tsgo)
-            .args(["--project"])
+        let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args(["frontend", "--no-acquire"])
+            .env("NTS_CHECKERS", "1")
             .arg(out.join("tsconfig.json"))
             .output()
             .unwrap();
@@ -313,8 +310,8 @@ EnumResourceNamesW(null, "NAMED", onName, 0n);
             String::from_utf8_lossy(&run.stderr)
         );
         assert_eq!(
-            run.status.success(),
-            !negative,
+            run.status.code(),
+            Some(if negative { 2 } else { 0 }),
             "negative={negative}: {said}"
         );
         if negative {

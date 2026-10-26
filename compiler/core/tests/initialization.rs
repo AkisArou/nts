@@ -4,16 +4,14 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn lexical_writes_share_readiness_and_proven_writes_carry_no_ready_field() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-lexical-assignment-before-initialization/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("the unchecked write matrix snapshots");
     let prepared = hir::prepare(&snapshot).expect("the write matrix verifies");
@@ -83,14 +81,12 @@ fn lexical_writes_share_readiness_and_proven_writes_carry_no_ready_field() {
 
 #[test]
 fn module_initialization_preserves_subjects_and_leaves_safe_readers_unguarded() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-binding-read-before-its-declaration/tsconfig.json")
         .canonicalize_utf8()
         .expect("the example exists");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
     let prepared = hir::prepare(&snapshot).expect("HIR verifies");
@@ -174,12 +170,10 @@ fn module_initialization_preserves_subjects_and_leaves_safe_readers_unguarded() 
 
 #[test]
 fn a_folded_module_initializer_retains_its_exception() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/module-initializer-tdz/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
     let prepared = hir::prepare(&snapshot).expect("HIR verifies");
@@ -223,12 +217,10 @@ fn a_folded_module_initializer_retains_its_exception() {
 
 #[test]
 fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/captured-initialization/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
     let prepared = hir::prepare(&snapshot).expect("HIR verifies");
@@ -316,12 +308,10 @@ fn captured_initialization_throws_and_proven_late_readers_need_no_flag() {
 
 #[test]
 fn captured_var_typeof_observes_assignment_without_loading_an_unwritten_value() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/captured-var-observations/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot succeeds");
     let prepared = hir::prepare(&snapshot).expect("HIR verifies");
@@ -367,13 +357,11 @@ fn captured_var_typeof_observes_assignment_without_loading_an_unwritten_value() 
 
 #[test]
 fn once_entered_module_blocks_share_readiness_without_flagging_loop_locals() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
         "../../tests/programs/a-module-block-closure-writes-before-initialization/tsconfig.json",
     );
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("the module block matrix snapshots");
     let prepared = hir::prepare(&snapshot).expect("the module block matrix verifies");

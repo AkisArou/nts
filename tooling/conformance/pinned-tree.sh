@@ -40,7 +40,6 @@ git worktree add --detach "$tree" "$commit" > /dev/null
 # tree does.
 ln -sfn "$root/third_party/node" "$tree/third_party/node"
 mkdir -p "$tree/target"
-ln -sfn "$root/target/tsgo" "$tree/target/tsgo"
 
 # `node_modules` too, and forgetting them cost a wrong number.
 #
@@ -64,5 +63,5 @@ done
 # the shared `target/node` is owned by no session, so another lane rebuilding
 # the same module mid-run silently substitutes the artifact under test.
 echo "export NTS_PINNED_TREE=$tree"
-echo "export NTS_TSGO=$tree/target/tsgo"
+echo "export NTS_CHECKERS=1"
 echo "# pinned at $(git rev-parse --short "$commit"); cd \$NTS_PINNED_TREE to run"

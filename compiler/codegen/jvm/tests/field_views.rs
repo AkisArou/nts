@@ -12,7 +12,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 mod common;
 
@@ -21,7 +21,8 @@ fn program() -> hir::Program {
         .join("../../core/tests/programs/interface-field-view/tsconfig.json")
         .canonicalize_utf8()
         .unwrap();
-    let snapshot = TsgoApi::for_compilation(nts_frontend_ts::tsgo::locate().unwrap())
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .unwrap();
     common::prepare(&snapshot).unwrap().program

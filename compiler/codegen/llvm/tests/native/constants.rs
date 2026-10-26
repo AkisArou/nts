@@ -19,14 +19,12 @@ const CALLER: &str =
 )]
 fn pointer_constants_keep_exact_bits_and_native_equality() {
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) = prepare_with_files(
+        let (dir, prepared) = prepare_with_files(
             "pointer-constants",
             SOURCE,
             provider,
             &[("constants.d.ts", DECLARATIONS)],
-        ) else {
-            return;
-        };
+        );
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",

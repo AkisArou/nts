@@ -332,15 +332,9 @@ export function pinCompiler(nts, scratch) {
   };
 }
 
-/**
- * The environment every compiler invocation needs.
- *
- * Mutable worker scratch defaults to no cache. A caller using immutable case
- * roots opts in explicitly so the frontend can reuse the same inputs across
- * workers, backends and compiler rebuilds.
- */
-export function environment({ snapshotCache = false } = {}) {
-  return { ...process.env, NTS_NO_SNAPSHOT_CACHE: snapshotCache ? "0" : "1" };
+/** One checker per corpus worker bounds concurrent frontend memory. */
+export function environment() {
+  return { ...process.env, NTS_CHECKERS: "1" };
 }
 
 const ROOT_MANIFEST = ".nts-case-root.json";

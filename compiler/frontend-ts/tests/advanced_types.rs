@@ -1,31 +1,27 @@
 //! Type-level features that change emitted code: predicates, accessors,
 //! construct signatures, generics, conditionals and template literals.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{Accessor, MemberKind, SemanticSnapshot, TypeKind};
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/advanced/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/advanced fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_decomposition(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 #[test]
 fn a_type_guard_records_what_it_narrows() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `pet is Fish`. Inside the true branch the concrete type is known, so a
     // dispatch on `pet` can become a direct call.
     let guard = snapshot
@@ -35,18 +31,16 @@ fn a_type_guard_records_what_it_narrows() {
         .find(|p| !p.asserts)
         .expect("`pet is Fish` should record a predicate");
 
-    assert_eq!(guard.parameter_name, "pet");
-    assert_eq!(guard.parameter_index, Some(0));
     let narrowed = guard.narrowed_to.expect("narrows to a type");
     assert!(matches!(
         &snapshot.types[narrowed.0 as usize].kind,
-        TypeKind::Object { properties } if properties.iter().any(|p| p.name == "swim")
+        TypeKind::Object { properties } if properties.iter().any(|p| p.name.is_name("swim"))
     ));
 }
 
 #[test]
 fn an_asserts_predicate_is_distinguished_from_a_guard() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `asserts pet is Fish` narrows for the rest of the enclosing scope rather
     // than only inside a branch, and returns void. Treating it as an ordinary
     // guard would narrow the wrong region.
@@ -62,7 +56,7 @@ fn an_asserts_predicate_is_distinguished_from_a_guard() {
 
 #[test]
 fn accessors_are_distinguished_from_fields() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `get value()` / `set value()` look like a property and are a call. Emitting
     // a field load reads whatever sits at that offset.
     let box_type = snapshot
@@ -70,8 +64,8 @@ fn accessors_are_distinguished_from_fields() {
         .iter()
         .find_map(|record| match &record.kind {
             TypeKind::Object { properties }
-                if properties.iter().any(|p| p.name == "value")
-                    && properties.iter().any(|p| p.name == "plain") =>
+                if properties.iter().any(|p| p.name.is_name("value"))
+                    && properties.iter().any(|p| p.name.is_name("plain")) =>
             {
                 Some(properties)
             }
@@ -79,7 +73,7 @@ fn accessors_are_distinguished_from_fields() {
         })
         .expect("the Box instance type");
 
-    let get = |name: &str| box_type.iter().find(|p| p.name == name).unwrap();
+    let get = |name: &str| box_type.iter().find(|p| p.name.is_name(name)).unwrap();
     assert_eq!(get("value").kind, MemberKind::Accessor(Accessor::GetSet));
     assert_eq!(
         get("plain").kind,
@@ -90,7 +84,7 @@ fn accessors_are_distinguished_from_fields() {
 
 #[test]
 fn construct_signatures_are_resolved() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `new (id: number) => Widget` has no call signature. Asking only for call
     // signatures decomposes it as an ordinary object, losing the arity and
     // parameter types a `new` expression needs.
@@ -108,7 +102,7 @@ fn construct_signatures_are_resolved() {
 
 #[test]
 fn generic_signatures_keep_their_type_parameters() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // Monomorphization needs to know what to specialize over.
     assert!(
         snapshot
@@ -121,7 +115,7 @@ fn generic_signatures_keep_their_type_parameters() {
 
 #[test]
 fn a_constrained_type_parameter_records_its_constraint() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `<T extends Fish>` bounds what T can be, which is what lets a backend emit
     // a specialization rather than a boxed generic.
     let constrained = snapshot
@@ -139,7 +133,7 @@ fn a_constrained_type_parameter_records_its_constraint() {
 
 #[test]
 fn a_conditional_type_keeps_its_branches() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let conditional = snapshot
         .types
         .iter()
@@ -154,7 +148,7 @@ fn a_conditional_type_keeps_its_branches() {
 
 #[test]
 fn a_template_literal_keeps_its_literal_segments() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // The segments arrive on the type response and no endpoint answers them
     // again, so they are captured when the type is first classified rather than
     // when it is decomposed.

@@ -3,7 +3,6 @@
 #
 #   tooling/bootstrap/bootstrap.sh             # everything
 #   tooling/bootstrap/bootstrap.sh --minimal   # only what the gate needs
-#   tooling/bootstrap/bootstrap.sh --tsgo-only [shared checkout]
 #
 # Each step says why it exists and each is skipped when already done, so this
 # is safe to re-run and is the fastest way to find out what is missing.
@@ -18,13 +17,6 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
-
-# Build only this tree's frontend, without checking machine packages, running
-# cargo or fetching corpora. A lane shares the main checkout's immutable cache.
-shared=${2:-$(dirname -- "$(git rev-parse --path-format=absolute --git-common-dir)")}
-if [ "${1:-}" = --tsgo-only ]; then
-  exec node "$root/tooling/lanes/tsgo.ts" build "$shared" "$root"
-fi
 
 # `--all` stays accepted and means what it always did, which is now the
 # default: it is in muscle memory and in the message this script prints.
@@ -99,23 +91,6 @@ if [ -n "$java_home" ] && ! ls "$java_home"/lib/hsdis-*.so >/dev/null 2>&1; then
   echo "  hsdis: not in $java_home/lib -- see the 'manual hsdis' line of arch-packages.txt"
 fi
 
-# ---------------------------------------------------------------- the frontend
-#
-# `typescript-go` is a real submodule, and the *only* one. Cloning it
-# recursively pulls microsoft/TypeScript as well -- that is typescript-go's own
-# test fixture repository, it is enormous, and nothing here needs it.
-say "typescript-go (submodule)"
-if have third_party/typescript-go/go.mod; then
-  echo "  already checked out"
-else
-  git submodule update --init third_party/typescript-go
-fi
-
-# The frontend follows this tree's gitlink and carried patch contents.
-# Publishing a new key never replaces a build another lane or pin uses.
-say "target/tsgo (immutable per-pin build)"
-node "$root/tooling/lanes/tsgo.ts" build "$shared" "$root"
-
 # ------------------------------------------------------------------- packages
 #
 # `tests/programs/library` resolves a workspace dependency, and without this it fails
@@ -136,6 +111,7 @@ if [ "$all" = false ]; then
   echo "  Corpora skipped by --minimal. Re-run without it for:"
   echo "    third_party/node               the Node compatibility profile and conformance"
   echo "    third_party/test262            the ECMAScript conformance corpus"
+  echo "    third_party/typescript         the native checker's upstream tests"
   echo "    third_party/are-we-fast-yet    the C++ and Java reference columns"
   exit 0
 fi
@@ -194,6 +170,9 @@ else
     https://github.com/tc39/test262.git third_party/test262
   git -C third_party/test262 checkout --detach "$test262_pin"
 fi
+
+say "third_party/typescript (tests only, at the native checker's TypeScript pin)"
+node tooling/bootstrap/typescript.ts
 
 # The `C++` and `Java` columns of the benchmark table: their own hand-written
 # implementations of the same programs, built and timed by our harness.

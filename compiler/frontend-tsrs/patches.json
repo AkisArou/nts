@@ -1,0 +1,10 @@
+[
+  {
+    "id": "yield-thenable-diagnostics-and-check-state",
+    "base": "a0db53eabe483062205717f067a49b6ccb3fc868",
+    "path": "patches/yield-thenable-diagnostics-and-check-state.patch",
+    "sha256": "31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
+    "rationale": "Retain reported TS1321 while recovering valid yield constituents; expose a computation-free completed-file observation for the scoped-diagnostics work guard.",
+    "remove_when": "Drop the semantic hunk independently when an official upstream equivalent passes the permanent controls and completes the raw checker audit with zero unmeasured cases. Retain the read-only observation hunk only until an intended upstream completed-file query exists. Review and re-hash the remaining patch at each change."
+  }
+]

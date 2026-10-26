@@ -17,10 +17,6 @@ fn a_cast_record_membership_compares_present_and_absent_keys() {
 }
 
 fn check_every_case(fixture: &str, cases: usize, functions: usize) {
-    if std::env::var_os("NTS_TSGO").is_none() {
-        eprintln!("SKIP cast-family alias: set NTS_TSGO");
-        return;
-    }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .current_dir(root)

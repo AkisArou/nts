@@ -120,9 +120,6 @@ use nts_semantic_schema::schema::{LiteralValue, NodeId, SemanticSnapshot, TypeId
 use nts_semantic_schema::{syntax, walk};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-/// The checker's `TypeFlagsUniqueESSymbol`, mirrored from `names_one_member`.
-const UNIQUE_SYMBOL: u32 = 1 << 14;
-
 /// What a receiver's type is, for the purpose of one question.
 ///
 /// Read from the type's symbol's **declarations**, never from `SymbolFlags` and
@@ -229,7 +226,7 @@ enum Member<'a> {
     /// A dot, a string key, a numeric key. The name is the name.
     Spelled(&'a str),
     /// `v[kRefed]`, carrying the description the brackets spell.
-    Described(&'a str),
+    Keyed(TypeId),
 }
 
 /// One field access.
@@ -621,17 +618,24 @@ fn keyed(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mut
         .and_then(|ty| snapshot.types.get(ty.0 as usize))
         .map(|record| &record.kind)
     {
-        Some(TypeKind::Literal(LiteralValue::String(text))) => Member::Spelled(text),
+        Some(TypeKind::Literal(LiteralValue::String(text))) => {
+            let Some(text) = text.as_utf8() else {
+                return;
+            };
+            Member::Spelled(text)
+        }
         Some(TypeKind::Literal(LiteralValue::Number(value))) => {
             spelled = format!("{value}");
             Member::Spelled(&spelled)
         }
-        Some(TypeKind::Structured { flags }) if flags & UNIQUE_SYMBOL != 0 => {
-            match walk::text_of(snapshot, index) {
-                Some(described) => Member::Described(described),
-                None => return,
-            }
+        Some(TypeKind::UniqueSymbol) => {
+            Member::Keyed(*snapshot.node_types.get(&index).expect("type was matched"))
         }
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive) => return,
         _ => return,
     };
     record(snapshot, id, object, named, Form::Keyed, known, out);
@@ -703,6 +707,11 @@ fn spread(snapshot: &SemanticSnapshot, id: NodeId, known: &Inhabitants, out: &mu
         .unwrap_or(u32::MAX),
         // An undecomposed receiver has no field list to walk, so the multiplier
         // is unknown. One is the floor, and the `Unclear` row carries the doubt.
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => 1,
         _ => 1,
     };
     let (receiver, implemented, satisfied, unexamined, arms) = receiver_of(snapshot, ty, known);
@@ -757,16 +766,18 @@ fn record(
     // for -- not an excuse to assume a field.
     let mut member = match named {
         Member::Spelled(name) => name.to_owned(),
-        Member::Described(described) => described.to_owned(),
+        Member::Keyed(key) => nts_semantic_schema::PropertyKey::Symbol(key).to_string(),
     };
     if let Some(TypeKind::Object { properties }) =
         snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
     {
         let found = match named {
-            Member::Spelled(name) => properties.iter().find(|property| property.name == name),
-            Member::Described(described) => match symbol_member(properties, described) {
+            Member::Spelled(name) => properties
+                .iter()
+                .find(|property| property.name.is_name(name.as_ref())),
+            Member::Keyed(key) => match symbol_member(properties, key) {
                 Some(property) => {
-                    member.clone_from(&property.name);
+                    member = property.name.to_string();
                     Some(property)
                 }
                 None => None,
@@ -817,7 +828,7 @@ fn receiver_of(
         .map(|symbol| walk::denoted(snapshot, symbol));
     let name = symbol
         .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
-        .map_or_else(|| "?".to_owned(), |record| record.name.clone());
+        .map_or_else(|| "?".to_owned(), |record| record.name.to_string());
     // **Plus one for the type's own layout**, which is always an arm: an object
     // literal written at an interface is built at the interface's own shape, not
     // at any class's. So a type nothing can inhabit has one arm and needs no
@@ -902,19 +913,17 @@ fn assigns_in_place(token: u16) -> bool {
 /// What a receiver type is, or `None` where it is not a generated struct at all.
 ///
 /// Through the symbol's **declarations**, which is the derivation `hir::lower`'s
-/// `is_an_instantiation` and `tsgo::decompose`'s `declares_a_form_here` both
+/// `is_an_instantiation` and native capture's declared generic form policy both
 /// use — written that way because a generic interface's instantiations are
 /// separate `TypeId`s sharing one symbol, so a per-type test answers for one
 /// instantiation and not the interface.
 fn shape_of(snapshot: &SemanticSnapshot, ty: TypeId, out: &mut Census) -> Option<Shape> {
     let ty = through_a_constraint(snapshot, ty);
     let record = snapshot.types.get(ty.0 as usize)?;
-    if !matches!(
-        record.kind,
-        TypeKind::Object { .. } | TypeKind::Structured { .. }
-    ) {
-        // A primitive, an array, a `Map`, `any`: no generated struct, nothing to
-        // make indirect. This is the arm that keeps `v.name.length` out.
+    if !matches!(record.kind, TypeKind::Object { .. } | TypeKind::Structured) {
+        // NonPrimitive is open object storage, and UniqueSymbol is a primitive:
+        // neither declares a generated struct. An array, a `Map`, `any` also
+        // has no generated struct to make indirect. This is the arm that keeps `v.name.length` out.
         out.excluded.not_a_struct += 1;
         return None;
     }
@@ -974,6 +983,11 @@ fn through_a_constraint(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
                 constraint: Some(constraint),
                 ..
             }) => at = *constraint,
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => return at,
             _ => return at,
         }
     }
@@ -1022,28 +1036,14 @@ fn denotes_a_module(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
             })
 }
 
-/// The property a type declares under a symbol with this description.
-///
-/// `__@kRefed@2`: the description the brackets spell and the checker's own id for
-/// the symbol. Mirrors `hir::lower`'s `symbol_property_name`, including its
-/// refusal: the id is tsgo's and not reproducible here, so the match is on the
-/// description alone, and **two symbols sharing one description on one type
-/// resolve to nothing** rather than to whichever came first. Counting such an
-/// access against the wrong member would be worse than not counting it, and the
-/// undeclared-member row is where it lands.
-fn symbol_member<'a>(
-    properties: &'a [nts_semantic_schema::schema::PropertyRecord],
-    described: &str,
-) -> Option<&'a nts_semantic_schema::schema::PropertyRecord> {
-    let prefix = format!("__@{described}@");
-    let mut found = properties.iter().filter(|property| {
-        property.name.starts_with(&prefix)
-            && property.name[prefix.len()..]
-                .bytes()
-                .all(|byte| byte.is_ascii_digit())
-    });
-    let first = found.next()?;
-    found.next().is_none().then_some(first)
+/// A symbol-keyed property is selected by its unique type identity.
+fn symbol_member(
+    properties: &[nts_semantic_schema::PropertyRecord],
+    key: TypeId,
+) -> Option<&nts_semantic_schema::PropertyRecord> {
+    properties
+        .iter()
+        .find(|property| property.name == nts_semantic_schema::PropertyKey::Symbol(key))
 }
 
 /// The function an access is written in.

@@ -4,13 +4,13 @@
 
 Compiled from "nts"
 public final class nts.gen.Cell0 implements nts.rt.NtsPrintable {
-  double value;
+  double n$value;
   public java.lang.String nts$print();
   public nts.gen.Cell0();
 }
 Compiled from "nts"
 public final class nts.gen.Closure0 extends nts.gen.Fn6__44 implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable,nts.rt.NtsNamed {
-  nts.gen.Cell0 total;
+  nts.gen.Cell0 n$total;
   public void call(double);
   public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
   public java.lang.String nts$print();
@@ -57,7 +57,7 @@ public final class nts.gen.Program {
 }
 Compiled from "nts"
 public final class nts.gen.Session implements nts.rt.NtsPrintable {
-  double $hits;
+  double p$$hits;
   public double bump();
   public double hits();
   public java.lang.String nts$print();

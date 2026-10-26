@@ -36,7 +36,7 @@ use nts_semantic_schema::TypeId;
 use rustc_hash::FxHashSet;
 
 use crate::program::JvmProgram;
-use crate::{body, hierarchy, types, widen};
+use crate::{body, guarded_members, hierarchy, types, widen};
 
 /// Whether `layout` is a face: a TypeScript interface or object type.
 ///
@@ -236,6 +236,41 @@ pub(crate) struct Declared {
     pub(crate) member: String,
     pub(crate) descriptor: String,
     pub(crate) kind: Member,
+    /// An additional internal member whose concrete default calls this
+    /// unchanged public declaration. It is not a new abstract obligation.
+    pub(crate) compatibility: Option<String>,
+}
+
+fn push_slot(
+    out: &mut Vec<Declared>,
+    slot: usize,
+    member: String,
+    descriptor: String,
+    compatibility: Option<String>,
+) {
+    if let Some(plain) = &compatibility
+        && !out
+            .iter()
+            .any(|known| known.member == *plain && known.descriptor == descriptor)
+    {
+        out.push(Declared {
+            member: plain.clone(),
+            descriptor: descriptor.clone(),
+            kind: Member::Slot { slot },
+            compatibility: None,
+        });
+    }
+    if !out
+        .iter()
+        .any(|known| known.member == member && known.descriptor == descriptor)
+    {
+        out.push(Declared {
+            member,
+            descriptor,
+            kind: Member::Slot { slot },
+            compatibility,
+        });
+    }
 }
 
 /// How `owner`'s class holds its field `at`: a `double` where the widen plan
@@ -340,18 +375,12 @@ pub(crate) fn members<'a>(
             },
             hierarchy::member_name,
         );
-        if out
-            .iter()
-            .any(|known| known.member == member && known.descriptor == descriptor)
-        {
-            continue;
-        }
-        out.push(Declared {
-            member,
-            descriptor,
-            kind: Member::Slot { slot },
-        });
+        let compatibility = program
+            .guarded_member(slot)
+            .and_then(|_| hierarchy::original_declared_member(program, face, slot));
+        push_slot(&mut out, slot, member, descriptor, compatibility);
     }
+
     for at in 0..face.fields.len() {
         let at = u32::try_from(at).map_err(|_| format!("`{}` has too many fields", face.name))?;
         // Only a field something reaches by position through the face has an
@@ -369,14 +398,48 @@ pub(crate) fn members<'a>(
             member: accessor(at),
             descriptor: format!("(){held}"),
             kind: Member::Field { at, writes: false },
+            compatibility: None,
         });
         out.push(Declared {
             member: accessor(at),
             descriptor: format!("({held})V"),
             kind: Member::Field { at, writes: true },
+            compatibility: None,
         });
     }
     Ok(out)
+}
+
+/// The actual parents emitted on a companion interface, in the same order.
+/// Shared with internal-default planning: holder flow and physical bases do
+/// not create interface inheritance. Direct interfaces are handled separately
+/// by `object_class` and currently emit no source-parent edges.
+pub(crate) fn interface_parents<'a>(
+    program: &'a JvmProgram<'_>,
+    package: &str,
+    face: &Layout,
+) -> Vec<&'a Layout> {
+    let mut parents: Vec<_> = face
+        .interfaces
+        .iter()
+        .filter_map(|id| program.layout(*id))
+        .filter(|parent| hierarchy::is_interface(program, parent))
+        .collect();
+    let name = |parent: &Layout| {
+        if program.is_split(parent) {
+            interface_name(package, parent)
+        } else {
+            types::class_name(package, parent)
+        }
+    };
+    for parent in program.declared_parents(face) {
+        if (program.is_split(parent) || hierarchy::is_interface(program, parent))
+            && !parents.iter().any(|known| name(known) == name(parent))
+        {
+            parents.push(parent);
+        }
+    }
+    parents
 }
 
 /// The companion interface of split face `face`, declaring [`members`]. It
@@ -398,45 +461,61 @@ pub(crate) fn interface_class(
     origin: &nts_semantic_schema::Origin,
 ) -> Result<Class, Diagnostic> {
     let refused = |why: String| Diagnostic::error("NTS4004", why, origin.location);
-    let mut builder =
-        ClassBuilder::new(interface_name(package, face), "java/lang/Object".to_owned());
+    let owner = interface_name(package, face);
+    let mut builder = ClassBuilder::new(owner.clone(), "java/lang/Object".to_owned());
+    let mut pool = Pool::new();
     builder.access = access::PUBLIC | access::INTERFACE | access::ABSTRACT;
     builder.source_file = Some("nts".to_owned());
-    for declared in face
-        .interfaces
-        .iter()
-        .filter_map(|id| program.layout(*id))
-        .filter(|at| hierarchy::is_interface(program, at))
-    {
-        builder
-            .interfaces
-            .push(types::class_name(package, declared));
-    }
-    // Its declared parents, every one of them: a diamond's two arms both,
-    // never a first parent. A split parent is extended at its companion; a
-    // parent emitted as a JVM interface is extended as itself.
-    for parent in program.declared_parents(face) {
+    for parent in interface_parents(program, package, face) {
         let name = if program.is_split(parent) {
             interface_name(package, parent)
-        } else if hierarchy::is_interface(program, parent) {
-            types::class_name(package, parent)
         } else {
-            continue;
+            types::class_name(package, parent)
         };
-        if !builder.interfaces.contains(&name) {
-            builder.interfaces.push(name);
-        }
+        builder.interfaces.push(name);
     }
     for declared in members(program, package, plan, face).map_err(refused)? {
-        builder.method(
-            access::PUBLIC | access::ABSTRACT,
-            declared.member,
-            declared.descriptor,
-            None,
-        );
+        let body = if let Some(plain) = &declared.compatibility {
+            let Member::Slot { slot } = declared.kind else {
+                return Err(refused("an internal selector is not a method slot".into()));
+            };
+            // Redeclaring this inherited entry as either abstract or concrete
+            // would shadow the one ancestor default or create a diamond.
+            if !program.guarded_default(face, slot) {
+                continue;
+            }
+            let target = face
+                .methods
+                .get(slot)
+                .and_then(Option::as_deref)
+                .and_then(|name| program.funcs.iter().find(|func| func.name == name))
+                .ok_or_else(|| refused("an internal selector has no live declaration".into()))?;
+            if !target.abstract_declaration {
+                return Err(refused(
+                    "an internal selector needs an abstract public declaration".into(),
+                ));
+            }
+            Some(guarded_members::default_forwarder(
+                package,
+                program,
+                (&owner, true),
+                target,
+                (plain, &declared.descriptor),
+                &mut pool,
+            )?)
+        } else {
+            None
+        };
+        let access = access::PUBLIC
+            | if body.is_some() {
+                access::SYNTHETIC
+            } else {
+                access::ABSTRACT
+            };
+        builder.method(access, declared.member, declared.descriptor, body);
     }
     builder
-        .build(Pool::new())
+        .build(pool)
         .map_err(|error| refused(format!("`{}`'s interface: {error}", face.name)))
 }
 
@@ -659,7 +738,7 @@ fn field_body(
                 face.name,
                 face.fields
                     .get(at as usize)
-                    .map_or("?", |f| f.name.as_str()),
+                    .map_or_else(|| "?".to_owned(), |f| f.name.to_string()),
                 if moved {
                     "a family row answers for it"
                 } else {

@@ -688,7 +688,9 @@ fn push_refusal(func: &mut Func, testing: usize, origin: super::Origin) {
         func,
         Op {
             kind: OpKind::ConstString(
-                "calling a value that is none of the classes the program gives it".to_owned(),
+                "calling a value that is none of the classes the program gives it"
+                    .to_owned()
+                    .into(),
             ),
             ty: HirType::Managed(ManagedType::String),
             origin: origin.clone(),

@@ -93,8 +93,8 @@ if (FROM) {
 
 function lower(module) {
   return withToken(() => new Promise((resolve) => {
-    // Snapshot cache off, as integrity's timed listing runs (see there).
-    const child = spawn(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore", env: { ...process.env, NTS_NO_SNAPSHOT_CACHE: "1" } });
+    // The same fresh native capture as integrity's listing.
+    const child = spawn(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore", env: { ...process.env } });
     const cpu = Promise.all([followCpu(child), followInstructions(child)]);
     const timer = setTimeout(() => child.kill("SIGTERM"), 900_000);
     child.on("error", (e) => { clearTimeout(timer); resolve({ error: e.message }); });

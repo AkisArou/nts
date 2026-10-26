@@ -59,8 +59,10 @@ use crate::origin::Origin;
 /// those bindings resolve to. 44: declaration-attached JVM contracts and their
 /// three-way parameter-retention evidence. 45: `packages`, a module's
 /// pkg-config packages (`@ntsPackage`). 46: `SymbolRecord::library`, the
-/// library a symbol the program does not declare comes from.
-pub const SCHEMA_VERSION: u32 = 46;
+/// library a symbol the program does not declare comes from. 47: the atomic
+/// native frontend switch: nts-owned semantic facts, exact property keys,
+/// lossless JavaScript text, and removal of unused predicate-subject fields.
+pub const SCHEMA_VERSION: u32 = 47;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -84,7 +86,7 @@ pub struct ModuleId(pub u32);
 
 /// The complete semantic view of one compilation.
 ///
-/// Produced by a [`crate::SemanticSource`]; consumed by `nts-core`. Nothing
+/// Produced by the native frontend; consumed by `nts-core`. Nothing
 /// downstream of this type is permitted to call the TypeScript checker.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SemanticSnapshot {
@@ -98,9 +100,12 @@ pub struct SemanticSnapshot {
     pub symbols: Vec<SymbolRecord>,
     /// Indexed by [`TypeId`].
     pub types: Vec<TypeRecord>,
+    /// Reachable standard symbols, identified by the native checker. A key is
+    /// compared with this `TypeId`, never with a description or internal name.
+    pub well_known_symbols: std::collections::BTreeMap<crate::WellKnownSymbol, TypeId>,
     /// Indexed by [`SignatureId`].
     pub signatures: Vec<SignatureRecord>,
-    /// Indexed by [`NodeId`]. Flattened from tsgo's encoded AST.
+    /// Indexed by [`NodeId`]. Flattened from the native AST into nts child slots.
     pub nodes: Vec<NodeRecord>,
     /// Index signatures of a type — `[key: string]: T`.
     ///
@@ -132,6 +137,11 @@ pub struct SemanticSnapshot {
     /// types have, and putting it in the kind would make every match on an object
     /// type mention it.
     pub type_arguments: FxHashMap<TypeId, Vec<TypeId>>,
+    /// Declared outer/local parameter count of a reference's native target.
+    /// The argument vector may additionally carry a receiver's `this` binding.
+    /// Absent is unknown; a present zero proves a nongeneric declaration.
+    /// Captured where carried dispatch needs it, rather than for every reference.
+    pub reference_parameter_counts: FxHashMap<TypeId, u32>,
     /// Compile-time constant value of a node, where the checker folded one.
     ///
     /// Covers enum members and the sites that read them. `Color.Red` becomes an
@@ -237,6 +247,32 @@ pub enum HeritageKind {
     Implements,
 }
 
+/// When an import's binding is acquired.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ImportPhase {
+    Value,
+    Type,
+    Defer,
+    Source,
+}
+
+impl ImportPhase {
+    #[must_use]
+    pub const fn from_data(data: NodeData) -> Option<Self> {
+        let small = match data {
+            NodeData::Children { small, .. } | NodeData::Flags { small } => small,
+            NodeData::ListLength(_) => return None,
+        };
+        match small {
+            0 => Some(Self::Value),
+            1 => Some(Self::Type),
+            2 => Some(Self::Defer),
+            3 => Some(Self::Source),
+            _ => None,
+        }
+    }
+}
+
 impl HeritageKind {
     /// Classify a `HeritageClause` from its node data.
     #[must_use]
@@ -250,7 +286,7 @@ impl HeritageKind {
 
 /// How a variable was declared.
 ///
-/// From `NodeFlags` on the `VariableDeclarationList`, not from the node data bits
+/// From the variable-kind facts on `VariableDeclarationList`, not its node data bits
 /// the encoder documentation points at. `const` is what lets a backend treat a
 /// binding as immutable without proving it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -265,6 +301,18 @@ pub enum VariableKind {
 }
 
 impl VariableKind {
+    /// This declaration kind in nts's semantic node flags.
+    #[must_use]
+    pub const fn node_flags(self) -> u32 {
+        match self {
+            Self::Var => 0,
+            Self::Let => 1,
+            Self::Const => 2,
+            Self::Using => 4,
+            Self::AwaitUsing => 6,
+        }
+    }
+
     /// Classify a `VariableDeclarationList` by its node flags.
     ///
     /// **`Using` is tested first, and the order is the whole of it.** The
@@ -309,7 +357,7 @@ impl VariableKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConstantValue {
     Number(f64),
-    String(String),
+    String(crate::JsText),
 }
 
 // Constants are compared for identity rather than numeric equality, and the
@@ -344,7 +392,9 @@ pub struct ModuleRecord {
 /// A resolved symbol.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SymbolRecord {
-    pub name: String,
+    pub name: PropertyKey,
+    /// A checker-identified intrinsic binding. Spelling alone never supplies it.
+    pub builtin: Option<BuiltinBinding>,
     pub flags: SymbolFlags,
     /// Where the symbol is declared. A merged declaration has more than one.
     ///
@@ -377,6 +427,17 @@ pub struct SymbolRecord {
     /// declaration's file by [`Library::of_path`], the one classifier every
     /// frontend calls.
     pub library: Option<Library>,
+}
+
+/// Bindings whose meaning the compiler implements directly. A local or a
+/// property with the same written name is a different symbol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BuiltinBinding {
+    Undefined,
+    NaN,
+    Infinity,
+    GlobalThis,
+    Arguments,
 }
 
 /// Which library a declaration file belongs to.
@@ -546,6 +607,10 @@ pub enum TypeKind {
     BigInt,
     String,
     Symbol,
+    /// A symbol with one statically known identity, usable as a member name.
+    UniqueSymbol,
+    /// TypeScript's `object`: a nonprimitive value with no known structure.
+    NonPrimitive,
     /// A literal type: `42`, `"ok"`, `true`.
     Literal(LiteralValue),
     /// A named object type, class instance, or interface.
@@ -561,6 +626,9 @@ pub enum TypeKind {
     TypeParameter {
         name: String,
         constraint: Option<TypeId>,
+        /// The checker's polymorphic receiver parameter, independently of its
+        /// printed name or constraint. Ordinary `T extends C` is false.
+        is_this: bool,
     },
     /// `T extends U ? X : Y`.
     Conditional {
@@ -580,17 +648,10 @@ pub enum TypeKind {
         texts: Vec<String>,
         types: Vec<TypeId>,
     },
-    /// A structured type the checker resolved but this snapshot has not
-    /// decomposed into members yet.
-    ///
-    /// Objects, unions, intersections, tuples, and conditionals all reach here.
-    /// Their members need follow-up queries that the frontend does not make in one
-    /// pass, and recording an empty [`TypeKind::Object`] or [`TypeKind::Union`]
-    /// instead would be indistinguishable from a genuinely empty one — a lie no
-    /// later pass could detect. `flags` is the checker's own `TypeFlags`.
-    Structured {
-        flags: u32,
-    },
+    /// An opaque nominal, provided or generic type. Its identity and type
+    /// arguments remain available without traversing its member graph. This is
+    /// distinct from an empty object, and carries no native checker flag bits.
+    Structured,
 
     /// The checker produced something this schema does not model.
     ///
@@ -617,9 +678,6 @@ pub struct IndexSignature {
 /// method can be resolved rather than looked up.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypePredicate {
-    /// Which parameter is narrowed. `None` for a `this` predicate.
-    pub parameter_index: Option<u32>,
-    pub parameter_name: String,
     /// The type the parameter is narrowed to. Absent for a bare `asserts x`.
     pub narrowed_to: Option<TypeId>,
     /// An `asserts` predicate: it narrows for the rest of the enclosing scope
@@ -643,7 +701,7 @@ pub enum Accessor {
 /// One member of an object type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyRecord {
-    pub name: String,
+    pub name: PropertyKey,
     pub ty: TypeId,
     /// Never written after construction.
     ///
@@ -688,6 +746,64 @@ pub struct PropertyRecord {
     pub own: bool,
 }
 
+/// A member's semantic key. A string, a private name and a unique symbol are
+/// different keys even when their descriptions have the same spelling.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum PropertyKey {
+    Name(String),
+    Private(String),
+    /// Always a `UniqueSymbol` type in this snapshot; its description is display
+    /// information, never identity.
+    Symbol(TypeId),
+}
+
+impl PropertyKey {
+    #[must_use]
+    pub fn public_name(&self) -> Option<&str> {
+        match self {
+            Self::Name(name) => Some(name),
+            Self::Private(_) | Self::Symbol(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn is_name(&self, name: &str) -> bool {
+        self.public_name() == Some(name)
+    }
+
+    /// The emitted member namespace is disjoint for all three kinds. Prefixes
+    /// are applied to string keys too: a user can write any prefix as a string.
+    #[must_use]
+    pub fn storage_name(&self) -> String {
+        match self {
+            Self::Name(name) => format!("n:{name}"),
+            Self::Private(name) => format!("p:{name}"),
+            Self::Symbol(id) => format!("s:{}", id.0),
+        }
+    }
+}
+
+impl From<String> for PropertyKey {
+    fn from(name: String) -> Self {
+        Self::Name(name)
+    }
+}
+
+impl From<&str> for PropertyKey {
+    fn from(name: &str) -> Self {
+        Self::Name(name.to_owned())
+    }
+}
+
+impl std::fmt::Display for PropertyKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(name) | Self::Private(name) => f.write_str(name),
+            Self::Symbol(id) => write!(f, "[symbol #{}]", id.0),
+        }
+    }
+}
+
 /// What a member of a type is.
 ///
 /// One question with one answer, rather than a flag per kind. The three are
@@ -725,7 +841,7 @@ impl MemberKind {
 pub enum LiteralValue {
     Boolean(bool),
     Number(f64),
-    String(String),
+    String(crate::JsText),
     BigInt(String),
 }
 
@@ -780,46 +896,34 @@ pub struct ParameterRecord {
 
 /// What kind of node this is.
 ///
-/// A dedicated variant for lists rather than a magic number: tsgo encodes a
-/// `NodeList` with the sentinel kind `0xFFFF_FFFF`, which does not fit a `u16`
-/// and means something categorically different from a syntax kind. Making that
-/// an enum stops the sentinel from being compared against real kinds by accident.
+/// Lists are explicit groups rather than syntax kinds, so a group cannot be
+/// accidentally compared with a token or expression tag.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NodeKind {
-    /// tsgo's `SyntaxKind`, kept as a number so a tsgo bump that adds kinds does
-    /// not require a schema change to *parse* — only to handle.
+    /// An nts-owned syntax tag from [`syntax`]. Native kinds are normalized
+    /// before capture, preserving stable consumer slots across checker pins.
     Syntax(u16),
     /// A `NodeList`: the encoded parent of a syntactic group.
     List,
 }
 
-/// The tagged payload of a node's data field.
-///
-/// tsgo packs four things into one `u32`: a 2-bit type tag, 6 bits of per-kind
-/// flags, and a 24-bit payload. Splitting it here means no downstream pass has to
-/// remember which bits mean what — and in particular that a unary expression's
-/// operator, which lives in the flag bits, is never mistaken for a string index.
+/// Semantic child roles and per-kind flags. Text lives on the node; source
+/// representation indexes and byte offsets are not part of this schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeData {
     /// Which of the node kind's child properties are present, as a bitmask in
     /// visitor order.
     Children { present: u8, small: u8 },
-    /// Index into the encoded string table, already resolved into
-    /// [`NodeRecord::text`].
-    String { index: u32, small: u8 },
-    /// Byte offset into the extended-data section. Template literals and the
-    /// source file itself use this.
-    Extended { offset: u32, small: u8 },
+    /// Per-kind flags for a node whose value is in [`NodeRecord::text`].
+    Flags { small: u8 },
     /// Number of entries, for a [`NodeKind::List`].
     ListLength(u32),
 }
 
 /// One node of the flattened AST.
 ///
-/// Mirrors tsgo's encoded layout so that decoding is close to a reinterpretation
-/// rather than a tree construction. `children` is the one derived field: the
-/// encoding stores parent and next-sibling links instead, and source order makes
-/// the child lists recoverable in order.
+/// Arena identities, source origins and semantic syntax roles are owned by nts,
+/// independently of the frontend's AST storage and traversal implementation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeRecord {
     pub kind: NodeKind,
@@ -828,7 +932,8 @@ pub struct NodeRecord {
     pub children: Vec<NodeId>,
     /// Resolved symbol, where the node names one.
     pub symbol: Option<SymbolId>,
-    /// tsgo's `NodeFlags`. Carries `let`/`const`, ambient, and similar bits.
+    /// Nts-owned variable-kind, ambient and optional-chain facts. The frontend
+    /// projects named adapter attributes into these stable bits.
     pub flags: u32,
     /// Modifier keywords written on this declaration.
     pub modifiers: DeclarationModifiers,
@@ -837,7 +942,7 @@ pub struct NodeRecord {
     pub native: Option<Box<NativeAttributes>>,
     pub data: NodeData,
     /// Resolved text, for nodes whose data is a string index.
-    pub text: Option<String>,
+    pub text: Option<crate::JsText>,
 }
 
 /// A declaration's JVM invocation contract, supplied by `nts bind` or an author.
@@ -1071,9 +1176,6 @@ pub enum SnapshotError {
         len: usize,
     },
 
-    #[error("frontend transport failed: {0}")]
-    Transport(String),
-
     /// A generator of files for the program -- its Objective-C binding --
     /// could not make them, and says why.
     #[error("{0}")]
@@ -1084,11 +1186,45 @@ pub enum SnapshotError {
     #[error("{0}")]
     Project(String),
 
-    #[error("failed to decode snapshot: {0}")]
-    Decode(String),
+    #[error("failed to serialize snapshot: {0}")]
+    Serialize(String),
 }
 
 impl SemanticSnapshot {
+    /// The receiver bound of a checker-identified polymorphic `this`.
+    /// A matching name or a constraint alone does not establish this fact.
+    #[must_use]
+    pub fn polymorphic_this_constraint(&self, ty: TypeId) -> Option<TypeId> {
+        let TypeKind::TypeParameter {
+            is_this: true,
+            constraint: Some(constraint),
+            ..
+        } = &self.types.get(ty.0 as usize)?.kind
+        else {
+            return None;
+        };
+        self.types.get(constraint.0 as usize)?;
+        Some(*constraint)
+    }
+
+    #[must_use]
+    pub fn key_is_well_known(&self, key: &PropertyKey, well_known: crate::WellKnownSymbol) -> bool {
+        match key {
+            PropertyKey::Symbol(id) => self.well_known_symbols.get(&well_known) == Some(id),
+            PropertyKey::Name(_) | PropertyKey::Private(_) => false,
+        }
+    }
+    /// Only an identifier expression can read one of these bindings. A string
+    /// literal or a property's name carries text but does not read the symbol.
+    #[must_use]
+    pub fn builtin_binding_at(&self, node: NodeId) -> Option<BuiltinBinding> {
+        let node = self.nodes.get(node.0 as usize)?;
+        (node.kind == NodeKind::Syntax(crate::syntax::IDENTIFIER))
+            .then_some(node.symbol)
+            .flatten()
+            .and_then(|symbol| self.symbols.get(symbol.0 as usize))
+            .and_then(|symbol| symbol.builtin)
+    }
     /// Whether the program implements a declaration of its own under `symbol`.
     ///
     /// A library's declarations are in files this compiler does not decode, so
@@ -1117,7 +1253,7 @@ impl SemanticSnapshot {
         if self.implements_its_own(symbol) {
             return None;
         }
-        Some(self.symbols.get(symbol.0 as usize)?.name.as_str())
+        self.symbols.get(symbol.0 as usize)?.name.public_name()
     }
 
     /// Reject a snapshot the rest of the compiler cannot safely trust.
@@ -1147,8 +1283,34 @@ impl SemanticSnapshot {
         }
 
         for symbol in &self.symbols {
+            self.check_key(&symbol.name)?;
             if let Some(TypeId(ty)) = symbol.ty {
                 check(ty, "type", self.types.len())?;
+            }
+        }
+
+        for record in &self.types {
+            if let TypeKind::Object { properties } = &record.kind {
+                for property in properties {
+                    self.check_key(&property.name)?;
+                }
+            }
+        }
+        for id in self.well_known_symbols.values() {
+            self.check_key(&PropertyKey::Symbol(*id))?;
+        }
+        for (&TypeId(id), &count) in &self.reference_parameter_counts {
+            check(id, "type", self.types.len())?;
+            let Some(arguments) = self.type_arguments.get(&TypeId(id)) else {
+                return Err(SnapshotError::Project(format!(
+                    "reference #{id} has a declared parameter count but no argument vector"
+                )));
+            };
+            if arguments.len() < count as usize || arguments.len() > count as usize + 1 {
+                return Err(SnapshotError::Project(format!(
+                    "reference #{id} has {} arguments for {count} declared parameters; only one receiver binding may follow the declared prefix",
+                    arguments.len()
+                )));
             }
         }
 
@@ -1162,6 +1324,19 @@ impl SemanticSnapshot {
             check(bound, "type", self.types.len())?;
         }
 
+        Ok(())
+    }
+
+    fn check_key(&self, key: &PropertyKey) -> Result<(), SnapshotError> {
+        if let PropertyKey::Symbol(id) = key {
+            check(id.0, "symbol-key type", self.types.len())?;
+            if self.types[id.0 as usize].kind != TypeKind::UniqueSymbol {
+                return Err(SnapshotError::Project(format!(
+                    "the member key's type #{} is not a unique symbol",
+                    id.0
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -1218,11 +1393,13 @@ impl SemanticSnapshot {
             modules,
             symbols,
             types,
+            well_known_symbols,
             signatures,
             nodes,
             index_signatures,
             base_types,
             type_arguments,
+            reference_parameter_counts,
             constants,
             call_targets,
             diagnostics,
@@ -1235,12 +1412,14 @@ impl SemanticSnapshot {
         encode(&mut bytes, modules)?;
         encode(&mut bytes, symbols)?;
         encode(&mut bytes, types)?;
+        encode(&mut bytes, well_known_symbols)?;
         encode(&mut bytes, signatures)?;
         encode(&mut bytes, nodes)?;
         encode(&mut bytes, diagnostics)?;
         encode(&mut bytes, &by_key(index_signatures))?;
         encode(&mut bytes, &by_key(base_types))?;
         encode(&mut bytes, &by_key(type_arguments))?;
+        encode(&mut bytes, &by_key(reference_parameter_counts))?;
         encode(&mut bytes, &by_key(constants))?;
         encode(&mut bytes, &by_key(call_targets))?;
         encode(&mut bytes, &by_key(node_types))?;
@@ -1251,7 +1430,8 @@ impl SemanticSnapshot {
 
 /// Append one field's encoding to a digest's input.
 fn encode<T: Serialize>(bytes: &mut Vec<u8>, part: &T) -> Result<(), SnapshotError> {
-    let encoded = postcard::to_allocvec(part).map_err(|e| SnapshotError::Decode(e.to_string()))?;
+    let encoded =
+        postcard::to_allocvec(part).map_err(|e| SnapshotError::Serialize(e.to_string()))?;
     bytes.extend_from_slice(&encoded);
     Ok(())
 }
@@ -1284,6 +1464,95 @@ mod tests {
 
     use super::*;
     use nts_diagnostics::{Location, SourceId, Span};
+
+    #[test]
+    fn receiver_parameter_fact_survives_the_cache_and_changes_the_digest() {
+        let mut value = snapshot(Vec::new());
+        value.types = vec![
+            TypeRecord {
+                kind: TypeKind::Object {
+                    properties: Vec::new(),
+                },
+                symbol: None,
+            },
+            TypeRecord {
+                kind: TypeKind::TypeParameter {
+                    name: "SameName".into(),
+                    constraint: Some(TypeId(0)),
+                    is_this: false,
+                },
+                symbol: None,
+            },
+        ];
+        assert_eq!(value.polymorphic_this_constraint(TypeId(1)), None);
+        let ordinary = value.digest().unwrap();
+        if let TypeKind::TypeParameter { is_this, .. } = &mut value.types[1].kind {
+            *is_this = true;
+        }
+        assert_ne!(ordinary, value.digest().unwrap());
+        assert_eq!(
+            value.polymorphic_this_constraint(TypeId(1)),
+            Some(TypeId(0))
+        );
+        let bytes = postcard::to_allocvec(&value).unwrap();
+        let loaded: SemanticSnapshot = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(loaded.types, value.types);
+        assert_eq!(loaded.digest().unwrap(), value.digest().unwrap());
+        assert_eq!(
+            loaded.polymorphic_this_constraint(TypeId(1)),
+            Some(TypeId(0))
+        );
+        if let TypeKind::TypeParameter { constraint, .. } = &mut value.types[1].kind {
+            *constraint = None;
+        }
+        assert_eq!(value.polymorphic_this_constraint(TypeId(1)), None);
+        if let TypeKind::TypeParameter { constraint, .. } = &mut value.types[1].kind {
+            *constraint = Some(TypeId(99));
+        }
+        assert_eq!(value.polymorphic_this_constraint(TypeId(1)), None);
+        assert_eq!(value.polymorphic_this_constraint(TypeId(99)), None);
+    }
+
+    #[test]
+    fn reference_parameter_facts_are_hashed_serialized_and_validated() {
+        let mut value = snapshot(Vec::new());
+        value.types.push(TypeRecord {
+            kind: TypeKind::Structured,
+            symbol: None,
+        });
+        value.type_arguments.insert(TypeId(0), Vec::new());
+        let unknown = value.digest().unwrap();
+        value.reference_parameter_counts.insert(TypeId(0), 0);
+        assert_ne!(
+            unknown,
+            value.digest().unwrap(),
+            "known zero is a distinct fact"
+        );
+        let bytes = postcard::to_allocvec(&value).unwrap();
+        let decoded: SemanticSnapshot = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.reference_parameter_counts[&TypeId(0)], 0);
+        assert_eq!(decoded.digest().unwrap(), value.digest().unwrap());
+        assert!(value.validate().is_ok());
+        value.reference_parameter_counts.insert(TypeId(0), 2);
+        assert!(value.validate().is_err(), "a truncated prefix is malformed");
+        value.reference_parameter_counts.insert(TypeId(0), 0);
+        value.type_arguments.insert(TypeId(0), vec![TypeId(0); 2]);
+        assert!(
+            value.validate().is_err(),
+            "more than one trailing receiver binding is malformed"
+        );
+        value.type_arguments.remove(&TypeId(0));
+        assert!(
+            value.validate().is_err(),
+            "missing arguments are not known zero"
+        );
+        value.reference_parameter_counts.clear();
+        value.reference_parameter_counts.insert(TypeId(99), 0);
+        assert!(
+            value.validate().is_err(),
+            "metadata may not name a missing type"
+        );
+    }
 
     fn origin() -> Origin {
         Origin::source(Location {

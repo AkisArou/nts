@@ -1,6 +1,6 @@
 use rustc_hash::FxHashSet;
 use tsrs_ast::Diagnostic;
-use tsrs_core::collections::{OrderedMap, OrderedMapExt};
+use tsrs_core::collections::OrderedMap;
 use tsrs_core::tspath;
 use tsrs_core::{
     BuildOptions, CompilerOptions, JsxEmit, ModuleDetectionKind, ModuleKind, ModuleResolutionKind,
@@ -20,7 +20,7 @@ use crate::namemap::BUILD_NAME_MAP;
 use crate::tsconfigparsing::{COMMAND_LINE_COMPILER_OPTIONS_MAP, CommandLineOptionNameMap};
 use tsrs_ast::new_compiler_diagnostic;
 
-pub fn parse_tristate(value: &CompilerOptionsValue) -> Tristate {
+fn parse_tristate(value: &CompilerOptionsValue) -> Tristate {
     match value {
         CompilerOptionsValue::Null => Tristate::Unknown,
         CompilerOptionsValue::Tristate(v) => *v,
@@ -29,7 +29,7 @@ pub fn parse_tristate(value: &CompilerOptionsValue) -> Tristate {
     }
 }
 
-pub fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
+fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
     if let CompilerOptionsValue::Array(arr) = value {
         let mut result = Vec::with_capacity(arr.len());
         result.extend(arr.iter().filter_map(|v| {
@@ -40,7 +40,7 @@ pub fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
     None
 }
 
-pub fn parse_string_map(
+fn parse_string_map(
     value: &CompilerOptionsValue,
 ) -> Option<OrderedMap<String, Option<Vec<String>>>> {
     if let CompilerOptionsValue::Object(m) = value {
@@ -51,7 +51,7 @@ pub fn parse_string_map(
     None
 }
 
-pub fn parse_string(value: &CompilerOptionsValue) -> String {
+fn parse_string(value: &CompilerOptionsValue) -> String {
     if let CompilerOptionsValue::String(str) = value {
         return str.clone();
     }
@@ -59,7 +59,7 @@ pub fn parse_string(value: &CompilerOptionsValue) -> String {
 }
 
 // parseNumber into a Go `*int` (64-bit) option.
-pub fn parse_number_int(value: &CompilerOptionsValue) -> Option<i64> {
+fn parse_number_int(value: &CompilerOptionsValue) -> Option<i64> {
     match value {
         CompilerOptionsValue::Int(num) => Some(*num),
         CompilerOptionsValue::Float(num) => Some(*num as i64),
@@ -187,7 +187,7 @@ fn parse_string_string_map_strict(
 
 // parseStringArrayStrict returns the string slice and true only if value is an array whose
 // elements are all strings. A missing element or wrong element type yields false.
-pub fn parse_string_array_strict(value: &CompilerOptionsValue) -> Option<Vec<String>> {
+fn parse_string_array_strict(value: &CompilerOptionsValue) -> Option<Vec<String>> {
     let CompilerOptionsValue::Array(arr) = value else {
         return None;
     };
@@ -209,37 +209,37 @@ pub fn parse_json_to_string_key(
     let mut result = OrderedMap::with_capacity_and_hasher(6, rustc_hash::FxBuildHasher);
     if let CompilerOptionsValue::Object(m) = json {
         if let Some(v) = m.get("include") {
-            result.set("include".to_string(), v.clone());
+            result.insert("include".to_string(), v.clone());
         }
         if let Some(v) = m.get("exclude") {
-            result.set("exclude".to_string(), v.clone());
+            result.insert("exclude".to_string(), v.clone());
         }
         if let Some(v) = m.get("files") {
-            result.set("files".to_string(), v.clone());
+            result.insert("files".to_string(), v.clone());
         }
         if let Some(v) = m.get("references") {
-            result.set("references".to_string(), v.clone());
+            result.insert("references".to_string(), v.clone());
         }
         if let Some(v) = m.get("contentMappers") {
-            result.set("contentMappers".to_string(), v.clone());
+            result.insert("contentMappers".to_string(), v.clone());
         }
         if let Some(v) = m.get("extends") {
             if let CompilerOptionsValue::String(str) = v {
-                result.set(
+                result.insert(
                     "extends".to_string(),
                     CompilerOptionsValue::Array(vec![CompilerOptionsValue::String(str.clone())]),
                 );
             }
-            result.set("extends".to_string(), v.clone());
+            result.insert("extends".to_string(), v.clone());
         }
         if let Some(v) = m.get("compilerOptions") {
-            result.set("compilerOptions".to_string(), v.clone());
+            result.insert("compilerOptions".to_string(), v.clone());
         }
         if let Some(v) = m.get("excludes") {
-            result.set("excludes".to_string(), v.clone());
+            result.insert("excludes".to_string(), v.clone());
         }
         if let Some(v) = m.get("typeAcquisition") {
-            result.set("typeAcquisition".to_string(), v.clone());
+            result.insert("typeAcquisition".to_string(), v.clone());
         }
     }
     result
@@ -439,7 +439,7 @@ pub fn parse_compiler_options_worker(
         }
         "outFile" => all_options.out_file = parse_string(value),
         "noResolve" => all_options.no_resolve = parse_tristate(value),
-        "paths" => all_options.paths = parse_string_map(value),
+        "paths" => all_options.paths = parse_string_map(value).map(std::sync::Arc::new),
         "plugins" => {
             // Native TypeScript does not load plugins; retain them only so tools can report the incompatibility.
             if matches!(value, CompilerOptionsValue::NilArray) {
@@ -600,7 +600,7 @@ pub fn parse_type_acquisition(
     Vec::new()
 }
 
-pub fn parse_build_options(
+fn parse_build_options(
     key: &str,
     value: &CompilerOptionsValue,
     all_options: &mut BuildOptions,
@@ -891,6 +891,24 @@ impl ToOptionsValue for Option<OrderedMap<String, Option<Vec<String>>>> {
     }
 }
 
+impl ToOptionsValue for Option<std::sync::Arc<OrderedMap<String, Option<Vec<String>>>>> {
+    fn to_options_value(&self) -> CompilerOptionsValue {
+        match self {
+            Some(m) => CompilerOptionsValue::Object(
+                m.iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            CompilerOptionsValue::StringArray(v.clone().unwrap_or_default()),
+                        )
+                    })
+                    .collect(),
+            ),
+            None => CompilerOptionsValue::Null,
+        }
+    }
+}
+
 impl ToOptionsValue for Option<Vec<PluginImport>> {
     fn to_options_value(&self) -> CompilerOptionsValue {
         match self {
@@ -1008,7 +1026,7 @@ pub fn convert_to_options_with_absolute_paths(
     for o in keys {
         let v = options_base.get(&o).unwrap();
         if let Some(result) = convert_option_to_absolute_path(&o, v, option_map, cwd) {
-            options_base.set(o, result);
+            options_base.insert(o, result);
         }
     }
     options_base

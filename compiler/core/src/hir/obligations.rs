@@ -554,7 +554,7 @@ impl<'a> Slots<'a> {
                                 *value,
                                 (kind, None),
                                 Into::Field {
-                                    field: name.to_owned(),
+                                    field: name.to_string(),
                                 },
                             );
                         }
@@ -562,7 +562,8 @@ impl<'a> Slots<'a> {
                     // Each layout that can arrive; their kinds agree (Q1),
                     // and each is obliged, so a disagreement is still caught.
                     OpKind::OpenFieldSet { arms, value, .. } => {
-                        let mut kinds: Vec<(Scalar, &str)> = Vec::new();
+                        let mut kinds: Vec<(Scalar, &nts_semantic_schema::PropertyKey)> =
+                            Vec::new();
                         for arm in arms {
                             let object = HirType::Managed(ManagedType::Object(arm.ty));
                             if let Some(found) = self.field(&object, arm.field)
@@ -577,7 +578,7 @@ impl<'a> Slots<'a> {
                                 *value,
                                 (kind, None),
                                 Into::Field {
-                                    field: name.to_owned(),
+                                    field: name.to_string(),
                                 },
                             );
                         }
@@ -873,12 +874,16 @@ impl<'a> Slots<'a> {
 
     /// The kind a field of an object of type `object` was written as, and its
     /// name.
-    fn field(&self, object: &HirType, field: u32) -> Option<(Scalar, &'a str)> {
+    fn field(
+        &self,
+        object: &HirType,
+        field: u32,
+    ) -> Option<(Scalar, &'a nts_semantic_schema::PropertyKey)> {
         let HirType::Managed(ManagedType::Object(ty)) = object else {
             return None;
         };
         let field = self.layouts.get(ty)?.fields.get(field as usize)?;
-        Some((field.written?, field.name.as_str()))
+        Some((field.written?, &field.name))
     }
 }
 

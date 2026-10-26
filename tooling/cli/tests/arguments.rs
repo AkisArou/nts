@@ -16,7 +16,6 @@ fn every_command_rejects_a_bogus_flag_before_doing_work() {
     for command in arguments::COMMANDS {
         let output = Command::new(env!("CARGO_BIN_EXE_nts"))
             .args([command.name, "--nts-unknown-option"])
-            .env("NTS_TSGO", "/nts/no-frontend-needed")
             .output()
             .unwrap();
         let error = String::from_utf8_lossy(&output.stderr);
@@ -35,7 +34,6 @@ fn every_command_rejects_a_bogus_flag_before_doing_work() {
         }
         let help = Command::new(env!("CARGO_BIN_EXE_nts"))
             .args([command.name, "--help"])
-            .env("NTS_TSGO", "/nts/no-frontend-needed")
             .output()
             .unwrap();
         assert!(help.status.success(), "{}: {:?}", command.name, help);
@@ -47,7 +45,6 @@ fn every_command_rejects_a_bogus_flag_before_doing_work() {
 fn check_cannot_silently_select_c_for_a_backend_flag() {
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["check", "--backend", "wasm"])
-        .env("NTS_TSGO", "/nts/no-frontend-needed")
         .output()
         .unwrap();
     let error = String::from_utf8_lossy(&output.stderr);
@@ -97,7 +94,19 @@ fn option_values_and_inline_forms_keep_their_existing_meaning() {
         assert!(arguments::validate(&args(values)).is_err(), "{values:?}");
     }
     assert_eq!(arguments::validate(&args(&["check", "--rc"])), Ok(false));
+    assert_eq!(
+        arguments::validate(&args(&["frontend", "--checkers", "4", "project"])),
+        Ok(false)
+    );
+    assert_eq!(
+        arguments::validate(&args(&["deps", "--checkers", "1", "--json"])),
+        Ok(false)
+    );
+    for deleted in ["--decompose", "--calls", "--constants"] {
+        assert!(arguments::validate(&args(&["frontend", deleted])).is_err());
+    }
     assert!(arguments::takes_value("--backend"));
+    assert!(arguments::takes_value("--checkers"));
     assert!(!arguments::takes_value("--rc"));
 }
 
@@ -106,7 +115,6 @@ fn a_backend_value_before_the_project_is_not_a_project() {
     let missing = "__nts_backend_value_is_not_the_project__";
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["hir", "--backend", "llvm", "--no-acquire", missing])
-        .env("NTS_TSGO", "/nts/no-frontend-needed")
         .output()
         .unwrap();
     let error = String::from_utf8_lossy(&output.stderr);
@@ -117,10 +125,6 @@ fn a_backend_value_before_the_project_is_not_a_project() {
 
 #[test]
 fn check_rc_reaches_the_differential_librarys_provider_selection() {
-    if std::env::var_os("NTS_TSGO").is_none() {
-        eprintln!("SKIP check --rc: set NTS_TSGO");
-        return;
-    }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for counting in [false, true] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
@@ -349,6 +353,17 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
     group("hir", &["dump_hir"]);
     group("receivers", &["dump_receivers"]);
     group("deps", &["deps"]);
+    // Project capture and standalone acquisition share one count reader.
+    let checkers = include_str!("../src/checkers.rs")
+        .split("#[cfg(test)]")
+        .next()
+        .unwrap();
+    let checkers = flags(&tokens(checkers));
+    consumed
+        .get_mut("project")
+        .unwrap()
+        .extend(checkers.clone());
+    consumed.get_mut("deps").unwrap().extend(checkers);
     for name in [
         "frontend",
         "emit-c",

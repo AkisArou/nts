@@ -9,36 +9,34 @@
 //! `moved`, whose first link's left side is a string it made and gives away,
 //! appends to it in place (`nts_str_append`) and makes nothing with room.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, BinOp, Callee, OpKind, Options, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-string-chain-made-with-room";
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
         provider: Provider::ReferenceCounting,
         ..Options::default()
     };
-    Some(
-        hir::prepare_with(&snapshot, &options)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &options)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 /// The live operations of the functions named `name`, or a clone of it.
@@ -79,9 +77,7 @@ fn concatenations(program: &hir::Program, name: &str) -> usize {
 
 #[test]
 fn a_chain_s_first_link_is_made_with_room_only_where_an_append_takes_it_over() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     for name in ["templates", "joined"] {
         assert!(
             calls(&program, name, "nts_str_concat_grown") > 0,

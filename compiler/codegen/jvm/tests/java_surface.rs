@@ -15,7 +15,7 @@
 
 use camino::Utf8PathBuf;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
 
@@ -33,15 +33,7 @@ fn repository() -> PathBuf {
 /// build: a test asserting the surface and a test asserting the pool disagreeing
 /// about which project or which provider they compiled would be two results
 /// nobody could compare.
-fn prepared() -> Option<hir::Program> {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP java_surface: NTS_TSGO is not set");
-        return None;
-    };
-    if !tsgo.exists() {
-        eprintln!("SKIP java_surface: no tsgo at {tsgo}");
-        return None;
-    }
+fn prepared() -> hir::Program {
     let tsconfig = Utf8PathBuf::from_path_buf(
         repository()
             .join("tests/interop/ts-from-java/tsconfig.json")
@@ -50,35 +42,32 @@ fn prepared() -> Option<hir::Program> {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "ts-from-java should typecheck");
     let prepared = common::prepare(&snapshot).expect("prepared HIR should verify");
-    Some(prepared.program)
+    prepared.program
 }
 
 /// The emitted classes as bytes, for a question about the constant pool.
-fn emitted_bytes() -> Option<Vec<(String, Vec<u8>)>> {
-    let program = prepared()?;
-    Some(
-        nts_codegen_jvm::emit(&program)
-            .classes
-            .iter()
-            .map(|class| (class.binary_name.clone(), class.bytes.clone()))
-            .collect(),
-    )
+fn emitted_bytes() -> Vec<(String, Vec<u8>)> {
+    let program = prepared();
+    nts_codegen_jvm::emit(&program)
+        .classes
+        .iter()
+        .map(|class| (class.binary_name.clone(), class.bytes.clone()))
+        .collect()
 }
 
-fn emitted() -> Option<Vec<read::ClassFile>> {
-    let program = prepared()?;
-    Some(
-        nts_codegen_jvm::emit(&program)
-            .classes
-            .iter()
-            .map(|class| read::class_file(&class.bytes).expect("our own output parses"))
-            .collect(),
-    )
+fn emitted() -> Vec<read::ClassFile> {
+    let program = prepared();
+    nts_codegen_jvm::emit(&program)
+        .classes
+        .iter()
+        .map(|class| read::class_file(&class.bytes).expect("our own output parses"))
+        .collect()
 }
 
 /// **Proven to fail in both directions**, because a test that only rejects one
@@ -95,7 +84,7 @@ fn emitted() -> Option<Vec<read::ClassFile>> {
 /// `javac` reports a missing symbol rather than a visibility error.
 #[test]
 fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
-    let Some(classes) = emitted() else { return };
+    let classes = emitted();
     let program = classes
         .iter()
         .find(|class| class.binary_name == "nts/gen/Program")
@@ -135,7 +124,7 @@ fn a_methods_static_is_synthetic_and_a_free_functions_is_not() {
 
 #[test]
 fn a_class_carries_an_instance_method_for_each_of_its_statics() {
-    let Some(classes) = emitted() else { return };
+    let classes = emitted();
     let session = classes
         .iter()
         .find(|class| class.binary_name == "nts/gen/Session")
@@ -186,9 +175,7 @@ fn a_class_carries_an_instance_method_for_each_of_its_statics() {
 /// the kind that turns a static into a virtual call without anyone noticing.
 #[test]
 fn no_emitted_class_names_a_java_collection_interface() {
-    let Some(classes) = emitted_bytes() else {
-        return;
-    };
+    let classes = emitted_bytes();
     assert!(!classes.is_empty(), "ts-from-java emits classes");
 
     // **The control, because a search that finds nothing proves nothing until it

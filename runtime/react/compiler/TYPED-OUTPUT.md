@@ -1,5 +1,9 @@
 # React Compiler output as typed TypeScript
 
+The measurements and prototype commands below describe the pre-switch Go
+frontend. The current implementation uses the native frontend's syntax views
+and borrowed type queries; the historical API references are not dependencies.
+
 **The question.** The upstream Rust React Compiler rewrites each component,
 and nts refuses what it cannot type. Can the compiled code stay correct,
 compilable TypeScript with the precision of the original? What is the
@@ -133,7 +137,7 @@ just not memoized, and the fallback count is reported.
   declaration emit does. A type that can't be named (`__type`, truncation)
   sends the function to fallback.
 
-## What nts needs
+## What the prototype needed
 
 - **tsgo already exposes `typeToString` and `typeToTypeNode`** with an
   enclosing declaration and flags (`third_party/typescript-go/internal/api/session.go`).
@@ -150,7 +154,7 @@ All three steps are built. This document keeps the measurements that chose
 the design; the implementation is `nts-react`, which `nts` runs when
 `nts.config.ts` has a `react` section.
 
-1. **The frontend** is `nts-react`'s converter, from tsgo's syntax tree to
+1. **The frontend** is `nts-react`'s converter, from the frontend's syntax views to
    the compiler's input. It is held identical to Babel's on 271 upstream
    fixtures and 40 of ours: convert, scope, compile and print.
 2. **The restoration** is its printer, which copies unchanged code from the

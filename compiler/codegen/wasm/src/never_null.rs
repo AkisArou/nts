@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn a_string_built_from_a_literal_is_never_null() {
-        let (f, text) = appending(|f| value(f, OpKind::ConstString(String::new()), string()));
+        let (f, text) = appending(|f| value(f, OpKind::ConstString("".into()), string()));
         assert!(values(&f).contains(&text));
     }
 

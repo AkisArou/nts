@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 mod common;
 
@@ -104,9 +104,6 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
     // ran it: on 2026-09-30 a signature spelled `Erased-Callable` refused four
     // callbacks here while six landings in a row read the suite as green. A
     // check that passes by not running is the failure it exists to prevent.
-    let tsgo = nts_frontend_ts::tsgo::locate().unwrap_or_else(|| {
-        panic!("no tsgo: set NTS_TSGO or build target/tsgo (tooling/bootstrap/bootstrap.sh)")
-    });
     let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
         eprintln!("SKIP intrinsics: no JDK");
         return;
@@ -121,7 +118,8 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(

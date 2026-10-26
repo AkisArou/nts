@@ -2,16 +2,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn missing_and_present_reference_elements_retain_their_subjects() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-nested-pattern-missing-a-reference-element/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     let prepared = hir::prepare(&snapshot).expect("valid HIR");

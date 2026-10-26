@@ -9,24 +9,24 @@
 //! `{...}` literal typed at `DetailJSON` would then stop sharing `DetailJSON`'s
 //! layout.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/record-parents/tsconfig.json")
         .canonicalize_utf8()
         .expect("the fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// Which types the map names, by the name the hierarchy gave them.
@@ -51,9 +51,7 @@ fn named(lowered: &hir::lower::Lowered) -> Vec<(String, String)> {
 
 #[test]
 fn one_declared_parent_is_recorded_and_two_are_not() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let rows = named(&lowered);
     assert!(
         rows.iter()
@@ -90,9 +88,7 @@ fn one_declared_parent_is_recorded_and_two_are_not() {
 /// itself and the ids were genuinely different.
 #[test]
 fn a_merged_shape_records_no_edge() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     for (child, parent) in &lowered.program.record_parents {
         let layout = |ty: &nts_semantic_schema::TypeId| {
             lowered
@@ -148,9 +144,7 @@ fn a_merged_shape_records_no_edge() {
 /// map is shaped to avoid, arriving from inside it.
 #[test]
 fn a_classs_extends_stays_in_layout_base() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let rows = named(&lowered);
     assert!(
         !rows.iter().any(|(child, _)| child.contains("Derived")),
@@ -181,9 +175,7 @@ fn a_classs_extends_stays_in_layout_base() {
 /// instead, so a green `record_parents` means the fixture was actually lowered.
 #[test]
 fn the_fixture_lowered_at_all() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(
         lowered
             .program

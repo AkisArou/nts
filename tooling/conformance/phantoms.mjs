@@ -43,7 +43,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-const env = { ...process.env, NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo") };
+const env = { ...process.env, NTS_CHECKERS: "1" };
 
 if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);

@@ -12,7 +12,7 @@
 // # Why
 //
 // **A binary cannot state its own provenance**: `nts version` prints `nts
-// 0.0.0`, a schema version and a tsgo version, and no commit is embedded
+// 0.0.0`, a schema version and its native frontend version, and no commit is embedded
 // anywhere. So "which compiler is this" was answered by a file name someone
 // typed -- and on 2026-09-28 a census's control was believed to be capture's
 // tip and was capture's parent, and its delta included capture. Nothing
@@ -20,7 +20,7 @@
 // binary can record where it came from, so this builds, and records:
 //
 //   ~/.cache/nts-pins/<key>/nts                the binary
-//   ~/.cache/nts-pins/<key>/provenance.json    { sha, clean, applied, tsgo, ... }
+//   ~/.cache/nts-pins/<key>/provenance.json    { sha, clean, applied, binary_sha256, ... }
 //   ~/.cache/nts-pins/<key>/applied.diff       what was applied, when anything was
 //
 // `applied` is the **diff against <rev>**, not an input file: a change made by
@@ -28,11 +28,6 @@
 // applied, and the diff is what the binary was built from. Its sha256 is part
 // of the key, so two pins of one rev with different changes never collide,
 // and a pin asked for twice is built once.
-//
-// `tsgo` names the frontend the pin pairs with. A copy of `nts` outside
-// `target/` does not find `target/tsgo` beside itself, falls back to a
-// `tsgo` on PATH with no Node version set, and the first thing that notices
-// reports a *frontend crash* -- an environment failure read as a finding.
 //
 // # For the tools that consume pins
 //
@@ -45,11 +40,10 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { frontendPin } from "../lanes/tsgo.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -76,31 +70,11 @@ export function provenanceOf(binary) {
   }
 }
 
-/**
- * The frontend a tool should run `binary` with: `NTS_TSGO` when set, else the
- * one a pin recorded beside the binary, else `root`'s `target/tsgo`. And
- * whether it exists -- a tool run from a worktree resolves `target/tsgo`
- * against the worktree, which has none, and every project then prints nothing
- * and reads as "0 violations". A pin names its frontend so that cannot happen.
- *
- * **And whether that frontend is still the one the pin was built with.** A pin
- * records its frontend's path *and* hash, but a path stays true while the file
- * behind it is rebuilt: on 2026-09-30 `target/tsgo` was rebuilt for a fork
- * patch, and every earlier pin went on running the new one without a word.
- * `moved` is null when the bytes match the record (or `NTS_TSGO` names a
- * frontend on purpose), and says both hashes when they do not -- a report is
- * then about a compiler and a frontend that were never built together.
- */
-export function frontendFor(binary, root) {
-  const recorded = process.env.NTS_TSGO ? null : provenanceOf(binary)?.tsgo;
-  const path = process.env.NTS_TSGO ?? recorded?.path ?? join(root, "target/tsgo");
-  const exists = existsSync(path);
-  let moved = null;
-  if (exists && recorded?.sha256) {
-    const now = sha256(readFileSync(path));
-    if (now !== recorded.sha256) moved = `built with ${recorded.sha256.slice(0, 12)}, now ${now.slice(0, 12)}`;
-  }
-  return { path, exists, moved };
+/** Cached artifacts are complete native compilers; their bytes must still match. */
+export function isRecordedBinary(binary, sha) {
+  if (!existsSync(binary)) return false;
+  const record = provenanceOf(binary);
+  return record?.sha === sha && record.binary_sha256 === sha256(readFileSync(binary));
 }
 
 /** One line for a report: the commit, what was applied, and the frontend. */
@@ -276,9 +250,8 @@ export function pin(rev, opts = {}) {
     : null;
   const dir = join(PINS, keyOf(sha, applied));
   const binary = join(dir, "nts");
-  // Older records named the shared mutable target/tsgo. Rebuild their
-  // provenance once so a cached pin also gains an immutable frontend path.
-  const cached = () => existsSync(binary) && provenanceOf(binary)?.sha === sha && provenanceOf(binary)?.tsgo?.key;
+  // The complete native compiler travels in one binary. Verify its bytes on reuse.
+  const cached = () => isRecordedBinary(binary, sha);
   if (cached()) return binary;
   mkdirSync(PINS, { recursive: true });
   // Re-checked inside: a waiter's key may have been built by the holder.
@@ -296,10 +269,7 @@ function build(sha, diff, applied, dir) {
   if (!clean) throw new Error(`the pin tree at ${TREE} is not clean after checkout`);
   if (diff) git(["apply", "--whitespace=nowarn", "-"], TREE, diff.text);
   const shared = dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim());
-  execFileSync("sh", [join(HERE, "../lanes/inputs.sh"), "gate", shared, TREE], { stdio: "inherit" });
-  // Record the immutable path, not the tree's link: the next pin re-points it.
-  const tsgo = realpathSync(join(TREE, "target/tsgo"));
-  const tsgoPin = frontendPin(TREE);
+  execFileSync("sh", [join(TREE, "tooling/lanes/inputs.sh"), "gate", shared, TREE], { stdio: "inherit" });
   // **What the tree holds, before and after the build.** The lock keeps other
   // pins out; this catches anything else that moves the tree while cargo
   // reads it. A binary is recorded only if the source it was built from is
@@ -310,7 +280,7 @@ function build(sha, diff, applied, dir) {
   const cargo = spawnSync("cargo", ["build", "--release", "-q", "-p", "nts-cli"], {
     cwd: TREE,
     stdio: ["ignore", "inherit", "inherit"],
-    env: { ...process.env, CARGO_TARGET_DIR: TARGET, NTS_TSGO: tsgo },
+    env: { ...process.env, CARGO_TARGET_DIR: TARGET },
   });
   if (cargo.status !== 0) throw new Error(`cargo build failed for ${keyOf(sha, applied)}`);
   const after = state();
@@ -323,7 +293,6 @@ function build(sha, diff, applied, dir) {
     subject: git(["log", "-1", "--format=%s", sha]).trim(),
     clean,
     applied,
-    tsgo: { key: tsgoPin.key, path: tsgo, sha256: sha256(readFileSync(tsgo)) },
     built_at: new Date().toISOString(),
     binary_sha256: sha256(readFileSync(join(TARGET, "release/nts"))),
   };
@@ -375,21 +344,16 @@ function selfTest() {
   } finally {
     rmSync(locks, { recursive: true, force: true });
   }
-  // A pin whose recorded frontend is not the file at that path any more.
-  const fake = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pin-selftest-"));
+  const artifact = mkdtempSync(join(process.env.TMPDIR ?? "/tmp", "pin-artifact-"));
   try {
-    const frontend = join(fake, "tsgo");
-    writeFileSync(frontend, "the frontend as it is now");
-    writeFileSync(join(fake, "provenance.json"), JSON.stringify({ sha: "a".repeat(40), applied: null, tsgo: { path: frontend, sha256: sha256("the frontend it was built with") } }));
-    const saved = process.env.NTS_TSGO;
-    delete process.env.NTS_TSGO;
-    const moved = frontendFor(join(fake, "nts"), fake).moved;
-    writeFileSync(frontend, "the frontend it was built with");
-    const kept = frontendFor(join(fake, "nts"), fake).moved;
-    if (saved !== undefined) process.env.NTS_TSGO = saved;
-    if (!moved || kept !== null) return `a rebuilt frontend read as ${moved}, an unchanged one as ${kept}`;
+    const binary = join(artifact, "nts");
+    writeFileSync(binary, "a complete native compiler");
+    writeFileSync(join(artifact, "provenance.json"), JSON.stringify({ sha: a.sha, applied: null, binary_sha256: sha256(readFileSync(binary)) }));
+    if (!isRecordedBinary(binary, a.sha)) return "an unchanged artifact was not reusable";
+    writeFileSync(binary, "changed bytes");
+    if (isRecordedBinary(binary, a.sha)) return "a changed artifact retained its recorded identity";
   } finally {
-    rmSync(fake, { recursive: true, force: true });
+    rmSync(artifact, { recursive: true, force: true });
   }
   return null;
 }
@@ -402,7 +366,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     process.exit(2);
   }
   if (argv.includes("--self-test")) {
-    console.log("  self-test: keys, a pin against itself and against its patched twin, an unknown binary, a frontend rebuilt under a pin, and the build lock taken, refused and released");
+    console.log("  self-test: keys, a pin against itself and against its patched twin, an unknown binary, artifact identity, and the build lock taken, refused and released");
     process.exit(0);
   }
   const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);

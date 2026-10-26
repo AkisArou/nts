@@ -13,11 +13,10 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
-fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -32,15 +31,16 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((
+    (
         dir,
         hir::prepare(&snapshot)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
-    ))
+    )
 }
 
 /// `Windows.Data.Json` as `tests/interop/windows-winrt` binds it, with
@@ -89,10 +89,7 @@ export function run(): string {
 /// read; and the C is what mingw's clang accepts for Windows.
 #[test]
 fn a_com_method_is_a_call_through_its_table() {
-    let Some((dir, prepared)) = prepare("shape", &binding("", ""), PROGRAM) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("shape", &binding("", ""), PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -275,10 +272,7 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
         let source = format!(
             "import {{ {imports} }} from \"winrt:Windows.Data.Json\";\nexport function run(): void {{\n  {call};\n}}\n"
         );
-        let Some((_, prepared)) = prepare(name, &binding(&method, &function), &source) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare(name, &binding(&method, &function), &source);
         assert!(
             prepared
                 .diagnostics
@@ -310,9 +304,7 @@ export async function later(value: IJsonValue): Promise<number> {
   return total;
 }
 "#;
-    let Some((dir, prepared)) = prepare("hresult-async-loop", &binding("", ""), source) else {
-        panic!("NTS_TSGO is required for this guard");
-    };
+    let (dir, prepared) = prepare("hresult-async-loop", &binding("", ""), source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -340,10 +332,7 @@ export function run(): string {
   return String(parsed.returnValue) + (parsed.result === null ? "none" : parsed.result.Stringify());
 }
 "#;
-    let Some((dir, prepared)) = prepare("out", &binding("", &function), source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("out", &binding("", &function), source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -371,9 +360,21 @@ export function run(): string {
     let checked = text
         .find("nts_hresult_message(")
         .unwrap_or_else(|| panic!("no HRESULT is checked:\n{text}"));
-    for field in ["->result = ", "->returnValue = "] {
+    for name in ["result", "returnValue"] {
+        let layout = prepared
+            .program
+            .layouts
+            .iter()
+            .find(|layout| layout.fields.iter().any(|field| field.name.is_name(name)))
+            .expect("the output record has its declared field");
+        let at = layout
+            .fields
+            .iter()
+            .position(|field| field.name.is_name(name))
+            .unwrap();
+        let field = format!("->{} = ", nts_codegen_c::object_field_name(layout, at));
         let stored = text
-            .find(field)
+            .find(&field)
             .unwrap_or_else(|| panic!("no store to `{field}`:\n{text}"));
         assert!(
             stored > checked,
@@ -439,10 +440,7 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
         "import { type IFrame, TypeKind }",
         "import type { Copied } from \"winrt:types\";\nimport { type IFrame, type TypeName, TypeKind }",
     );
-    let Some((dir, prepared)) = prepare("copied", &binding, &source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("copied", &binding, &source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -523,10 +521,7 @@ export function run(set: IJsonValue): string {
   return String(got.returnValue) + String(got.value.x + got.value.y);
 }
 "#;
-    let Some((dir, prepared)) = prepare("out-struct", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("out-struct", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -550,8 +545,20 @@ export function run(set: IJsonValue): string {
     // The struct is copied out of its slot into an object. The record around
     // it, `{ value, returnValue }`, is only read field by field, so its fields
     // are values (`scalarize`) and nothing stores into it.
-    for field in ["->x = ", "->y = "] {
-        assert!(text.contains(field), "no store to `{field}`:\n{text}");
+    for name in ["x", "y"] {
+        let layout = prepared
+            .program
+            .layouts
+            .iter()
+            .find(|layout| layout.fields.iter().any(|field| field.name.is_name(name)))
+            .expect("the copied result has its declared component");
+        let at = layout
+            .fields
+            .iter()
+            .position(|field| field.name.is_name(name))
+            .unwrap();
+        let field = format!("->{} = ", nts_codegen_c::object_field_name(layout, at));
+        assert!(text.contains(&field), "no store to `{field}`:\n{text}");
     }
 
     windows_syntax(&dir, &emitted);
@@ -569,10 +576,7 @@ export function run(): number {
   return Parse("[]").GetInspectableArray().value.length;
 }
 "#;
-    let Some((dir, prepared)) = prepare("received-handles", &binding(method, ""), source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("received-handles", &binding(method, ""), source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -658,10 +662,7 @@ export function run(): number {
   return values.length + objects.length;
 }
 "#;
-    let Some((dir, prepared)) = prepare("handles", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("handles", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -729,10 +730,7 @@ export function run(): string {
   return value.GetNames().value.join("|");
 }
 "#;
-    let Some((dir, prepared)) = prepare("hstrings", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("hstrings", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -804,10 +802,7 @@ export function run(): number {
   return converted[1].x + converted[0].y;
 }
 "#;
-    let Some((dir, prepared)) = prepare("records", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("records", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -890,10 +885,7 @@ export function run(): number {
   return value.GetMany(items) + value.GetStrings(texts) + texts[0].length + points[0].x;
 }
 "#;
-    let Some((dir, prepared)) = prepare("filled", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("filled", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -977,10 +969,7 @@ export function run(): number {
   return (filled[0] ? 1 : 0) + (given[0] ? 2 : 0) + given.length;
 }
 "#;
-    let Some((dir, prepared)) = prepare("booleans", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("booleans", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1042,10 +1031,7 @@ export function run(): boolean {
   return value.go("a") && value.go("a", "b");
 }
 "#;
-    let Some((dir, prepared)) = prepare("overloads", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("overloads", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1118,10 +1104,7 @@ export function run(): number {
   return (checked === null ? 2 : checked ? 1 : 0) + (where === null ? 0 : where.x);
 }
 "#;
-    let Some((dir, prepared)) = prepare("references", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("references", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1174,10 +1157,7 @@ export function run(flag: boolean | null): void {
   Parse("[]").put_Checked(flag);
 }
 "#;
-    let Some((dir, prepared)) = prepare("reference-arguments", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("reference-arguments", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1215,10 +1195,7 @@ export function run(flag: boolean | null): void {
 fn a_declared_number_with_no_value_is_refused() {
     let binding = "declare module \"c:Probe\" {\n  import type { c_uint } from \"@nts/scalars\";\n  export const UNTAGGED: c_uint;\n}\n";
     let source = "import { UNTAGGED } from \"c:Probe\";\nexport function run(message: number): boolean {\n  return message === UNTAGGED;\n}\n";
-    let Some((_dir, prepared)) = prepare("valueless-constant", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_dir, prepared) = prepare("valueless-constant", binding, source);
     let said: Vec<&str> = prepared
         .diagnostics
         .iter()
@@ -1252,10 +1229,7 @@ export function run(message: number): boolean {
   return message === WM_PAINT;
 }
 "#;
-    let Some((_dir, prepared)) = prepare("bound-constant", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_dir, prepared) = prepare("bound-constant", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1278,9 +1252,7 @@ export function run(message: number): boolean {
   return message === WM_HEX;
 }
 "#;
-    let Some((_dir, prepared)) = prepare("bound-constant-refused", binding, refused) else {
-        return;
-    };
+    let (_dir, prepared) = prepare("bound-constant-refused", binding, refused);
     let said: Vec<&str> = prepared
         .diagnostics
         .iter()
@@ -1338,10 +1310,7 @@ export function run(): string {
 }
 "#,
     );
-    let Some((dir, prepared)) = prepare("sealed", &binding, &source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("sealed", &binding, &source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1380,10 +1349,7 @@ export function run(): string {
 }
 "#,
     );
-    let Some((_, prepared)) = prepare("sealed-over", &binding, &source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("sealed-over", &binding, &source);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -1408,10 +1374,7 @@ fn a_struct_holding_a_string_is_never_storage() {
         "import { type IFrame, TypeKind }",
         "import { local } from \"c:memory\";\nimport { type IFrame, type TypeName }",
     );
-    let Some((_, prepared)) = prepare("copied-storage", &binding, &source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("copied-storage", &binding, &source);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -1435,10 +1398,7 @@ fn a_static_taking_bytes_passes_the_count_before_them() {
         "import type { CBytes, Counted } from \"c:types\"; import type { Float64, Int32, Uint32 } from \"@nts/scalars\";",
     );
     let source = "import { FromBytes } from \"winrt:Windows.Data.Json\";\nexport function run(): string {\n  return FromBytes(new Uint8Array([1, 2, 3])).Stringify();\n}\n";
-    let Some((dir, prepared)) = prepare("bytes", &binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("bytes", &binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1478,10 +1438,7 @@ fn a_static_taking_bytes_passes_the_count_before_them() {
 #[test]
 fn a_handle_at_module_scope_is_a_global() {
     let source = "import { Parse } from \"winrt:Windows.Data.Json\";\nconst value = Parse(\"42.5\");\nexport function run(): string {\n  return value.Stringify();\n}\n";
-    let Some((dir, prepared)) = prepare("global", &binding("", ""), source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("global", &binding("", ""), source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1509,10 +1466,7 @@ fn a_handle_at_module_scope_is_a_global() {
 fn tags_on_one_line_are_refused_as_one_tag() {
     let method = "    /** @ntsVtable 10 GetBoolean @ntsHresult */\n    GetBoolean(this: IJsonValue): Float64;";
     let source = "import { Parse } from \"winrt:Windows.Data.Json\";\nexport function run(): void {\n  Parse(\"1\").GetBoolean();\n}\n";
-    let Some((_, prepared)) = prepare("one-line", &binding(method, ""), source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("one-line", &binding(method, ""), source);
     assert!(
         prepared
             .diagnostics
@@ -1552,10 +1506,7 @@ fn a_static_in_a_namespace_is_called_on_its_factory() {
 }
 "#;
     let source = "import { JsonValue } from \"winrt:Windows.Data.Json\";\nexport function run(): number {\n  return JsonValue.Parse(\"7.5\").GetNumber();\n}\n";
-    let Some((_, prepared)) = prepare("namespace", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("namespace", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1608,10 +1559,7 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
         )
     };
     let source = "import { JsonValue } from \"winrt:Windows.Data.Json\";\nexport function run(): number {\n  return JsonValue.Parse(\"1\").as_IJsonValue().GetNumber();\n}\n";
-    let Some((_, prepared)) = prepare("query", &binding(""), source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("query", &binding(""), source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1643,9 +1591,7 @@ fn a_query_is_a_runtime_call_and_a_wrong_one_is_refused() {
         let source = format!(
             "import {{ JsonValue }} from \"winrt:Windows.Data.Json\";\nexport function run(): void {{\n  {call};\n}}\n"
         );
-        let Some((_, prepared)) = prepare(name, &binding(extra), &source) else {
-            return;
-        };
+        let (_, prepared) = prepare(name, &binding(extra), &source);
         assert!(
             prepared
                 .diagnostics
@@ -1699,10 +1645,7 @@ fn a_delegate_is_an_object_whose_invoke_calls_the_closure() {
         "F4637D4A-0760-5431-BFC0-24EB1D4F6C4F",
     );
     let source = "import type { IMemoryBufferReference } from \"winrt:Windows.Foundation\";\nexport function watch(reference: IMemoryBufferReference): number {\n  let seen = 0;\n  reference.add_Closed((sender) => {\n    seen += sender.get_Capacity();\n  });\n  return seen;\n}\n";
-    let Some((dir, prepared)) = prepare("delegate", &binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("delegate", &binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1749,10 +1692,7 @@ fn a_delegate_that_cannot_be_built_is_refused_by_name() {
             "not 8-4-4-4-12 hexadecimal digits",
         ),
     ] {
-        let Some((_, prepared)) = prepare(name, &events(handler, iid), source) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare(name, &events(handler, iid), source);
         assert!(
             prepared
                 .diagnostics

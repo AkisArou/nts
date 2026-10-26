@@ -11,6 +11,9 @@
 //! use nts_frontend_tsrs::{Session, ProjectSpec, SourceChanges};
 //! fn invalid(session: &mut Session, spec: ProjectSpec) {
 //!     let checked = session.open(spec).unwrap();
+//!     let paths: Vec<_> = checked.projects().flat_map(|p| p.files())
+//!         .filter(|f| !f.is_default_library()).map(|f| f.path().to_owned()).collect();
+//!     let checked = checked.start_diagnostics(nts_frontend_tsrs::DiagnosticScope::Files(&paths));
 //!     let file = checked.projects().next().unwrap().files().next().unwrap();
 //!     let ty = file.root().ty();
 //!     session.revise(SourceChanges::default()).unwrap();
@@ -19,9 +22,12 @@
 //! ```
 //! A semantic view cannot remain in use across diagnostic finalization:
 //! ```compile_fail
-//! use nts_frontend_tsrs::{Session, ProjectSpec};
+//! use nts_frontend_tsrs::{Session, ProjectSpec, DiagnosticScope};
 //! fn invalid(session: &mut Session, spec: ProjectSpec) {
 //!     let checked = session.open(spec).unwrap();
+//!     let paths: Vec<_> = checked.projects().flat_map(|p| p.files())
+//!         .filter(|f| !f.is_default_library()).map(|f| f.path().to_owned()).collect();
+//!     let checked = checked.start_diagnostics(nts_frontend_tsrs::DiagnosticScope::Files(&paths));
 //!     let file = checked.projects().next().unwrap().files().next().unwrap();
 //!     let ty = file.root().ty();
 //!     let finished = checked.finish();
@@ -30,9 +36,12 @@
 //! ```
 //! Finished views expose syntax and metadata, without checker services:
 //! ```compile_fail
-//! use nts_frontend_tsrs::{Session, ProjectSpec};
+//! use nts_frontend_tsrs::{Session, ProjectSpec, DiagnosticScope};
 //! fn invalid(session: &mut Session, spec: ProjectSpec) {
-//!     let finished = session.open(spec).unwrap().finish();
+//!     let checked = session.open(spec).unwrap();
+//!     let paths: Vec<_> = checked.projects().flat_map(|p| p.files())
+//!         .filter(|f| !f.is_default_library()).map(|f| f.path().to_owned()).collect();
+//!     let finished = checked.start_diagnostics(DiagnosticScope::Files(&paths)).finish();
 //!     let file = finished.projects().next().unwrap().files().next().unwrap();
 //!     let _ = file.root().ty();
 //! }
@@ -56,7 +65,7 @@ use std::hash::{Hash, Hasher};
 
 use tsrs_ast::{Symbol as NativeSymbol, SymbolFlags};
 use tsrs_checker::{
-    CheckMode, ObjectFlags, Signature as NativeSignature, Type as NativeType, TypeData, TypeFlags,
+    ObjectFlags, Signature as NativeSignature, Type as NativeType, TypeData, TypeFlags,
     TypeFormatFlags,
 };
 use tsrs_core::P;
@@ -136,8 +145,7 @@ impl<'p> Node<'p> {
         }
         let file = self.source_file();
         Some(Signature {
-            native: file
-                .with_checker(|c| c.get_resolved_signature(self.native, None, CheckMode::Normal)),
+            native: file.with_checker(|c| c.get_resolved_signature_exported(self.native)),
             file,
         })
     }
@@ -169,12 +177,10 @@ impl<'p> Symbol<'p> {
             if self.native == checker.get_arguments_symbol() {
                 return Some(BuiltinBinding::Arguments);
             }
-            if self.native == checker.global_this_symbol {
-                return Some(BuiltinBinding::GlobalThis);
-            }
             let binding = match self.native.name().as_bytes() {
                 b"NaN" => BuiltinBinding::NaN,
                 b"Infinity" => BuiltinBinding::Infinity,
+                b"globalThis" => BuiltinBinding::GlobalThis,
                 _ => return None,
             };
             let global =
@@ -224,7 +230,7 @@ impl<'p> Symbol<'p> {
         declarations.iter().map(move |&native| {
             self.file
                 .node_view(native)
-                .expect("native declaration must have a source in its program")
+                .expect("bound declarations retain a parent chain into this capture checker's registered program sources")
         })
     }
     #[must_use]
@@ -293,7 +299,7 @@ impl<'p> Symbol<'p> {
         Some(Type {
             native: self
                 .file
-                .with_checker(|c| c.get_declared_type_of_symbol(self.native)),
+                .with_checker(|c| c.get_declared_type_of_symbol_exported(self.native)),
             file: self.file,
         })
     }
@@ -422,8 +428,7 @@ impl<'p> Type<'p> {
                 TypeKind::Tuple
             } else if self
                 .native
-                .object_flags
-                .get_lazy()
+                .object_flags()
                 .intersects(ObjectFlags::Reference)
             {
                 TypeKind::Reference
@@ -489,15 +494,14 @@ impl<'p> Type<'p> {
     pub fn non_inferrable(self) -> bool {
         self.file.with_checker(|_| {
             self.native
-                .object_flags
-                .get_lazy()
+                .object_flags()
                 .intersects(ObjectFlags::NonInferrableType)
         })
     }
     #[must_use]
     pub fn evolving_any(self) -> bool {
         self.file.with_checker(|_| {
-            let objects = self.native.object_flags.get_lazy();
+            let objects = self.native.object_flags();
             objects.intersects(ObjectFlags::EvolvingArray)
                 || (self.native.flags.get().intersects(TypeFlags::Any)
                     && objects.intersects(ObjectFlags::NonInferrableType))
@@ -557,7 +561,7 @@ impl<'p> Type<'p> {
     pub fn assignable_to(self, target: Self) -> bool {
         self.file.assert_same_program(target.file);
         self.file
-            .with_checker(|c| c.is_type_assignable_to(self.native, target.native))
+            .with_checker(|c| c.is_type_assignable_to_exported(self.native, target.native))
     }
 }
 
@@ -572,7 +576,9 @@ pub struct Parameter<'p> {
     pub name: SymbolName<'p>,
     pub ty: Type<'p>,
     pub declarations: Vec<Declaration<'p>>,
+    /// The symbol's Optional flag or a written `?`, independent of arity.
     pub optional: bool,
+    /// A written default value; distinct from a question-optional parameter.
     pub has_initializer: bool,
     pub rest: bool,
 }
@@ -592,9 +598,12 @@ impl<'p> Signature<'p> {
         let subject = match kind {
             TypePredicateKind::This | TypePredicateKind::AssertsThis => PredicateSubject::This,
             TypePredicateKind::Identifier | TypePredicateKind::AssertsIdentifier => {
-                PredicateSubject::Parameter {
-                    name: self.file.intern_string(name.as_bytes()),
-                    index: index.expect("native identifier predicate has a parameter index"),
+                let name = self.file.intern_string(name.as_bytes());
+                // The native checker keeps malformed written predicates: a
+                // missing parameter index is the subject of its TS1225 error.
+                match index {
+                    Some(index) => PredicateSubject::Parameter { name, index },
+                    None => PredicateSubject::UnresolvedIdentifier { name },
                 }
             }
         };
@@ -617,14 +626,15 @@ impl<'p> Signature<'p> {
             .map(|native| {
                 self.file
                     .node_view(native)
-                    .expect("signature declaration must have a source in its program")
+                    .expect("signature declarations retain a parent chain into this capture checker's registered program sources")
             })
     }
-    fn parameter(self, native: P<NativeSymbol>, optional: bool, rest: bool) -> Parameter<'p> {
+    fn parameter(self, native: P<NativeSymbol>, rest: bool) -> Parameter<'p> {
         let symbol = Symbol::new(native, self.file);
         let declarations: Vec<_> = symbol.declarations().collect();
         let has_initializer = declarations.iter().any(|d| d.attributes().has_initializer);
-        let optional = optional || declarations.iter().any(|d| d.attributes().optional);
+        let optional = symbol.classification().optional
+            || declarations.iter().any(|d| d.attributes().optional);
         Parameter {
             symbol,
             name: symbol.name(),
@@ -637,23 +647,13 @@ impl<'p> Signature<'p> {
     }
     #[must_use]
     pub fn parameters(self) -> Vec<Parameter<'p>> {
-        let (parameters, minimum, rest) = self.file.with_checker(|_| {
-            (
-                self.native.parameters(),
-                self.native.min_argument_count(),
-                self.native.has_rest_parameter(),
-            )
-        });
+        let (parameters, rest) = self
+            .file
+            .with_checker(|_| (self.native.parameters(), self.native.has_rest_parameter()));
         parameters
             .iter()
             .enumerate()
-            .map(|(index, &native)| {
-                self.parameter(
-                    native,
-                    index >= minimum,
-                    rest && index + 1 == parameters.len(),
-                )
-            })
+            .map(|(index, &native)| self.parameter(native, rest && index + 1 == parameters.len()))
             .collect()
     }
     #[must_use]
@@ -681,7 +681,7 @@ impl<'p> Signature<'p> {
         self.file
             .with_checker(|_| self.native.this_parameter())
             .map(|native| {
-                let mut parameter = self.parameter(native, false, false);
+                let mut parameter = self.parameter(native, false);
                 parameter.name = parameter.symbol.name_in(names::NameTable::ThisParameter);
                 parameter
             })
@@ -702,5 +702,13 @@ pub struct TypePredicate<'p> {
 #[derive(Debug, Clone, Copy)]
 pub enum PredicateSubject<'p> {
     This,
-    Parameter { name: JsString<'p>, index: usize },
+    Parameter {
+        name: JsString<'p>,
+        index: usize,
+    },
+    /// A written identifier with no matching parameter (for example TS1225).
+    /// Retain the name; ordinary program diagnostics explain the error.
+    UnresolvedIdentifier {
+        name: JsString<'p>,
+    },
 }

@@ -32,7 +32,7 @@ mkdir -p "$here/target/classes"
 # Everything below is an assertion rather than a build step, which is why this
 # file is not a one-line call: the demo, the declaration drift check, the
 # consumer and its exact output are what the example is *for*.
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
+NTS_CHECKERS=1 "$nts" build "$here/tsconfig.json" \
   --out "$here/target/build" > "$here/target/build.log" 2>&1 \
   || { cat "$here/target/build.log"; exit 1; }
 built="$here/target/build/api/java-8"

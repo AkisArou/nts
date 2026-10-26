@@ -44,7 +44,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { frontendFor } from "./pin.ts";
+
 import { longestFirst } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 
@@ -60,11 +60,89 @@ const SIG_LINE = /^sig#(\d+)(?: <\[([^\]]*)\]>)? \((.*)\) -> #(\d+)$/;
  * whose kind is not one of these was not understood, however well it parsed:
  * a new variant is a table this reader has not been taught to check.
  */
-const KINDS = new Set(["Any", "Evolving", "Unknown", "Never", "Void", "Undefined", "Null", "Boolean", "Number", "BigInt", "String", "Symbol", "Literal", "Object", "Array", "Tuple", "Union", "Intersection", "Function", "TypeParameter", "Conditional", "IndexedAccess", "TemplateLiteral", "Structured", "Unsupported"]);
+const KINDS = new Set(["Any", "Evolving", "Unknown", "Never", "Void", "Undefined", "Null", "Boolean", "Number", "BigInt", "String", "Symbol", "UniqueSymbol", "NonPrimitive", "Literal", "Object", "Array", "Tuple", "Union", "Intersection", "Function", "TypeParameter", "Conditional", "IndexedAccess", "TemplateLiteral", "Structured", "Unsupported"]);
 const ids = (text, re) => [...(text ?? "").matchAll(re)].map((m) => Number(m[1]));
 const TYPE_REF = /TypeId\((\d+)\)/g;
 const SIG_REF = /SignatureId\((\d+)\)/g;
 const HASH_REF = /#(\d+)/g;
+
+/**
+ * The Object payload's PropertyRecord keys, as the actual Rust Debug producer
+ * spells them. Keep the complete tagged token: Rust's \u{...} escapes are not
+ * JSON, and Name/Private/Symbol are disjoint even at the same printed label.
+ * The legacy quoted public name remains readable as a Name.
+ */
+/** Validate the string escape forms emitted by Rust Debug; preserve the token.
+ * See core/char/methods.rs escape_debug_ext: simple escapes or a Unicode scalar.
+ * This does not decode or canonicalize names across member namespaces.
+ */
+function rustDebugString(token) {
+  if (token[0] !== '"' || token.at(-1) !== '"') return false;
+  for (let i = 1; i < token.length - 1; i += 1) {
+    const code = token.codePointAt(i);
+    if (code === 92) {
+      const escaped = token[++i];
+      if ('"\\nrt0'.includes(escaped ?? "") && escaped !== undefined) continue;
+      if (escaped !== "u" || token[i + 1] !== "{") return false;
+      const end = token.indexOf("}", i + 2);
+      const digits = end < 0 ? "" : token.slice(i + 2, end);
+      if (!/^[0-9a-fA-F]{1,6}$/.test(digits)) return false;
+      const scalar = Number.parseInt(digits, 16);
+      if (scalar > 0x10ffff || (scalar >= 0xd800 && scalar <= 0xdfff)) return false;
+      i = end;
+    } else {
+      if (code === 34 || code < 0x20 || code === 0x7f || (code >= 0xd800 && code <= 0xdfff)) return false;
+      if (code > 0xffff) i += 1;
+    }
+  }
+  return true;
+}
+
+function objectMembers(payload) {
+  const prefix = " { properties: [";
+  const suffix = "] }";
+  const bad = () => ({ members: [], error: "an Object property list or key was not read" });
+  if (!payload.startsWith(prefix) || !payload.endsWith(suffix)) return bad();
+  const text = payload.slice(prefix.length, -suffix.length);
+  const members = [];
+  let at = 0;
+  while (at < text.length) {
+    const head = "PropertyRecord { name: ";
+    if (!text.startsWith(head, at)) return bad();
+    const key = /^(?:(Name|Private)\(("(?:[^"\\]|\\.)*")\)|Symbol\(TypeId\((\d+)\)\)|("(?:[^"\\]|\\.)*"))(?=, ty:)/.exec(text.slice(at + head.length));
+    if (!key) return bad();
+    const stringToken = key[2] ?? key[4];
+    if (stringToken !== undefined && !rustDebugString(stringToken)) return bad();
+    members.push(key[1] ? `${key[1]}(${key[2]})` : key[3] !== undefined ? `Symbol(TypeId(${key[3]}))` : `Name(${key[4]})`);
+    // Find this record's end outside strings, including escaped Rust strings.
+    // Delimiter balance also prevents malformed records from looking empty.
+    const stack = [];
+    let quoted = false, escaped = false, end = -1;
+    for (let i = at + "PropertyRecord ".length; i < text.length; i += 1) {
+      const c = text[i];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (c === "\\") escaped = true;
+        else if (c === '"') quoted = false;
+        continue;
+      }
+      if (c === '"') { quoted = true; continue; }
+      if ("{[(".includes(c)) stack.push(c);
+      else if ("}])".includes(c)) {
+        if (stack.pop() !== ({ "}": "{", "]": "[", ")": "(" })[c]) return bad();
+        if (stack.length === 0) { end = i + 1; break; }
+      }
+    }
+    if (end < 0) return bad();
+    at = end;
+    if (at < text.length) {
+      if (!text.startsWith(", ", at)) return bad();
+      at += 2;
+      if (at === text.length) return bad();
+    }
+  }
+  return { members, error: null };
+}
 
 /** The three tables, and every line none of them read. */
 export function readTypes(text) {
@@ -76,7 +154,9 @@ export function readTypes(text) {
     if (line === "") continue;
     let m;
     if ((m = TYPE_LINE.exec(line))) {
-      const members = m[4] === "Object" ? [...m[5].matchAll(/PropertyRecord \{ name: "((?:[^"\\]|\\.)*)"/g)].map((p) => p[1]) : null;
+      const object = m[4] === "Object" ? objectMembers(m[5]) : null;
+      const members = object?.members ?? null;
+      if (object?.error) unread.push(`#${m[1]}: ${object.error}`);
       types.push({ id: Number(m[1]), name: m[2] ?? null, args: m[3] === undefined ? null : ids(m[3], TYPE_REF), kind: m[4], types: ids(m[5], TYPE_REF), sigs: ids(m[5], SIG_REF), members });
     } else if ((m = BASE_LINE.exec(line))) {
       bases.set(Number(m[1]), m[2].split(",").map((s) => s.trim()).filter(Boolean).map(Number));
@@ -182,9 +262,9 @@ export function judge(text) {
 function selfTest() {
   const good = [
     "#0 Number",
-    "#1 `T` TypeParameter { name: \"T\", constraint: None }",
-    "#2 `Box` args[TypeId(1)] Object { properties: [PropertyRecord { name: \"v\", ty: TypeId(1), readonly: false, optional: false, declaration: None, kind: Field, own: true }] }",
-    "#3 `Box` args[TypeId(0)] Object { properties: [PropertyRecord { name: \"v\", ty: TypeId(0), readonly: false, optional: false, declaration: None, kind: Field, own: true }] }",
+    "#1 `T` TypeParameter { name: \"T\", constraint: None, is_this: false }",
+    "#2 `Box` args[TypeId(1)] Object { properties: [PropertyRecord { name: Name(\"v\"), ty: TypeId(1), readonly: false, optional: false, declaration: None, kind: Field, own: true }] }",
+    "#3 `Box` args[TypeId(0)] Object { properties: [PropertyRecord { name: Name(\"v\"), ty: TypeId(0), readonly: false, optional: false, declaration: None, kind: Field, own: true }] }",
     "#4 Function(SignatureId(0))",
     "#5 `Sub` Object { properties: [] }",
     "base #5 -> [3]",
@@ -192,6 +272,12 @@ function selfTest() {
   ];
   const rules = (lines) => (judge(lines.join("\n")).violations ?? []).map((v) => v.rule);
   if (rules(good).length !== 0) return `the clean table read as ${rules(good).join(", ")}`;
+  const units = judge("#0 UniqueSymbol\n#1 NonPrimitive");
+  if (units.violations.length !== 0 || units.types !== 2) return "the schema's two unit kinds were not read";
+  if (!rules(["#0 FutureKind"]).includes("read-whole")) return "an unknown kind was accepted";
+  for (const kind of ["UniqueSymbol", "NonPrimitive"]) {
+    if (!rules([`#0 ${kind}`, "#1 Object { properties: [] }", "base #1 -> [0]"]).includes("base-is-object")) return `${kind} was accepted as a stored object base`;
+  }
   const arms = [
     [good.map((l) => l.replace("TypeId(1), readonly", "TypeId(9), readonly")), "resolves", "a property naming a type that does not exist"],
     [good.map((l) => l.replace("SignatureId(0)", "SignatureId(3)")), "resolves", "a function naming a signature that does not exist"],
@@ -200,9 +286,49 @@ function selfTest() {
     [good.map((l) => l.replace("base #5 -> [3]", "base #5 -> [0]")), "base-is-object", "a number as a base"],
     [good.map((l) => l.replace("args[TypeId(0)]", "args[TypeId(0), TypeId(0), TypeId(0)]")), "arity", "an instantiation with two extra arguments"],
     [[...good, "#6 something new"], "read-whole", "a line nothing reads"],
-    [good.map((l) => l.replace('name: \"v\", ty: TypeId(0)', 'name: \"w\", ty: TypeId(0)')), "members", "an instantiation whose member is not its declaration's"],
+    [good.map((l) => l.replace('name: Name(\"v\"), ty: TypeId(0)', 'name: \"w\", ty: TypeId(0)')), "members", "an instantiation whose member is not its declaration's"],
   ];
   for (const [lines, rule, what] of arms) if (!rules(lines).includes(rule)) return `${what} was not caught (${rules(lines).join(", ") || "clean"})`;
+  const property = (key) => `PropertyRecord { name: ${key}, ty: TypeId(0), readonly: false, optional: false, declaration: None, kind: Field, own: true }`;
+  const typed = (declared, used) => [
+    "#0 Number", "#1 TypeParameter { name: \"T\", constraint: None, is_this: false }",
+    "#2 `Box` args[TypeId(1)] Object { properties: [" + declared.map(property).join(", ") + "] }",
+    "#3 `Box` args[TypeId(0)] Object { properties: [" + used.map(property).join(", ") + "] }",
+  ];
+  const publicKey = 'Name("v")', privateKey = 'Private("v")';
+  if (rules(typed([publicKey, privateKey], [publicKey, privateKey])).length !== 0) return "matching tagged keys were not read";
+  for (const changed of ['Name("w")', privateKey]) {
+    if (!rules(typed([publicKey], [changed])).includes("members")) return "a changed tagged member was accepted";
+  }
+  if (!rules(typed([publicKey, privateKey], [publicKey])).includes("members")) return "a missing private member was accepted";
+  for (const key of ['FutureKey("v")', 'Symbol(TypeId(x))', 'Name("v"']) {
+    if (!rules(typed([publicKey], [key])).includes("read-whole")) return "an unknown or malformed key was accepted";
+  }
+  if (rules(typed([], [])).length !== 0) return "legitimate empty property lists failed";
+  const symbolic = (key) => [
+    "#0 UniqueSymbol", "#1 UniqueSymbol", "#2 Number", "#3 TypeParameter { name: \"T\", constraint: None, is_this: false }",
+    "#4 `Box` args[TypeId(3)] Object { properties: [PropertyRecord { name: Symbol(TypeId(0)), ty: TypeId(2), readonly: false, optional: false, declaration: None, kind: Field, own: true }] }",
+    `#5 \`Box\` args[TypeId(2)] Object { properties: [PropertyRecord { name: ${key}, ty: TypeId(2), readonly: false, optional: false, declaration: None, kind: Field, own: true }] }`,
+  ];
+  if (rules(symbolic("Symbol(TypeId(0))")).length !== 0) return "the same symbol ID did not match";
+  if (!rules(symbolic("Symbol(TypeId(1))")).includes("members")) return "a different symbol ID was accepted";
+  if (!rules(symbolic('Name("v")')).includes("members")) return "a symbol key became public";
+  if (!rules(symbolic("Symbol(TypeId(9))")).includes("resolves")) return "a missing symbol type was accepted";
+  const escaped = String.raw`Name("a\u{1f600}\" PropertyRecord { name: ")`;
+  if (rules(typed([escaped], [escaped])).length !== 0) return "a Rust Debug escape or quoted marker was not preserved";
+  const tagged = (tag, literal) => tag === "legacy" ? literal : `${tag}(${literal})`;
+  for (const literal of [String.raw`"bad\q"`, String.raw`"bad\u{zz}"`, String.raw`"bad\u{110000}"`, String.raw`"bad\u{d800}"`, String.raw`"bad\u{}"`, String.raw`"bad\u{1234567}"`]) {
+    for (const tag of ["Name", "Private", "legacy"]) {
+      const key = tagged(tag, literal);
+      if (!rules(typed([key], [key])).includes("read-whole")) return "a malformed Rust Debug escape was accepted";
+    }
+  }
+  for (const literal of [String.raw`"quote\"slash\\"`, String.raw`"nul\0tab\tcr\rnl\n"`, String.raw`"edge\u{0}\u{d7ff}\u{e000}\u{10ffff}"`, '"raw💯"']) {
+    for (const tag of ["Name", "Private", "legacy"]) {
+      const key = tagged(tag, literal);
+      if (rules(typed([key], [key])).length !== 0) return "a supported Rust Debug token was rejected";
+    }
+  }
   const appended = judge(good.map((l) => l.replace("args[TypeId(0)]", "args[TypeId(0), TypeId(5)]")).join("\n"));
   if (appended.violations.length !== 0 || appended.thisAppended !== 1) return "a `this`-appended instantiation was not counted as one";
   return null;
@@ -233,15 +359,8 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exi
 const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);
-// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
-// here, before every project prints nothing and reads as clean.
-const FRONTEND = frontendFor(SOURCE, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-const env = { ...process.env, NTS_TSGO: FRONTEND.path, NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
-delete env.NTS_NO_SNAPSHOT_CACHE;
+
+const env = { ...process.env, NTS_CHECKERS: "1" };
 
 const under = (dir) =>
   readdirSync(join(ROOT, dir), { withFileTypes: true })

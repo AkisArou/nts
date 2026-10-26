@@ -35,7 +35,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "../conformance/outcomes-project.ts";
 import { materialise as materialiseCase, placeOf, workspace } from "./project.ts";
-import { describe, provenanceOf, frontendFor } from "../conformance/pin.ts";
+import { describe, provenanceOf } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -369,15 +369,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const NTS = join(scratch, "nts");
   copyFileSync(SOURCE, NTS);
   chmodSync(NTS, 0o755);
-// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
-// here, before every project prints nothing and reads as clean.
-const FRONTEND = frontendFor(SOURCE, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-  const env = { ...process.env, NTS_TSGO: FRONTEND.path, NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
-  delete env.NTS_NO_SNAPSHOT_CACHE;
+
+  const env = { ...process.env, NTS_CHECKERS: "1" };
 
   const under = (dir) =>
     readdirSync(join(ROOT, dir), { withFileTypes: true })

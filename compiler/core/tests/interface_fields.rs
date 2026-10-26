@@ -1,28 +1,28 @@
 //! Proven fields dispatch to their concrete storage; unproven fields retain
 //! the Part 0 guard. A known class still uses a direct field access.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared() -> Option<hir::Program> {
+fn prepared() -> hir::Program {
     prepared_fixture("interface-fields")
 }
 
-fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared_fixture(fixture: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(format!("tests/programs/{fixture}/tsconfig.json"))
         .canonicalize_utf8()
         .expect("the program is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("valid HIR").program)
+    hir::prepare(&snapshot).expect("valid HIR").program
 }
 
 /// Whether the function `name` reads a family's field by its receiver's class
@@ -53,9 +53,7 @@ fn reads_by_class(program: &hir::Program, name: &str) -> bool {
 
 #[test]
 fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
-    let Some(program) = prepared_fixture("accessor-source-flow") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-source-flow");
     for name in [
         "readFace",
         "observe",
@@ -78,7 +76,7 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
         .interface_access
         .families
         .iter()
-        .find(|family| family.member == "budget")
+        .find(|family| family.member == "budget".into())
         .expect("Computed flows to Face through calls and nested storage");
     assert!(budget.owners.iter().any(|owner| {
         program
@@ -90,7 +88,7 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
             .interface_access
             .families
             .iter()
-            .filter(|family| family.member == "value")
+            .filter(|family| family.member == "value".into())
             .flat_map(|family| &family.owners)
             .any(|owner| program
                 .layout(*owner)
@@ -113,7 +111,7 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
         .interface_access
         .families
         .iter()
-        .find(|family| family.member == "marker")
+        .find(|family| family.member == "marker".into())
         .expect("erased object suppliers retain absence through an assertion");
     for name in ["Missing", "Marked"] {
         assert!(
@@ -127,9 +125,7 @@ fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
 
 #[test]
 fn explicit_function_receivers_keep_their_proven_storage() {
-    let Some(program) = prepared_fixture("accessor-source-flow") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-source-flow");
     let reader = program
         .funcs
         .iter()
@@ -158,7 +154,12 @@ fn explicit_function_receivers_keep_their_proven_storage() {
             hir::HirType::Managed(hir::ManagedType::Object(ty)) => program.layout(ty),
             _ => None,
         })
-        .filter(|layout| layout.fields.iter().any(|field| field.name == "value"))
+        .filter(|layout| {
+            layout
+                .fields
+                .iter()
+                .any(|field| field.name == "value".into())
+        })
         .collect();
     assert_eq!(
         allocations.len(),
@@ -178,9 +179,7 @@ fn explicit_function_receivers_keep_their_proven_storage() {
 
 #[test]
 fn stored_record_results_keep_the_existing_positional_path() {
-    let Some(program) = prepared_fixture("accessor-stored-result") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-stored-result");
     for name in ["observeDirect", "read"] {
         assert!(
             program.funcs.iter().any(|func| func.name == name),
@@ -192,9 +191,7 @@ fn stored_record_results_keep_the_existing_positional_path() {
 
 #[test]
 fn native_rows_do_not_break_a_private_generic_template_prefix() {
-    let Some(program) = prepared_fixture("accessor-private-template") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-private-template");
     assert!(!program.interface_access.families.is_empty());
     assert!(
         program
@@ -208,9 +205,7 @@ fn native_rows_do_not_break_a_private_generic_template_prefix() {
 
 #[test]
 fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
-    let Some(program) = prepared_fixture("accessor-narrowed-read") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-narrowed-read");
     let flag = program
         .funcs
         .iter()
@@ -246,15 +241,13 @@ fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
 
 #[test]
 fn an_exact_source_allocation_keeps_its_typed_array_storage() {
-    let Some(program) = prepared_fixture("accessor-known-storage") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-known-storage");
     assert!(
         program
             .interface_access
             .families
             .iter()
-            .any(|family| family.member == "entries"),
+            .any(|family| family.member == "entries".into()),
         "the control must have a licensed field family"
     );
     let append = program
@@ -274,12 +267,12 @@ fn an_exact_source_allocation_keeps_its_typed_array_storage() {
 
 #[test]
 fn equivalent_optional_records_keep_one_geometry_in_their_own_layouts() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/accessor-preserved-layout/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     let lowered = hir::lower::lower_with(&snapshot, &[], &rustc_hash::FxHashMap::default());
     let program = &lowered.program;
     assert!(program.interface_access.families.len() >= 2);
@@ -312,32 +305,34 @@ fn equivalent_optional_records_keep_one_geometry_in_their_own_layouts() {
 
 #[test]
 fn a_stored_family_constructs_its_accessor_bodies() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/interface-fields/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     let lowered = hir::lower::lower_with(&snapshot, &[], &rustc_hash::FxHashMap::default());
     let program = &lowered.program;
     assert!(!program.interface_access.families.is_empty());
     assert!(
-        program
-            .funcs
-            .iter()
-            .any(|func| func.name.contains("nts$get$") || func.name.contains("nts$set$")),
+        program.interface_access.families.iter().any(|family| {
+            program
+                .funcs
+                .iter()
+                .any(|func| func.name == family.getter.declared)
+        }),
         "a family's reads dispatch, so its accessor bodies exist before pruning"
     );
 }
 
 #[test]
 fn optional_storage_reads_dispatch_through_their_family() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/accessor-schema-supplier/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     let program = hir::prepare_with(
         &snapshot,
         &hir::Options {
@@ -354,12 +349,12 @@ fn optional_storage_reads_dispatch_through_their_family() {
 
 #[test]
 fn stored_field_dispatch_is_independent_of_the_memory_provider() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/interface-fields/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     for provider in [hir::Provider::NoGc, hir::Provider::HostGc] {
         let program = hir::prepare_with(
             &snapshot,
@@ -386,9 +381,7 @@ fn stored_field_dispatch_is_independent_of_the_memory_provider() {
 
 #[test]
 fn non_prefix_field_views_keep_their_license_and_cannot_become_plain_casts() {
-    let Some(program) = prepared_fixture("interface-field-view") else {
-        return;
-    };
+    let program = prepared_fixture("interface-field-view");
     let reordered = program
         .funcs
         .iter()
@@ -451,12 +444,12 @@ fn non_prefix_field_views_keep_their_license_and_cannot_become_plain_casts() {
 
 #[test]
 fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/interface-field-view-lifetime/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
@@ -500,10 +493,7 @@ fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
 
 #[test]
 fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
-    let Some(program) = prepared_fixture("accessor-default-record") else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared_fixture("accessor-default-record");
     let maker = program
         .funcs
         .iter()
@@ -532,8 +522,8 @@ fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
         .iter()
         .filter(|layout| {
             layout.fields.len() == 2
-                && layout.fields[0].name == "item"
-                && layout.fields[1].name == "remove"
+                && layout.fields[0].name == "item".into()
+                && layout.fields[1].name == "remove".into()
         })
         .collect();
     assert_eq!(
@@ -547,9 +537,7 @@ fn unrelated_optional_defaults_preserve_a_records_literal_storage_identity() {
 fn anonymous_schema_reservations_do_not_depend_on_declaration_order() {
     let mut shapes = Vec::new();
     for fixture in ["accessor-schema-order", "accessor-schema-order-reversed"] {
-        let Some(program) = prepared_fixture(fixture) else {
-            return;
-        };
+        let program = prepared_fixture(fixture);
         let mut rows = Vec::new();
         for fields in [["item", "remove"], ["hostname", "port"]] {
             let records: Vec<_> = program
@@ -559,7 +547,12 @@ fn anonymous_schema_reservations_do_not_depend_on_declaration_order() {
                     layout
                         .fields
                         .iter()
-                        .map(|field| field.name.as_str())
+                        .map(|field| {
+                            field
+                                .name
+                                .public_name()
+                                .expect("this fixture uses public fields")
+                        })
                         .eq(fields)
                 })
                 .collect();
@@ -586,10 +579,7 @@ fn anonymous_schema_reservations_do_not_depend_on_declaration_order() {
 
 #[test]
 fn default_getter_roles_survive_prepare_and_only_default_targets_share() {
-    let Some(program) = prepared_fixture("accessor-default-sharing") else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared_fixture("accessor-default-sharing");
     let defaults = &program.interface_access.default_bodies;
     assert!(
         defaults.len() >= 2,
@@ -624,10 +614,7 @@ fn default_getter_roles_survive_prepare_and_only_default_targets_share() {
 
 #[test]
 fn a_transitively_refused_getter_refuses_interface_readers() {
-    let Some(program) = prepared_fixture("accessor-refusal-chain") else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared_fixture("accessor-refusal-chain");
     for caller in [
         "readFace",
         "caughtFace",
@@ -653,9 +640,7 @@ fn a_transitively_refused_getter_refuses_interface_readers() {
 
 #[test]
 fn an_initially_refused_getter_uses_the_same_dependency_cascade() {
-    let Some(program) = prepared_fixture("accessor-refusal-chain") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-refusal-chain");
     for caller in [
         "readDirect",
         "caughtDirect",
@@ -688,20 +673,14 @@ fn an_initially_refused_getter_uses_the_same_dependency_cascade() {
 
 #[test]
 fn a_class_test_can_prove_the_stored_receivers_exact_layout() {
-    let Some(program) = prepared_fixture("accessor-layout-proof") else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared_fixture("accessor-layout-proof");
     assert!(!reads_by_class(&program, "guarded"));
     assert!(reads_by_class(&program, "unguarded"));
 }
 
 #[test]
 fn field_dispatch_does_not_turn_prototype_getters_into_own_properties() {
-    let Some(program) = prepared_fixture("accessor-spread-boundary") else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared_fixture("accessor-spread-boundary");
     assert!(program.uncompiled.iter().any(|(_, reason)| {
         reason.contains("own properties, order or storage are not uniform")
     }));
@@ -755,10 +734,7 @@ fn tested(program: &hir::Program, func: &str) -> Vec<Vec<String>> {
 
 #[test]
 fn proven_interface_fields_dispatch_to_each_class_storage() {
-    let Some(program) = prepared() else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared();
     for (function, member, writes) in [
         ("levelOf", "level", false),
         ("setLevel", "level", true),
@@ -806,7 +782,7 @@ fn assert_storage_rows(program: &hir::Program, function: &str, member: &str, wri
         let field = layout
             .fields
             .iter()
-            .position(|field| field.name == member)
+            .position(|field| field.name == member.into())
             .unwrap();
         assert!(
             body.values.iter().any(|op| match &op.kind {
@@ -821,19 +797,13 @@ fn assert_storage_rows(program: &hir::Program, function: &str, member: &str, wri
 
 #[test]
 fn an_unproven_field_keeps_the_class_guard() {
-    let Some(program) = prepared() else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared();
     assert_eq!(tested(&program, "unreadyName"), [["Unready"]]);
 }
 
 #[test]
 fn an_access_through_the_class_is_not_tested() {
-    let Some(program) = prepared() else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared();
     assert_eq!(
         tested(&program, "levelOfGreen"),
         [] as [std::vec::Vec<std::string::String>; 0]
@@ -859,15 +829,12 @@ fn an_access_through_the_class_is_not_tested() {
 
 #[test]
 fn accessor_coverage_and_storage_permissions_are_verified() {
-    let Some(program) = prepared() else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let program = prepared();
     let getter = program
         .interface_access
         .families
         .iter()
-        .find(|family| family.member == "level")
+        .find(|family| family.member == "level".into())
         .unwrap()
         .getter
         .clone();
@@ -938,15 +905,12 @@ fn accessor_coverage_and_storage_permissions_are_verified() {
 
 #[test]
 fn raising_accessor_rows_require_complete_coverage() {
-    let Some(mut program) = prepared_fixture("accessor-families") else {
-        eprintln!("SKIP interface_fields: tsgo is not built");
-        return;
-    };
+    let mut program = prepared_fixture("accessor-families");
     let family = program
         .interface_access
         .families
         .iter()
-        .find(|family| family.member == "value" && !family.raising.is_empty())
+        .find(|family| family.member == "value".into() && !family.raising.is_empty())
         .unwrap();
     let slot = family.raising[0].slot as usize;
     let owners = family.owners.clone();
@@ -977,15 +941,13 @@ fn raising_accessor_rows_require_complete_coverage() {
 /// optional-only face it fit, and the `cluster` addon grew by 71%.
 #[test]
 fn a_prefix_class_is_read_at_the_faces_own_position() {
-    let Some(program) = prepared_fixture("accessor-default-row") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-default-row");
     let family = program
         .interface_access
         .families
         .iter()
         .find(|family| {
-            family.member == "a"
+            family.member == "a".into()
                 && program
                     .layout(family.face)
                     .is_some_and(|layout| layout.name == "F3")
@@ -1048,9 +1010,7 @@ fn a_prefix_class_is_read_at_the_faces_own_position() {
 
 #[test]
 fn a_family_read_narrowed_by_a_test_over_stored_fields_is_the_narrowed_type() {
-    let Some(program) = prepared_fixture("accessor-narrowed-family") else {
-        return;
-    };
+    let program = prepared_fixture("accessor-narrowed-family");
     let refused = |name: &str| {
         program.uncompiled.iter().any(|(refused, reason)| {
             refused == name && reason.contains("an erased value where a concrete")

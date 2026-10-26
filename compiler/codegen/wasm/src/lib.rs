@@ -160,10 +160,17 @@ pub struct Manifest {
     /// Ordinary imports, in module order. Recognized builtins and imported
     /// string constants are compile-time and appear in neither list.
     pub imports: Vec<Import>,
+    /// Required immutable externref imports from `UTF16_LITERAL_MODULE`, keyed
+    /// by first-use ordinal (the import field is its decimal spelling). Every
+    /// host must supply these exact UTF-16 strings, once at instantiation.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub literal_constants: std::collections::BTreeMap<u32, nts_semantic_schema::JsText>,
     pub builtins: Vec<Import>,
     pub features: Vec<String>,
     pub functions: Vec<FunctionRoute>,
 }
+
+pub const UTF16_LITERAL_MODULE: &str = "nts:literal/v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionExport {

@@ -22,19 +22,21 @@ pub(super) struct Target {
 #[derive(Clone)]
 pub(super) struct Method {
     pub receiver: TypeId,
-    pub key: String,
+    pub key: super::MemberKey,
     pub targets: Vec<Target>,
 }
 
 impl Method {
-    pub(super) fn resolve(probe: &FuncBuilder<'_>, receiver: TypeId, key: &str) -> Option<Self> {
+    pub(super) fn resolve(
+        probe: &FuncBuilder<'_>,
+        receiver: TypeId,
+        key: &super::MemberKey,
+    ) -> Option<Self> {
         let owner = probe.hierarchy.declaring(receiver, key)?;
         let mut declarations = if probe.hierarchy.overridden(receiver, key) {
             members_filling(probe.snapshot, probe, &probe.hierarchy, owner, key)
         } else {
-            vec![probe.implementation_of(
-                probe.member_declaration(owner, key.strip_prefix("get ").unwrap_or(key))?,
-            )]
+            vec![probe.implementation_of(probe.member_declaration(owner, &key.key)?)]
         };
         for literal in probe
             .hierarchy
@@ -96,7 +98,7 @@ struct Site {
 #[derive(Default)]
 pub(super) struct Plan {
     sites: FxHashMap<NodeId, Site>,
-    methods: FxHashMap<(TypeId, String), Option<Rc<Method>>>,
+    methods: FxHashMap<(TypeId, super::MemberKey), Option<Rc<Method>>>,
     /// The types whose chain declares a program `valueOf`, sorted: asked by
     /// every conversion whose operand's type has none, so it is found once.
     value_of: Vec<TypeId>,
@@ -115,12 +117,16 @@ impl Plan {
         plan.value_of = named
             .into_iter()
             .filter(|ty| {
-                plan.resolve_method(probe, *ty, "valueOf")
+                plan.resolve_method(probe, *ty, &super::MemberKey::named("valueOf"))
                     .is_some_and(|method| !method.targets.is_empty())
             })
             .collect();
         plan.declares_a_conversion = probe.snapshot.symbols.iter().any(|symbol| {
-            (symbol.name == "valueOf" || symbol.name.starts_with("__@toPrimitive@"))
+            (symbol.name.is_name("valueOf")
+                || probe.snapshot.key_is_well_known(
+                    &symbol.name,
+                    nts_semantic_schema::WellKnownSymbol::ToPrimitive,
+                ))
                 && symbol
                     .declarations
                     .iter()
@@ -156,10 +162,14 @@ impl Plan {
             if abstract_generator_kind(probe.snapshot, receiver).is_some() {
                 continue;
             }
-            let Some(key) = probe.symbol_property_name(receiver, "iterator") else {
+            let Some(key) = probe
+                .well_known_property_key(receiver, nts_semantic_schema::WellKnownSymbol::Iterator)
+            else {
                 continue;
             };
-            let Some(iterator) = plan.resolve_method(probe, receiver, &key) else {
+            let Some(iterator) =
+                plan.resolve_method(probe, receiver, &super::MemberKey::method(key.clone()))
+            else {
                 continue;
             };
             let frame = probe
@@ -173,7 +183,8 @@ impl Plan {
             };
             if let Some(HirType::Managed(ManagedType::Object(receiver))) =
                 probe.member_returns(receiver, &key)
-                && let Some(next) = plan.resolve_method(probe, receiver, "next")
+                && let Some(next) =
+                    plan.resolve_method(probe, receiver, &super::MemberKey::named("next"))
             {
                 site.methods.push(next);
                 site.steps = site.methods.len();
@@ -210,7 +221,8 @@ impl Plan {
                 continue;
             };
             for key in ["valueOf", "toString"] {
-                if let Some(method) = self.resolve_method(probe, receiver, key)
+                if let Some(method) =
+                    self.resolve_method(probe, receiver, &super::MemberKey::named(key))
                     && !method.targets.is_empty()
                 {
                     methods.push(method);
@@ -224,7 +236,7 @@ impl Plan {
         &mut self,
         probe: &FuncBuilder<'_>,
         receiver: TypeId,
-        key: &str,
+        key: &super::MemberKey,
     ) -> Option<Rc<Method>> {
         self.methods
             .entry((receiver, key.to_owned()))
@@ -330,8 +342,18 @@ fn input_of(probe: &FuncBuilder<'_>, at: NodeId) -> Option<NodeId> {
                 return None;
             };
             if probe.kind_of(*object) != Some(syntax::IDENTIFIER)
-                || probe.node(*object).text.as_deref() != Some("Array")
-                || probe.node(*member).text.as_deref() != Some("from")
+                || probe
+                    .node(*object)
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+                    != Some("Array")
+                || probe
+                    .node(*member)
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+                    != Some("from")
             {
                 return None;
             }
@@ -403,7 +425,7 @@ impl FuncBuilder<'_> {
         &mut self,
         at: NodeId,
         receiver: TypeId,
-        key: &str,
+        key: &super::MemberKey,
     ) -> Result<(Callee, bool), Diagnostic> {
         let method = self
             .iterators
@@ -412,6 +434,7 @@ impl FuncBuilder<'_> {
             .cloned()
             .flatten()
             .or_else(|| Method::resolve(self, receiver, key).map(Rc::new));
+        let member = &key.key;
         let raises = method
             .as_ref()
             .is_some_and(|method| method.can_raise(&self.throwing))
@@ -425,7 +448,7 @@ impl FuncBuilder<'_> {
         {
             return Err(self.unsupported(
                 at,
-                &format!("an implicit iterator `{key}` call whose raising entry is unavailable"),
+                &format!("an implicit iterator `{member}` call whose raising entry is unavailable"),
             ));
         }
         let suffix = if raises { RAISING_SUFFIX } else { "" };

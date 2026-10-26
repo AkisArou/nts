@@ -57,6 +57,6 @@ pub fn iteration_protocol_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<
         .get(ty.0 as usize)?
         .symbol
         .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
-        .map(|symbol| symbol.name.as_str())?;
+        .and_then(|symbol| symbol.name.public_name())?;
     is_an_iteration_protocol(name).then_some(name)
 }

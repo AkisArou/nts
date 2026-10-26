@@ -52,7 +52,7 @@ cat > "$work/tsconfig.json" <<JSON
 }
 JSON
 
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
+NTS_CHECKERS=1 "$compiler" \
   emit-c "$work/tsconfig.json" --out "$work/out" --napi
 
 # Every header the module's own C expects, the same set `build.sh` force-includes

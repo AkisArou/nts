@@ -1,52 +1,53 @@
-//! A file through the stage, against tsgo: what it compiles, and that a
+//! A file through the native stage: what it compiles, and that a
 //! function handed back as failing is printed exactly as the user wrote it.
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_react::print::{NoTypes, PrintOptions};
-use nts_react::project::Session;
 use nts_react::stage::{self, FunctionState, Outcome};
-use nts_react::tsgo::Nodes;
+use nts_react::syntax::Nodes;
 
-fn session() -> Option<Session> {
-    let tsgo = std::env::var("NTS_TSGO").ok()?;
-    if !Utf8Path::new(&tsgo).exists() {
-        return None;
-    }
+fn compile(name: &str, print: &PrintOptions) -> (String, Outcome) {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../fixtures/jsx-lowering/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked in");
-    Some(Session::open(&tsconfig).expect("tsgo opens the fixtures"))
-}
-
-fn compile(session: &mut Session, name: &str, print: &PrintOptions) -> (String, Outcome) {
-    let path: Utf8PathBuf = session
-        .own_sources()
+    nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .inspect(
+            &tsconfig,
+            |file, _| -> Result<_, nts_semantic_schema::SnapshotError> {
+                Ok(
+                    if file.path.starts_with(tsconfig.parent().unwrap())
+                        && file.path.file_name() == Some(name)
+                    {
+                        let outcome = stage::compile_file(
+                            file.text,
+                            Nodes::new(&file.tree.nodes),
+                            file.path.as_str(),
+                            &stage::default_options(),
+                            &mut NoTypes,
+                            print,
+                        )
+                        .expect("the stage takes it");
+                        Some((file.text.to_owned(), outcome))
+                    } else {
+                        None
+                    },
+                )
+            },
+        )
         .unwrap()
         .into_iter()
-        .find(|p| p.file_name() == Some(name))
-        .expect("a fixture");
-    let tree = session.file(&path).unwrap();
-    let code = std::fs::read_to_string(&path).unwrap();
-    let outcome = stage::compile_file(
-        &code,
-        Nodes::new(&tree.nodes),
-        path.as_str(),
-        &stage::default_options(),
-        &mut NoTypes,
-        print,
-    )
-    .expect("the stage takes it");
-    (code, outcome)
+        .flatten()
+        .next()
+        .expect("a fixture")
 }
 
 #[test]
 fn a_component_compiles_and_reports_where_it_went() {
-    let Some(mut session) = session() else { return };
-    let (_, outcome) = compile(&mut session, "keys.tsx", &PrintOptions::default());
+    let (_, outcome) = compile("keys.tsx", &PrintOptions::default());
     let keys = outcome
         .functions
         .iter()
@@ -65,8 +66,7 @@ fn a_component_compiles_and_reports_where_it_went() {
 
 #[test]
 fn a_function_handed_back_is_printed_as_written() {
-    let Some(mut session) = session() else { return };
-    let (code, compiled) = compile(&mut session, "keys.tsx", &PrintOptions::default());
+    let (code, compiled) = compile("keys.tsx", &PrintOptions::default());
     let keys = compiled
         .functions
         .iter()
@@ -76,7 +76,7 @@ fn a_function_handed_back_is_printed_as_written() {
         as_written: [keys.span].into_iter().collect(),
         ..PrintOptions::default()
     };
-    let (_, fallen_back) = compile(&mut session, "keys.tsx", &as_written);
+    let (_, fallen_back) = compile("keys.tsx", &as_written);
     let source: Vec<u16> = code.encode_utf16().collect();
     let original = String::from_utf16_lossy(&source[keys.span.0 as usize..keys.span.1 as usize]);
     assert!(

@@ -13,7 +13,12 @@ impl FuncBuilder<'_> {
             return self.literal_name(key);
         }
         match &self.snapshot.types[self.snapshot.node_types.get(&key)?.0 as usize].kind {
-            TypeKind::Literal(LiteralValue::String(name)) => Some(name.clone()),
+            TypeKind::Literal(LiteralValue::String(name)) => name.as_utf8().map(str::to_owned),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
             _ => None,
         }
     }
@@ -1075,10 +1080,13 @@ impl FuncBuilder<'_> {
                     ));
                 }
             };
-            let key =
-                self.node(name).text.clone().ok_or_else(|| {
-                    self.unsupported(name, "a C record field whose name is computed")
-                })?;
+            let key = self
+                .node(name)
+                .text
+                .as_ref()
+                .and_then(|text| text.as_utf8())
+                .map(str::to_owned)
+                .ok_or_else(|| self.unsupported(name, "a C record field whose name is computed"))?;
             if let Some(value) = value
                 .filter(|value| self.kind_of(*value) == Some(syntax::OBJECT_LITERAL_EXPRESSION))
             {
@@ -1192,11 +1200,12 @@ impl FuncBuilder<'_> {
         // lib-dom-a-dictionary-member-its-binding-has-no-field-for). Overload
         // choice already prefers a binding that takes the member
         // (`record_holds`); this is where none did.
-        if let Some(lost) = layout
-            .fields
-            .iter()
-            .find(|field| !record.fields.iter().any(|native| native.name == field.name))
-        {
+        if let Some(lost) = layout.fields.iter().find(|field| {
+            !record
+                .fields
+                .iter()
+                .any(|native| field.name.is_name(&native.name))
+        }) {
             return Err(self.unsupported(
                 id,
                 &format!(
@@ -1211,7 +1220,7 @@ impl FuncBuilder<'_> {
                 // rather than written as the zero it was left out as.
                 let accessor = matches!(
                     self.snapshot.types.get(type_id.0 as usize).map(|record| &record.kind),
-                    Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name == native.name && !p.kind.is_stored())
+                    Some(TypeKind::Object { properties }) if properties.iter().any(|p| p.name.is_name(native.name.as_ref()) && !p.kind.is_stored())
                 );
                 if accessor {
                     return Err(self.unsupported(
@@ -1231,8 +1240,13 @@ impl FuncBuilder<'_> {
                 let member = match self.snapshot.types.get(type_id.0 as usize).map(|r| &r.kind) {
                     Some(TypeKind::Object { properties }) => properties
                         .iter()
-                        .find(|p| p.name == native.name)
+                        .find(|p| p.name.is_name(native.name.as_ref()))
                         .map(|p| p.ty),
+                    #[expect(
+                        clippy::match_same_arms,
+                        reason = "keep audited semantic type variants explicit"
+                    )]
+                    Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => None,
                     _ => None,
                 };
                 self.write_given(

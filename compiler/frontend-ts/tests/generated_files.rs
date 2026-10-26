@@ -2,21 +2,15 @@
 //! target's surface. The project is opened with them besides its own files,
 //! however its config names those.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::generated::{Complaint, Generated};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
+use nts_frontend_ts::generated::{Complaint, Generated};
 use nts_semantic_schema::SemanticSnapshot;
-
-fn tsgo() -> Option<Utf8PathBuf> {
-    let path = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    path.exists().then_some(path)
-}
 
 const MAIN: &str = r#"import { a } from "gen:a";
 import { b } from "gen:b";
@@ -102,7 +96,8 @@ impl Generated for OnePerRound {
 
 fn open(tsconfig: &Utf8Path, added: &[Utf8PathBuf]) -> (SemanticSnapshot, u32) {
     let rounds = Arc::new(Mutex::new(0));
-    let mut source = TsgoApi::new(tsgo().unwrap())
+    let mut source = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .with_generated(Box::new(OnePerRound {
             declared: Vec::new(),
             rounds: Arc::clone(&rounds),
@@ -128,10 +123,6 @@ fn has_source(snapshot: &SemanticSnapshot, file: &str) -> bool {
 /// the program's own files under `"files"` or the default include.
 #[test]
 fn the_project_keeps_its_own_files_however_its_config_names_them() {
-    if tsgo().is_none() {
-        eprintln!("skipping: NTS_TSGO not set");
-        return;
-    }
     for names in ["files", "include", "default"] {
         let tsconfig = project(names, names);
         let extra = tsconfig.parent().unwrap().join("generated/extra.d.ts");
@@ -190,10 +181,6 @@ impl Generated for NoFiles {
 /// names in a different order. A generator that does nothing must not do that.
 #[test]
 fn an_inactive_generator_preserves_the_snapshot() {
-    let Some(tsgo) = tsgo() else {
-        eprintln!("skipping: NTS_TSGO not set");
-        return;
-    };
     let config = project("inactive", "files");
     std::fs::write(
         config.parent().unwrap().join("src/main.ts"),
@@ -209,11 +196,13 @@ export const ordinary = 'gi:cairo';
 "#,
     )
     .unwrap();
-    let control = TsgoApi::for_compilation(tsgo.clone())
+    let control = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .unwrap();
     let complaints = Arc::new(Mutex::new(None));
-    let subject = TsgoApi::for_compilation(tsgo.clone())
+    let subject = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .with_generated(Box::new(NoFiles {
             complaints: Arc::clone(&complaints),
         }))
@@ -234,7 +223,8 @@ export const ordinary = 'gi:cairo';
         format!("import type {{ Context }} from \"gi:cairo\";\n{text}"),
     )
     .unwrap();
-    TsgoApi::for_compilation(tsgo)
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .with_generated(Box::new(NoFiles {
             complaints: Arc::clone(&complaints),
         }))
@@ -256,10 +246,6 @@ export const ordinary = 'gi:cairo';
 /// imported sources outside the config's roots. Escapes are already cooked.
 #[test]
 fn generator_imports_are_found_in_every_module_form() {
-    let Some(tsgo) = tsgo() else {
-        eprintln!("skipping: NTS_TSGO not set");
-        return;
-    };
     let config = project("module-forms", "files");
     let root = config.parent().unwrap();
     std::fs::create_dir_all(root.join("vendor")).unwrap();
@@ -282,7 +268,8 @@ fn generator_imports_are_found_in_every_module_form() {
     ] {
         std::fs::write(root.join("vendor/imports.ts"), form).unwrap();
         let complaints = Arc::new(Mutex::new(None));
-        TsgoApi::new(tsgo.clone())
+        Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .with_generated(Box::new(NoFiles {
                 complaints: Arc::clone(&complaints),
             }))

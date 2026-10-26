@@ -45,7 +45,7 @@ fn layout(name: &str, ty: u32, field: &str) -> Layout {
         name: name.to_owned(),
         types: vec![TypeId(ty)],
         fields: vec![Field {
-            name: field.to_owned(),
+            name: field.to_owned().into(),
             ty: HirType::NUMBER,
             written: None,
             declared_by: None,
@@ -198,7 +198,7 @@ impl Random {
         row.base = (self.next(3) == 0).then(|| TypeId(self.next(4)));
         row.fields = (0..self.next(4))
             .map(|_| Field {
-                name: format!("f{}", self.next(3)),
+                name: format!("f{}", self.next(3)).into(),
                 ty: if self.next(2) == 0 {
                     HirType::NUMBER
                 } else {
@@ -321,6 +321,7 @@ fn shared(n: u32) -> super::Shared {
         closures: closures.into(),
         naming: super::Naming::default(),
         generics: super::super::generics::GenericFunctions::default(),
+        overload_results: super::overload_results::Results::default(),
         structural: super::Structural::default(),
         class_instances: std::rc::Rc::default(),
         thenables: std::rc::Rc::default(),

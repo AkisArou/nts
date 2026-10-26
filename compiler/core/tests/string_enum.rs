@@ -6,26 +6,26 @@
 //! member access the same `Literal(String("s"))` type it gives the literal, so
 //! the two arrive at one constant rather than at two that happen to agree.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -42,7 +42,7 @@ fn strings(func: &hir::Func) -> Vec<&str> {
     func.values
         .iter()
         .filter_map(|op| match &op.kind {
-            OpKind::ConstString(text) => Some(text.as_str()),
+            OpKind::ConstString(text) => text.as_utf8(),
             _ => None,
         })
         .collect()
@@ -55,9 +55,7 @@ fn strings(func: &hir::Func) -> Vec<&str> {
 /// this example was written so the two can never be confused for each other.
 #[test]
 fn a_string_member_is_its_value() {
-    let Some(lowered) = lowered("string-enum") else {
-        return;
-    };
+    let lowered = lowered("string-enum");
     assert_eq!(
         lowered
             .diagnostics
@@ -84,9 +82,7 @@ fn a_string_member_is_its_value() {
 /// adds the truthiness, which separates them in the answer as well as here.
 #[test]
 fn the_empty_member_is_a_constant() {
-    let Some(lowered) = lowered("string-enum") else {
-        return;
-    };
+    let lowered = lowered("string-enum");
     let built = strings(func(&lowered, "empty"));
     assert!(
         built.contains(&""),
@@ -103,9 +99,7 @@ fn the_empty_member_is_a_constant() {
 /// the wrong representation would be a pointer read as a double.
 #[test]
 fn a_string_member_is_a_managed_string() {
-    let Some(lowered) = lowered("string-enum") else {
-        return;
-    };
+    let lowered = lowered("string-enum");
     let pick = func(&lowered, "pick");
     for (at, op) in pick.values.iter().enumerate() {
         if matches!(op.kind, OpKind::ConstString(_)) {
@@ -129,9 +123,7 @@ fn a_string_member_is_a_managed_string() {
 /// emitted a load for `Direction.Up` would be reading a member of nothing.
 #[test]
 fn a_const_enum_string_member_folds_too() {
-    let Some(lowered) = lowered("string-enum") else {
-        return;
-    };
+    let lowered = lowered("string-enum");
     let mut built = strings(func(&lowered, "heading"));
     built.sort_unstable();
     assert_eq!(built, vec!["down", "up"]);
@@ -144,9 +136,7 @@ fn a_const_enum_string_member_folds_too() {
 /// here instead of two and type a number as a pointer.
 #[test]
 fn a_numeric_member_is_still_an_immediate() {
-    let Some(lowered) = lowered("string-enum") else {
-        return;
-    };
+    let lowered = lowered("string-enum");
     let both = func(&lowered, "both");
     let numbers = both
         .values

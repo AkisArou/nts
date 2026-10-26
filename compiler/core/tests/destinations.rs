@@ -11,36 +11,34 @@
 //! subtrees through `tree#into` itself, a recursion the pass reaches without
 //! a depth bound.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind, Options, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-string-built-where-it-is-appended";
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
         provider: Provider::ReferenceCounting,
         ..Options::default()
     };
-    Some(
-        hir::prepare_with(&snapshot, &options)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &options)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 /// How many direct calls `func` makes to `callee`.
@@ -59,9 +57,7 @@ fn calls(func: &hir::Func, callee: &str) -> usize {
 
 #[test]
 fn a_string_built_only_to_be_appended_is_built_where_it_is_appended() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     let named = |name: &str| {
         program
             .funcs

@@ -90,11 +90,11 @@ public final class Main {
         final int[] fromLambda = { 0 };
         nts.gen.Program.eachUpTo(4, x -> fromLambda[0] += (int) x);
 
-        // s.$hits is NOT reachable from here: the field is package-private and
+        // s.p$$hits is NOT reachable from here: the field is package-private and
         // this class is not in `nts.gen`. Uncommenting the next line is a
         // compile error, and that error is item 0 working.
         //
-        //   double peek = s.$hits;
+        //   double peek = s.p$$hits;
 
         // **Scalar kinds cross at their width, returns as parameters do.** An
         // unsigned kind is its raw bits: `answer()` is 4294967295 as a Uint32,

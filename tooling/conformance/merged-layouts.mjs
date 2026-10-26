@@ -34,7 +34,7 @@ for (const config of configs) {
   try {
     out = execFileSync(process.env.NTS_BIN ?? "./target/release/nts", ["hir", config], {
       encoding: "utf8", maxBuffer: 512 * 1024 * 1024, timeout: 900_000,
-      env: { NTS_TSGO: `${process.cwd()}/target/tsgo`, ...process.env },
+      env: { NTS_CHECKERS: "1", ...process.env },
       stdio: ["ignore", "pipe", "ignore"],
     });
   } catch (e) { out = e.stdout ?? ""; }

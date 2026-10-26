@@ -246,7 +246,7 @@ fn symbol_result(builder: &mut FuncBuilder<'_>, at: NodeId, action: Action) -> O
 fn refuse(builder: &mut FuncBuilder<'_>, at: NodeId, reason: &str) {
     let origin = builder.origin(at);
     let text = builder.push(
-        OpKind::ConstString(reason.to_owned()),
+        OpKind::ConstString(reason.to_owned().into()),
         HirType::Managed(ManagedType::String),
         origin.clone(),
     );
@@ -291,7 +291,7 @@ fn inherited_membership(
     for name in OBJECT_PROTOTYPE_MEMBERS {
         let next = builder.new_block();
         let name = builder.push(
-            OpKind::ConstString((*name).to_owned()),
+            OpKind::ConstString((*name).to_owned().into()),
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );

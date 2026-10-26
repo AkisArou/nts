@@ -110,7 +110,7 @@ for case in $cases; do
   cat > "$out/tsconfig.json" <<JSON
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benchmarks/cases/$case"] }
 JSON
-  NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
+  NTS_CHECKERS=1 "$nts" emit-jvm "$out/tsconfig.json" \
     --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1 \
     || { printf "%-24s %12s %12s\n" "$case" "declined" "declined"; continue; }
 

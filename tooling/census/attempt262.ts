@@ -428,12 +428,9 @@ export const BACKENDS = {
  * **The program is compiled from its own content-addressed root**
  * (`caseRoot`): read-only, named by a hash of exactly what it holds, and
  * shared by every worker, backend and compiler build that compiles the same
- * case. That is what lets the frontend's snapshot cache answer a case it has
- * typechecked before -- 3.2 ms against 85 against tsgo, measured on 300 cases
- * -- since its key holds the tsconfig's path, and every case in a worker's
- * scratch had the same one. The outputs stay in `dir`, outside the root.
- * `tools.fresh` compiles from `dir` instead, with the cache off, which is
- * what every run did before.
+ * case. The outputs stay in `dir`, outside the root. `tools.fresh` uses
+ * mutable worker scratch instead, for checking materialization independently
+ * of the immutable case-root store. Native capture runs anew in both modes.
  */
 export function attempt(dir, body, tools, origin?) {
   const { nts } = tools;
@@ -472,7 +469,7 @@ export function attempt(dir, body, tools, origin?) {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
-    env: environment({ snapshotCache: !tools.fresh }),
+    env: environment(),
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (emit.memoryKilled) return { bucket: "memory-cap", why: "emit resident scope", residentWorkerBytes: emit.residentLimitBytes, residentRunBytes: emit.residentRunBytes };
@@ -480,14 +477,10 @@ export function attempt(dir, body, tools, origin?) {
   const diagnostics = `${stdout}${emit.stderr ?? ""}`;
   if (emit.error || emit.status !== 0) {
     if (emit.signal === "SIGTERM") return { bucket: "timeout", why: "emit" };
-    // Before the crash test: Go's own out-of-memory is `fatal error`, not a
-    // `panic:`, and it is the cap below firing -- a resource verdict about this
-    // case, not a crash of the compiler.
-    if (/^fatal error: out of memory$/m.test(diagnostics)) {
-      return { bucket: "memory-cap", why: "emit", peak: /\((\d+) in use\)/.exec(diagnostics)?.[1] };
-    }
-    if (diagnostics.includes("frontend transport failed") || diagnostics.includes("panic: ")) {
-      return { bucket: "frontend-crash" };
+    // Only the resident controller above can attribute an OOM to its limit.
+    // A native panic/abort belongs to the compiler, never an unsupported case.
+    if (emit.signal || emit.status === 101 || (emit.status >= 128 && emit.status <= 255)) {
+      return { bucket: "crash", why: "emit", first: emit.signal ?? `exit ${emit.status}` };
     }
     const type_error = FIRST_TYPE_ERROR.exec(diagnostics);
     if (type_error) {

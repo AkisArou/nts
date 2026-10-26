@@ -22,7 +22,7 @@
 //! again here, because two spellings of one name is how a linker finds out the
 //! two disagree.
 
-use nts_codegen_c::{c_global, c_identifier, c_member};
+use nts_codegen_c::{c_global, c_identifier};
 use std::fmt::Write as _;
 
 use nts_core::hir::{self, HirType, ManagedType};
@@ -151,12 +151,18 @@ fn elements_helper(inner: &Cross, layouts: &[hir::Layout]) -> String {
 /// refusal was one level of nesting, on the last function keeping `os` from
 /// whole. `emit_object_helper` already calls itself for an array of objects;
 /// a field is the same call without the loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ObjectCrossingFailure {
+    Shape,
+    SymbolKey,
+}
+
 fn object_crosses(
     at: usize,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
     path: &mut Vec<usize>,
-) -> bool {
+) -> Result<(), ObjectCrossingFailure> {
     // The cycle guard, and it is the current *chain* rather than a visited set
     // on purpose. A layout reached twice down two different fields is fine and
     // has to stay allowed; a layout that reaches itself has no finite JavaScript
@@ -167,14 +173,14 @@ fn object_crosses(
     // A `Vec` because these chains are two or three deep -- `CpuInfo` ->
     // `CpuTimes` and stop -- and scanning three is cheaper than hashing one.
     if path.contains(&at) {
-        return false;
+        return Err(ObjectCrossingFailure::Shape);
     }
     let layout = &layouts[at];
     if classes.contains(&layout.name)
         || layout.base.is_some()
         || layout.methods.iter().any(Option::is_some)
     {
-        return false;
+        return Err(ObjectCrossingFailure::Shape);
     }
     // A layout with no fields at all, which is refused for a reason the class
     // rule above should have covered and cannot.
@@ -199,21 +205,34 @@ fn object_crosses(
     // than of a function body. That is a `compiler/core` change every backend
     // reads, so it is coordinated rather than taken here.
     if layout.fields.is_empty() {
-        return false;
+        return Err(ObjectCrossingFailure::Shape);
     }
     path.push(at);
-    let crosses = layout.fields.iter().all(|field| match &field.ty {
-        HirType::Bool | HirType::Float { .. } | HirType::Int { .. } | HirType::BigInt => true,
-        HirType::Managed(ManagedType::String | ManagedType::Table(_, _)) => true,
-        // A closure is a synthetic object layout whose JavaScript value is a
-        // function, excluded here for the reason `cross` excludes it one level
-        // up: copying captured fields into a plain object would silently change
-        // what the value is.
-        HirType::Managed(ManagedType::Object(id)) if !hir::is_closure_type(*id) => layouts
-            .iter()
-            .position(|nested| nested.types.contains(id))
-            .is_some_and(|nested| object_crosses(nested, layouts, classes, path)),
-        _ => false,
+    let crosses = layout.fields.iter().try_for_each(|field| {
+        match &field.name {
+            nts_semantic_schema::PropertyKey::Symbol(_) => {
+                return Err(ObjectCrossingFailure::SymbolKey);
+            }
+            nts_semantic_schema::PropertyKey::Private(_) => {
+                return Err(ObjectCrossingFailure::Shape);
+            }
+            nts_semantic_schema::PropertyKey::Name(_) => {}
+        }
+        match &field.ty {
+            HirType::Bool
+            | HirType::Float { .. }
+            | HirType::Int { .. }
+            | HirType::BigInt
+            | HirType::Managed(ManagedType::String | ManagedType::Table(_, _)) => Ok(()),
+            HirType::Managed(ManagedType::Object(id)) if !hir::is_closure_type(*id) => {
+                let nested = layouts
+                    .iter()
+                    .position(|nested| nested.types.contains(id))
+                    .ok_or(ObjectCrossingFailure::Shape)?;
+                object_crosses(nested, layouts, classes, path)
+            }
+            _ => Err(ObjectCrossingFailure::Shape),
+        }
     });
     path.pop();
     crosses
@@ -347,7 +366,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => None,
         HirType::Managed(ManagedType::Object(id)) => {
             let at = layouts.iter().position(|l| l.types.contains(id))?;
-            object_crosses(at, layouts, classes, &mut Vec::new()).then_some(Cross::Object(at))
+            object_crosses(at, layouts, classes, &mut Vec::new()).ok().map(|()| Cross::Object(at))
         }
         // A `never` return means the call does not come back, so there is
         // nothing for a wrapper to hand back.
@@ -1499,7 +1518,8 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
              entry->name != NULL; entry++) {
             if (strcmp(entry->name, class_name) != 0) continue;
             base = entry->base;
-            if (napi_create_string_utf8(env, entry->code, NAPI_AUTO_LENGTH, &code) != napi_ok) {
+            if (napi_create_string_utf16(env, (const char16_t *)entry->code,
+                                       entry->code_length, &code) != napi_ok) {
                 code = NULL;
             }
             break;
@@ -1544,6 +1564,28 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
 /// Separated from [`wrapper`] because they are two things: this one only ever
 /// says no, and everything below it only ever writes C. Reading a refusal meant
 /// scrolling past forty lines of `format!` to find the next one.
+fn crossing_reason(
+    verb: &str,
+    ty: &HirType,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+) -> String {
+    let mut element = ty;
+    while let HirType::Managed(ManagedType::Array(inner)) = element {
+        element = inner;
+    }
+    if let HirType::Managed(ManagedType::Object(id)) = element
+        && let Some(at) = layouts.iter().position(|layout| layout.types.contains(id))
+        && object_crosses(at, layouts, classes, &mut Vec::new())
+            == Err(ObjectCrossingFailure::SymbolKey)
+    {
+        return format!(
+            "{verb} a plain object with a symbol-keyed field, which has no Node-API projection"
+        );
+    }
+    format!("{verb} {}", spell(ty))
+}
+
 fn crossings_of(
     func: &hir::Func,
     layouts: &[hir::Layout],
@@ -1559,7 +1601,7 @@ fn crossings_of(
     }
     let ret = cross(&func.return_type, layouts, classes).ok_or_else(|| Skipped {
         function: func.name.clone(),
-        reason: format!("returns {}", spell(&func.return_type)),
+        reason: crossing_reason("returns", &func.return_type, layouts, classes),
     })?;
     let crossings: Vec<Cross> = func
         .params
@@ -1567,7 +1609,7 @@ fn crossings_of(
         .map(|p| {
             cross(&p.ty, layouts, classes).ok_or_else(|| Skipped {
                 function: func.name.clone(),
-                reason: format!("takes {}", spell(&p.ty)),
+                reason: crossing_reason("takes", &p.ty, layouts, classes),
             })
         })
         .collect::<Result<_, _>>()?;
@@ -1838,13 +1880,13 @@ fn member_crossings(
 ) -> Result<(Cross, Vec<Cross>), Skipped> {
     let ret = cross(&func.return_type, layouts, classes).ok_or_else(|| Skipped {
         function: func.name.clone(),
-        reason: format!("returns {}", spell(&func.return_type)),
+        reason: crossing_reason("returns", &func.return_type, layouts, classes),
     })?;
     let mut crossings = Vec::new();
     for parameter in func.params.iter().skip(1) {
         let crossing = cross(&parameter.ty, layouts, classes).ok_or_else(|| Skipped {
             function: func.name.clone(),
-            reason: format!("takes {}", spell(&parameter.ty)),
+            reason: crossing_reason("takes", &parameter.ty, layouts, classes),
         })?;
         if matches!(crossing, Cross::Object(_) | Cross::Bytes | Cross::Void) {
             return Err(Skipped {
@@ -2227,7 +2269,7 @@ fn class_definition(
 /// A class whose constructor does not assign a constant `code` is left out and
 /// keeps the old behaviour: `name` set to the class, and no code. That is the
 /// honest answer for a class this cannot read one from.
-fn error_classes(program: &hir::Program) -> Vec<(String, String, String)> {
+fn error_classes(program: &hir::Program) -> Vec<(String, String, hir::JsText)> {
     let roots = hir::PROVIDED_ERROR_NAMES;
     let mut found = Vec::new();
     for layout in &program.layouts {
@@ -2294,23 +2336,31 @@ fn error_classes(program: &hir::Program) -> Vec<(String, String, String)> {
 /// That table, as C, ahead of the support code that reads it.
 fn error_class_table(program: &hir::Program) -> String {
     let mut out = String::from(
-        "typedef struct { const char *name; const char *base; const char *code; } NtsNapiErrorClass;
+        "typedef struct { const char *name; const char *base; const uint16_t *code; size_t code_length; } NtsNapiErrorClass;
 static const NtsNapiErrorClass nts_napi_error_classes[] = {
 ",
     );
     for (name, base, code) in error_classes(program) {
+        let units: Vec<_> = code.encode_utf16().collect();
+        let payload = units
+            .iter()
+            .copied()
+            .chain(std::iter::once(0))
+            .map(|unit| unit.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
         let _ = writeln!(
             out,
-            "    {{ {}, {}, {} }},",
+            "    {{ {}, {}, (const uint16_t[]){{{payload}}}, {}u }},",
             c_string_literal(&name),
             c_string_literal(&base),
-            c_string_literal(&code)
+            units.len()
         );
     }
     // A sentinel, because a zero-length array is not C and a program with no
     // error classes at all is an ordinary program.
     out.push_str(
-        "    { 0, 0, 0 }
+        "    { 0, 0, 0, 0 }
 };
 
 ",
@@ -2939,9 +2989,14 @@ fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::La
         out,
         "static napi_status {name}(napi_env env, const {struct_name} *result, napi_value *into) {{\n    napi_value out;\n    napi_status status = napi_create_object(env, &out);\n    if (status != napi_ok) return status;\n"
     );
-    for field in &layout.fields {
-        let member = c_identifier(&field.name);
-        let set_property = set_property_call(&field.name);
+    for (at, field) in layout.fields.iter().enumerate() {
+        let member = nts_codegen_c::object_field_name(layout, at);
+        let set_property = set_property_call(
+            field
+                .name
+                .public_name()
+                .expect("object_crosses requires public string keys"),
+        );
         let make = match field.ty {
             HirType::Managed(ManagedType::String) => {
                 format!("nts_to_napi_string(env, result->{member}, &value)")
@@ -3778,7 +3833,19 @@ fn field_accessors(
 ) -> (String, Vec<String>) {
     let mut out = String::new();
     let mut descriptors = Vec::new();
-    for field in &layout.fields {
+    for (at, field) in layout.fields.iter().enumerate() {
+        let Some(name) = field.name.public_name() else {
+            // Private state is not a JavaScript property. A symbol cannot be
+            // published under its description as if it were a string key.
+            if matches!(field.name, nts_semantic_schema::PropertyKey::Symbol(_)) {
+                skipped.push(Skipped {
+                    function: format!("{class}.{}", field.name),
+                    reason: "is a symbol-keyed field, whose identity has no Node-API projection"
+                        .to_owned(),
+                });
+            }
+            continue;
+        };
         let Some(crossing) = cross(&field.ty, layouts, classes) else {
             skipped.push(Skipped {
                 function: format!("{class}.{}", field.name),
@@ -3786,7 +3853,7 @@ fn field_accessors(
             });
             continue;
         };
-        let member = c_member(&field.name);
+        let member = nts_codegen_c::object_field_name(layout, at);
         // Keep the physical prefix for an ordinary class, and the semantic
         // suffix for another class sharing its storage. Mangle its complete
         // prefixed stem, retaining the existing field-name spelling.
@@ -3794,7 +3861,7 @@ fn field_accessors(
         let symbol = format!(
             "{}_{}",
             c_identifier(&format!("nts_napi_get_{stem}")),
-            c_identifier(&field.name)
+            nts_codegen_c::object_field_name(layout, at)
         );
         let Some(make) = conversion(&crossing, &format!("nts_self->{member}"), layouts) else {
             continue;
@@ -3803,7 +3870,7 @@ fn field_accessors(
             out,
             "static napi_value {symbol}(napi_env env, napi_callback_info info) {{\n                 napi_value self;\n                 if (!nts_napi_check(env, napi_get_cb_info(env, info, NULL, NULL, &self, NULL), \"could not read callback arguments\")) return NULL;\n                 {instance} *nts_self = NULL;\n                 if (!nts_napi_check(env, napi_unwrap(env, self, (void **)&nts_self), \"could not read the instance\")) return NULL;\n                 napi_value value = NULL;\n                 if (!nts_napi_check(env, {make}, \"could not read a field\")) return NULL;\n                 return value;\n}}\n"
         );
-        let property = c_string_literal(&field.name);
+        let property = c_string_literal(name);
         descriptors.push(format!(
             "{{ {property}, NULL, NULL, {symbol}, NULL, NULL, napi_enumerable, NULL }}"
         ));
@@ -4050,12 +4117,12 @@ fn emit_layouts(
         let name = nts_codegen_c::object_type_name(layout);
         let _ = writeln!(out, "struct {name} {{");
         out.push_str("    NtsHeader header;\n");
-        for field in &layout.fields {
+        for (at, field) in layout.fields.iter().enumerate() {
             let _ = writeln!(
                 out,
                 "    {} {};",
                 c_type(&field.ty, &program.layouts),
-                c_identifier(&field.name)
+                nts_codegen_c::object_field_name(layout, at)
             );
         }
         out.push_str("};\n\n");
@@ -4357,7 +4424,7 @@ mod tests {
                 types: vec![nts_semantic_schema::TypeId(7)],
                 name: "Holder".to_owned(),
                 fields: vec![hir::Field {
-                    name: "value".to_owned(),
+                    name: "value".into(),
                     ty: ty.clone(),
                     declared_by: None,
                     readonly: false,
@@ -4369,12 +4436,18 @@ mod tests {
             };
             let layouts = [layout];
             assert!(
-                object_crosses(0, &layouts, &FxHashSet::default(), &mut Vec::new()),
+                object_crosses(0, &layouts, &FxHashSet::default(), &mut Vec::new()).is_ok(),
                 "{ty:?} no longer crosses, so this test checks nothing for it"
             );
             let mut out = String::new();
             emit_object_helper(&mut out, &layouts[0], &layouts);
-            assert!(out.contains("result->value"), "{ty:?}: {out}");
+            assert!(
+                out.contains(&format!(
+                    "result->{}",
+                    nts_codegen_c::object_field_name(&layouts[0], 0)
+                )),
+                "{ty:?}: {out}"
+            );
         }
     }
 

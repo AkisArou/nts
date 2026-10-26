@@ -1,6 +1,6 @@
 # Test262 tests/typescript cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 30306e14080cb0dc, commit 0e897771c1b59ba48d6721a2763c45bfce2c82cc, backend wasm, harness f8ca0afd3c45597f; machine at start: 18.4 GB available, swap 2.9/31.5 GB, load 53.7/56.7 (1m/5m), 16 cores; 4 worker(s)
+# compiler 6768eb8d0734aa63, commit 07b52742d0686dea30f111f5ac465af1defd8651, backend wasm, harness f8ca0afd3c45597f; machine at start: 23.8 GB available, swap 4.9/31.5 GB, load 4.3/3.8 (1m/5m), 16 cores; 4 worker(s)
 tests/typescript/async/async-method.ts	pass	
 tests/typescript/async/async-recursion.ts	pass	
 tests/typescript/async/await-a-plain-value.ts	pass	
@@ -29,7 +29,7 @@ tests/typescript/classes/initialisation-order.ts	pass
 tests/typescript/classes/instanceof-hierarchy.ts	pass	
 tests/typescript/classes/override-and-super-call.ts	pass	
 tests/typescript/classes/override-parameter-property.ts	pass	
-tests/typescript/classes/parameter-properties-with-super.ts	fail	nts: uncaught Test262Error: sameValue
+tests/typescript/classes/parameter-properties-with-super.ts	pass	
 tests/typescript/classes/parameter-properties.ts	pass	
 tests/typescript/classes/private-brand-check.ts	pass	
 tests/typescript/classes/private-constructor-singleton.ts	pass	

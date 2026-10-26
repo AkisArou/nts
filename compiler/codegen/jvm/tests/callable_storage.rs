@@ -3,17 +3,13 @@
 
 use camino::Utf8PathBuf;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 mod common;
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP callable_storage: NTS_TSGO is not set");
-        return;
-    };
     let (Some(javac), Some(java)) = (common::tool("javac"), common::tool("java")) else {
         eprintln!("SKIP callable_storage: no JDK");
         return;
@@ -28,7 +24,8 @@ fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {
     std::fs::write(dir.join("tsconfig.json"),
         "{\"compilerOptions\": {\"target\": \"ESNext\", \"module\": \"ESNext\", \"strict\": true}, \"files\": [\"main.ts\"]}\n").unwrap();
     let config = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

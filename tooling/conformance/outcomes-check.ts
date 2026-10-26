@@ -164,15 +164,9 @@ process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
 /** A fixture as a project under this run's scratch: see outcomes-project.ts. */
 const materialise = (name, sources, mode) => materialiseIn(SCRATCH, name, sources, mode);
 
-// `NTS_TSGO` from the caller when it names one: `tooling/gate/pinned.sh` runs the
-// gate in a worktree with no `target/` of its own and passes the main tree's
-// tsgo. This line used to set it *after* spreading `process.env`, so the
-// tree-local path won, pointed at nothing, and every pinned gate failed this
-// step at its self-check.
 const env = () => ({
   ...process.env,
-  NTS_NO_SNAPSHOT_CACHE: "1",
-  NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"),
+  NTS_CHECKERS: "1",
 });
 const CASCADE = new Set(["NTS1003", "NTS1005"]);
 const rootLine = (d) => `${d.code} ${d.raw}`;
@@ -191,7 +185,6 @@ function runBuild(dir, options = { rc: false, address: false }) {
   if (emit.error || emit.signal) return { category: "not-measured", nts: `emit-c ${emit.signal ?? emit.error?.message}` };
   const invalid = /^invalid HIR: (.*)$/m.exec(said);
   if (invalid) return { category: "invalid-hir", nts: `invalid HIR: ${invalid[1].trim()}` };
-  if (/^fatal error: out of memory$/m.test(said)) return { category: "not-measured", nts: "the memory cap" };
   const roots = rawRoots(said);
   if (roots.length > 0) {
     // **A refusal does not always stop the program.** `emit-c` exits 0 with a
@@ -558,14 +551,6 @@ for (const name of chosen) {
 console.log(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
 const broken = selfCheck();
 if (broken) {
-  // **"The harness could not start the frontend" is not "the records moved".**
-  // Both used to arrive as one verdict; only the second is about the compiler,
-  // and a gate reader should not have to open the JSON to tell them apart.
-  if (/frontend transport failed|could not start/.test(broken)) {
-    console.log(`  NOT MEASURED: the frontend (tsgo) could not be started -- NTS_TSGO=${env().NTS_TSGO}`);
-    console.log("  this is the harness's environment, not a fact about the compiler or the records");
-    process.exit(2);
-  }
   console.log(`  NOT MEASURED: self-check failed -- ${broken}`);
   console.log("  a harness that cannot tell agreement from disagreement cannot hold a record");
   process.exit(2);

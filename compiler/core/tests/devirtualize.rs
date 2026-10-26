@@ -15,26 +15,25 @@
 //! this is a pass whose failure mode is calling the wrong function and being
 //! silent about it. Four of the five exports in the fixture are negative.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
-use nts_frontend_ts::SemanticSource;
 
-fn prepared(name: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()).program)
+    hir::prepare_unverified(&snapshot, &hir::Options::default()).program
 }
 
 /// A known generator result must reach the store as a typed call. An erased
@@ -42,14 +41,12 @@ fn prepared(name: &str) -> Option<hir::Program> {
 /// decline into an emitted `ClassCastException` at module initialization.
 #[test]
 fn known_reference_results_remain_typed_at_the_store() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/outcomes/a-generator-into-an-empty-array-pattern-on-jvm/tsconfig.json")
         .canonicalize_utf8()
         .expect("the recorded generator outcome is checked in");
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let program = hir::prepare_unverified(&snapshot, &hir::Options::default()).program;
@@ -111,9 +108,7 @@ fn known_reference_results_remain_typed_at_the_store() {
 /// caller prefix must not be replaced by an unchecked adapter cast.
 #[test]
 fn mixed_reference_defaults_keep_their_previous_typed_path() {
-    let Some(program) = prepared("a-mixed-reference-default-keeps-its-typed-call") else {
-        return;
-    };
+    let program = prepared("a-mixed-reference-default-keeps-its-typed-call");
     let subject = program
         .funcs
         .iter()
@@ -168,9 +163,7 @@ fn calls_directly(program: &hir::Program, export: &str) -> bool {
 /// closure class like any other and must be rewritten too.
 #[test]
 fn a_field_that_holds_one_closure_is_called_directly() {
-    let Some(program) = prepared("callback-fields") else {
-        return;
-    };
+    let program = prepared("callback-fields");
     assert!(
         calls_directly(&program, "single"),
         "one named function stored into the field"
@@ -191,9 +184,7 @@ fn a_field_that_holds_one_closure_is_called_directly() {
 /// like the only one the field can hold.
 #[test]
 fn a_field_that_may_hold_several_is_not_rewritten() {
-    let Some(program) = prepared("callback-fields") else {
-        return;
-    };
+    let program = prepared("callback-fields");
     for export in [
         "eitherOf",
         "throughAParameter",
@@ -217,9 +208,7 @@ fn a_field_that_may_hold_several_is_not_rewritten() {
 /// guessed.
 #[test]
 fn the_receiver_is_unerased_to_the_class_it_is_called_as() {
-    let Some(program) = prepared("callback-fields") else {
-        return;
-    };
+    let program = prepared("callback-fields");
     let func = program
         .funcs
         .iter()
@@ -305,9 +294,7 @@ fn the_receiver_is_unerased_to_the_class_it_is_called_as() {
 /// dispatch (35 to 90 us on C).
 #[test]
 fn an_interface_field_of_a_literal_holding_one_closure_is_called_directly() {
-    let Some(program) = prepared("an-interface-field-holding-one-closure") else {
-        return;
-    };
+    let program = prepared("an-interface-field-holding-one-closure");
     let run = program
         .funcs
         .iter()

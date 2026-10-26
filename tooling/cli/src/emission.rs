@@ -9,8 +9,7 @@ use nts_core::hir;
 use nts_diagnostics::{Severity, SourceFile, SourceLocations};
 
 use super::{
-    Emission, configured_surface_to, foreign_tables, frontend_binary, frontend_for, provider_for,
-    selected_roots,
+    Emission, configured_surface_to, foreign_tables, frontend_for, provider_for, selected_roots,
 };
 
 /// Live commands write directly; a combined command keeps each backend's exact
@@ -195,8 +194,8 @@ impl Input {
         emission: Emission<'_>,
         report: &mut Report,
     ) -> Result<Self> {
-        let mut source = frontend_for(tsconfig, frontend_binary())?;
-        let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+        let mut source = frontend_for(tsconfig)?;
+        let snapshot = super::capture_project(&mut source, tsconfig)?;
         drop(source);
         snapshot_diagnostics(&snapshot, report)?;
         let entry = selected_roots(emission.shape);

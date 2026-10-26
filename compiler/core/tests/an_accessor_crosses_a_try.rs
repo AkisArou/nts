@@ -19,28 +19,28 @@
 //! a quiet getter refused, which is a refusal rather than a wrong answer. Only the
 //! differential saw the first and only this kind of assertion pins the second.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const EXAMPLE: &str = "a-throwing-accessor-inside-a-try";
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(EXAMPLE)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{EXAMPLE} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn compiled(lowered: &hir::lower::Lowered, name: &str) -> bool {
@@ -50,10 +50,7 @@ fn compiled(lowered: &hir::lower::Lowered, name: &str) -> bool {
 /// The copy is made for a `get`, for a `set`, and for a `static` pair.
 #[test]
 fn an_accessor_reached_by_a_try_gets_a_raising_copy() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     for name in [
         "Box#get doubled@raises",
         "Box#set checked@raises",
@@ -83,10 +80,7 @@ fn an_accessor_reached_by_a_try_gets_a_raising_copy() {
 /// there is no copy for it to find.
 #[test]
 fn a_quiet_accessor_is_not_refused_for_want_of_a_copy() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     assert!(
         compiled(&lowered, "aQuietGetter"),
         "a getter that cannot throw compiles"
@@ -120,10 +114,7 @@ fn a_quiet_accessor_is_not_refused_for_want_of_a_copy() {
 /// which is the half this cannot do: a wrong dispatch here is a plausible number.
 #[test]
 fn an_overridden_accessor_dispatches_at_its_own_slot() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     assert!(
         lowered.diagnostics.is_empty(),
         "nothing refuses now: {:?}",

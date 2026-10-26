@@ -6,26 +6,26 @@
 //! parameters are in the order `forEach` hands them rather than the order the
 //! table stores them.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -58,9 +58,7 @@ fn externals(func: &hir::Func) -> Vec<&str> {
 /// case and cost a call per entry.
 #[test]
 fn a_table_for_each_is_the_cursor_walk() {
-    let Some(lowered) = lowered("map-and-set") else {
-        return;
-    };
+    let lowered = lowered("map-and-set");
     let calls = externals(func(&lowered, "mapForEach"));
     assert!(
         calls.contains(&"nts_map_next"),
@@ -83,9 +81,7 @@ fn a_table_for_each_is_the_cursor_walk() {
 /// has nothing to answer with.
 #[test]
 fn a_set_reads_its_key_for_both_parameters() {
-    let Some(lowered) = lowered("map-and-set") else {
-        return;
-    };
+    let lowered = lowered("map-and-set");
     let calls = externals(func(&lowered, "setForEachSeesTheElementTwice"));
     assert!(
         !calls.contains(&"nts_map_value_at"),
@@ -109,9 +105,7 @@ fn a_set_reads_its_key_for_both_parameters() {
 /// `Walk::Entries` says about `for...of` and it has to stay true here.
 #[test]
 fn the_walk_allocates_nothing() {
-    let Some(lowered) = lowered("map-and-set") else {
-        return;
-    };
+    let lowered = lowered("map-and-set");
     let allocations = |name: &str| {
         func(&lowered, name)
             .values
@@ -135,9 +129,7 @@ fn the_walk_allocates_nothing() {
 /// The table parameter is still refused, and by count.
 #[test]
 fn the_table_parameter_is_refused() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     let reasons: Vec<&str> = lowered
         .diagnostics
         .iter()
@@ -164,9 +156,7 @@ fn the_table_parameter_is_refused() {
 /// *is* the parameter order.
 #[test]
 fn the_first_parameter_is_the_value() {
-    let Some(lowered) = lowered("map-and-set") else {
-        return;
-    };
+    let lowered = lowered("map-and-set");
     let function = func(&lowered, "mapForEachValueOnly");
 
     let read = |helper: &str| -> Vec<u32> {

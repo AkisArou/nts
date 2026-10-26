@@ -423,7 +423,7 @@ mod tests {
 
     fn field(name: &str, ty: HirType) -> Field {
         Field {
-            name: name.to_owned(),
+            name: name.to_owned().into(),
             ty,
             readonly: false,
             // Placement depends on width and order, never on who declared what.

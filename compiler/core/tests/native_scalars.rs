@@ -8,7 +8,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn test_scratch_is_removed_when_its_owner_returns() {
@@ -48,11 +48,7 @@ fn test_scratch_with_the_same_label_has_independent_owners() {
     assert!(second.exists());
 }
 
-fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP native scalars: tsgo is required");
-        return None;
-    };
+fn snapshot(name: &str, source: &str) -> nts_semantic_schema::SemanticSnapshot {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
@@ -62,11 +58,12 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
     std::fs::write(dir.join("main.ts"), format!("{}{}", "import type { c_int, c_uint, Int8, Uint8, Int16, Uint16, Int32, Uint32, BigInt64, BigUint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, Float32, Float64 } from \"@nts/scalars\";\n", source)).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some(snapshot)
+    snapshot
 }
 
 #[test]
@@ -89,7 +86,7 @@ fn pointer_constant_tags_refuse_overflow_and_non_data_handles() {
         ("callback", "1", "() => number", "neither a scalar"),
         ("string", "1", "string", "neither a scalar"),
     ] {
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             label,
             &format!(
                 r#"
@@ -102,9 +99,7 @@ declare const CONTROL: number;
 export function control(): number {{ return CONTROL; }}
 "#
             ),
-        ) else {
-            return;
-        };
+        );
         let lowered = hir::lower::lower(&snapshot);
         assert!(
             lowered
@@ -127,7 +122,7 @@ export function control(): number {{ return CONTROL; }}
 
 #[test]
 fn zero_pointer_constants_require_declared_null() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "zero-pointer-contract",
         r#"
 import type { Ptr } from "c:types";
@@ -141,9 +136,7 @@ export function nonnull(): Ptr<c_int> { return BAD; }
 export function nullable(): Ptr<c_int> | null { return GOOD; }
 export function undefinedOnly(): Ptr<c_int> | undefined { return UNDEFINED; }
 "#,
-    ) else {
-        return;
-    };
+    );
     let lowered = hir::lower::lower(&snapshot);
     assert_eq!(
         lowered
@@ -176,7 +169,7 @@ export function undefinedOnly(): Ptr<c_int> | undefined { return UNDEFINED; }
 
 #[test]
 fn pointer_constant_verification_requires_a_native_pointer_result() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "pointer-constant-type",
         r#"
 import type { Ptr } from "c:types";
@@ -184,9 +177,7 @@ import type { Ptr } from "c:types";
 declare const VALUE: Ptr<c_int>;
 export function read(): Ptr<c_int> { return VALUE; }
 "#,
-    ) else {
-        return;
-    };
+    );
     let mut lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     let func = lowered
@@ -229,15 +220,13 @@ fn a_narrow_brand_has_number_semantics_in_both_signature_positions() {
         "c_int", "c_uint", "Int8", "Uint8", "Int16", "Uint16", "Int32", "Uint32", "Float32",
         "Float64",
     ] {
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             name,
             &format!(
                 "export function argument(n: {name}): number {{ return n + 0.25; }}\n\
              export function result(n: number): {name} {{ return (n + 0.5) as {name}; }}"
             ),
-        ) else {
-            return;
-        };
+        );
         let lowered = hir::lower::lower(&snapshot);
         assert!(
             lowered.diagnostics.is_empty(),
@@ -264,7 +253,7 @@ fn a_narrow_brand_has_number_semantics_in_both_signature_positions() {
 
 #[test]
 fn brand_support_does_not_admit_structural_intersection_reads() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "structural-control",
         r#"
         export function branded(n: c_int): c_int { return (n + 0.5) as c_int; }
@@ -274,9 +263,7 @@ fn brand_support_does_not_admit_structural_intersection_reads() {
         }
         export function arbitrary(n: number & { readonly q: symbol }): number { return n; }
     "#,
-    ) else {
-        return;
-    };
+    );
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.program.funcs.iter().any(|f| f.name == "branded"));
     assert!(!lowered.program.funcs.iter().any(|f| f.name == "structural"));
@@ -291,12 +278,10 @@ fn phantom_brand_property_reads_are_explicitly_refused() {
         ("index", "n['__c_int']"),
         ("optional", "n?.__c_int"),
     ] {
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             name,
             &format!("export function read(n: c_int): true | undefined {{ return {read}; }}"),
-        ) else {
-            return;
-        };
+        );
         let lowered = hir::lower::lower(&snapshot);
         assert!(lowered.program.funcs.is_empty());
         assert_eq!(lowered.diagnostics.len(), 1);
@@ -310,7 +295,7 @@ fn phantom_brand_property_reads_are_explicitly_refused() {
 
 #[test]
 fn managed_abi_belongs_only_to_the_annotated_declaration() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "managed-annotation",
         r"
         // Unicode before the annotation exercises UTF-16 source positions: α😀
@@ -325,9 +310,7 @@ fn managed_abi_belongs_only_to_the_annotated_declaration() {
         export function bad(n: number): number { return unmarked(n); }
         export function wrong(n: number): number { return invalid(n); }
     ",
-    ) else {
-        return;
-    };
+    );
     let annotations: Vec<_> = snapshot
         .nodes
         .iter()
@@ -400,9 +383,7 @@ fn opaque_pointers_reject_boxing_forgery_and_numeric_containers() {
         let source = format!(
             "{declarations} export function good(): number {{ return read(make()); }} {body}"
         );
-        let Some(snapshot) = snapshot(name, &source) else {
-            return;
-        };
+        let snapshot = snapshot(name, &source);
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
         assert!(
@@ -434,9 +415,7 @@ fn opaque_pointee_identity_does_not_depend_on_signature_position() {
             let source = format!(
                 "import type {{ Opaque }} from \"c:types\"; type Handle = Opaque<\"_Counter\">; {declaration} {body} {witness}"
             );
-            let Some(snapshot) = snapshot(&format!("opaque-position-{name}"), &source) else {
-                return;
-            };
+            let snapshot = snapshot(&format!("opaque-position-{name}"), &source);
             let prepared = hir::prepare(&snapshot).unwrap();
             assert!(
                 prepared.diagnostics.is_empty(),
@@ -495,9 +474,7 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
         let source = format!(
             "{declarations} export function good(): number {{ const p = make(); p[0] = 42; return p[0]; }} {body}"
         );
-        let Some(snapshot) = snapshot(&format!("scalar-pointer-{name}"), &source) else {
-            return;
-        };
+        let snapshot = snapshot(&format!("scalar-pointer-{name}"), &source);
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(!prepared.diagnostics.is_empty(), "{name} must refuse");
         assert!(
@@ -513,12 +490,10 @@ fn scalar_pointer_access_does_not_admit_object_or_pointer_forgery() {
 
 #[test]
 fn native_memory_verifier_rejects_corrupted_widths_and_indices() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "native-memory-verifier",
         "import type { Ptr } from \"c:types\"; export function run(p: Ptr<Uint8>, n: Uint8): number { p[0] = n; return p[1]; }",
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
@@ -597,9 +572,7 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
                 // about what the element projects to.
                 export function run(): void {{ void make()[1]; }} {witness}"
             );
-            let Some(snapshot) = snapshot(&format!("pointer-result-{brand}"), &source) else {
-                return;
-            };
+            let snapshot = snapshot(&format!("pointer-result-{brand}"), &source);
             let prepared = hir::prepare(&snapshot).unwrap();
             assert!(
                 prepared.diagnostics.is_empty(),
@@ -627,7 +600,7 @@ fn scalar_pointees_survive_return_only_declarations_and_unrelated_types() {
 
 #[test]
 fn local_storage_and_sizeof_lower_from_the_authored_types() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "local-storage",
         r#"
         import { local, sizeof, addrOf } from "c:memory";
@@ -654,9 +627,7 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
             return result;
         }
     "#,
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
@@ -675,7 +646,7 @@ fn local_storage_and_sizeof_lower_from_the_authored_types() {
 /// size -- a wrong number, not a crash.
 #[test]
 fn sizes_of_two_structs_in_one_function_are_not_merged() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "two-sizes",
         r#"
         import { sizeof } from "c:memory";
@@ -684,9 +655,7 @@ fn sizes_of_two_structs_in_one_function_are_not_merged() {
         type Three = Struct<{ a: c_int; b: c_int; c: c_int }, "three">;
         export function run(): number { return sizeof<One>() * 100 + sizeof<Three>(); }
     "#,
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
@@ -833,9 +802,7 @@ fn local_addresses_cannot_outlive_or_free_their_storage() {
             {body}
         "#
         );
-        let Some(snapshot) = snapshot(&format!("local-{name}"), &source) else {
-            return;
-        };
+        let snapshot = snapshot(&format!("local-{name}"), &source);
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(
             prepared.program.funcs.iter().any(|f| f.name == "good"),
@@ -888,7 +855,7 @@ fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
             false,
         ),
     ] {
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             &format!("no-escape-{name}"),
             &format!(
                 r#"
@@ -899,9 +866,7 @@ fn no_escape_annotations_are_checked_and_scoped_to_their_declaration() {
             export function run(): number {{ return consume(local<c_int>()); }}
         "#
             ),
-        ) else {
-            return;
-        };
+        );
         let prepared = hir::prepare(&snapshot).unwrap();
         assert_eq!(
             prepared.diagnostics.is_empty(),
@@ -948,7 +913,7 @@ fn a_borrow_contract_survives_the_prepared_pipeline() {
         // handed to a callee with no contract *is* an escape, and the untagged
         // arm was refused for that -- correctly, and it would have made the
         // control a test of the refusal rather than of the contract.
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             &format!("contract-survives-{name}"),
             &format!(
                 r#"
@@ -960,9 +925,7 @@ fn a_borrow_contract_survives_the_prepared_pipeline() {
             export function run(p: Ptr<c_int>): number {{ return hand(p); }}
         "#
             ),
-        ) else {
-            return;
-        };
+        );
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(
             prepared.diagnostics.is_empty(),
@@ -1003,7 +966,7 @@ fn a_borrow_contract_survives_the_prepared_pipeline() {
 fn a_copy_survives_and_is_refused_between_two_types() {
     // Named `same`, not `snapshot`: the binding would shadow the helper and the
     // second call below would not resolve.
-    let Some(same) = snapshot(
+    let same = snapshot(
         "copy-survives",
         r#"
         import { copy, local } from "c:memory";
@@ -1013,9 +976,7 @@ fn a_copy_survives_and_is_refused_between_two_types() {
         type A = Struct<{ v: c_int; w: c_int }, "">;
         export function go(): void { const a = local<A>(); const b = local<A>(); copy(a, b); }
     "#,
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&same).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
@@ -1036,7 +997,7 @@ fn a_copy_survives_and_is_refused_between_two_types() {
 
     // The arm that makes it a check: two different layouts, which would take
     // the destination's size and read past the source.
-    let Some(mismatched) = snapshot(
+    let mismatched = snapshot(
         "copy-mismatch",
         r#"
         import { copy, local } from "c:memory";
@@ -1045,9 +1006,7 @@ fn a_copy_survives_and_is_refused_between_two_types() {
         type B = Struct<{ v: c_int; w: c_int }, "">;
         export function go(): void { const a = local<A>(); const b = local<B>(); copy(a, b); }
     "#,
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&mismatched).unwrap();
     assert!(
         prepared
@@ -1076,7 +1035,7 @@ fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
         ("Float32", Some("double")),
         ("Uint32", None),
     ] {
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             &format!("variadic-{tail}"),
             &format!(
                 "
@@ -1084,9 +1043,7 @@ fn a_promoted_variadic_tail_is_refused_with_the_type_to_declare() {
             export function go(): number {{ return log(1 as c_int, 2 as {tail}); }}
         "
             ),
-        ) else {
-            return;
-        };
+        );
         let prepared = hir::prepare(&snapshot).unwrap();
         let refusal = prepared
             .diagnostics
@@ -1122,7 +1079,7 @@ fn tail_c_name(brand: &str) -> &'static str {
 
 #[test]
 fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "local-verifier",
         r#"
         import { local } from "c:memory";
@@ -1131,9 +1088,7 @@ fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
         declare function consume(p: Ptr<c_int>): c_int;
         export function run(): number { return consume(local<c_int>()); }
     "#,
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&snapshot).unwrap();
     assert_eq!(prepared.diagnostics, [] as [nts_diagnostics::Diagnostic; 0]);
     for kind in 0..4 {
@@ -1243,11 +1198,8 @@ fn addrof_takes_a_native_place_and_nothing_else() {
             Caught::Lowering,
         ),
     ] {
-        let Some((snapshot, typescript)) =
-            snapshot_allowing_errors(&format!("addrof-{name}"), &format!("{header}{body}"))
-        else {
-            return;
-        };
+        let (snapshot, typescript) =
+            snapshot_allowing_errors(&format!("addrof-{name}"), &format!("{header}{body}"));
         let caught = if typescript {
             Caught::Typescript
         } else {
@@ -1266,8 +1218,7 @@ fn addrof_takes_a_native_place_and_nothing_else() {
 fn snapshot_allowing_errors(
     name: &str,
     source: &str,
-) -> Option<(nts_semantic_schema::SemanticSnapshot, bool)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+) -> (nts_semantic_schema::SemanticSnapshot, bool) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
@@ -1285,11 +1236,12 @@ fn snapshot_allowing_errors(
         format!("import type {{ c_int }} from \"@nts/scalars\";\n{source}"),
     )
     .unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     let errors = snapshot.has_errors();
-    Some((snapshot, errors))
+    (snapshot, errors)
 }
 
 /// What a `const` native view permits, and which mechanism refuses the rest.
@@ -1343,11 +1295,8 @@ fn a_const_view_reads_and_does_not_write() {
             Some("lowering"),
         ),
     ] {
-        let Some((snapshot, typescript)) =
-            snapshot_allowing_errors(&format!("const-{name}"), &format!("{header}{body}"))
-        else {
-            return;
-        };
+        let (snapshot, typescript) =
+            snapshot_allowing_errors(&format!("const-{name}"), &format!("{header}{body}"));
         let mut why = String::new();
         let caught = if typescript {
             why = format!("{:?}", snapshot.diagnostics);
@@ -1424,10 +1373,7 @@ fn void_pointer_assignability_is_the_c_conversion() {
             false,
         ),
     ] {
-        let Some((snapshot, actual)) = snapshot_allowing_errors(name, &format!("{header}{body}"))
-        else {
-            return;
-        };
+        let (snapshot, actual) = snapshot_allowing_errors(name, &format!("{header}{body}"));
         assert_eq!(actual, errors, "{name}: {:?}", snapshot.diagnostics);
         if !actual {
             let prepared = hir::prepare(&snapshot).unwrap();
@@ -1476,10 +1422,7 @@ fn void_pointer_has_no_element_projection() {
             false,
         ),
     ] {
-        let Some((snapshot, actual)) = snapshot_allowing_errors(name, &format!("{header}{body}"))
-        else {
-            return;
-        };
+        let (snapshot, actual) = snapshot_allowing_errors(name, &format!("{header}{body}"));
         assert_eq!(actual, errors, "{name}: {:?}", snapshot.diagnostics);
     }
 }
@@ -1500,12 +1443,10 @@ fn only_void_selects_the_void_pointer_projection() {
         let body = format!(
             "type Check = Assert<Equal<Ptr<{element}>[\"__c_pointer\"], {expected}>>; export function go(): number {{ return 1; }}"
         );
-        let Some((snapshot, errors)) = snapshot_allowing_errors(
+        let (snapshot, errors) = snapshot_allowing_errors(
             &format!("void-projection-{element}"),
             &format!("{header}{body}"),
-        ) else {
-            return;
-        };
+        );
         assert!(!errors, "{element}: {:?}", snapshot.diagnostics);
     }
 }
@@ -1518,9 +1459,7 @@ fn an_any_pointer_does_not_become_a_native_void_parameter() {
              declare function accept(p: Ptr<{element}>): void;\n\
              export function go(p: Ptr<{element}>): void {{ accept(p); }}"
         );
-        let Some(snapshot) = snapshot(&format!("native-pointer-{element}"), &source) else {
-            return;
-        };
+        let snapshot = snapshot(&format!("native-pointer-{element}"), &source);
         let prepared = hir::prepare(&snapshot).unwrap();
         assert_eq!(
             !prepared.diagnostics.is_empty(),
@@ -1557,8 +1496,8 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
              export function go(p: Ptr<c_int>): void {{ f(p); }}\n"
         )
     };
-    let escaping = |name: &str, tag: &str| -> Option<bool> {
-        let snapshot = snapshot(name, &program(tag))?;
+    let escaping = |name: &str, tag: &str| -> bool {
+        let snapshot = snapshot(name, &program(tag));
         let prepared = hir::prepare(&snapshot).unwrap();
         assert!(
             prepared.diagnostics.is_empty(),
@@ -1573,12 +1512,10 @@ fn a_native_declaration_contributes_its_no_escape_contract() {
             .position(|f| f.name == "go")
             .expect("go was not lowered");
         // The argument is `go`'s own parameter, which is value 0.
-        Some(escapes[at].escapes(hir::ValueId(0)))
+        escapes[at].escapes(hir::ValueId(0))
     };
-    let Some(without) = escaping("no-escape-absent", "") else {
-        return;
-    };
-    let with = escaping("no-escape-present", "/** @ntsNoEscape p */\n").unwrap();
+    let without = escaping("no-escape-absent", "");
+    let with = escaping("no-escape-present", "/** @ntsNoEscape p */\n");
     assert!(
         without,
         "an unclassified foreign callee must be assumed to keep its arguments"
@@ -1607,15 +1544,13 @@ fn a_wide_brand_has_bigint_semantics_in_both_signature_positions() {
         "c_size_t",
         "c_ptrdiff_t",
     ] {
-        let Some(snapshot) = snapshot(
+        let snapshot = snapshot(
             &format!("wide-{name}"),
             &format!(
                 "export function argument(n: {name}): bigint {{ return n + 1n; }}\n\
              export function result(n: bigint): {name} {{ return (n + 1n) as {name}; }}"
             ),
-        ) else {
-            return;
-        };
+        );
         let lowered = hir::lower::lower(&snapshot);
         assert!(
             lowered.diagnostics.is_empty(),
@@ -1700,10 +1635,7 @@ fn a_retained_callback_refuses_a_local_context_and_accepts_a_heap_one() {
             false,
         ),
     ] {
-        let Some(snapshot) = snapshot(&format!("retained-{name}"), &format!("{header}{body}"))
-        else {
-            return;
-        };
+        let snapshot = snapshot(&format!("retained-{name}"), &format!("{header}{body}"));
         let prepared = hir::prepare(&snapshot).unwrap();
         assert_eq!(
             !prepared.diagnostics.is_empty(),
@@ -1763,9 +1695,7 @@ fn an_async_callback_is_refused_and_an_async_caller_is_not() {
             false,
         ),
     ] {
-        let Some(snapshot) = snapshot(&format!("bridge-{name}"), &format!("{header}{body}")) else {
-            return;
-        };
+        let snapshot = snapshot(&format!("bridge-{name}"), &format!("{header}{body}"));
         let prepared = hir::prepare(&snapshot).unwrap();
         let said: Vec<&str> = prepared
             .diagnostics
@@ -1790,7 +1720,7 @@ fn an_async_callback_is_refused_and_an_async_caller_is_not() {
 /// library is named as `-l` takes it, which is wider than a C identifier.
 #[test]
 fn a_program_links_the_libraries_of_the_functions_it_calls() {
-    let Some(called) = snapshot(
+    let called = snapshot(
         "link-libraries",
         r"
         /** @ntsLibrary gdi32 */
@@ -1801,9 +1731,7 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
         declare function dashed(): c_int;
         export function run(): number { return drawn() + dashed(); }
     ",
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&called).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
@@ -1812,16 +1740,14 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
     );
     assert_eq!(prepared.program.native_libraries, ["gdi32", "glib-2.0"]);
 
-    let Some(flagged) = snapshot(
+    let flagged = snapshot(
         "link-libraries-bad",
         r"
         /** @ntsLibrary -lfoo */
         declare function flag(): c_int;
         export function run(): number { return flag(); }
     ",
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&flagged).unwrap();
     // The source's error, said once and whole: no lowering-gap suffix.
     assert!(
@@ -1837,9 +1763,9 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
 /// What the strict check refuses in `source`: each error's code and message,
 /// none where every slot is proven. A construct the lowering refused counts
 /// too, so a function that was never compiled is not taken for one proven.
-fn refusals(name: &str, source: &str) -> Option<Vec<(String, String)>> {
-    let snapshot = snapshot(name, source)?;
-    Some(match hir::prepare(&snapshot) {
+fn refusals(name: &str, source: &str) -> Vec<(String, String)> {
+    let snapshot = snapshot(name, source);
+    match hir::prepare(&snapshot) {
         Ok(prepared) => prepared
             .diagnostics
             .into_iter()
@@ -1850,7 +1776,7 @@ fn refusals(name: &str, source: &str) -> Option<Vec<(String, String)>> {
             .map(|error| (error.code, error.message))
             .collect(),
         Err(invalid) => panic!("{name}: {}", invalid.render(&snapshot.sources)),
-    })
+    }
 }
 
 /// TypeScript's own holes into a written kind (`docs/scalar-numbers.md`, Q1),
@@ -1937,14 +1863,9 @@ fn the_holes_typescript_leaves_into_a_kind_are_closed() {
         ),
     ];
     for (at, (hole, open, control)) in cases.iter().enumerate() {
-        let Some(refused) = refusals(&format!("q1-hole-{at}"), &format!("{take}{open}")) else {
-            return;
-        };
+        let refused = refusals(&format!("q1-hole-{at}"), &format!("{take}{open}"));
         assert!(!refused.is_empty(), "{hole}: taken as fitting");
-        let Some(accepted) = refusals(&format!("q1-control-{at}"), &format!("{take}{control}"))
-        else {
-            return;
-        };
+        let accepted = refusals(&format!("q1-control-{at}"), &format!("{take}{control}"));
         assert!(
             accepted.is_empty(),
             "{hole}: the control is refused too: {accepted:?}"
@@ -2030,12 +1951,10 @@ fn each_proof_is_refused_without_the_fact_it_rests_on() {
         ),
     ];
     for (name, proven, control) in cases {
-        let Some(refused) = refusals(
+        let refused = refusals(
             &format!("proof-{name}"),
             &format!("{declarations}{proven}\n"),
-        ) else {
-            return;
-        };
+        );
         assert!(
             refused.is_empty(),
             "{name}: proven, and refused: {refused:?}"
@@ -2043,8 +1962,7 @@ fn each_proof_is_refused_without_the_fact_it_rests_on() {
         let refused = refusals(
             &format!("control-{name}"),
             &format!("{declarations}{control}\n"),
-        )
-        .unwrap();
+        );
         assert!(
             !refused.is_empty(),
             "{name}: the control has to be refused, or the case shows nothing"
@@ -2073,9 +1991,7 @@ fn a_kind_is_the_librarys_label_and_no_other() {
     let kept = format!(
         "{library}export function f(): number {{ return takes_label(1) + takes_owned(2) + count() + Number(wide(3n)); }}\n"
     );
-    let Some(read) = snapshot("library-label", &kept) else {
-        return;
-    };
+    let read = snapshot("library-label", &kept);
     let prepared =
         hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     assert!(
@@ -2120,9 +2036,7 @@ fn a_kind_is_the_librarys_label_and_no_other() {
     let spoof = "type Fake = number & { readonly __Int32?: true };\n\
          declare function takes_fake(v: Fake): number;\n\
          export function g(): number { return takes_fake(1); }\n";
-    let Some(read) = snapshot("library-label-spoof", spoof) else {
-        return;
-    };
+    let read = snapshot("library-label-spoof", spoof);
     let prepared =
         hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     assert!(
@@ -2147,9 +2061,7 @@ fn a_cbool_and_a_cenum_are_c_types_labels_and_no_other() {
          declare function flag(v: CBool<c_int>): CBool<c_int>;\n\
          declare function mode(v: CEnum<Mode, c_uint>): c_int;\n\
          export function f(): number { return (flag(true) ? 1 : 0) + mode(Mode.On); }\n";
-    let Some(read) = snapshot("c-types-label", kept) else {
-        return;
-    };
+    let read = snapshot("c-types-label", kept);
     let prepared =
         hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     assert!(
@@ -2193,9 +2105,7 @@ fn a_cbool_and_a_cenum_are_c_types_labels_and_no_other() {
          declare function fake_mode(v: FakeEnum): c_int;\n\
          export function g(): number { return fake_flag(true); }\n\
          export function h(): number { return fake_mode(Mode.On); }\n";
-    let Some(read) = snapshot("c-types-label-spoof", spoof) else {
-        return;
-    };
+    let read = snapshot("c-types-label-spoof", spoof);
     let prepared =
         hir::prepare(&read).unwrap_or_else(|refused| panic!("{}", refused.render(&read.sources)));
     for function in ["fake_flag", "fake_mode"] {
@@ -2237,7 +2147,7 @@ fn the_list_of_scalar_names_is_the_librarys() {
 /// checker's: the text is the string the literal denotes.
 #[test]
 fn a_declared_string_constant_is_its_literal_types_text() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "declared-string-constant",
         r#"
 declare const GROUP: "Desktop Entry";
@@ -2245,9 +2155,7 @@ declare const QUOTED: "a\"b\\c\nd";
 export function groupLength(): number { return GROUP.length; }
 export function quoted(): string { return QUOTED; }
 "#,
-    ) else {
-        return;
-    };
+    );
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     let reads = |name: &str, text: &str| {

@@ -47,3 +47,11 @@ pub use verdict::judge_execution;
 /// `bootstrap.sh` cannot produce holds only on machines that already have the
 /// tree, which is the state that produced this.
 pub const TEST262_PIN: &str = "14e8c908e54ae2e770e473bcacf536f8cb654929";
+
+/// The upstream TypeScript tests at the exact revision the native checker ports.
+pub const TYPESCRIPT_PIN: &str = "3e9236361fa97a9e6c685f4833ac457ae2d8c50a";
+
+#[test]
+fn the_corpus_revision_is_the_native_checkers_typescript_revision() {
+    assert_eq!(TYPESCRIPT_PIN, nts_frontend_tsrs::VERSION.typescript_commit);
+}

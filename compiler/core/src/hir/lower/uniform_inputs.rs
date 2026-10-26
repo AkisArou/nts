@@ -709,7 +709,7 @@ impl FuncBuilder<'_> {
     fn uniform_mismatch(&mut self, (body, parameter): (&str, &str), origin: &Origin) {
         let reason = self.push(OpKind::ConstString(format!(
             "calling `{body}` through an erased signature with an argument not admitted by parameter `{parameter}`"
-        )), HirType::Managed(ManagedType::String), origin.clone());
+        ).into()), HirType::Managed(ManagedType::String), origin.clone());
         self.runtime_call("nts_refused", vec![reason], HirType::Void, origin.clone());
         self.terminate(Terminator::Unreachable);
     }

@@ -12,7 +12,6 @@ const run = promisify(execFile);
 const HERE = new URL("./", import.meta.url).pathname;
 const REPO = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const NTS = process.env["NTS_BIN"] ?? REPO + "/target/release/nts";
-const TSGO = process.env["NTS_TSGO"] ?? REPO + "/target/tsgo";
 
 type Outcome = "no-entry" | "typecheck-failed" | "refused" | "no-refusal";
 
@@ -82,7 +81,7 @@ for (const v of vendored) {
   let out = "";
   try {
     const r = await run(NTS, ["check", configPath], {
-      env: { ...process.env, NTS_TSGO: TSGO },
+      env: { ...process.env, NTS_CHECKERS: "1" },
       timeout: 120_000,
       maxBuffer: 64e6,
       cwd: REPO,

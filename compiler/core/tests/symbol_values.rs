@@ -13,26 +13,25 @@
 //! sole blocker: `Map<string, A | B>` and `Map<string | number, V>` both
 //! lowered already.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
-use nts_frontend_ts::SemanticSource;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -66,9 +65,7 @@ fn calls(func: &hir::Func) -> Vec<&str> {
 /// newcomer.
 #[test]
 fn a_symbol_is_not_an_object() {
-    let Some(lowered) = lowered("symbol-values") else {
-        return;
-    };
+    let lowered = lowered("symbol-values");
     assert_eq!(lowered.diagnostics, [], "nothing here may be refused");
 
     let made = func(&lowered, "freshSymbolsDiffer");
@@ -105,9 +102,7 @@ fn a_symbol_is_not_an_object() {
 /// both answers look plausible.
 #[test]
 fn a_fresh_symbol_and_a_registered_one_are_different_calls() {
-    let Some(lowered) = lowered("symbol-values") else {
-        return;
-    };
+    let lowered = lowered("symbol-values");
     assert!(
         calls(func(&lowered, "freshSymbolsDiffer")).contains(&"nts_symbol_new"),
         "`Symbol(d)` allocates"
@@ -131,9 +126,7 @@ fn a_fresh_symbol_and_a_registered_one_are_different_calls() {
 /// merely adequate.
 #[test]
 fn a_symbol_keys_an_ordinary_map() {
-    let Some(lowered) = lowered("symbol-values") else {
-        return;
-    };
+    let lowered = lowered("symbol-values");
     for export in ["twoSymbolsAreTwoKeys", "aMixedKeyMap"] {
         let built = func(&lowered, export);
         assert!(
@@ -156,9 +149,7 @@ fn a_symbol_keys_an_ordinary_map() {
 /// the machine value.
 #[test]
 fn a_symbol_member_name_is_still_a_field() {
-    let Some(lowered) = lowered("symbol-keys") else {
-        return;
-    };
+    let lowered = lowered("symbol-keys");
     assert_eq!(lowered.diagnostics, [], "the shipped row still lowers");
     for func in &lowered.program.funcs {
         assert!(

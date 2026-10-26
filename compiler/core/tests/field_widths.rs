@@ -5,26 +5,26 @@
 //! fixpoint started with no facts, an absent entry reads as TOP at the use, and
 //! `this.x += this.step` therefore settled at TOP in round one.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(fixture: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("prepared HIR should verify"))
+    hir::prepare(&snapshot).expect("prepared HIR should verify")
 }
 
 /// The declared width of one field, by class and member name.
@@ -37,7 +37,7 @@ fn width(prepared: &hir::Prepared, class: &str, field: &str) -> HirType {
         .unwrap_or_else(|| panic!("`{class}` is a class in tests/programs/field-widths"))
         .fields
         .iter()
-        .find(|slot| slot.name == field)
+        .find(|slot| slot.name == field.into())
         .unwrap_or_else(|| panic!("`{class}.{field}` is a field"))
         .ty
         .clone()
@@ -57,9 +57,7 @@ fn width(prepared: &hir::Prepared, class: &str, field: &str) -> HirType {
 /// is now in the list below, and this one has the guard that makes it true.
 #[test]
 fn a_self_referential_field_narrows() {
-    let Some(prepared) = prepared("field-widths") else {
-        return;
-    };
+    let prepared = prepared("field-widths");
     let sum = width(&prepared, "Capped", "sum");
     assert!(
         matches!(sum, HirType::Int { .. }),
@@ -81,9 +79,7 @@ fn a_self_referential_field_narrows() {
 /// the allocator's zero and never revisited would narrow every one of them.
 #[test]
 fn a_field_that_can_hold_a_fraction_keeps_its_double() {
-    let Some(prepared) = prepared("field-widths") else {
-        return;
-    };
+    let prepared = prepared("field-widths");
     for (class, field, why) in [
         ("Halving", "value", "halves itself, so it is a fraction"),
         ("Poisoned", "value", "can divide by zero and reach NaN"),

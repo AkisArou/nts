@@ -5,7 +5,7 @@
 #
 # Unlike java-from-ts, everything here works today.
 #
-# Skips loudly without a JDK or tsgo: a skip that prints nothing is
+# Skips loudly without a JDK or nts binary: a skip that prints nothing is
 # indistinguishable from a pass.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -37,7 +37,7 @@ mkdir -p "$here/target/java"
 # Everything below this line is an assertion rather than a build step, which is
 # why this file is not a one-line call to `nts build`: the javap capture, the
 # consumer, and running it are what the example is *for*.
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
+NTS_CHECKERS=1 "$nts" build "$here/tsconfig.json" \
   --out "$here/target/build" > /dev/null
 classes="$here/target/build/api/java-8"
 

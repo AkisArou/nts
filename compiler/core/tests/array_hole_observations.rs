@@ -3,18 +3,15 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn a_folded_typeof_keeps_its_hole_observation_after_bounds_proof() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP: set NTS_TSGO to run the hole-observation guard");
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
         "../../tests/outcomes/typeof-an-unwritten-slot-survives-a-bounds-proof/tsconfig.json",
     );
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
@@ -53,13 +50,10 @@ fn a_folded_typeof_keeps_its_hole_observation_after_bounds_proof() {
 
 #[test]
 fn an_unknown_array_parameter_keeps_its_hole_observation() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP: set NTS_TSGO to run the hole-observation guard");
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/outcomes/typeof-an-unwritten-slot-passed-to-a-function/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);

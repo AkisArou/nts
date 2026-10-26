@@ -7,7 +7,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::{fmt::Write, process::Command};
 
 #[path = "native/dispatch.rs"]
@@ -32,7 +32,7 @@ mod string_view_lend;
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
-fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
+fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with_provider(name, source, hir::Provider::NoGc)
 }
 
@@ -40,7 +40,7 @@ fn prepare_with_provider(
     name: &str,
     source: &str,
     provider: hir::Provider,
-) -> Option<(ScratchDir, hir::Prepared)> {
+) -> (ScratchDir, hir::Prepared) {
     prepare_with_files(name, source, provider, &[])
 }
 
@@ -49,8 +49,8 @@ fn prepare_with_files(
     source: &str,
     provider: hir::Provider,
     declarations: &[(&str, &str)],
-) -> Option<(ScratchDir, hir::Prepared)> {
-    let (dir, snapshot) = snapshot_of(name, source, declarations)?;
+) -> (ScratchDir, hir::Prepared) {
+    let (dir, snapshot) = snapshot_of(name, source, declarations);
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
@@ -58,10 +58,10 @@ fn prepare_with_files(
             ..hir::Options::default()
         },
     );
-    Some((
+    (
         dir,
         prepared.unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
-    ))
+    )
 }
 
 /// `source` written beside `declarations` and read by the checker, for a test
@@ -70,8 +70,7 @@ fn snapshot_of(
     name: &str,
     source: &str,
     declarations: &[(&str, &str)],
-) -> Option<(ScratchDir, nts_semantic_schema::SemanticSnapshot)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+) -> (ScratchDir, nts_semantic_schema::SemanticSnapshot) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -86,11 +85,12 @@ fn snapshot_of(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"{files}]}}"#
     )).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, snapshot))
+    (dir, snapshot)
 }
 
 /// An `async` callback is bridged only where the program's loop checkpoints
@@ -100,9 +100,6 @@ fn snapshot_of(
 /// the same program, prepared both ways.
 #[test]
 fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -121,7 +118,8 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
         "import { each_upto } from \"c:closures\";\nimport type { c_int } from \"@nts/scalars\";\nlet seen = 0;\nexport function count(): number {\n  each_upto(async (n) => {\n    await 0;\n    seen += n;\n  }, 3 as c_int);\n  return seen;\n}\n",
     )
     .unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -152,8 +150,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
 
 /// What the checker says of `source`, for an arm whose refusal is the
 /// checker's rather than lowering's -- which `prepare` asserts never happens.
-fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn checker_messages(name: &str, source: &str) -> Vec<String> {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -163,16 +160,15 @@ fn checker_messages(name: &str, source: &str) -> Option<Vec<String>> {
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","{root}/runtime/native/libc.d.ts"]}}"#
     )).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
-    Some(
-        snapshot
-            .diagnostics
-            .iter()
-            .map(|d| d.message.clone())
-            .collect(),
-    )
+    snapshot
+        .diagnostics
+        .iter()
+        .map(|d| d.message.clone())
+        .collect()
 }
 
 /// The runtime a program links, written beside it and compiled: a number
@@ -200,12 +196,10 @@ fn clang(dir: &Utf8Path, args: &[&str]) {
 
 #[test]
 fn managed_declarations_execute_with_the_nts_abi_on_c_and_llvm() {
-    let Some((dir, prepared)) = prepare(
+    let (dir, prepared) = prepare(
         "managed-abi",
         include_str!("../../common/test-support/managed-abi/main.ts"),
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -310,7 +304,7 @@ fn managed_declarations_execute_with_the_nts_abi_on_c_and_llvm() {
 /// thing that checks the claim.
 #[test]
 fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
-    let Some((dir, prepared)) = prepare_with_files(
+    let (dir, prepared) = prepare_with_files(
         "bitfields",
         include_str!("../../common/test-support/native-bitfields/main.ts"),
         hir::Provider::NoGc,
@@ -318,9 +312,7 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
             "ip.d.ts",
             include_str!("../../common/test-support/native-bitfields/ip.d.ts"),
         )],
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -402,7 +394,7 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
 /// payload, and the two backends compute that address by different routes.
 #[test]
 fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
-    let Some((dir, prepared)) = prepare_with_files(
+    let (dir, prepared) = prepare_with_files(
         "flexible",
         include_str!("../../common/test-support/native-flexible/main.ts"),
         hir::Provider::NoGc,
@@ -410,9 +402,7 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
             "cmsg.d.ts",
             include_str!("../../common/test-support/native-flexible/cmsg.d.ts"),
         )],
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -493,7 +483,7 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
 /// one: every assertion would then be about a type nothing defines.
 #[test]
 fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
-    let Some((dir, prepared)) = prepare_with_files(
+    let (dir, prepared) = prepare_with_files(
         "typedef",
         include_str!("../../common/test-support/native-typedef/main.ts"),
         hir::Provider::NoGc,
@@ -501,9 +491,7 @@ fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
             "signal.d.ts",
             include_str!("../../common/test-support/native-typedef/signal.d.ts"),
         )],
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -605,9 +593,7 @@ fn aggregate_arguments_respect_register_exhaustion() {
         .unwrap();
     }
     caller.push_str("return 0; }\n");
-    let Some((dir, prepared)) = prepare("aggregate-registers", &ts) else {
-        return;
-    };
+    let (dir, prepared) = prepare("aggregate-registers", &ts);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -666,7 +652,7 @@ fn aggregate_arguments_respect_register_exhaustion() {
 /// (`Platform::extension`), so the parameter is a plain `i1` there.
 #[test]
 fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
-    let Some((dir, prepared)) = prepare(
+    let (dir, prepared) = prepare(
         "refused-boolean",
         r"
         export function pick(flag: boolean, n: bigint): bigint {
@@ -676,9 +662,7 @@ fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
             return pick(true, 1n);
         }
     ",
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -713,16 +697,14 @@ fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
 
 #[test]
 fn a_program_with_every_function_refused_still_emits() {
-    let Some((_, prepared)) = prepare(
+    let (_, prepared) = prepare(
         "all-refused",
         r#"
         import { local } from "c:memory";
         import type { c_int } from "@nts/scalars";
         const slot = local<c_int>();
     "#,
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared
             .diagnostics
@@ -747,16 +729,14 @@ fn a_program_with_every_function_refused_still_emits() {
 
 #[test]
 fn intrinsic_annotations_do_not_authorize_arbitrary_foreign_symbols() {
-    let Some((_, prepared)) = prepare(
+    let (_, prepared) = prepare(
         "unknown-intrinsic",
         r"
         /** @ntsAbi intrinsic */
         declare function abs(n: number): number;
         export function run(n: number): number { return abs(n); }
     ",
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -788,9 +768,7 @@ fn managed_runtime_declarations_must_agree_with_the_header() {
         let source = format!(
             "/** @ntsAbi managed */\ndeclare function nts_checkpoint{signature};\nexport function run(n: number): number {{ {call}; }}"
         );
-        let Some((dir, prepared)) = prepare(&format!("runtime-abi-{label}"), &source) else {
-            return;
-        };
+        let (dir, prepared) = prepare(&format!("runtime-abi-{label}"), &source);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -892,9 +870,7 @@ fn every_scalar_and_libm_cross_the_real_c_abi() {
     implementation.push_str("bool native_not(bool v) { return !v; }\n");
     prototypes.push_str("double library(int);\n_Bool toggle(_Bool);\n");
     caller.push_str("if (library(-3) != 5 || toggle(1) || !toggle(0)) return 99;\nreturn 0; }\n");
-    let Some((dir, prepared)) = prepare("scalar-abi", &ts) else {
-        return;
-    };
+    let (dir, prepared) = prepare("scalar-abi", &ts);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1044,7 +1020,7 @@ fn conflicting_abis_and_runtime_collisions_are_refused() {
             export function run(n: c_int): number { return nts_math_pow(n); }", "collides"),
     ] {
         let source = format!("import type {{ c_int, c_uint }} from \"@nts/scalars\";\n{source}");
-        let Some((_, prepared)) = prepare(name, &source) else { return; };
+        let (_, prepared) = prepare(name, &source);
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(emitted.diagnostics.iter().any(|d| d.message.contains(expected)), "{:?}", emitted.diagnostics);
@@ -1060,9 +1036,7 @@ fn compatible_c_aliases_share_one_symbol_in_both_backends() {
         export function run(n: c_int, m: Int32): number {
             return native_identity(n) + native_identity(m) + 0.5;
         }";
-    let Some((dir, prepared)) = prepare("compatible-aliases", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("compatible-aliases", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1137,9 +1111,7 @@ export function run(): number {
     return widget_is(b) + object_is(b) * 10 + widget_or_null_is(b) * 100;
 }
 "#;
-    let Some((dir, prepared)) = prepare("class-upcast", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("class-upcast", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1246,9 +1218,7 @@ export function run(kind: c_int): number {
     return b === null ? -1 : box_items(b);
 }
 "#;
-    let Some((dir, prepared)) = prepare("downcast", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("downcast", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1342,9 +1312,7 @@ export function run(): boolean {{
 }}
 "#
         );
-        let Some((_, prepared)) = prepare(&format!("downcast-{label}"), &refused) else {
-            return;
-        };
+        let (_, prepared) = prepare(&format!("downcast-{label}"), &refused);
         assert!(
             prepared
                 .diagnostics
@@ -1378,9 +1346,7 @@ export function run(): number {
     return same(w, w) * 10 + same(w, null);
 }
 "#;
-    let Some((dir, prepared)) = prepare("object-void", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("object-void", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1450,9 +1416,7 @@ int same(void *p, void *q) { return p == (void *)&the_widget ? (q == NULL ? 2 : 
 declare function takes(p: object): void;
 export function run(): void { takes({ x: 1 }); }
 ";
-    let Some((_, prepared)) = prepare("object-managed", managed) else {
-        return;
-    };
+    let (_, prepared) = prepare("object-managed", managed);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -1469,9 +1433,7 @@ interface Hook { init(resource: object): number }
 class Counter implements Hook { init(resource: object): number { return resource === null ? 0 : 1; } }
 export function run(): number { const hook: Hook = new Counter(); return hook.init({ x: 1 }); }
 ";
-    let Some((_, prepared)) = prepare("object-interface", interface) else {
-        return;
-    };
+    let (_, prepared) = prepare("object-interface", interface);
     assert!(
         prepared.diagnostics.is_empty(),
         "a TypeScript method taking `object` was read as C: {:?}",
@@ -1485,9 +1447,7 @@ export function run(): number { const hook: Hook = new Counter(); return hook.in
 declare function keep(value: object): void;
 export function run(): void { keep({ x: 1 }); }
 ";
-    let Some((_, prepared)) = prepare("object-managed-abi", managed_abi) else {
-        return;
-    };
+    let (_, prepared) = prepare("object-managed-abi", managed_abi);
     assert!(
         prepared.diagnostics.is_empty(),
         "an `@ntsAbi managed` object parameter was read as C: {:?}",
@@ -1515,9 +1475,7 @@ export function run(): void {
     button_label(widget_new() as GtkButton);
 }
 "#;
-    let Some((_, prepared)) = prepare("class-downcast", source) else {
-        return;
-    };
+    let (_, prepared) = prepare("class-downcast", source);
     assert!(
         prepared
             .diagnostics
@@ -1554,11 +1512,8 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
         ("nogc", hir::Provider::NoGc),
         ("rc", hir::Provider::ReferenceCounting),
     ] {
-        let Some((dir, prepared)) =
-            prepare_with_files(&format!("closure-{label}"), source, provider, &declarations)
-        else {
-            return;
-        };
+        let (dir, prepared) =
+            prepare_with_files(&format!("closure-{label}"), source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -1694,9 +1649,7 @@ export function roundTrip(n: number): number { return echo(high()) + n; }
     let caller = "#include <stdio.h>\ndouble seen(double);\ndouble roundTrip(double);\n\
                   int main(void) { printf(\"%g %g\", seen(0), roundTrip(0)); return 0; }\n";
     let unsigned = nts_core::hir::native::NativeAbi::LP64_UNSIGNED_CHAR;
-    let Some((dir, snapshot)) = snapshot_of("unsigned-char", source, &[]) else {
-        return;
-    };
+    let (dir, snapshot) = snapshot_of("unsigned-char", source, &[]);
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
@@ -1803,11 +1756,8 @@ fn a_64_bit_integer_read_as_a_number_is_exact_or_a_range_error() {
         ("nogc", hir::Provider::NoGc),
         ("rc", hir::Provider::ReferenceCounting),
     ] {
-        let Some((dir, prepared)) =
-            prepare_with_provider(&format!("as-number-{label}"), &source, provider)
-        else {
-            return;
-        };
+        let (dir, prepared) =
+            prepare_with_provider(&format!("as-number-{label}"), &source, provider);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -1907,9 +1857,7 @@ export function run(k: number): number {
     return apply_twice((n) => ((n + k) | 0) as c_int, 1 as c_int);
 }
 "#;
-    let Some((_, prepared)) = prepare("closure-plain", plain) else {
-        return;
-    };
+    let (_, prepared) = prepare("closure-plain", plain);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -1931,9 +1879,7 @@ export function run(limit: number): number {
     return seen;
 }
 "#;
-    let Some((dir, prepared)) = prepare("closure-throw", throwing) else {
-        return;
-    };
+    let (dir, prepared) = prepare("closure-throw", throwing);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -2029,11 +1975,8 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
         ("nogc", hir::Provider::NoGc),
         ("rc", hir::Provider::ReferenceCounting),
     ] {
-        let Some((dir, prepared)) =
-            prepare_with_files(&format!("string-{label}"), source, provider, &declarations)
-        else {
-            return;
-        };
+        let (dir, prepared) =
+            prepare_with_files(&format!("string-{label}"), source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -2167,11 +2110,7 @@ export function identity(c: Counter | null): Counter | null { return c; }
         ("nogc", hir::Provider::NoGc),
         ("rc", hir::Provider::ReferenceCounting),
     ] {
-        let Some((dir, prepared)) =
-            prepare_with_provider(&format!("opaque-{label}"), source, provider)
-        else {
-            return;
-        };
+        let (dir, prepared) = prepare_with_provider(&format!("opaque-{label}"), source, provider);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -2365,9 +2304,7 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
     caller.push_str("uint8_t text[] = {'a', 0, 'z', 195, 'Q'};
         if (uppercaseAscii(text, 5) != 2 || text[0] != 'A' || text[1] != 0 || text[2] != 'Z' || text[3] != 195 || text[4] != 'Q') return 41;
         return 0; }\n");
-    let Some((dir, prepared)) = prepare("pointer-memory", &source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("pointer-memory", &source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -2430,9 +2367,7 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
 #[test]
 fn native_struct_fields_addresses_and_aliases_agree_with_c() {
     let source = include_str!("../../common/test-support/native-structs/main.ts");
-    let Some((dir, prepared)) = prepare("native-structs", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("native-structs", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -2520,11 +2455,7 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         include_str!("../../../../tests/interop/native-poll/types/poll.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) =
-            prepare_with_files("native-poll", source, provider, &declarations)
-        else {
-            return;
-        };
+        let (dir, prepared) = prepare_with_files("native-poll", source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -2601,11 +2532,7 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
         include_str!("../../../../tests/interop/native-fd/types/unistd.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) =
-            prepare_with_files("native-fd", source, provider, &declarations)
-        else {
-            return;
-        };
+        let (dir, prepared) = prepare_with_files("native-fd", source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -2687,14 +2614,12 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
          const buf = local<Uint8>(8);\n\
          return Number(read(fd, buf, 8n as Count));\n\
          }\n";
-    let Some((dir, prepared)) = prepare_with_files(
+    let (dir, prepared) = prepare_with_files(
         "native-fd-typed",
         source,
         hir::Provider::NoGc,
         &declarations,
-    ) else {
-        return;
-    };
+    );
     // The point of the control: lowering is happy with the wrong declaration.
     assert!(
         prepared.diagnostics.is_empty(),
@@ -2755,9 +2680,7 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
         // `long` is 64 bits here and so bigint-branded; the conversion out is
         // explicit rather than through a double.
         export function seconds(p: Ptr<ITimerVal>): number { return Number(p.it_value.tv_sec); }";
-    let Some((dir, prepared)) = prepare("inline-struct-member", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("inline-struct-member", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -2816,11 +2739,8 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         include_str!("../../../../tests/interop/native-callback/types/library.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) =
-            prepare_with_files("native-callback", source, provider, &declarations)
-        else {
-            return;
-        };
+        let (dir, prepared) =
+            prepare_with_files("native-callback", source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -2951,9 +2871,7 @@ fn native_struct_rejections_preserve_the_valid_arm() {
         let source = format!(
             "import type {{Ptr, Struct}} from 'c:types'; import type {{Int32, Float64}} from '@nts/scalars'; {import}\n type State = Struct<{{count: Int32}}>; export function good(p: Ptr<State>): number {{ return p.count; }} {bad}"
         );
-        let Some((_, prepared)) = prepare(name, &source) else {
-            return;
-        };
+        let (_, prepared) = prepare(name, &source);
         assert!(!prepared.diagnostics.is_empty(), "{name} was accepted");
         assert!(
             prepared.program.funcs.iter().any(|f| f.name == "good"),
@@ -2975,9 +2893,7 @@ fn conflicting_native_struct_tags_refuse_in_both_backends() {
         type B = Struct<{x:Float64}, 'Collision'>;
         export function a(p:Ptr<A>):number {return p.x;}
         export function b(p:Ptr<B>):number {return p.x;}";
-    let Some((_, prepared)) = prepare("struct-collision", source) else {
-        return;
-    };
+    let (_, prepared) = prepare("struct-collision", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -3005,9 +2921,7 @@ fn native_address_verifier_rejects_wrong_field_type_and_index() {
         // An element of a block of structs is already an address, so this is
         // `p + i` and not `&(p + i)`; `addrOf` here would be a Ptr<Ptr<S>>.
         export function item(p:Ptr<S>, i:number):Ptr<S> {return p[i];}";
-    let Some((_, prepared)) = prepare("verify-native-address", source) else {
-        return;
-    };
+    let (_, prepared) = prepare("verify-native-address", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -3060,9 +2974,7 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
             "type Unrelated = {first:number; second:string};\n",
         ),
     ] {
-        let Some((dir, prepared)) = prepare(case, &format!("{prefix}{source}")) else {
-            return;
-        };
+        let (dir, prepared) = prepare(case, &format!("{prefix}{source}"));
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -3096,10 +3008,7 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
 fn native_owned_storage_executes_on_c_and_llvm() {
     let source = include_str!("../../common/test-support/native-storage/main.ts");
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) = prepare_with_provider("native-storage", source, provider)
-        else {
-            return;
-        };
+        let (dir, prepared) = prepare_with_provider("native-storage", source, provider);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -3211,9 +3120,7 @@ fn authored_allocator_symbols_cannot_redefine_storage_operations() {
             return 1;
         }
     ";
-    let Some((_, prepared)) = prepare("allocator-collision", source) else {
-        return;
-    };
+    let (_, prepared) = prepare("allocator-collision", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -3330,11 +3237,7 @@ export function tally(): number { return total; }
         ("nogc", hir::Provider::NoGc),
         ("rc", hir::Provider::ReferenceCounting),
     ] {
-        let Some((dir, prepared)) =
-            prepare_with_provider(&format!("signal-{label}"), source, provider)
-        else {
-            return;
-        };
+        let (dir, prepared) = prepare_with_provider(&format!("signal-{label}"), source, provider);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -3478,9 +3381,7 @@ export function attempt(ok: c_int): number {
     return (r as number) * 100 + (n[0] as number);
 }
 ";
-    let Some((dir, prepared)) = prepare("out-parameter", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("out-parameter", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -3562,7 +3463,7 @@ fn run_on_both_backends(
     provider: hir::Provider,
     library: &str,
     caller: &str,
-) -> Option<(String, Vec<String>)> {
+) -> (String, Vec<String>) {
     run_on_both_backends_with(name, source, provider, library, caller, &[])
 }
 
@@ -3576,13 +3477,13 @@ fn run_on_both_backends_with(
     library: &str,
     caller: &str,
     files: &[(&str, &str)],
-) -> Option<(String, Vec<String>)> {
+) -> (String, Vec<String>) {
     let label = if provider == hir::Provider::ReferenceCounting {
         "rc"
     } else {
         "nogc"
     };
-    let (dir, prepared) = prepare_with_provider(&format!("{name}-{label}"), source, provider)?;
+    let (dir, prepared) = prepare_with_provider(&format!("{name}-{label}"), source, provider);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -3669,7 +3570,7 @@ fn run_on_both_backends_with(
         );
         outputs.push(String::from_utf8_lossy(&run.stdout).trim().to_owned());
     }
-    Some((c.writer.text().to_owned(), outputs))
+    (c.writer.text().to_owned(), outputs)
 }
 
 /// A caller printing `line`'s values, and under reference counting the live
@@ -3723,11 +3624,7 @@ int length(const char *a) { return (int)strlen(a); }
             r#"printf("%.0f %.0f %.0f %.0f", ascii(), latin(), wide(), built());"#,
             "ascii(); latin(); wide(); built();",
         );
-        let Some((_, outputs)) =
-            run_on_both_backends("lent-string", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) = run_on_both_backends("lent-string", source, provider, library, &caller);
         for output in outputs {
             assert_eq!(output, expect("1 0 0 30", provider), "{provider:?}");
         }
@@ -3795,11 +3692,8 @@ export function many(): number {
             r#"printf("%.0f %.0f %.0f %.0f %.0f", empty(), absent(), text(), counted(), many());"#,
             "empty(); absent(); text(); counted(); many();",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("strings", source, provider, STRINGS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("strings", source, provider, STRINGS_LIBRARY, &caller);
         assert!(
             text.contains("int walked(const char * const *)"),
             "`CStrings` is not `const char * const *`"
@@ -3825,9 +3719,7 @@ import type { c_int } from "@nts/scalars";
 declare function walked(values: CStrings): c_int;
 export function run(): number { return walked(["a"]); }
 "#;
-    let Some((_, prepared)) = prepare("strings-kept", kept) else {
-        return;
-    };
+    let (_, prepared) = prepare("strings-kept", kept);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -3885,15 +3777,13 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((text, outputs)) = run_on_both_backends(
+        let (text, outputs) = run_on_both_backends(
             "returned-strings",
             source,
             provider,
             RETURNED_STRINGS_LIBRARY,
             &caller,
-        ) else {
-            return;
-        };
+        );
         assert!(
             text.contains("char * * owned(void)"),
             "an owned array is not `char **`"
@@ -3955,11 +3845,8 @@ export function run(): string {
             // `run` hands back a string the caller owns.
             "nts_release((NtsHeader *)run());",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("bytes", source, provider, BYTES_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("bytes", source, provider, BYTES_LIBRARY, &caller);
         assert!(
             text.contains("int bytes_sum(const uint8_t *, size_t)"),
             "`CBytes` is not `const uint8_t *` with its length after"
@@ -4019,11 +3906,8 @@ export function run(): string {
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             "nts_release((NtsHeader *)run());",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("elements", source, provider, ELEMENTS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("elements", source, provider, ELEMENTS_LIBRARY, &caller);
         assert!(
             text.contains("int i32_sum(const int32_t *, uint32_t)"),
             "`CElements` is not `const int32_t *` with its count after"
@@ -4077,11 +3961,7 @@ export function run(): string {
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             "nts_release((NtsHeader *)run());",
         );
-        let Some((_, outputs)) =
-            run_on_both_backends("flags", source, provider, FLAGS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) = run_on_both_backends("flags", source, provider, FLAGS_LIBRARY, &caller);
         for output in outputs {
             assert_eq!(
                 output,
@@ -4145,11 +4025,8 @@ export function fired(): void { fire_all(); }
             r#"printf("%.0f", run()); started(); printf(" owed=%zu", nts_closures_owed()); fired(); printf(" then=%zu", nts_closures_owed());"#,
             "run();",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller);
         assert!(
             text.contains("NtsBridgeOnce_"),
             "the bridge does not give the closure back"
@@ -4200,11 +4077,8 @@ export function run(): number {
             r#"printf("%.0f owed=%zu", run(), nts_closures_owed());"#,
             "run();",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("dispatched", source, provider, ASYNC_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("dispatched", source, provider, ASYNC_LIBRARY, &caller);
         assert!(
             text.contains("->header.descriptor->methods["),
             "the bridge does not dispatch through the closure's table"
@@ -4260,11 +4134,7 @@ export function held(): number {
             r#"printf("%.0f %.0f %.0f %.0f", full(), partial(), ordered(), held());"#,
             "full(); partial(); ordered(); held();",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("fields", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("fields", source, provider, library, &caller);
         assert!(
             text.contains("describe(*v"),
             "the literal is not passed as the record its storage holds:\n{text}"
@@ -4339,11 +4209,8 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((text, outputs)) =
-            run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller);
         assert!(
             text.contains("button_set_label(v"),
             "the method is not the C function"
@@ -4396,11 +4263,7 @@ int orient_last(int spacing, unsigned orientation) { return (int)orientation * 1
             r#"printf("%.0f %.0f", run(), defaulted());"#,
             "run(); defaulted();",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("enums", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("enums", source, provider, library, &caller);
         assert!(
             text.contains("int orient(unsigned int, int)"),
             "the enum is not C's unsigned int"
@@ -4416,9 +4279,7 @@ int orient_last(int spacing, unsigned orientation) { return (int)orientation * 1
         }
     }
     let other = source.replace("orient(n, 2 as c_int)", "orient(Sign.POSITIVE, 2 as c_int)");
-    let Some(messages) = checker_messages("enums-other", &other) else {
-        return;
-    };
+    let messages = checker_messages("enums-other", &other);
     assert!(
         messages.iter().any(|m| m.contains(
             "'Sign.POSITIVE' is not assignable to parameter of type 'CEnum<Orientation, c_uint>'"
@@ -4513,15 +4374,13 @@ export function live(): number { return live_objects(); }
   printf(" live=%.0f", live());"#,
         "",
     );
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "gobject",
         source,
         hir::Provider::ReferenceCounting,
         GOBJECT_LIBRARY,
         &caller,
-    ) else {
-        return;
-    };
+    );
     for output in outputs {
         assert_eq!(output, "9 7 5 6 live=0 leak=0");
     }
@@ -4633,15 +4492,13 @@ export function errors(): number { return errors_seen(); }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
         "local(); walk(); helper(); listed(); captured();",
     );
-    let Some((text, outputs)) = run_on_both_backends(
+    let (text, outputs) = run_on_both_backends(
         "host-handle",
         source,
         hir::Provider::ReferenceCounting,
         HOST_LIBRARY,
         &caller,
-    ) else {
-        return;
-    };
+    );
     assert!(
         text.contains("host_retain"),
         "nothing was ever rooted: the escapes went uncounted"
@@ -4671,11 +4528,7 @@ declare function node_at(i: c_int): Node;
 declare function node_value(n: Node): c_int;
 export function local(): number { return node_value(node_at(0 as c_int)); }
 "#;
-    let Some((_, prepared)) =
-        prepare_with_provider("host-handle-nogc", source, hir::Provider::NoGc)
-    else {
-        return;
-    };
+    let (_, prepared) = prepare_with_provider("host-handle-nogc", source, hir::Provider::NoGc);
     assert!(
         prepared
             .diagnostics
@@ -4732,15 +4585,13 @@ export function errors(): number { return errors_seen(); }
   printf(" live=%.0f errors=%.0f", live(), errors());"#,
         "",
     );
-    let Some((text, outputs)) = run_on_both_backends(
+    let (text, outputs) = run_on_both_backends(
         "promised-gobject",
         source,
         hir::Provider::ReferenceCounting,
         GOBJECT_LIBRARY,
         &caller,
-    ) else {
-        return;
-    };
+    );
     assert!(
         text.contains("HandleBoxGObject"),
         "the handle did not settle boxed"
@@ -4789,15 +4640,13 @@ export function errors(): number { return errors_seen(); }
   printf(" live=%.0f errors=%.0f", live(), errors());"#,
         "",
     );
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "consumed",
         source,
         hir::Provider::ReferenceCounting,
         GOBJECT_LIBRARY,
         &caller,
-    ) else {
-        return;
-    };
+    );
     for output in outputs {
         assert_eq!(output, "5 live=0 errors=0 leak=0");
     }
@@ -4867,11 +4716,7 @@ int label_width(struct _Label *self) { return self->width; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((text, outputs)) =
-            run_on_both_backends("accessors", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("accessors", source, provider, library, &caller);
         assert!(
             text.contains("label_set_text("),
             "the write is not the setter"
@@ -4883,9 +4728,7 @@ int label_width(struct _Label *self) { return self->width; }
         }
     }
     let unreadable = source.replace("(label_width(label) as number)", "(label.width as number)");
-    let Some((_, prepared)) = prepare("accessors-unreadable", &unreadable) else {
-        return;
-    };
+    let (_, prepared) = prepare("accessors-unreadable", &unreadable);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -4941,11 +4784,7 @@ int ask(int (*callback)(int)) { return (callback(2) == 0) * 10 + (callback(0) ==
             r#"printf("%.0f %.0f %.0f", run(), narrowed(), asked());"#,
             "run(); narrowed(); asked();",
         );
-        let Some((text, outputs)) =
-            run_on_both_backends("cbool", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("cbool", source, provider, library, &caller);
         assert!(
             text.contains("void remember(int)"),
             "a `CBool<c_int>` is not C's int"
@@ -5037,11 +4876,7 @@ int thing_record(struct _Thing *t) { return t->record; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((c, outputs)) =
-            run_on_both_backends("construct", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (c, outputs) = run_on_both_backends("construct", source, provider, library, &caller);
         // And not by luck of the constant: the type reaches C with no double
         // between, which an exact round trip of a smaller value would hide.
         let typed = c
@@ -5069,11 +4904,7 @@ int thing_record(struct _Thing *t) { return t->record; }
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) =
-            run_on_both_backends("construct-bag", &bag, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) = run_on_both_backends("construct-bag", &bag, provider, library, &caller);
         for output in outputs {
             assert_eq!(
                 output,
@@ -5147,11 +4978,8 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", total());"#, "total();");
-        let Some((text, outputs)) =
-            run_on_both_backends("defaults", source, provider, DEFAULTS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("defaults", source, provider, DEFAULTS_LIBRARY, &caller);
         assert!(
             text.contains("flagged("),
             "the call is not in the C program"
@@ -5165,15 +4993,13 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
     // the written 2, 0, false, a handle and 5; and 10707, the outer call's 7
     // after an inner call that took its own.
     let caller = "#include \"program.h\"\n#include <stdio.h>\nint main(void) { NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i)); putchar('\\n'); return 0; }\n";
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "defaults-arms",
         source,
         hir::Provider::NoGc,
         DEFAULTS_LIBRARY,
         caller,
-    ) else {
-        return;
-    };
+    );
     for output in outputs {
         assert_eq!(output, "307 302 300 300 11 22 -1 1 17 15 10707");
     }
@@ -5214,9 +5040,7 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
         let refused = format!(
             "import type {{ c_int, c_uint }} from \"@nts/scalars\";\n{declaration}\nexport function run(): number {{ return f(1 as c_int); }}\n"
         );
-        let Some((_, prepared)) = prepare(&format!("defaults-{label}"), &refused) else {
-            return;
-        };
+        let (_, prepared) = prepare(&format!("defaults-{label}"), &refused);
         assert!(
             prepared
                 .diagnostics
@@ -5279,11 +5103,7 @@ export function maybe(): number {
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f %.0f", run(), maybe());"#, "run(); maybe();");
-        let Some((text, outputs)) =
-            run_on_both_backends("declared", source, provider, &library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("declared", source, provider, &library, &caller);
         // What each prototype says is the only observable here: C's two
         // translation units agree on the address whatever either declares.
         for prototype in ["button_as_widget(void)", "maybe_button(int)"] {
@@ -5303,9 +5123,7 @@ export function maybe(): number {
         "    const button = button_as_widget();\n    button.set_label(\"declared\");\n    return button.get_width() * 100 + button.dup_label().length;",
         "    return button_as_widget().get_width();",
     );
-    let Some((_, prepared)) = prepare("declared-lie", &lie) else {
-        return;
-    };
+    let (_, prepared) = prepare("declared-lie", &lie);
     assert!(
         prepared.diagnostics.iter().any(|d| d.message.contains(
             "declares its result `_Button` for a `_Widget`, which is not among its ancestors"
@@ -5438,11 +5256,8 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) =
-            run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller);
         // 12; "not a number: x1" (16) caught; the caller's own slot written,
         // nothing thrown; the same for a method's; a method without one
         // thrown; a failing string result thrown rather than read; and a
@@ -5465,9 +5280,7 @@ type Err = Class<"_Err">;
 declare function parse_number(text: string, error?: Ptr<Err | null> | null): c_int;
 export function run(): number { return parse_number("1"); }
 "#;
-    let Some((_, prepared)) = prepare("throws-misnamed", misnamed) else {
-        return;
-    };
+    let (_, prepared) = prepare("throws-misnamed", misnamed);
     assert!(
         prepared
             .diagnostics
@@ -5521,11 +5334,8 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) =
-            run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller);
         for output in outputs {
             // 4205; 42 * 7 with `other` null; 42 * 3 + 1.
             assert_eq!(output, expect("420794127", provider), "{provider:?}");
@@ -5538,9 +5348,7 @@ export function run(): number {
     let computed = source
         .replace("by: c_int = 7 as c_int", "by: c_int = seven()")
         .replace("export function run()", "let calls = 0;\nfunction seven(): c_int { calls++; return 7 as c_int; }\nexport function run()");
-    let Some((_, prepared)) = prepare("ntscall-computed", &computed) else {
-        return;
-    };
+    let (_, prepared) = prepare("ntscall-computed", &computed);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -5581,27 +5389,23 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends(
+        let (_, outputs) = run_on_both_backends(
             "ntscall-function",
             source,
             provider,
             METHODS_LIBRARY,
             &caller,
-        ) else {
-            return;
-        };
+        );
         for output in outputs {
             // 42 from C, then 42 * 3 * 1000 + 5 through the companion.
             assert_eq!(output, expect("42126005", provider), "{provider:?}");
         }
     }
     // A name the program does not define is refused, as for a method.
-    let Some((_, prepared)) = prepare(
+    let (_, prepared) = prepare(
         "ntscall-function-missing",
         &source.replace("@ntsCall width_scaled", "@ntsCall width_nowhere"),
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -5666,16 +5470,14 @@ int signal_value_int(__sigval_t *v) { return v->sival_int; }
             "#define _POSIX_C_SOURCE 200809L\n{}",
             counted_caller(r#"printf("%.0f", run());"#, "run();")
         );
-        let Some((_, outputs)) = run_on_both_backends_with(
+        let (_, outputs) = run_on_both_backends_with(
             "typedef-handle",
             source,
             provider,
             library,
             &caller,
             &[("typedef_handles.h", header)],
-        ) else {
-            return;
-        };
+        );
         for output in outputs {
             // 17 / 5 is 3 rem 2, then the union's 9.
             assert_eq!(output, expect("3209", provider), "{provider:?}");
@@ -5685,9 +5487,7 @@ int signal_value_int(__sigval_t *v) { return v->sival_int; }
         .replace(" * @ntsHeader \"typedef_handles.h\"\n", "")
         .replace(" * @ntsDefine _POSIX_C_SOURCE=200809L\n", "");
     assert!(!headerless.contains("@ntsHeader"));
-    let Some((_, prepared)) = prepare("typedef-handle-headerless", &headerless) else {
-        return;
-    };
+    let (_, prepared) = prepare("typedef-handle-headerless", &headerless);
     let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(
         c.diagnostics.iter().any(|d| d
@@ -5753,10 +5553,7 @@ export function run(): number {
 "#;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) = run_on_both_backends("const-read", source, provider, "", &caller)
-        else {
-            return;
-        };
+        let (_, outputs) = run_on_both_backends("const-read", source, provider, "", &caller);
         for output in outputs {
             // 3, then 42, 56 and 8 at their places.
             assert_eq!(output, expect("856423", provider), "{provider:?}");
@@ -5768,9 +5565,7 @@ export function run(): number {
         "export function run(): number {",
         "export function address(): number {\n    const point = local<Point>();\n    const view: ConstPtr<Point> = point;\n    return addrOf(view.x)[0];\n}\nexport function run(): number {",
     );
-    let Some((_, prepared)) = prepare("const-read-address", &laundered) else {
-        return;
-    };
+    let (_, prepared) = prepare("const-read-address", &laundered);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -5825,15 +5620,13 @@ export function settled(): number { return total; }
             r#"start(); nts_checkpoint(); printf("%.0f", settled());"#,
             "start(); nts_checkpoint();",
         );
-        let Some((text, outputs)) = run_on_both_backends(
+        let (text, outputs) = run_on_both_backends(
             "promised-handle",
             source,
             provider,
             METHODS_LIBRARY,
             &caller,
-        ) else {
-            return;
-        };
+        );
         assert!(
             text.contains("nts_promise_fulfill_pointer("),
             "the handle did not settle into the promise's slot"
@@ -5860,9 +5653,7 @@ export async function both(): Promise<void> {
     void pair;
 }
 "#;
-    let Some((_, prepared)) = prepare("promised-handle-all", all) else {
-        return;
-    };
+    let (_, prepared) = prepare("promised-handle-all", all);
     assert!(
         prepared
             .diagnostics
@@ -5945,9 +5736,7 @@ export function probe(seed: number): number {
     let sysv = nts_core::hir::native::NativeAbi::LP64;
     // Prepared for both: a value past Win64's 32-bit `long` is refused where
     // it is claimed, so there is no truncation at the slot left to observe.
-    let Some((dir, snapshot)) = snapshot_of("win64-long", source, &[]) else {
-        return;
-    };
+    let (dir, snapshot) = snapshot_of("win64-long", source, &[]);
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
@@ -6153,7 +5942,7 @@ export function wide(): void { take_long(2147483648n as c_long); }
     let win64 = nts_core::hir::native::NativeAbi::LLP64;
     let rejected =
         |name: &str, source: &str, targets: &[nts_core::hir::native::NativeAbi]| -> Vec<String> {
-            let (_, snapshot) = snapshot_of(name, source, &[]).unwrap();
+            let (_, snapshot) = snapshot_of(name, source, &[]);
             match hir::prepare_with(
                 &snapshot,
                 &hir::Options {
@@ -6169,9 +5958,7 @@ export function wide(): void { take_long(2147483648n as c_long); }
                 Err(invalid) => panic!("{}", invalid.render(&snapshot.sources)),
             }
         };
-    let Some((_, prepared)) = prepare("win64-constants", source) else {
-        return;
-    };
+    let (_, prepared) = prepare("win64-constants", source);
     let for_win64 = rejected("win64-constants-checked", source, &[win64]);
     assert!(
         for_win64.len() == 1
@@ -6266,11 +6053,8 @@ export function realPointer(): number { return is_null(some_address()); }
         "withCallback(); withNull();",
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((_, outputs)) =
-            run_on_both_backends("nullable-callback", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("nullable-callback", source, provider, library, &caller);
         for output in outputs {
             assert_eq!(output, expect("15 -1 1 0", provider), "{provider:?}");
         }
@@ -6319,11 +6103,8 @@ export function nothing(): number { return is_null(null); }
     // "AB" = 65+66 = 131 over 2 units; "αβ" = 945+946 = 1891 over 2; a lone
     // high surrogate is 55296 over 1.
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((text, outputs)) =
-            run_on_both_backends("utf16-string", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("utf16-string", source, provider, library, &caller);
         assert!(
             text.contains("nts_string_to_utf16(") && text.contains("nts_utf16_release("),
             "the UTF-16 pair is not in the C program"
@@ -6393,11 +6174,8 @@ export function nothing(): number { return is_null(null); }
     // 97+0+98 = 195 over 3 units; 0xE9 = 233, narrow and fresh; 0xD800 =
     // 55296, wide and fresh; "abc" immortal (2), "αβ" immortal and wide (3).
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((text, outputs)) =
-            run_on_both_backends("string-view", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("string-view", source, provider, library, &caller);
         assert!(
             ![
                 "nts_string_to_cstring(",
@@ -6461,11 +6239,8 @@ export function nulls(): number { return (maybe(0 as c_int) === null ? 10 : 0) +
     );
     // 4 units: 65 + 0 + 55296 + 945.
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((text, outputs)) =
-            run_on_both_backends("string-view-result", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) =
+            run_on_both_backends("string-view-result", source, provider, library, &caller);
         assert!(
             text.contains("nts_string_from_required_view(")
                 && text.contains("nts_string_from_view("),
@@ -6487,9 +6262,7 @@ import type { c_int } from "@nts/scalars";
 declare function take(s: string & { real: number }): c_int;
 export function go(s: string & { real: number }): number { return take(s); }
 "#;
-    let Some((_, prepared)) = prepare("utf16-not-a-brand", source) else {
-        return;
-    };
+    let (_, prepared) = prepare("utf16-not-a-brand", source);
     assert!(
         // Refused where the value's type is read: `representation_of`'s
         // intersection arm did not take it.
@@ -6534,9 +6307,7 @@ declare function echo_long(value: c_long32): c_long32;
 export function dword(): number { return echo_dword(4294967295 as c_ulong32); }
 export function negative(): number { return echo_long(-5 as c_long32); }
 "#;
-    let Some((dir, prepared)) = prepare("long32", source) else {
-        return;
-    };
+    let (dir, prepared) = prepare("long32", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -6734,9 +6505,7 @@ int finalized(void) { return gone; }
 void collect(void) { nts_checkpoint(); }
 ";
     let provider = hir::Provider::ReferenceCounting;
-    let Some((dir, prepared)) = prepare_with_provider("gobject-cycle-rc", source, provider) else {
-        return;
-    };
+    let (dir, prepared) = prepare_with_provider("gobject-cycle-rc", source, provider);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -6901,15 +6670,13 @@ export function live(): number { return live_objects() as number; }
   printf(" errors=%.0f live=%.0f", errors(), live());"#,
         "",
     );
-    let Some((c, outputs)) = run_on_both_backends(
+    let (c, outputs) = run_on_both_backends(
         "upcast",
         source,
         hir::Provider::ReferenceCounting,
         &library,
         &caller,
-    ) else {
-        return;
-    };
+    );
     let body = c
         .split("inherited(")
         .nth(2)
@@ -6956,11 +6723,7 @@ size_t doubled(size_t n) { return 2 * n + 1; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.2f %.2f", run(), wide());"#, "run(); wide();");
-        let Some((text, outputs)) =
-            run_on_both_backends("cnumber", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("cnumber", source, provider, library, &caller);
         assert!(
             text.contains("int add(int, double)"),
             "a kind of `@nts/scalars` is not C's type"
@@ -6979,9 +6742,7 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     let settled = format!(
         "{source}\nexport function later(): Promise<AsNumber<c_size_t>> {{ return new Promise<AsNumber<c_size_t>>((resolve) => {{ resolve(doubled(3)); }}); }}\n"
     );
-    let Some((_, prepared)) = prepare("cnumber-promise", &settled) else {
-        return;
-    };
+    let (_, prepared) = prepare("cnumber-promise", &settled);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -6989,7 +6750,7 @@ size_t doubled(size_t n) { return 2 * n + 1; }
     );
     // A fraction into C's `int` is refused where it is passed.
     let fraction = source.replace("add(2, 3.5)", "add(2.9, 3.5)");
-    let (_, snapshot) = snapshot_of("cnumber-fraction", &fraction, &[]).unwrap();
+    let (_, snapshot) = snapshot_of("cnumber-fraction", &fraction, &[]);
     let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
         panic!("`add(2.9, …)` must be refused");
     };
@@ -7055,11 +6816,7 @@ void nts_gobject_made(void *o) { (void)o; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.1f", run());"#, "run();");
-        let Some((text, outputs)) =
-            run_on_both_backends("interface", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (text, outputs) = run_on_both_backends("interface", source, provider, library, &caller);
         assert!(
             text.contains("editable_value(struct _Editable *)"),
             "an interface parameter is not its own tag in C"
@@ -7073,9 +6830,7 @@ void nts_gobject_made(void *o) { (void)o; }
         }
     }
     let wrong = source.replace("const editable: Editable = entry;", "const editable: Editable = entry;\n    const label = null as unknown as Label;\n    editable_value(label);");
-    let Some(messages) = checker_messages("interface-wrong", &wrong) else {
-        return;
-    };
+    let messages = checker_messages("interface-wrong", &wrong);
     assert!(
         messages
             .iter()
@@ -7086,9 +6841,7 @@ void nts_gobject_made(void *o) { (void)o; }
         "const cell: Cell = entry;",
         "const cell: Cell = entry;\n    cell_value(editable);",
     );
-    let Some(messages) = checker_messages("interface-upward", &upward) else {
-        return;
-    };
+    let messages = checker_messages("interface-upward", &upward);
     assert!(
         messages
             .iter()
@@ -7128,11 +6881,8 @@ export async function suspended(): Promise<number> {
 "#;
     let library = "void fill(int *out, int value) { *out = value; }\n";
     let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
-    let Some((_, outputs)) =
-        run_on_both_backends("confined", source, hir::Provider::NoGc, library, &caller)
-    else {
-        return;
-    };
+    let (_, outputs) =
+        run_on_both_backends("confined", source, hir::Provider::NoGc, library, &caller);
     for output in outputs {
         assert_eq!(output, "100");
     }
@@ -7152,9 +6902,7 @@ export async function suspended(): Promise<number> {
             "const before = slot[0];\n    await Promise.resolve();\n    return before;",
             shape,
         );
-        let Some((_, prepared)) = prepare(name, &edited) else {
-            return;
-        };
+        let (_, prepared) = prepare(name, &edited);
         let refused = prepared.diagnostics.iter().any(|d| {
             d.message
                 .contains("native local storage in a suspending function")
@@ -7170,9 +6918,7 @@ export async function suspended(): Promise<number> {
         "    for (let i = 1; i <= 4; i++) {\n        const slot = local<c_int>();",
         "    let kept = local<c_int>();\n    for (let i = 1; i <= 4; i++) {\n        const slot = local<c_int>();\n        sum += kept[0];\n        kept = slot;",
     );
-    let Some((_, prepared)) = prepare("confined-carried", &carried) else {
-        return;
-    };
+    let (_, prepared) = prepare("confined-carried", &carried);
     assert!(
         prepared
             .diagnostics
@@ -7213,15 +6959,13 @@ export function looped(): number {
 "#;
     let library = "void fill(int *out, int value) { *out = value; }\n";
     let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "iteration-local",
         source,
         hir::Provider::NoGc,
         library,
         &caller,
-    ) else {
-        return;
-    };
+    );
     // 20 + 40 read inside the branch, 1 + 1 beside it, and every
     // iteration's own 10..40 after the merge: 62 + 100 * 100.
     for output in outputs {
@@ -7259,15 +7003,13 @@ export function live(): number { return live_objects() as number; }
   printf(" errors=%.0f live=%.0f", errors(), live());"#,
         "",
     );
-    let Some((c, outputs)) = run_on_both_backends(
+    let (c, outputs) = run_on_both_backends(
         "erased-result",
         source,
         hir::Provider::ReferenceCounting,
         &library,
         &caller,
-    ) else {
-        return;
-    };
+    );
     assert!(
         c.contains("void * thing_any(void)") || c.contains("void *thing_any(void)"),
         "an erased result is not `void *` in C"
@@ -7313,11 +7055,8 @@ int thing_record(struct _Thing *t) { return t->record; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-        let Some((_, outputs)) =
-            run_on_both_backends("construct-only", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("construct-only", source, provider, library, &caller);
         // The constructor's 7, then the label's length: 72.
         for output in outputs {
             assert_eq!(output, expect("72", provider), "{provider:?}");
@@ -7334,7 +7073,7 @@ int thing_record(struct _Thing *t) { return t->record; }
 /// `class Counter extends GtkButton` did before subclasses were registered.
 #[test]
 fn a_class_over_an_unregistered_handle_is_refused_with_its_new() {
-    let Some((_, prepared)) = prepare(
+    let (_, prepared) = prepare(
         "unregistered-subclass",
         r#"
 import type { Class } from "c:types";
@@ -7354,9 +7093,7 @@ export function run(): void {
     void made;
 }
 "#,
-    ) else {
-        return;
-    };
+    );
     let text = format!("{:?}", prepared.diagnostics);
     assert!(
         text.contains("a class extending a C handle's class that nothing registers"),
@@ -7373,7 +7110,7 @@ export function run(): void {
 /// lowered to a call of a symbol named after the method.
 #[test]
 fn a_direct_call_of_a_virtual_function_is_refused_by_name() {
-    let Some((_, prepared)) = prepare(
+    let (_, prepared) = prepare(
         "vfunc-direct",
         r#"
 import type { GObjectClass } from "c:types";
@@ -7388,9 +7125,7 @@ export function run(): void {
     knob_new().vfunc_turned();
 }
 "#,
-    ) else {
-        return;
-    };
+    );
     let text = format!("{:?}", prepared.diagnostics);
     assert!(
         text.contains("a direct call of a GObject virtual function (`KnobClass turned`)"),
@@ -7431,11 +7166,8 @@ void name_into(char **out, int which) {
 "#;
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((_, outputs)) =
-            run_on_both_backends("string-from-probe", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("string-from-probe", source, provider, library, &caller);
         for output in outputs {
             assert_eq!(output, expect("5023365533", provider));
         }
@@ -7475,11 +7207,8 @@ double byte_zero(void) { return data[0]; }
         "run();",
     );
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((_, outputs)) =
-            run_on_both_backends("bytes-from-probe", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("bytes-from-probe", source, provider, library, &caller);
         for output in outputs {
             assert_eq!(output, expect("120000304440 byte0=1", provider));
         }
@@ -7514,15 +7243,13 @@ struct _Thing *thing_sized(int width) { Thing *t = &things[made++ % 2]; t->recor
 int thing_record(struct _Thing *t) { return t->record; }
 ";
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "static-probe",
         source,
         hir::Provider::NoGc,
         library,
         &caller,
-    ) else {
-        return;
-    };
+    );
     for output in outputs {
         assert_eq!(output, "53");
     }
@@ -7534,16 +7261,14 @@ int thing_record(struct _Thing *t) { return t->record; }
 /// `internal`, from `exported` alone, and the caller did not link.
 #[test]
 fn an_exported_generators_resumption_links_from_c_on_both_backends() {
-    let Some((dir, prepared)) = prepare(
+    let (dir, prepared) = prepare(
         "generator-resume",
         r"
         export function* counted(n: number): Generator<number> {
             for (let i = 0; i < n; i++) yield i;
         }
     ",
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -7695,11 +7420,7 @@ void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) {
             // would still count.
             "run(); dereferenced(); caughtByTheCaller(); asserted(); nts_collect_cycles();",
         );
-        let Some((_, outputs)) =
-            run_on_both_backends("getter-null", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) = run_on_both_backends("getter-null", source, provider, library, &caller);
         for output in outputs {
             // "null" through the class's getter (4) and the binding's (4), the
             // comparison true, and the default taken: JavaScript's 4412. And
@@ -7745,11 +7466,8 @@ double seen_u16(uint16_t v) { return v; }
 ";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run(-5));"#, "run(-5);");
-        let Some((_, outputs)) =
-            run_on_both_backends("c-integer-storage", source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("c-integer-storage", source, provider, library, &caller);
         for output in outputs {
             assert_eq!(output, expect("31", provider), "{provider:?}");
         }
@@ -7786,15 +7504,13 @@ export function errors(): number { return errors_seen() as number; }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
         "",
     );
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "dropped-host",
         source,
         hir::Provider::ReferenceCounting,
         HOST_LIBRARY,
         &caller,
-    ) else {
-        return;
-    };
+    );
     for output in outputs {
         assert_eq!(output, "2 roots=0 errors=0 leak=0");
     }
@@ -7841,15 +7557,13 @@ export function errors(): number { return errors_seen() as number; }
   printf(" roots=%.0f errors=%.0f", roots(), errors());"#,
         "",
     );
-    let Some((_, outputs)) = run_on_both_backends(
+    let (_, outputs) = run_on_both_backends(
         "owned-handle-loop",
         source,
         hir::Provider::ReferenceCounting,
         HOST_LIBRARY,
         &caller,
-    ) else {
-        return;
-    };
+    );
     for output in outputs {
         assert_eq!(output, "7 roots=0 errors=0 leak=0");
     }

@@ -27,7 +27,7 @@ struct BodyKey {
     owner: super::TypeId,
     /// Constant missing-field reads do not depend on a member. Their owner is
     /// still one exact canonical layout, so the JVM receiver type also agrees.
-    member: Option<String>,
+    member: Option<nts_semantic_schema::PropertyKey>,
     writes: bool,
     raising: bool,
     input: Option<HirType>,
@@ -44,7 +44,7 @@ pub(super) fn declare(
     program: &mut Program,
 ) {
     note_native_views(hierarchy, program);
-    for ((face, key), slot) in &hierarchy.slots {
+    for ((face, key, _raising), slot) in &hierarchy.slots {
         if hierarchy.access_families.for_key(*face, key).is_some() {
             program.interface_access.note_selector(*slot);
         }
@@ -67,7 +67,7 @@ pub(super) fn declare(
         let Some(face) = layouts.of_class(family.face) else {
             continue;
         };
-        let field = program.layouts[face].index_of(&family.member);
+        let field = program.layouts[face].index_of_key(&family.member);
         let dispatch = family.eager
             || family.supplies.iter().any(|supply| {
                 let Some(owner) = layouts.of_class(supply.owner) else {
@@ -88,6 +88,7 @@ pub(super) fn declare(
                 .map(|_| entry(hierarchy, family, true, false)),
             raising: raising_entries(hierarchy, family),
             owners: family.supplies.iter().map(|supply| supply.owner).collect(),
+            eager: family.eager,
             pending: dispatch && !family.eager,
             stored_dispatch: dispatch && !family.eager,
         };
@@ -349,7 +350,7 @@ fn refuse(
         )
     };
     let what = builder.push(
-        OpKind::ConstString(message),
+        OpKind::ConstString(message.into()),
         HirType::Managed(ManagedType::String),
         origin.clone(),
     );
@@ -387,10 +388,9 @@ fn raising_entries(hierarchy: &Hierarchy, family: &Family) -> Vec<interface_acce
 }
 
 fn has_raising_entry(hierarchy: &Hierarchy, family: &Family, writes: bool) -> bool {
-    hierarchy.slots.contains_key(&(
-        family.face,
-        format!("{}{}", family.key(writes), super::RAISING_SUFFIX),
-    ))
+    hierarchy
+        .slots
+        .contains_key(&(family.face, family.key(writes), true))
 }
 
 pub(super) fn entry(
@@ -400,9 +400,8 @@ pub(super) fn entry(
     raising: bool,
 ) -> interface_access::Entry {
     let suffix = if raising { super::RAISING_SUFFIX } else { "" };
-    let key = format!("{}{suffix}", family.key(writes));
     interface_access::Entry {
-        slot: hierarchy.slots[&(family.face, key.clone())],
+        slot: hierarchy.slots[&(family.face, family.key(writes), raising)],
         declared: format!(
             "{}#{}{suffix}",
             hierarchy.name[&family.face],
@@ -412,7 +411,11 @@ pub(super) fn entry(
 }
 
 fn declaration_key(family: &Family, writes: bool) -> String {
-    format!("{}@interface{}", family.key(writes), family.face.0)
+    format!(
+        "{}@interface{}",
+        family.key(writes).emitted_name(),
+        family.face.0
+    )
 }
 
 /// Pure stored rows are identical on equal physical layouts. Their reservation
@@ -753,7 +756,7 @@ fn stored(
     writes: bool,
     origin: &Origin,
 ) -> Option<ValueId> {
-    let field = program.layouts[owner].index_of(&family.member)?;
+    let field = program.layouts[owner].index_of_key(&family.member)?;
     let ty = &program.layouts[owner].fields[field as usize].ty;
     if writes {
         let absent = super::interfaces::property(builder.snapshot, family.face, &family.member)

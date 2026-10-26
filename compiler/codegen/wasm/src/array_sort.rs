@@ -44,7 +44,7 @@ fn inner(b: &mut Body<'_, '_>, result: ValueId, args: &[ValueId]) -> Result<(), 
     }
     contract::nonnull(b, *array, "sorting a null array")?;
     b.load(*array)?;
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.load(*null_slot)?;
     let target = callee(b.m, shape)?;
     b.call(target);

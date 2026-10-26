@@ -263,6 +263,13 @@ fn guard(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Option<Guard> {
                 Some(literal.clone()),
             ))
         }
+        // A unique-symbol singleton needs a value-identity guard, not merely
+        // the broad symbol tag. The object keyword names no concrete class.
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::UniqueSymbol | TypeKind::NonPrimitive => None,
         TypeKind::Union(items) => {
             let mut guards = Vec::new();
             for item in items {

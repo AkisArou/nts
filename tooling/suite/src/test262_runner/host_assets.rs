@@ -26,7 +26,7 @@ pub fn parse_host_contract() -> Result<HostContractManifest, serde_json::Error> 
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet, path::Path, process::Command};
+    use std::collections::BTreeSet;
 
     use super::*;
 
@@ -62,31 +62,30 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "measurements")]
     #[test]
-    #[ignore = "requires the optional pinned tsgo executable"]
-    fn host_declarations_typecheck_with_tsgo() {
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let tsgo = repository.join("target/tsgo");
-        if !tsgo.is_file() {
-            return;
-        }
-        let declarations = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test262/host.d.ts");
-        let output = Command::new(tsgo)
-            .current_dir(repository)
-            .args([
-                "--ignoreConfig",
-                "--noEmit",
-                "--strict",
-                "--lib",
-                "es2023,esnext.sharedmemory",
-            ])
-            .arg(declarations)
-            .output()
-            .expect("run tsgo");
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+    fn host_declarations_typecheck_with_the_native_frontend() {
+        let root = camino::Utf8PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| {
+            format!("{}/.cache", std::env::var("HOME").expect("home directory"))
+        }))
+        .join(format!("nts-test262-host-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("private scratch");
+        let declarations =
+            camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/test262/host.d.ts");
+        let config = root.join("tsconfig.json");
+        let text = serde_json::json!({
+            "compilerOptions": {
+                "strict": true, "noEmit": true, "types": [],
+                "target": "ESNext", "lib": ["es2023", "esnext.sharedmemory"]
+            },
+            "files": [declarations]
+        });
+        std::fs::write(&config, text.to_string()).expect("host project");
+        let snapshot = nts_frontend_ts::Frontend::new(&root)
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .expect("native host snapshot");
+        std::fs::remove_dir_all(&root).expect("remove scratch");
+        assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     }
 }

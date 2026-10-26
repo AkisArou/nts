@@ -3,32 +3,30 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, regions::placement};
-use nts_frontend_ts::SemanticSource;
+use nts_frontend_ts::Frontend;
 
-fn prepared(provider: hir::Provider) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(provider: hir::Provider) -> hir::Prepared {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/calls-a-region-could-serve/tsconfig.json")
         .canonicalize_utf8()
         .expect("the region fixture is checked in");
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("the fixture typechecks");
-    Some(hir::prepare_unverified(
+    hir::prepare_unverified(
         &snapshot,
         &hir::Options {
             provider,
             roots: hir::reachable::Roots::EveryExport,
             ..hir::Options::default()
         },
-    ))
+    )
 }
 
 #[test]
 fn live_sites_are_reported_without_licensing_any_allocation() {
-    let Some(mut prepared) = prepared(hir::Provider::ReferenceCounting) else {
-        return;
-    };
+    let mut prepared = prepared(hir::Provider::ReferenceCounting);
     let report = &prepared.regions.placement;
     assert_ne!(report.sites, []);
     assert!(
@@ -71,8 +69,6 @@ fn live_sites_are_reported_without_licensing_any_allocation() {
 
 #[test]
 fn host_gc_has_no_native_placement_facts() {
-    let Some(prepared) = prepared(hir::Provider::HostGc) else {
-        return;
-    };
+    let prepared = prepared(hir::Provider::HostGc);
     assert_eq!(prepared.regions.placement, placement::Report::default());
 }

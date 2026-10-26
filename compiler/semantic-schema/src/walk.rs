@@ -32,7 +32,12 @@ pub fn kind_of(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
 /// A node's own text, where it has any.
 #[must_use]
 pub fn text_of(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&str> {
-    snapshot.nodes.get(id.0 as usize)?.text.as_deref()
+    snapshot
+        .nodes
+        .get(id.0 as usize)?
+        .text
+        .as_ref()
+        .and_then(|text| text.as_utf8())
 }
 
 /// Children with list nodes flattened away, the way lowering sees them.

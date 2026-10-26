@@ -41,6 +41,7 @@ mod builder;
 pub mod closures;
 mod face;
 mod fuse;
+mod guarded_members;
 pub mod hierarchy;
 mod program;
 pub use program::JvmProgram;
@@ -550,7 +551,7 @@ fn declare_fields(
     }
     // Two properties that mangle to one field name.
     //
-    // `jvm_member_name` maps everything DEX forbids to `$`, which is not
+    // `jvm_member_name` still maps ASCII punctuation to `$`, which is not
     // injective: `class C { "a.b": number; "a$b": number }` declares two
     // properties and produces two `public int a$b;` in one class file. The JVM
     // refuses that at load -- `ClassFormatError: Duplicate field name` -- so
@@ -570,7 +571,7 @@ fn declare_fields(
     let mut spelled: FxHashMap<String, String> = FxHashMap::default();
     let names = hierarchy::declared_names(program, layout);
     for (field, name) in hierarchy::declared(program, layout).iter().zip(&names) {
-        if let Some(other) = spelled.insert(name.clone(), field.name.clone()) {
+        if let Some(other) = spelled.insert(name.clone(), field.name.to_string()) {
             return Err(Diagnostic::error(
                 "NTS4013",
                 format!(
@@ -3012,12 +3013,59 @@ fn foreign_bridges(
     Ok(())
 }
 
+/// Choose an explicitly recorded identity projection's direct body only when
+/// the complete machine signature and absence contract already agree. This is
+/// a one-edge owned proof, never body-name or bytecode equivalence. Keeping
+/// chains conservative avoids introducing a general alias-resolution policy.
+/// Void carries no result or absence conversion; value results must retain
+/// their exact absence interpretation as well as their machine descriptor.
+fn identity_forwarder_target<'a>(
+    package: &str,
+    program: &'a JvmProgram<'_>,
+    projected: &'a nts_core::hir::Func,
+) -> &'a nts_core::hir::Func {
+    let Some(name) = program.identity_projections.get(&projected.name) else {
+        return projected;
+    };
+    if program.identity_projections.contains_key(name) {
+        return projected;
+    }
+    let Some(target) = program.funcs.iter().find(|func| &func.name == name) else {
+        return projected;
+    };
+    if projected.abstract_declaration
+        || target.abstract_declaration
+        || projected.params.len() != target.params.len()
+        || projected.return_type != target.return_type
+        || (projected.return_type != nts_core::hir::HirType::Void
+            && projected.result_absent != target.result_absent)
+        || projected.params.first().map(|param| &param.ty)
+            != target.params.first().map(|param| &param.ty)
+        || !projected
+            .params
+            .iter()
+            .zip(&target.params)
+            .all(|(one, other)| one.shape == other.shape)
+    {
+        return projected;
+    }
+    let Some(descriptor) = instance_descriptor(package, program, projected) else {
+        return projected;
+    };
+    if instance_descriptor(package, program, target).as_ref() != Some(&descriptor) {
+        return projected;
+    }
+    target
+}
+
 struct DispatchForwarder<'a> {
+    slot: usize,
     target: &'a nts_core::hir::Func,
     full: String,
     member: String,
     descriptor: String,
     bridge: Option<Bridge>,
+    compatibility: Option<String>,
 }
 
 /// One instance method per dispatch slot, forwarding to the static body.
@@ -3090,6 +3138,9 @@ fn dispatch_forwarders(
         if selector && target.abstract_declaration {
             continue;
         }
+        // Canonicalize the proven identity before grouping by the published
+        // member. Both slot orders then select the same actual direct body.
+        let target = identity_forwarder_target(package, program, target);
         let Some(full) = body::signature(package, program, target) else {
             return Err(Diagnostic::error(
                 "NTS4008",
@@ -3170,7 +3221,7 @@ fn dispatch_forwarders(
         // overriding in any language on this platform -- they are overloading,
         // and a bridge would silently make one call the other.
         if let Some(previous) = forwarded.get(&(member.clone(), descriptor.clone())) {
-            if previous.name == *func_name {
+            if previous.name == target.name {
                 continue;
             }
             return Err(dispatch_conflict(
@@ -3207,13 +3258,40 @@ fn dispatch_forwarders(
             &origin,
         )?;
         planned.push(DispatchForwarder {
+            slot,
             target,
             full,
             member,
             descriptor,
             bridge,
+            compatibility: program
+                .guarded_member(slot)
+                .and_then(|_| hierarchy::original_declared_member(program, layout, slot)),
         });
     }
+
+    // Public compatibility entries share ownership BEFORE any bridge is chosen.
+    // A dropped-tail adapter must keep suppressing its target's bridge in
+    // either logical slot order; ClassBuilder alone is too late to prove it.
+    let mut compatibility_entries = Vec::new();
+    for entry in &planned {
+        if let Some(plain) = &entry.compatibility {
+            let key = (plain.clone(), entry.descriptor.clone());
+            if let std::collections::hash_map::Entry::Vacant(vacant) = forwarded.entry(key) {
+                vacant.insert(entry.target);
+                compatibility_entries.push(DispatchForwarder {
+                    slot: entry.slot,
+                    target: entry.target,
+                    full: entry.full.clone(),
+                    member: plain.clone(),
+                    descriptor: entry.descriptor.clone(),
+                    bridge: None,
+                    compatibility: None,
+                });
+            }
+        }
+    }
+    planned.extend(compatibility_entries);
 
     // Decide bridge ownership against every concrete slot, before emission.
     // A covariant bridge can share a slot forwarder only when lowering proved
@@ -3222,11 +3300,13 @@ fn dispatch_forwarders(
     // readers see the complete dispatch surface when this function returns.
     let mut bridged: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
     for DispatchForwarder {
+        slot,
         target,
         full,
         member,
         descriptor,
         bridge,
+        compatibility,
     } in planned
     {
         let func_name = &target.name;
@@ -3279,7 +3359,34 @@ fn dispatch_forwarders(
         if target.abstract_declaration {
             builder.access |= access::ABSTRACT;
             builder.access &= !access::FINAL;
-            builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
+            if let Some(plain) = compatibility {
+                if hierarchy::is_interface(program, layout)
+                    && !program.guarded_default(layout, slot)
+                {
+                    continue;
+                }
+                // EVERY physical abstract class needs a concrete wrapper,
+                // including ordinary implementers of a marked face: an abstract
+                // internal method shadows inherited defaults and burdens old
+                // Java subclasses which override only the public plain method.
+                let owner = types::class_name(package, layout);
+                let default = guarded_members::default_forwarder(
+                    package,
+                    program,
+                    (&owner, hierarchy::is_interface(program, layout)),
+                    target,
+                    (&plain, &descriptor),
+                    pool,
+                )?;
+                builder.method(
+                    access::PUBLIC | access::SYNTHETIC,
+                    member,
+                    descriptor,
+                    Some(default),
+                );
+            } else {
+                builder.method(access::PUBLIC | access::ABSTRACT, member, descriptor, None);
+            }
             continue;
         }
 
@@ -3311,13 +3418,31 @@ fn dispatch_forwarders(
             code.load(&origin, kind, at);
             at += kind.words();
         }
-        code.invoke_static(
-            &origin,
-            pool,
-            &body::program_class(package),
-            &body::method_name(func_name),
-            &full,
-        );
+        if let Some(plain) = compatibility.as_ref()
+            && forwarded
+                .get(&(plain.clone(), descriptor.clone()))
+                .is_some_and(|owner| owner.name == target.name)
+        {
+            // The complete public ownership plan, before bridges, names this
+            // exact canonical target. Dispatch through that public method so
+            // an existing Java subclass's override still wins, even when this
+            // coherent target is a named stop. A different public owner keeps
+            // the direct body below: distinct refused slots remain distinct.
+            let owner = types::class_name(package, layout);
+            if builder.access & access::INTERFACE != 0 {
+                code.invoke_interface(&origin, pool, &owner, plain, &descriptor);
+            } else {
+                code.invoke_virtual(&origin, pool, &owner, plain, &descriptor);
+            }
+        } else {
+            code.invoke_static(
+                &origin,
+                pool,
+                &body::program_class(package),
+                &body::method_name(func_name),
+                &full,
+            );
+        }
         code.ret(&origin, types::kind(&target.return_type));
         let rendered = code.finish(pool).map_err(|error| {
             Diagnostic::error(
@@ -4141,7 +4266,7 @@ fn initialize_templates(
         );
         code.new_array(origin, pool, "Ljava/lang/String;");
         for (index, text) in object.cooked.iter().enumerate() {
-            if Pool::utf8_length(text) > 65_535 {
+            if Pool::string_text_length(text) > 65_535 {
                 return Err(Diagnostic::error(
                     "NTS4003",
                     "a template string past the JVM's 65,535-byte constant limit",
@@ -4156,7 +4281,7 @@ fn initialize_templates(
                     initializer_refusal(program, "a template past the JVM array limit")
                 })?,
             );
-            code.const_string(origin, pool, text);
+            code.const_text(origin, pool, text);
             code.array_store(origin, "Ljava/lang/String;");
         }
         code.invoke_static(
@@ -4196,3 +4321,9 @@ fn program_origin(program: &JvmProgram<'_>) -> nts_semantic_schema::Origin {
         |func| func.origin.clone(),
     )
 }
+
+#[cfg(test)]
+mod dispatch_identity_tests;
+
+#[cfg(test)]
+mod guarded_member_tests;

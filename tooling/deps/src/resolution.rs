@@ -5,7 +5,7 @@
 //! Because TypeScript resolves the program this compiler compiles, so its
 //! answer is the one that binds. Anything that resolves bare specifiers
 //! independently — `oxc_resolver`, or an `exports` walk of our own — has to be
-//! kept in agreement with tsgo, and a disagreement between them has no
+//! kept in agreement with the checker, and a disagreement between them has no
 //! adjudicator.
 //!
 //! The `exports` walk this replaces was the weakest code in the crate: JSON
@@ -45,8 +45,8 @@ pub struct PackageRef {
     pub dir: Utf8PathBuf,
 }
 
-/// A checker diagnostic, kept because the pass that resolves also checks.
-#[derive(Debug, Clone)]
+/// A diagnostic attributed to the source file that produced it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Diagnostic {
     pub file: Utf8PathBuf,
     /// `TS2591`, `TS7006`.
@@ -57,11 +57,9 @@ pub struct Diagnostic {
 #[derive(Debug, Clone, Default)]
 pub struct Resolution {
     pub modules: Vec<ResolvedModule>,
-    /// Everything the checker complained about while resolving.
-    ///
-    /// Free: the pass that answers "where did this specifier go" is a
-    /// typecheck, and throwing its errors away would mean running a second one
-    /// to find out whether the source just acquired can actually be built.
+    /// Config, program and syntax diagnostics from resolution. Semantic
+    /// diagnostics come from the ordinary compilation, or the standalone
+    /// dependency report's single final check.
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -87,85 +85,140 @@ impl Resolution {
     }
 }
 
-/// Ask tsgo where everything went.
+/// Resolve imports without constructing a semantic checker or diagnostics pool.
 ///
-/// Runs the checker once with `--traceResolution` and reads the trace. It is a
-/// separate process from the one the frontend runs, which costs a spawn — worth
-/// it against maintaining a second resolver, and skippable entirely when
-/// acquisition is already up to date.
-pub fn trace(tsgo: &Utf8Path, tsconfig: &Utf8Path) -> Result<Resolution, ResolutionError> {
-    let output = std::process::Command::new(tsgo)
-        .arg("-p")
-        .arg(tsconfig)
-        .arg("--noEmit")
-        .arg("--traceResolution")
-        .output()
-        .map_err(|source| ResolutionError::Spawn {
-            executable: tsgo.to_owned(),
-            source,
-        })?;
-    // A program with type errors still resolved its imports, and acquisition is
-    // often what *fixes* those errors, so the exit status is deliberately not
-    // consulted. An empty trace is the only real failure.
-    Ok(parse(&String::from_utf8_lossy(&output.stdout)))
-}
-
-/// Read the trace.
-///
-/// The lines of interest look like:
-///
-/// ```text
-/// ======== Module name 'zod/v4' was successfully resolved to '/…/zod/v4/index.d.cts' with Package ID 'zod/v4/index.d.cts@4.5.4'. ========
-/// ```
-#[must_use]
-pub fn parse(trace: &str) -> Resolution {
-    let mut modules = Vec::new();
-    let mut diagnostics = Vec::new();
-    for line in trace.lines() {
-        let Some(rest) = line.strip_prefix("======== Module name '") else {
-            if let Some(diagnostic) = parse_diagnostic(line) {
-                diagnostics.push(diagnostic);
+/// # Errors
+/// Loading the config, reading the working directory, or naming an import failed.
+pub fn resolve(
+    tsconfig: &Utf8Path,
+    count: Option<std::num::NonZeroU16>,
+) -> Result<Resolution, ResolutionError> {
+    let (options, spec) = request(tsconfig, count)?;
+    nts_frontend_tsrs::run(options, move |session| {
+        let resolved = session
+            .resolve(spec)
+            .map_err(|error| ResolutionError::Project(error.to_string()))?;
+        let project = resolved
+            .projects()
+            .next()
+            .ok_or(ResolutionError::MissingProject)?;
+        let mut modules = Vec::new();
+        for file in project.files() {
+            for import in file.resolved_imports() {
+                let specifier = text(import.specifier, file.path())?;
+                let Some(target) = import.resolved_path else {
+                    continue;
+                };
+                let version = import
+                    .package_version
+                    .map(|version| text(version, file.path()))
+                    .transpose()?;
+                modules.push(ResolvedModule {
+                    package: package_of(target, version),
+                    specifier,
+                    file: target.to_owned(),
+                });
             }
-            continue;
-        };
-        let Some((specifier, rest)) = rest.split_once('\'') else {
-            continue;
-        };
-        let Some(rest) = rest.strip_prefix(" was successfully resolved to '") else {
-            continue;
-        };
-        let Some((file, rest)) = rest.split_once('\'') else {
-            continue;
-        };
-        let version = rest
-            .strip_prefix(" with Package ID '")
-            .and_then(|tail| tail.split_once('\''))
-            .and_then(|(id, _)| id.rsplit_once('@'))
-            .map(|(_, version)| version.to_owned());
-
-        let file = Utf8PathBuf::from(file);
-        modules.push(ResolvedModule {
-            package: package_of(&file, version),
-            specifier: specifier.to_owned(),
-            file,
-        });
-    }
-    Resolution {
-        modules,
-        diagnostics,
-    }
+        }
+        Ok(Resolution {
+            modules,
+            diagnostics: diagnostics(resolved.diagnostics(), tsconfig),
+        })
+    })
 }
 
-/// `path(line,col): error TSxxxx: message`
-fn parse_diagnostic(line: &str) -> Option<Diagnostic> {
-    let (location, rest) = line.split_once("): error TS")?;
-    let (code, message) = rest.split_once(": ")?;
-    let file = location.rsplit_once('(')?.0;
-    Some(Diagnostic {
-        file: Utf8PathBuf::from(file),
-        code: format!("TS{code}"),
-        message: message.to_owned(),
+/// One full check for the standalone dependency report, after acquisition settles.
+///
+/// # Errors
+/// The working directory or native project could not be loaded.
+pub(crate) fn check(
+    tsconfig: &Utf8Path,
+    count: Option<std::num::NonZeroU16>,
+    memo: &Utf8Path,
+    write_memo: bool,
+) -> Result<(Vec<Diagnostic>, bool), ResolutionError> {
+    let (options, spec) = request(tsconfig, count)?;
+    nts_frontend_tsrs::run(options, move |session| {
+        // Acquisition has just resolved the current roots. Replay the full
+        // check's observations before reusing its facts, including negative
+        // lookups; another program and a diagnostics pool are unnecessary.
+        if let Some(reused) = crate::complaint_cache::read(memo, session, &spec) {
+            return Ok((reused, true));
+        }
+        if write_memo {
+            crate::complaint_cache::prepare(memo);
+        }
+        let identity = crate::complaint_cache::identity(session);
+        let checked = session
+            .open(spec.clone())
+            .map_err(|error| ResolutionError::Project(error.to_string()))?;
+        let project = checked
+            .projects()
+            .next()
+            .ok_or(ResolutionError::MissingProject)?;
+        let paths: Vec<_> = project
+            .files()
+            .filter(|file| !file.is_default_library())
+            .map(|file| file.path().to_owned())
+            .collect();
+        let finished = checked
+            .start_diagnostics(nts_frontend_tsrs::DiagnosticScope::Files(&paths))
+            .finish();
+        let inputs = finished.inputs();
+        let reported = diagnostics(finished.diagnostics(), tsconfig);
+        if write_memo {
+            crate::complaint_cache::write(memo, identity, &spec, inputs, &reported);
+        }
+        Ok((reported, false))
     })
+}
+
+fn request(
+    tsconfig: &Utf8Path,
+    count: Option<std::num::NonZeroU16>,
+) -> Result<
+    (
+        nts_frontend_tsrs::SessionOptions,
+        nts_frontend_tsrs::ProjectSpec,
+    ),
+    ResolutionError,
+> {
+    let directory = std::env::current_dir().map_err(ResolutionError::Directory)?;
+    let cwd =
+        Utf8PathBuf::from_path_buf(directory).map_err(|_| ResolutionError::WorkingDirectory)?;
+    let config = if tsconfig.is_absolute() {
+        tsconfig.to_owned()
+    } else {
+        cwd.join(tsconfig)
+    };
+    let mut options = nts_frontend_tsrs::SessionOptions::new(cwd);
+    options.checker_count = count;
+    Ok((options, nts_frontend_tsrs::ProjectSpec::new(config)))
+}
+
+fn text(
+    value: nts_frontend_tsrs::JsString<'_>,
+    file: &Utf8Path,
+) -> Result<String, ResolutionError> {
+    value.utf8().map(str::to_owned).ok_or_else(|| {
+        let escaped = format!("{:x?}", value.utf16());
+        ResolutionError::Specifier {
+            file: file.to_owned(),
+            specifier: escaped,
+        }
+    })
+}
+
+fn diagnostics(reported: Vec<nts_frontend_tsrs::Diagnostic>, config: &Utf8Path) -> Vec<Diagnostic> {
+    reported
+        .into_iter()
+        .filter(|diagnostic| diagnostic.category == nts_frontend_tsrs::DiagnosticCategory::Error)
+        .map(|diagnostic| Diagnostic {
+            file: diagnostic.path.unwrap_or_else(|| config.to_owned()),
+            code: format!("TS{}", diagnostic.code),
+            message: diagnostic.message,
+        })
+        .collect()
 }
 
 /// The package a resolved file belongs to, from its path.
@@ -192,92 +245,64 @@ fn package_of(file: &Utf8Path, version: Option<String>) -> Option<PackageRef> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolutionError {
-    #[error("could not run `{executable}`: {source}")]
-    Spawn {
-        executable: Utf8PathBuf,
-        #[source]
-        source: std::io::Error,
+    #[error("cannot read the working directory: {0}")]
+    Directory(std::io::Error),
+    #[error("the working directory is not valid UTF-8")]
+    WorkingDirectory,
+    #[error("cannot resolve the native project: {0}")]
+    Project(String),
+    #[error("the requested native project is missing")]
+    MissingProject,
+    #[error("an import specifier in {file} cannot name a filesystem path: {specifier}")]
+    Specifier {
+        file: Utf8PathBuf,
+        specifier: String,
     },
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::*;
 
-    const TRACE: &str = "\
-noise that is not a resolution
-======== Module name '@demo/lib' was successfully resolved to '/r/packages/lib/src/index.ts' with Package ID '@demo/lib/src/index.ts@1.0.0'. ========
-======== Module name 'mitt' was successfully resolved to '/r/app/node_modules/mitt/index.d.ts' with Package ID 'mitt/index.d.ts@3.0.1'. ========
-======== Module name 'zod/v4' was successfully resolved to '/r/app/node_modules/zod/v4/index.d.cts' with Package ID 'zod/v4/index.d.cts@4.5.4'. ========
-======== Module name '@scope/pkg' was successfully resolved to '/r/app/node_modules/@scope/pkg/dist/i.d.ts' with Package ID '@scope/pkg/dist/i.d.ts@2.0.0'. ========
-======== Module name './math.ts' was successfully resolved to '/r/packages/lib/src/math.ts'. ========
-======== Module name 'gone' was not resolved. ========
-";
-
-    /// The pass that resolves also checks, and its complaints are the only
-    /// evidence that acquired source can be built.
     #[test]
-    fn diagnostics_are_read_out_of_the_same_pass() {
-        let resolution = parse(
-            "/r/.nts/vendor/p@1.0.0/src/i.ts(25,50): error TS2591: Cannot find name 'process'.\n",
+    fn package_identity_comes_from_the_last_installed_path_segment() {
+        for (path, name, dir) in [
+            (
+                "/r/node_modules/zod/v4/index.d.cts",
+                "zod",
+                "/r/node_modules/zod",
+            ),
+            (
+                "/r/node_modules/@scope/pkg/dist/i.d.ts",
+                "@scope/pkg",
+                "/r/node_modules/@scope/pkg",
+            ),
+            (
+                "/r/node_modules/.pnpm/node_modules/@types/node/index.d.ts",
+                "@types/node",
+                "/r/node_modules/.pnpm/node_modules/@types/node",
+            ),
+        ] {
+            let package =
+                package_of(Utf8Path::new(path), Some("2.0".into())).expect("an installed package");
+            assert_eq!(package.name, name);
+            assert_eq!(package.dir, dir);
+            assert_eq!(package.version, "2.0");
+        }
+        assert!(
+            package_of(
+                Utf8Path::new("/r/packages/lib/src/index.ts"),
+                Some("1.0".into())
+            )
+            .is_none()
         );
-        assert_eq!(resolution.diagnostics.len(), 1);
-        let first = &resolution.diagnostics[0];
-        assert_eq!(first.code, "TS2591");
-        assert_eq!(first.file, "/r/.nts/vendor/p@1.0.0/src/i.ts");
-        assert_eq!(first.message, "Cannot find name 'process'.");
     }
 
     #[test]
-    fn a_subpath_specifier_keeps_its_own_identity() {
-        let resolution = parse(TRACE);
-        let zod = resolution
-            .modules
-            .iter()
-            .find(|module| module.specifier == "zod/v4")
-            .expect("the subpath specifier is traced");
-        let package = zod.package.as_ref().expect("it came from a package");
-        assert_eq!(package.name, "zod");
-        assert_eq!(package.version, "4.5.4");
-        assert_eq!(package.dir, "/r/app/node_modules/zod");
-        assert_eq!(zod.file, "/r/app/node_modules/zod/v4/index.d.cts");
-    }
-
-    /// A scoped name is two segments, and the Package ID cannot say so.
-    #[test]
-    fn a_scoped_package_keeps_both_segments() {
-        let resolution = parse(TRACE);
-        let scoped = resolution
-            .modules
-            .iter()
-            .find(|module| module.specifier == "@scope/pkg")
-            .expect("traced");
-        let package = scoped.package.as_ref().expect("from a package");
-        assert_eq!(package.name, "@scope/pkg");
-        assert_eq!(package.dir, "/r/app/node_modules/@scope/pkg");
-    }
-
-    /// A workspace sibling resolves outside `node_modules` and is not a package
-    /// to acquire, however the trace labels it.
-    #[test]
-    fn a_workspace_sibling_is_not_a_package() {
-        let resolution = parse(TRACE);
-        let lib = resolution
-            .modules
-            .iter()
-            .find(|module| module.specifier == "@demo/lib")
-            .expect("traced");
-        assert!(lib.package.is_none());
-    }
-
-    #[test]
-    fn relative_specifiers_and_failures_are_not_package_specifiers() {
-        let resolution = parse(TRACE);
-        let specifiers: Vec<&str> = resolution
-            .package_specifiers()
-            .iter()
-            .map(|module| module.specifier.as_str())
-            .collect();
-        assert_eq!(specifiers, vec!["@scope/pkg", "mitt", "zod/v4"]);
+    fn absent_package_id_does_not_invent_a_checker_version() {
+        let package = package_of(Utf8Path::new("/r/node_modules/pkg/index.js"), None)
+            .expect("installed path");
+        assert_eq!(package.version, "");
     }
 }

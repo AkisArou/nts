@@ -8,24 +8,24 @@
 //! implementation on it. What is asserted here is that each wrapper holds the
 //! test its case needs.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, BinOp, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/method-value-this/tsconfig.json")
         .canonicalize_utf8()
         .expect("the method-value-this program is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// The body taking the call's `this` of the method value that calls `method`.
@@ -58,10 +58,7 @@ fn stops_by_name(func: &hir::Func) -> bool {
 
 #[test]
 fn a_method_value_proves_the_this_its_call_passes() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP method_value_this: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     let program = &lowered.program;
 
     // Not overridden: the call's `this` is proven a `Plain` and passed.

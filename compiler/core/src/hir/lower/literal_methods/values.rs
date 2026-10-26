@@ -90,7 +90,7 @@ fn legacy_faces(
             continue;
         };
         let access = NodeId(at);
-        let Some((receiver, member)) = probe.member_access(access) else {
+        let Some((receiver, member)) = probe.member_access_key(access) else {
             continue;
         };
         // Assigning the field does not extract the old closure's identity.
@@ -189,7 +189,7 @@ fn uses_only_values(
             let mut current = value;
             if current == Value::Receiver
                 && let Some(access) = walk::parent(probe.snapshot, expression)
-                && let Some((receiver, member)) = probe.member_access(access)
+                && let Some((receiver, member)) = probe.member_access_key(access)
                 && receiver == expression
             {
                 let Some(ty) = probe.snapshot.node_types.get(reference) else {

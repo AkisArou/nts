@@ -1673,7 +1673,7 @@ mod tests {
             name: "Cell".to_owned(),
             interfaces: Vec::new(),
             fields: vec![crate::hir::Field {
-                name: "value".to_owned(),
+                name: "value".to_owned().into(),
                 ty: string(),
                 readonly: false,
                 declared_by: None,
@@ -1749,7 +1749,7 @@ mod tests {
             name: "Cell".to_owned(),
             interfaces: Vec::new(),
             fields: vec![crate::hir::Field {
-                name: "value".to_owned(),
+                name: "value".to_owned().into(),
                 ty: string(),
                 readonly: false,
                 declared_by: None,

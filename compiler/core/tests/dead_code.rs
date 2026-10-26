@@ -16,23 +16,22 @@
 //! this test fails and the rest of `nts-core` loses two tests that notice
 //! *incidentally*, neither of which is about dead code.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::SemanticSource;
 
-fn prepared(name: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     // **Exactly what `nts hir --prepared` builds**, options and all, because
@@ -48,7 +47,7 @@ fn prepared(name: &str) -> Option<hir::Program> {
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };
-    Some(hir::prepare_unverified(&snapshot, &options).program)
+    hir::prepare_unverified(&snapshot, &options).program
 }
 
 /// Every float constant the prepared program still **emits**.
@@ -80,9 +79,7 @@ fn constants(program: &hir::Program) -> Vec<f64> {
 /// pipeline changed, and a test nobody can read the failure of gets deleted.
 #[test]
 fn a_value_nothing_reads_does_not_reach_the_backend() {
-    let Some(program) = prepared("dead-code-is-removed") else {
-        return;
-    };
+    let program = prepared("dead-code-is-removed");
     let held = constants(&program);
     assert!(
         !held
@@ -102,9 +99,7 @@ fn a_value_nothing_reads_does_not_reach_the_backend() {
 /// assertion usually stops meaning anything.
 #[test]
 fn the_live_half_of_the_fixture_survives() {
-    let Some(program) = prepared("dead-code-is-removed") else {
-        return;
-    };
+    let program = prepared("dead-code-is-removed");
     let held = constants(&program);
     assert!(
         held.iter().any(|value| (*value - 3.0).abs() < f64::EPSILON),

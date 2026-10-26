@@ -4,16 +4,27 @@
 //! what a TypeScript checker is lives here, and nothing downstream of
 //! [`nts_semantic_schema`] does.
 //!
-//! The semantic authority is `tsgo` — the Go implementation of TypeScript, pinned
-//! by [`tsgo::PINNED_TSGO`]. We speak its API protocol over a pipe rather than
-//! linking it, so the checker's memory, GC, and crashes stay in another process.
+//! The native TypeScript checker is linked in process. The builder owns every
+//! snapshot fact before returning across its scoped session boundary.
 
-pub mod cache;
+mod annotations;
+mod bindings;
+mod capture;
+mod early_errors;
+mod frontend;
+pub mod generated;
+mod inclusion;
+mod link;
+mod native_ast;
+pub mod native_syntax;
+pub mod provided;
 pub mod source;
-pub mod tsgo;
+pub mod transform;
+mod tree;
 
-pub use source::{FrontendStats, SemanticSource};
-pub use tsgo::TsgoApi;
+pub use frontend::Frontend;
+pub use source::FrontendStats;
+pub use tree::SyntaxTree;
 
 include!(concat!(env!("OUT_DIR"), "/frontend_stamp.rs"));
 
@@ -32,7 +43,7 @@ include!(concat!(env!("OUT_DIR"), "/frontend_stamp.rs"));
 ///
 /// The obvious version formats `nts-workspace:///{file}` and hands that over,
 /// and it matched nothing. `SourceFile::uri` is `workspace_uri(cwd, path)`,
-/// which strips the tsconfig's directory off an absolute path from tsgo -- and
+/// which strips the tsconfig's directory off an absolute checker path -- and
 /// `cwd` is `tsconfig.parent()`, so it is *relative* whenever the tsconfig
 /// argument was. `strip_prefix` then fails, `unwrap_or(path)` keeps the whole
 /// thing, and every URI in the snapshot reads
@@ -44,7 +55,7 @@ include!(concat!(env!("OUT_DIR"), "/frontend_stamp.rs"));
 /// equality and need to know nothing about how it was spelled.
 ///
 /// Canonical paths for the comparison itself, because the two sides genuinely
-/// differ: `files` is relative to the tsconfig and tsgo's paths are absolute,
+/// differ: `files` is relative to the tsconfig and checker paths are absolute,
 /// and `../..` appears in both. A file that cannot be canonicalized -- named
 /// but absent -- matches nothing, which is the same outcome as not naming it.
 ///

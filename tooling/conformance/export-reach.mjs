@@ -88,7 +88,7 @@ for (const module_ of modules) {
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
     timeout: 3_600_000,
-    env: { NTS_TSGO: join(ROOT, "target/tsgo"), ...process.env },
+    env: { NTS_CHECKERS: "1", ...process.env },
   });
   const lines = `${run.stdout ?? ""}${run.stderr ?? ""}`.split("\n");
 

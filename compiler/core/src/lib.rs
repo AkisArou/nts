@@ -31,3 +31,8 @@ pub use nts_semantic_schema::reachability;
 
 pub use hir::{Func, HirType, OpKind, Program};
 pub use nts_semantic_schema::reachability::Reachability;
+
+/// Stack for a thread that runs a whole compilation, shared by the CLI and
+/// corpus workers. Rust's default worker stack is smaller than the CLI's
+/// original 8 MiB main stack and overflows on deep binary chains.
+pub const COMPILER_STACK_BYTES: usize = 8 * 1024 * 1024;

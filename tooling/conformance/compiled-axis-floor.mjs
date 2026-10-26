@@ -99,7 +99,7 @@ function runAxis() {
   const nts = join(scratch, "nts");
   copyFileSync(source, nts);
   chmodSync(nts, 0o755);
-  for (const d of ["addons", "snapshots", "tmp"]) mkdirSync(join(scratch, d));
+  for (const d of ["addons", "tmp"]) mkdirSync(join(scratch, d));
   console.log(`  running compiled-axis.sh against ${source} (pinned); about 16 minutes`);
   const run = spawnSync("bash", [join(HERE, "compiled-axis.sh")], {
     cwd: ROOT,
@@ -108,9 +108,8 @@ function runAxis() {
     env: {
       ...process.env,
       NTS_BIN: nts,
-      NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"),
+      NTS_CHECKERS: "1",
       NTS_ADDON_OUT: join(scratch, "addons"),
-      NTS_SNAPSHOT_CACHE: join(scratch, "snapshots"),
       TMPDIR: join(scratch, "tmp"),
     },
   });

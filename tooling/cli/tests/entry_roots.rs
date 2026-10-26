@@ -36,10 +36,6 @@ export function diagnostic(n: number): number { return onlyDiagnostic(n); }
 
 const NAMES: [&str; 4] = ["published", "diagnostic", "onlyPublished", "onlyDiagnostic"];
 
-fn frontend_available() -> bool {
-    std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some()
-}
-
 /// A project on disk, under Cargo's own temp directory for this test target.
 ///
 /// **Named per test, because the first version shared one directory.** Cargo
@@ -102,10 +98,6 @@ fn emit(command: &str, project: &Path, extra: &[&str]) -> String {
 
 #[test]
 fn every_emitter_honours_entry() {
-    if !frontend_available() {
-        eprintln!("skipping: no tsgo frontend; set NTS_TSGO to run this");
-        return;
-    }
     let project = fixture("entry-roots-honours");
     let all: BTreeSet<String> = NAMES.iter().map(|n| (*n).to_owned()).collect();
     let narrowed: BTreeSet<String> = ["published", "onlyPublished"]
@@ -134,10 +126,6 @@ fn every_emitter_honours_entry() {
 /// its own copy of the roots decision.
 #[test]
 fn the_emitters_agree_about_what_survives() {
-    if !frontend_available() {
-        eprintln!("skipping: no tsgo frontend; set NTS_TSGO to run this");
-        return;
-    }
     let project = fixture("entry-roots-agree");
     for extra in [vec![], vec!["--entry", "published"], vec!["--main"]] {
         let c = defined(&emit("emit-c", &project, &extra));

@@ -359,6 +359,11 @@ impl<'p, 's> Graph<'p, 's> {
                 let element = type_at(at).and_then(|ty| {
                     match &probe.snapshot.types.get(ty.0 as usize)?.kind {
                         TypeKind::Array(element) => Some(*element),
+                        #[expect(
+                            clippy::match_same_arms,
+                            reason = "keep audited semantic type variants explicit"
+                        )]
+                        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
                         _ => None,
                     }
                 });
@@ -538,7 +543,7 @@ impl<'p, 's> Graph<'p, 's> {
                     continue;
                 }
                 let children = probe.children(field);
-                let Some(name) = children.first().and_then(|name| probe.literal_name(*name)) else {
+                let Some(name) = children.first().and_then(|name| probe.property_key(*name)) else {
                     continue;
                 };
                 let Some(value) = children.last() else {
@@ -557,7 +562,7 @@ impl<'p, 's> Graph<'p, 's> {
         if let Some(pattern) = probe.node(at).parent {
             let owner = type_at(pattern);
             if let Some([_, property, name, initializer]) = probe.child_slots::<4>(at) {
-                let member = property.or(name).and_then(|name| probe.literal_name(name));
+                let member = property.or(name).and_then(|name| probe.property_key(name));
                 let stored = owner.and_then(|owner| {
                     member
                         .as_ref()
@@ -578,13 +583,18 @@ impl<'p, 's> Graph<'p, 's> {
     fn array_element(&self, ty: TypeId) -> Option<TypeId> {
         match &self.probe.snapshot.types.get(ty.0 as usize)?.kind {
             TypeKind::Array(element) => Some(*element),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
             _ => None,
         }
     }
 
     fn stored_type(&self, at: NodeId) -> Option<TypeId> {
         let probe = self.probe;
-        if let Some((receiver, member)) = probe.member_access(at) {
+        if let Some((receiver, member)) = probe.member_access_key(at) {
             let receiver = probe.snapshot.node_types.get(&receiver)?;
             return interfaces::property(probe.snapshot, *receiver, &member)
                 .map(|property| property.ty);

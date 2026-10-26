@@ -1,13 +1,12 @@
-//! JVM contracts follow declarations through a real tsgo snapshot, including
+//! JVM contracts follow declarations through a native snapshot, including
 //! declaration files that TypeScript itself skips checking.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 
-fn snapshot(name: &str, declarations: &str) -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot(name: &str, declarations: &str) -> SemanticSnapshot {
     let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
         .join(format!("nts-jvm-attributes-{}-{name}", std::process::id()));
@@ -18,14 +17,16 @@ fn snapshot(name: &str, declarations: &str) -> Option<SemanticSnapshot> {
       "compilerOptions": { "strict": true, "skipLibCheck": true, "target": "es2022", "noEmit": true },
       "files": ["main.ts", "api.d.ts"]
     }"#).unwrap();
-    let result = TsgoApi::for_compilation(tsgo).snapshot(&root.join("tsconfig.json"));
+    let result = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&root.join("tsconfig.json"));
     std::fs::remove_dir_all(&root).unwrap();
-    Some(result.expect("the frontend reports annotation errors in the snapshot"))
+    result.expect("the frontend reports annotation errors in the snapshot")
 }
 
 #[test]
 fn declaration_contracts_keep_unknown_empty_and_known_retention() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "retention",
         r#"
 declare module "java:p" {
@@ -47,9 +48,7 @@ declare module "java:p" {
   }
 }
 "#,
-    ) else {
-        return;
-    };
+    );
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let contracts: Vec<_> = snapshot
         .nodes
@@ -69,7 +68,7 @@ declare module "java:p" {
 
 #[test]
 fn malformed_binding_docs_fail_even_when_skip_lib_check_is_enabled() {
-    let Some(snapshot) = snapshot(
+    let snapshot = snapshot(
         "errors",
         r"
 /** @ntsJvm sideways p/C.first:()V */
@@ -86,9 +85,7 @@ declare function second(): void;
  */
 declare function third(): void;
 ",
-    ) else {
-        return;
-    };
+    );
     assert!(snapshot.has_errors());
     let errors: Vec<_> = snapshot
         .diagnostics

@@ -1,6 +1,5 @@
 //! Where a member's name comes from, and where the line is drawn.
 //!
-//! Runs the frontend, so it skips only when `tsgo` is not built.
 //!
 //! A name is resolved in two places that have to agree: the function a member
 //! is *emitted* as, and the table a call site *finds* it through. An earlier
@@ -13,20 +12,20 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, OpKind, lower::Lowered};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lower_at(relative: &str) -> Option<Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lower_at(relative: &str) -> Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("{relative} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn named<'a>(lowered: &'a Lowered, name: &str) -> Option<&'a hir::Func> {
@@ -57,16 +56,14 @@ fn messages(lowered: &Lowered) -> Vec<&str> {
 /// `plain`, `"quoted"` and `["bracketed"]` are three spellings of one thing.
 #[test]
 fn every_literal_spelling_names_the_same_kind_of_member() {
-    let Some(lowered) = lower_at("tests/programs/computed-names") else {
-        return;
-    };
+    let lowered = lower_at("tests/programs/computed-names");
     for member in [
         "plain",
         "quoted",
         "bracketed",
         "get getter",
         "set size",
-        "#twice",
+        "@private6:#twice",
         "after",
     ] {
         assert!(
@@ -96,9 +93,7 @@ fn every_literal_spelling_names_the_same_kind_of_member() {
 /// identifier's text would put both in one slot and one would silently win.
 #[test]
 fn a_symbol_key_and_a_string_of_the_same_text_are_two_members() {
-    let Some(lowered) = lower_at("tests/programs/computed-names") else {
-        return;
-    };
+    let lowered = lower_at("tests/programs/computed-names");
     // The string spelling keeps the bare name.
     assert!(
         named(&lowered, "Holder#kTag").is_some(),
@@ -110,13 +105,13 @@ fn a_symbol_key_and_a_string_of_the_same_text_are_two_members() {
             .map(|f| f.name.as_str())
             .collect::<Vec<_>>(),
     );
-    // The symbol spelling gets the checker's own, and there is exactly one.
+    // The typed symbol key has its own emitted namespace, exactly once.
     let keyed: Vec<&str> = lowered
         .program
         .funcs
         .iter()
         .map(|func| func.name.as_str())
-        .filter(|name| name.starts_with("Holder#__@kTag@"))
+        .filter(|name| name.starts_with("Holder#@symbol"))
         .collect();
     assert_eq!(keyed.len(), 1, "one symbol-keyed member, got {keyed:?}");
     assert_ne!(keyed[0], "Holder#kTag", "the two spellings share a slot");
@@ -131,9 +126,7 @@ fn a_symbol_key_and_a_string_of_the_same_text_are_two_members() {
 /// caller. The caller's answer was wrong by a constant and nothing crashed.
 #[test]
 fn a_setter_returns_nothing() {
-    let Some(lowered) = lower_at("tests/programs/computed-names") else {
-        return;
-    };
+    let lowered = lower_at("tests/programs/computed-names");
     let setter = named(&lowered, "Holder#set size").expect("the setter lowers");
     assert_eq!(setter.return_type, HirType::Void);
 }
@@ -141,9 +134,7 @@ fn a_setter_returns_nothing() {
 /// `o.x` and `o["x"]` reach one member, and `o[0]()` is a call and not an index.
 #[test]
 fn brackets_at_the_use_site_reach_the_same_member() {
-    let Some(lowered) = lower_at("../../tests/programs/computed-members") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/computed-members");
     assert!(
         lowered.diagnostics.is_empty(),
         "tests/programs/computed-members should lower clean: {:?}",
@@ -166,11 +157,9 @@ fn brackets_at_the_use_site_reach_the_same_member() {
 /// conservation law rather than any test.
 #[test]
 fn a_private_name_does_not_swallow_the_members_after_it() {
-    let Some(lowered) = lower_at("tests/programs/computed-names") else {
-        return;
-    };
+    let lowered = lower_at("tests/programs/computed-names");
     assert!(
-        named(&lowered, "Holder.#check").is_some(),
+        named(&lowered, "Holder.@private6:#check").is_some(),
         "a private static method has a name; lowered {:?}",
         lowered
             .program
@@ -181,7 +170,7 @@ fn a_private_name_does_not_swallow_the_members_after_it() {
     );
     let after = named(&lowered, "Holder#after").expect("the member after it lowers too");
     assert!(
-        calls(after).contains(&"Holder.#check"),
+        calls(after).contains(&"Holder.@private6:#check"),
         "and the call reaches it rather than a name taken from the class, found {:?}",
         calls(after),
     );
@@ -204,9 +193,7 @@ fn a_private_name_does_not_swallow_the_members_after_it() {
 /// second one refuses.
 #[test]
 fn an_overridden_accessor_is_dispatched() {
-    let Some(lowered) = lower_at("../../tests/programs/accessors") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/accessors");
     let virtuals: Vec<String> = lowered
         .program
         .funcs

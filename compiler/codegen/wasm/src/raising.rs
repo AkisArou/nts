@@ -279,7 +279,7 @@ pub(crate) fn leave(b: &mut Body<'_, '_>) -> Result<(), Failure> {
     b.global_get(flag);
     b.instruction(&I::If(BlockType::Empty));
     b.call(take);
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     // A raise left pending has no message read for it.
     b.instruction(&I::RefNull(HeapType::EXTERN));
     b.call(uncaught);
@@ -378,7 +378,7 @@ pub(crate) fn call(
                 return Err(Failure::Invariant("nts_uncaught arity".into()));
             };
             b.load(payload)?;
-            strings::constant(b, &b.func.name.clone());
+            strings::constant(b, b.func.name.clone());
             b.load(detail)?;
             let f = callee(b.m, Helper::Uncaught)?;
             b.call(f);

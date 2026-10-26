@@ -6,26 +6,26 @@
 //! `begin_loop` has made the carried names block parameters — so the body sees
 //! this iteration's value and the same one the `ArrayGet` indexed with.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -51,9 +51,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
 /// starting value rather than this iteration's.
 #[test]
 fn the_index_the_body_reads_is_not_a_constant() {
-    let Some(lowered) = lowered("callbacks") else {
-        return;
-    };
+    let lowered = lowered("callbacks");
     let function = func(&lowered, "forEachWithIndex");
 
     let loaded: Vec<u32> = function
@@ -119,9 +117,7 @@ fn the_index_the_body_reads_is_not_a_constant() {
 /// the index must allocate exactly what the same callback without it does.
 #[test]
 fn naming_the_index_allocates_nothing_extra() {
-    let Some(lowered) = lowered("callbacks") else {
-        return;
-    };
+    let lowered = lowered("callbacks");
     let allocations = |name: &str| {
         func(&lowered, name)
             .values
@@ -163,9 +159,7 @@ fn naming_the_index_allocates_nothing_extra() {
 /// getting it wrong swaps the accumulator for the element rather than failing.
 #[test]
 fn reduce_still_binds_its_accumulator_first() {
-    let Some(lowered) = lowered("callbacks") else {
-        return;
-    };
+    let lowered = lowered("callbacks");
     assert_eq!(
         lowered
             .diagnostics
@@ -191,9 +185,7 @@ fn reduce_still_binds_its_accumulator_first() {
 /// The array parameter is still refused, and the message says how many.
 #[test]
 fn the_array_parameter_is_refused_by_count() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     let reasons: Vec<&str> = lowered
         .diagnostics
         .iter()

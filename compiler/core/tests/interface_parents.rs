@@ -4,23 +4,21 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, Program};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::TypeId;
 
-fn prepared() -> Option<Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/interface-parents/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
-    Some(
-        hir::prepare_with(&snapshot, &hir::Options::default())
-            .expect("valid prepared HIR")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &hir::Options::default())
+        .expect("valid prepared HIR")
+        .program
 }
 
 fn returns(program: &Program, name: &str) -> TypeId {
@@ -41,7 +39,7 @@ fn parents(program: &Program, ty: TypeId) -> &[TypeId] {
 
 #[test]
 fn roots_and_both_arms_of_a_diamond_are_explicit() {
-    let Some(program) = prepared() else { return };
+    let program = prepared();
     let root = returns(&program, "root");
     let left = returns(&program, "left");
     let right = returns(&program, "right");
@@ -56,7 +54,7 @@ fn roots_and_both_arms_of_a_diamond_are_explicit() {
 
 #[test]
 fn generic_parents_keep_their_instantiation() {
-    let Some(program) = prepared() else { return };
+    let program = prepared();
     let numeric = returns(&program, "numericParent");
     let textual = returns(&program, "textualParent");
     assert_ne!(numeric, textual);
@@ -72,7 +70,7 @@ fn generic_parents_keep_their_instantiation() {
 
 #[test]
 fn shared_layouts_and_concrete_parents_do_not_erase_declared_edges() {
-    let Some(program) = prepared() else { return };
+    let program = prepared();
     let root = returns(&program, "root");
     let same = returns(&program, "same");
     assert_ne!(root, same);

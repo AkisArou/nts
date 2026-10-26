@@ -142,7 +142,7 @@ if [ -n "$emitted" ] && [ -z "${NTS_CONFORMANCE_RC:-}" ] \
   echo "reused the emission in $emitted/$module"
 fi
 if [ -z "$reused" ]; then
-  NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
+  NTS_CHECKERS=1 "$compiler" \
     emit-c "$src/tsconfig.json" --out "$work" --napi "${rc_emit[@]}"
 fi
 

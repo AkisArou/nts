@@ -1,4 +1,4 @@
-// expect: NTS1001 a member of `Nest`, a class this compiler has no type for
+// expect: NTS1001 a property `value` of unrepresentable type (`Nest`) is not supported by this lowering yet
 
 // A class whose method returns a deeper nesting of itself:
 //
@@ -25,6 +25,13 @@
 // being bare type parameters, which is a cheaper question and the right one
 // for that pass. The bound this fixture wants is a different one, over
 // concrete arguments, and nothing asks it yet.
+
+// Expectation provenance: the sealed 38c0aec9d9d11354 capture (2026-10-25)
+// still stops at the unchanged native type budget of 4096 and refuses the
+// program. Its cutoff is reported while laying out `value`, not while looking
+// up a class member. This renews the exact diagnostic only: it does not add the
+// concrete nesting bound described below or treat partial capture as success.
+// Historical expectation: NTS1001 a member of `Nest`, a class this compiler has no type for
 
 class Nest<T> {
   value: T;

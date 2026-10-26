@@ -88,7 +88,10 @@ impl Plan {
             if probe.hierarchy.faces.contains(&ty) {
                 continue;
             }
-            let Some(owner) = probe.hierarchy.declaring(ty, "toString") else {
+            let Some(owner) = probe
+                .hierarchy
+                .declaring(ty, &super::super::MemberKey::named("toString"))
+            else {
                 continue;
             };
             plan.by_class.insert(ty, None);
@@ -96,7 +99,10 @@ impl Plan {
                 continue;
             };
             let name = format!("{name}#toString");
-            let Some(declaration) = probe.member_declaration(owner, "toString") else {
+            let Some(declaration) = probe.member_declaration(
+                owner,
+                &nts_semantic_schema::PropertyKey::Name("toString".to_owned()),
+            ) else {
                 continue;
             };
             let declaration = probe.implementation_of(declaration);
@@ -263,7 +269,7 @@ impl Plan {
                     }
                     | TypeKind::Conditional { .. }
                     | TypeKind::IndexedAccess { .. }
-                    | TypeKind::Structured { .. }
+                    | TypeKind::Structured
                     | TypeKind::Unsupported { .. },
                 )
                 | None => found.extend(self.all.iter().copied()),
@@ -279,6 +285,8 @@ impl Plan {
                     | TypeKind::BigInt
                     | TypeKind::String
                     | TypeKind::Symbol
+                    | TypeKind::UniqueSymbol
+                    | TypeKind::NonPrimitive
                     | TypeKind::Literal(_)
                     | TypeKind::Tuple(_)
                     | TypeKind::Function(_)

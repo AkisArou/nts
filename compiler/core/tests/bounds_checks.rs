@@ -5,26 +5,26 @@
 //! happened to be there — a wrong answer, silently. Removing one is therefore a
 //! claim, and this is where the claim is tested.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Func, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(fixture: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("prepared HIR should verify"))
+    hir::prepare(&snapshot).expect("prepared HIR should verify")
 }
 
 /// Whether every element access in a function is unchecked.
@@ -60,9 +60,7 @@ fn func<'a>(prepared: &'a hir::Prepared, name: &str) -> &'a Func {
 
 #[test]
 fn a_loop_over_a_known_length_needs_no_checks() {
-    let Some(prepared) = prepared("arrays") else {
-        return;
-    };
+    let prepared = prepared("arrays");
     // `const xs = [1, 2, 3, 4, 5]` then `for (i = 0; i < xs.length; i++)`. The
     // array was allocated here, so its length is a constant, the guard bounds
     // the counter to a constant range, and the interval settles it. The literal
@@ -76,9 +74,7 @@ fn a_loop_over_a_known_length_needs_no_checks() {
 
 #[test]
 fn a_loop_over_an_unknown_length_needs_no_checks_either() {
-    let Some(prepared) = prepared("arrays") else {
-        return;
-    };
+    let prepared = prepared("arrays");
     // `sum(xs: number[])` — the array arrives from outside, so no interval
     // bounds its length and nothing about `i`'s *range* proves anything. What
     // proves it is that the loop is guarded by that same array's length, which
@@ -92,9 +88,7 @@ fn a_loop_over_an_unknown_length_needs_no_checks_either() {
 
 #[test]
 fn an_arbitrary_index_keeps_its_check() {
-    let Some(prepared) = prepared("arrays") else {
-        return;
-    };
+    let prepared = prepared("arrays");
     // `at(xs, i)` and `readAt(i)` index with a number nothing constrains. There
     // is no proof to be had, and inventing one would turn a stopped program
     // into a wrong answer.
@@ -108,9 +102,7 @@ fn an_arbitrary_index_keeps_its_check() {
 
 #[test]
 fn the_report_counts_what_was_removed_and_what_remains() {
-    let Some(prepared) = prepared("arrays") else {
-        return;
-    };
+    let prepared = prepared("arrays");
     // Eight checks remain across the fixture, and each is a place there is no
     // proof to be had:
     //

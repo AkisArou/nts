@@ -116,7 +116,7 @@ echo "gate: $sha in $tree"
 [ -n "${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
 cd "$tree"
 CARGO_TARGET_DIR="$target" cargo build --release -q
-NTS_TSGO="$tree/target/tsgo" \
+NTS_CHECKERS=1 \
 NTS_BIN="$target/release/nts" \
 NTS_SUITE_BIN="$target/release/nts-suite" \
 CARGO_TARGET_DIR="$target" \

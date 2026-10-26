@@ -175,7 +175,7 @@ fn inner(
     } else {
         b.load(args[1])?;
     }
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     let target = callee(b.m, helper, shape)?;
     b.call(target);
     let actual = if helper == Helper::At {

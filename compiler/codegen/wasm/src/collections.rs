@@ -406,7 +406,7 @@ fn record_membership(
         b.load(receiver)?;
         b.instruction(&I::RefCastNonNull(HeapType::Concrete(c.wrapper)));
         key_operand(b, &c, key)?;
-        strings::constant(b, &b.func.name.clone());
+        strings::constant(b, b.func.name.clone());
         let lookup = callee(b.m, &c, Helper::Has)?;
         b.call(lookup);
         b.instruction(&I::Br(1));
@@ -455,7 +455,7 @@ fn entry(
     if op == Op::Set {
         value_operand(b, c, args[2])?;
     }
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.call(target);
     // `set` and `add` answer the collection.
     if matches!(op, Op::Set | Op::Add) && b.types().slot(&b.ty(result).clone())?.is_some() {
@@ -496,7 +496,7 @@ fn shared(
     if op == Op::EntrySet {
         value_operand(b, c, args[3])?;
     }
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.call(target);
     // `set` answers the collection.
     if op == Op::EntrySet && b.types().slot(&b.ty(result).clone())?.is_some() {

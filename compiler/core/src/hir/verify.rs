@@ -2544,7 +2544,7 @@ mod tests {
             name: "Holder".to_owned(),
             interfaces: Vec::new(),
             fields: vec![Field {
-                name: "count".to_owned(),
+                name: "count".to_owned().into(),
                 ty: HirType::Int {
                     bits: 32,
                     signed: true,
@@ -2636,7 +2636,7 @@ mod tests {
             name: "Holder".to_owned(),
             interfaces: Vec::new(),
             fields: vec![Field {
-                name: "count".to_owned(),
+                name: "count".to_owned().into(),
                 ty: HirType::Int {
                     bits: 32,
                     signed: true,
@@ -2774,7 +2774,7 @@ mod tests {
         use nts_semantic_schema::TypeId;
 
         let field = |name: &str, ty: HirType| Field {
-            name: name.to_owned(),
+            name: name.to_owned().into(),
             ty,
             readonly: false,
             declared_by: None,
@@ -2898,7 +2898,7 @@ mod tests {
         use nts_semantic_schema::TypeId;
 
         let field = |name: &str| Field {
-            name: name.to_owned(),
+            name: name.to_owned().into(),
             ty: HirType::Float { bits: 64 },
             readonly: false,
             declared_by: None,

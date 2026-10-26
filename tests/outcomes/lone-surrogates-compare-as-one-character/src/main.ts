@@ -1,3 +1,8 @@
+// FIXED by the native lossless-constant path. Kept beside the old measured
+// record until the landing is re-recorded on main. The executable control is
+// tests/programs/a-string-literal-keeps-a-lone-code-unit: written constants
+// against fromCharCode, including tagged cooked and raw spelling.
+//
 // Lone surrogates, at run time (`pick` hides the literals from the folder):
 // distinct lone surrogates compare equal, `.length` is not 1, `charCodeAt` is
 // not the unit. No diagnostic. Found by test262's S11.8.1_A4.12_T1 and

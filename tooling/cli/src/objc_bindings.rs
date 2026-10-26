@@ -20,7 +20,7 @@ use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::generated::{Complaint, Generated};
+use nts_frontend_ts::generated::{Complaint, Generated};
 
 use crate::bind_objc;
 use crate::objc_imports::Imports;
@@ -1144,7 +1144,7 @@ mod tests {
     /// bindings of the old header, and the generator would never be asked.
     #[test]
     fn a_changed_native_source_changes_the_identity() {
-        use nts_frontend_ts::tsgo::generated::Generated as _;
+        use nts_frontend_ts::generated::Generated as _;
         let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
             .unwrap()
             .join(format!("nts-objc-identity-{}", std::process::id()));

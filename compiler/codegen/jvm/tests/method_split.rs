@@ -19,19 +19,21 @@
 
 use camino::Utf8Path;
 use nts_core::hir::Program;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 use std::time::Instant;
 
 mod common;
 
 fn prepared() -> Program {
-    let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/method-split/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     common::prepare(&snapshot).expect("valid HIR").program
 }
 

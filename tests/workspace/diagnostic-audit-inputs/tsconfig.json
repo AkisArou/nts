@@ -1,0 +1,4 @@
+{
+  "compilerOptions": {"target": "ESNext", "allowJs": true, "checkJs": true, "types": [], "noImplicitAny": false},
+  "files": ["harness.ts", "include.js", "main.js"]
+}

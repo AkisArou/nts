@@ -2,16 +2,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn argument_semantics_retain_every_subject() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-template-object-keeps-its-identity/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     let prepared = hir::prepare(&snapshot).expect("valid HIR");
@@ -58,12 +56,10 @@ fn argument_semantics_retain_every_subject() {
 
 #[test]
 fn invalid_cooked_entries_and_writable_casts_remain_named_boundaries() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/tagged-template-boundaries/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     let prepared = hir::prepare(&snapshot).expect("refused subjects leave valid HIR");

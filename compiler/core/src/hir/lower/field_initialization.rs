@@ -61,7 +61,7 @@ impl Ready {
             {
                 continue;
             }
-            let Some(name) = probe.member_name(field) else {
+            let Some(name) = probe.member_key(field) else {
                 continue;
             };
             // A property declaration has modifiers, name, ?/!, annotation, initializer.
@@ -121,7 +121,10 @@ fn parameter_property(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
     .any(|modifier| modifiers.contains(*modifier))
 }
 
-fn unconditional_write(probe: &FuncBuilder<'_>, statement: NodeId) -> Option<String> {
+fn unconditional_write(
+    probe: &FuncBuilder<'_>,
+    statement: NodeId,
+) -> Option<nts_semantic_schema::PropertyKey> {
     if probe.kind_of(statement) != Some(syntax::EXPRESSION_STATEMENT) {
         return None;
     }
@@ -136,7 +139,7 @@ fn unconditional_write(probe: &FuncBuilder<'_>, statement: NodeId) -> Option<Str
     if probe.kind_of(*operator) != Some(syntax::EQUALS_TOKEN) {
         return None;
     }
-    let (receiver, name) = probe.member_access(*left)?;
+    let (receiver, name) = probe.member_access_key(*left)?;
     (probe.kind_of(receiver) == Some(syntax::THIS_KEYWORD)).then_some(name)
 }
 
@@ -244,7 +247,7 @@ fn stays(probe: &FuncBuilder<'_>, receiver: NodeId) -> bool {
     let Some(access) = probe.node(receiver).parent else {
         return false;
     };
-    match probe.member_access(access) {
+    match probe.member_access_key(access) {
         Some((object, name)) if object == receiver => {
             own_field(probe, receiver, &name) && !called(probe, access)
         }
@@ -255,7 +258,11 @@ fn stays(probe: &FuncBuilder<'_>, receiver: NodeId) -> bool {
 /// Asked of the class behind the receiver: the checker types `this` as the
 /// polymorphic `this` type, a parameter constrained by the class, which has
 /// no properties of its own to answer with.
-fn own_field(probe: &FuncBuilder<'_>, receiver: NodeId, name: &str) -> bool {
+fn own_field(
+    probe: &FuncBuilder<'_>,
+    receiver: NodeId,
+    name: &nts_semantic_schema::PropertyKey,
+) -> bool {
     probe
         .snapshot
         .node_types
@@ -290,7 +297,7 @@ fn stored_whole(probe: &FuncBuilder<'_>, value: NodeId) -> bool {
     };
     right == value
         && probe.kind_of(operator) == Some(syntax::EQUALS_TOKEN)
-        && probe.member_access(left).is_some_and(|(object, name)| {
+        && probe.member_access_key(left).is_some_and(|(object, name)| {
             probe.kind_of(object) == Some(syntax::THIS_KEYWORD) && own_field(probe, object, &name)
         })
 }
@@ -306,17 +313,14 @@ fn constructs_the_base(probe: &FuncBuilder<'_>, keyword: NodeId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
 
     #[test]
     fn only_a_write_before_publication_licenses_the_field() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            eprintln!("SKIP field initialization: tsgo is not built");
-            return;
-        };
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/accessor-initialization/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
         let snapshot = super::super::LoweringSnapshot::new(&snapshot);
@@ -344,6 +348,11 @@ mod tests {
             ("OwnReadFirst", true),
             ("SelfStored", true),
             ("PrivateReadFirst", true),
+            // An exact symbol-key write keeps `this` local, so a later public
+            // field write is ready too. Reordering the two writes is the
+            // one-change control: it preserves all runtime field values.
+            ("SymbolWriteFirst", true),
+            ("SymbolWriteLast", true),
         ] {
             let ty = snapshot
                 .types
@@ -351,12 +360,12 @@ mod tests {
                 .enumerate()
                 .find_map(|(at, ty)| {
                     let symbol = ty.symbol?;
-                    (snapshot.symbols[symbol.0 as usize].name == class
+                    (snapshot.symbols[symbol.0 as usize].name.is_name(class)
                         && matches!(ty.kind, nts_semantic_schema::TypeKind::Object { .. }))
                     .then(|| TypeId(u32::try_from(at).unwrap_or(u32::MAX)))
                 })
                 .unwrap_or_else(|| panic!("instance type missing: {class}"));
-            let field = interfaces::property(&snapshot, ty, "value")
+            let field = interfaces::property(&snapshot, ty, &"value".into())
                 .unwrap_or_else(|| panic!("field missing: {class}.value"));
             assert_eq!(ready.contains(field), expected, "{class}.value");
         }

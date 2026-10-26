@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler a92a7367f3d8306d, commit f3fa503b7d6cef0554273d350e28a41a3733f022, backend jvm, harness d6442dbc09f91ad0; machine at start: 17.8 GB available, swap 2.3/31.5 GB, load 71/40.8 (1m/5m), 16 cores; 4 worker(s)
+# compiler 6768eb8d0734aa63, commit 07b52742d0686dea30f111f5ac465af1defd8651, backend jvm, harness d6442dbc09f91ad0; machine at start: 23.8 GB available, swap 4.9/31.5 GB, load 4.5/3.3 (1m/5m), 16 cores; 4 worker(s)
 test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-array.js	pass	
@@ -577,8 +577,8 @@ test/built-ins/String/prototype/charAt/pos-rounding.js	pass
 test/built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T8.js	pass	
 test/built-ins/String/prototype/charCodeAt/pos-coerce-string.js	pass	
 test/built-ins/String/prototype/charCodeAt/pos-rounding.js	pass	
-test/built-ins/String/prototype/codePointAt/return-first-code-unit.js	fail	nts: uncaught Test262Error: sameValue
-test/built-ins/String/prototype/codePointAt/return-single-code-unit.js	fail	nts: uncaught Test262Error: sameValue
+test/built-ins/String/prototype/codePointAt/return-first-code-unit.js	pass	
+test/built-ins/String/prototype/codePointAt/return-single-code-unit.js	pass	
 test/built-ins/String/prototype/codePointAt/return-utf16-decode.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-equal-or-more-than-size.js	pass	
 test/built-ins/String/prototype/codePointAt/returns-undefined-on-position-less-than-zero.js	pass	
@@ -598,9 +598,9 @@ test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T1.js	pass
 test/built-ins/String/prototype/indexOf/S15.5.4.7_A3_T3.js	pass	
 test/built-ins/String/prototype/lastIndexOf/not-a-substring.js	pass	
 test/built-ins/String/prototype/padEnd/fill-string-empty.js	pass	
-test/built-ins/String/prototype/padEnd/normal-operation.js	fail	nts: uncaught Test262Error: sameValue
+test/built-ins/String/prototype/padEnd/normal-operation.js	pass	
 test/built-ins/String/prototype/padStart/fill-string-empty.js	pass	
-test/built-ins/String/prototype/padStart/normal-operation.js	fail	nts: uncaught Test262Error: sameValue
+test/built-ins/String/prototype/padStart/normal-operation.js	pass	
 test/built-ins/String/prototype/repeat/count-is-infinity-throws.js	pass	
 test/built-ins/String/prototype/repeat/count-is-zero-returns-empty-string.js	pass	
 test/built-ins/String/prototype/repeat/count-less-than-zero-throws.js	pass	

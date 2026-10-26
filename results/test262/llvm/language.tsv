@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler ed12bc7156294402, commit d5469510bc08147f816e31114362e54d81953365, backend llvm, harness d6442dbc09f91ad0; machine at start: 23.6 GB available, swap 2.3/31.5 GB, load 11.4/14.4 (1m/5m), 16 cores; 4 worker(s)
+# compiler 6768eb8d0734aa63, commit 07b52742d0686dea30f111f5ac465af1defd8651, backend llvm, harness d6442dbc09f91ad0; machine at start: 23.8 GB available, swap 4.9/31.5 GB, load 3.5/2.1 (1m/5m), 16 cores; 4 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -1579,7 +1579,7 @@ test/language/expressions/greater-than/S11.8.2_A2.4_T2.js	pass
 test/language/expressions/greater-than/S11.8.2_A4.1.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.10.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.11.js	pass	
-test/language/expressions/greater-than/S11.8.2_A4.12_T1.js	fail	nts: uncaught Test262Error: #9: ("\uDC00" > "\uD800") === true
+test/language/expressions/greater-than/S11.8.2_A4.12_T1.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.12_T2.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.2.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.3.js	pass	
@@ -1637,7 +1637,7 @@ test/language/expressions/less-than/S11.8.1_A2.4_T2.js	pass
 test/language/expressions/less-than/S11.8.1_A4.1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.10.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.11.js	pass	
-test/language/expressions/less-than/S11.8.1_A4.12_T1.js	fail	nts: uncaught Test262Error: #9: ("\uD800" < "\uDC00") === true
+test/language/expressions/less-than/S11.8.1_A4.12_T1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.12_T2.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.2.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.3.js	pass	
@@ -3803,7 +3803,7 @@ test/language/statements/for-of/return-from-try.js	pass
 test/language/statements/for-of/return.js	pass	
 test/language/statements/for-of/set-contract.js	pass	
 test/language/statements/for-of/set-expand-contract.js	pass	
-test/language/statements/for-of/string-astral-truncated.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/for-of/string-astral-truncated.js	pass	
 test/language/statements/for-of/string-astral.js	pass	
 test/language/statements/for-of/string-bmp.js	pass	
 test/language/statements/for-of/yield-star-from-catch.js	pass	

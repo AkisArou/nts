@@ -59,7 +59,6 @@ for (const binary of [before, after]) if (!existsSync(binary)) fail(`no compiler
 const SCRATCH = join(homedir(), ".cache/nts/emitted-diff", String(process.pid));
 mkdirSync(SCRATCH, { recursive: true });
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
-const tsgo = process.env.NTS_TSGO ?? join(ROOT, "target/tsgo");
 
 function fail(why: string): never {
   console.error(`emitted-diff: ${why}`);
@@ -95,7 +94,7 @@ function emit(binary: string, env: Record<string, string>, project: Project, sid
   const out = join(SCRATCH, side, project.name.replaceAll("/", "__"));
   return new Promise((done) => {
     const child = spawn(binary, ["emit-wasm", project.tsconfig, "--out", out], {
-      env: { ...process.env, NTS_TSGO: tsgo, ...env },
+      env: { ...process.env, NTS_CHECKERS: "1", ...env },
       stdio: ["ignore", "ignore", "pipe"],
     });
     let stderr = "";

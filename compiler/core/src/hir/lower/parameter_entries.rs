@@ -279,8 +279,9 @@ impl FuncBuilder<'_> {
                 };
                 if let Some(bound) = self.bindings.get(&symbol).copied()
                     && let Some(record) = self.snapshot.symbols.get(symbol as usize)
+                    && let Some(public) = record.name.public_name()
                 {
-                    parameters.insert(record.name.clone(), (symbol, bound, name));
+                    parameters.insert(public.to_owned(), (symbol, bound, name));
                 }
             }
         }
@@ -340,6 +341,7 @@ impl FuncBuilder<'_> {
                     .node(name)
                     .text
                     .as_ref()
+                    .and_then(|text| text.as_utf8())
                     .and_then(|name| parameters.get(name))
                     .copied()
                 else {
@@ -925,18 +927,16 @@ fn made_in_parameters(probe: &FuncBuilder<'_>, closure: NodeId, owner: NodeId) -
 #[cfg(test)]
 mod tests {
     use camino::Utf8Path;
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
 
     use super::*;
 
     #[test]
     fn split_refuses_a_hoisted_body_value_and_a_body_back_edge_by_name() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/captured-parameter-defaults/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .expect("fixture");
         let lowered = super::super::lower(&snapshot);
@@ -1002,12 +1002,10 @@ mod tests {
 
     #[test]
     fn entry_membership_uses_the_closures_actual_parameter_captures() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/captured-parameter-defaults/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .expect("the parameter-environment fixture has a snapshot");
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -1026,7 +1024,14 @@ mod tests {
                         .into_iter()
                         .find_map(|child| {
                             (probe.kind_of(child) == Some(syntax::IDENTIFIER))
-                                .then(|| probe.node(child).text.clone())
+                                .then(|| {
+                                    probe
+                                        .node(child)
+                                        .text
+                                        .as_ref()
+                                        .and_then(|text| text.as_utf8())
+                                        .map(str::to_owned)
+                                })
                                 .flatten()
                         })
                         .expect("each affected fixture function is named"),
@@ -1152,16 +1157,14 @@ mod tests {
 #[cfg(test)]
 mod generator_tests {
     use camino::Utf8Path;
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
 
     #[test]
     fn generator_entries_keep_the_public_resumption_and_leave_simple_parameters_alone() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/captured-parameter-defaults/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .expect("the generator fixture");
         assert!(!snapshot.has_errors());

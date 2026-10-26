@@ -41,7 +41,7 @@ fn jsx_diagnostics(count: u16, real_error: bool) -> Vec<Diagnostic> {
                 }
             }
         }
-        checked.finish().diagnostics()
+        checked.diagnose_fixture_files().finish().diagnostics()
     })
 }
 
@@ -102,7 +102,7 @@ fn explicit_unchecked_js_does_not_report_semantic_errors() {
                     }
                 }
             }
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             assert_eq!(finished.diagnostics(), []);
         });
     }
@@ -113,6 +113,7 @@ fn facts(count: u16, setting: Option<bool>, source: &str) -> (Vec<i32>, Vec<i32>
         let finished = session
             .open(spec(setting, source))
             .expect("JS project")
+            .diagnose_fixture_files()
             .finish();
         let project = finished.projects().next().expect("requested project");
         assert_eq!(finished.diagnostics(), project.diagnostics());
@@ -140,24 +141,24 @@ fn plain_js_assignment_early_error_is_a_separate_raw_fact() {
     let source = "function f() { return 0; }\nf() = 1;";
     for count in [1, 4] {
         let (ordinary, raw) = facts(count, None, source);
-        assert_eq!(ordinary, []);
+        assert!(ordinary.is_empty(), "{ordinary:?}");
         assert!(raw.contains(&2364), "{raw:?}");
         assert_eq!(facts(count, Some(false), source), (vec![], vec![]));
         let (ordinary, raw) = facts(count, Some(true), source);
         assert!(ordinary.contains(&2364), "{ordinary:?}");
-        assert_eq!(raw, []);
+        assert!(raw.is_empty(), "{raw:?}");
     }
 }
 
 #[test]
 fn type_only_plain_js_diagnostics_never_become_ordinary_program_errors() {
     let one = facts(1, None, "const value = 0n === 1n;");
-    assert_eq!(one.0, []);
+    assert!(one.0.is_empty(), "{:?}", one.0);
     assert!(one.1.contains(&2367), "{:?}", one.1);
     assert_eq!(one, facts(4, None, "const value = 0n === 1n;"));
     let checked = facts(1, Some(true), "const value = 0n === 1n;");
     assert!(checked.0.contains(&2367));
-    assert_eq!(checked.1, []);
+    assert!(checked.1.is_empty(), "{:?}", checked.1);
 }
 
 #[test]
@@ -189,7 +190,7 @@ fn native_nocheck_ignore_and_check_directives_keep_their_own_policy() {
         );
         let checked = facts(count, Some(false), "// @ts-check\nconst value = 0n === 1n;");
         assert!(checked.0.contains(&2367));
-        assert_eq!(checked.1, []);
+        assert!(checked.1.is_empty(), "{:?}", checked.1);
     }
 }
 
@@ -202,7 +203,11 @@ fn native_no_check_option_skips_the_raw_plain_js_view_too() {
             .get_mut(&camino::Utf8PathBuf::from("tsconfig.json"))
             .expect("inline config");
         *config = config.replace("\"allowJs\":true", "\"allowJs\":true,\"noCheck\":true");
-        let finished = session.open(project).expect("noCheck project").finish();
+        let finished = session
+            .open(project)
+            .expect("noCheck project")
+            .diagnose_fixture_files()
+            .finish();
         assert_eq!(finished.diagnostics(), []);
         assert_eq!(finished.plain_js_unfiltered(), []);
     });

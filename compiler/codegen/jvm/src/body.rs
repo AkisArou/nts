@@ -971,7 +971,7 @@ mod tests {
         use nts_semantic_schema::TypeId;
         let crosses = |owners: Vec<TypeId>| {
             let number = |name: &str| Field {
-                name: name.to_owned(),
+                name: name.to_owned().into(),
                 ty: HirType::Float { bits: 64 },
                 written: None,
                 declared_by: None,
@@ -994,7 +994,7 @@ mod tests {
             };
             program.interface_access.families.push(Family {
                 face: TypeId(0),
-                member: "radius".to_owned(),
+                member: "radius".to_owned().into(),
                 field: Some(1),
                 getter: Entry {
                     slot: 0,
@@ -1003,6 +1003,7 @@ mod tests {
                 setter: None,
                 raising: Vec::new(),
                 owners,
+                eager: false,
                 pending: false,
                 stored_dispatch: false,
             });
@@ -1057,7 +1058,7 @@ mod tests {
                         Box::new(number.clone()),
                     )),
                 ),
-                op(OpKind::ConstString("w".to_owned()), string),
+                op(OpKind::ConstString("w".into()), string),
                 op(
                     OpKind::Erase {
                         value: ValueId(2),

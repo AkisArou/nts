@@ -19,7 +19,7 @@
 //! A test of the crash needs RC, the collector reaching the promise, and the
 //! freed bytes reused; a test of the classification needs none of them.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -39,19 +39,20 @@ const READERS: [&str; 3] = [
 /// and it runs in `prepare` rather than in `lower` — so a test reading
 /// `lower()`'s output finds no promise reader at all and its own emptiness check
 /// fires. That is what happened here, twice, before this comment existed.
-fn prepared(name: &str) -> Option<hir::Prepared> {
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Prepared {
+    use nts_frontend_ts::Frontend;
+
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()))
+    hir::prepare_unverified(&snapshot, &hir::Options::default())
 }
 
 /// Every call to a promise reader, as `(function name, its result)`.
@@ -90,9 +91,7 @@ fn reads(program: &hir::Program) -> Vec<(String, hir::ValueId)> {
 /// failure mode the whole family of census bugs in this repo shares.
 #[test]
 fn a_promise_payload_is_never_produced() {
-    let Some(prepared) = prepared("async-catch") else {
-        return;
-    };
+    let prepared = prepared("async-catch");
     let summaries = hir::own::summarize(&prepared.program, &prepared.program.layouts);
 
     // **Two halves, and neither is enough alone.**

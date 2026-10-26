@@ -18,14 +18,12 @@ const CALLER: &str =
 )]
 fn pointer_bits_are_c_uintptr_with_no_load_or_count() {
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, prepared)) = prepare_with_files(
+        let (dir, prepared) = prepare_with_files(
             "pointer-bits",
             SOURCE,
             provider,
             &[("bits.d.ts", DECLARATIONS)],
-        ) else {
-            return;
-        };
+        );
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",

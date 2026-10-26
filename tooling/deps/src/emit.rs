@@ -46,11 +46,8 @@ pub struct LockedPackage {
     pub mapped: BTreeMap<String, String>,
     /// Specifier -> the file the checker resolved it to, absolute.
     ///
-    /// Recorded so a settled run can seed its discovery from the lock instead
-    /// of rediscovering the graph one checker pass at a time. A dependency's
-    /// own dependencies are only visible once its source is in the program, so
-    /// without this a no-op run walked the fixpoint from scratch: four checker
-    /// passes to learn what the lock already said.
+    /// Recovery provenance only. Current native resolution decides admission;
+    /// these observations must never keep a removed import in the graph.
     #[serde(default)]
     pub resolved: BTreeMap<String, String>,
     /// What the checker said about this package's recovered source, as

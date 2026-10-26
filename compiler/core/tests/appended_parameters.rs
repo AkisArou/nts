@@ -8,43 +8,39 @@
 //! parameter over; `measured`, `twiceOnAPath`, `looped`, the exported
 //! `addExported` and `addKept`, whose caller keeps its argument, do not.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Options, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-string-parameter-appended-onto-is-taken-over";
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
         provider: Provider::NoGc,
         ..Options::default()
     };
-    Some(
-        hir::prepare_with(&snapshot, &options)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &options)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 #[test]
 fn a_string_parameter_appended_onto_is_taken_over() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     let summaries = hir::own::summarize(&program, &program.layouts);
     let takes_first = |name: &str| {
         assert!(

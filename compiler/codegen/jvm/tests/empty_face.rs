@@ -19,7 +19,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir::Program;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::TypeId;
 use std::path::Path;
 use std::process::Command;
@@ -27,12 +27,14 @@ use std::process::Command;
 mod common;
 
 fn prepared(fixture: &str) -> Program {
-    let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(format!("tests/{fixture}/tsconfig.json"))
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     common::prepare(&snapshot).expect("valid HIR").program
 }
 
@@ -256,3 +258,8 @@ fn a_store_out_of_an_empty_face_into_a_class_declines() {
     assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "104.0");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+// Owned merged-family controls add no frontend capture; the existing real
+// empty-face tests above retain the JDK upcast and reverse-store controls.
+#[path = "empty_face/merged_families.rs"]
+mod merged_families;

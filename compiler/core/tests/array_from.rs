@@ -9,26 +9,26 @@
 //! source keeps a `slice`, and which sources know their length before they
 //! start. Both were measured, and both were got wrong first.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -65,9 +65,7 @@ fn externals(func: &hir::Func) -> Vec<&str> {
 /// is still taken.
 #[test]
 fn an_array_source_is_a_slice() {
-    let Some(lowered) = lowered("array-from") else {
-        return;
-    };
+    let lowered = lowered("array-from");
     let from_array = func(&lowered, "fromArray");
     assert!(
         externals(from_array).contains(&"nts_array_slice"),
@@ -94,9 +92,7 @@ fn an_array_source_is_a_slice() {
 /// typed source specifically rather than for "an array".
 #[test]
 fn a_typed_array_source_walks_instead() {
-    let Some(lowered) = lowered("array-from") else {
-        return;
-    };
+    let lowered = lowered("array-from");
     let from_typed = func(&lowered, "fromTyped");
     assert!(
         !externals(from_typed).contains(&"nts_array_slice"),
@@ -121,9 +117,7 @@ fn a_typed_array_source_walks_instead() {
 /// held. Two instruments, one of which is blind to it.
 #[test]
 fn a_counted_source_is_sized_before_the_walk() {
-    let Some(lowered) = lowered("array-from") else {
-        return;
-    };
+    let lowered = lowered("array-from");
     let from_set = func(&lowered, "fromSet");
     let sized = from_set.values.iter().any(|op| match op.kind {
         OpKind::ArrayNew { length, .. } => {
@@ -150,9 +144,7 @@ fn a_counted_source_is_sized_before_the_walk() {
 /// *wrong answer* rather than an error — the extra slot is a legal element.
 #[test]
 fn a_source_of_unknown_length_appends() {
-    let Some(lowered) = lowered("array-from") else {
-        return;
-    };
+    let lowered = lowered("array-from");
     for name in ["fromString", "fromGenerator"] {
         let walk = func(&lowered, name);
         assert!(
@@ -181,9 +173,7 @@ fn a_source_of_unknown_length_appends() {
 /// arm is.
 #[test]
 fn the_array_like_form_is_refused_by_name() {
-    let Some(lowered) = lowered("array-from-unsupported") else {
-        return;
-    };
+    let lowered = lowered("array-from-unsupported");
     let said: Vec<&str> = lowered
         .diagnostics
         .iter()

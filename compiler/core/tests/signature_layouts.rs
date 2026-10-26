@@ -6,26 +6,26 @@
 //! its `call` in one: `tests/programs/function-values` collapsed three signatures
 //! into a single layout holding eight type ids.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Layout};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn signature_layouts(lowered: &hir::lower::Lowered) -> Vec<&Layout> {
@@ -46,9 +46,7 @@ fn signature_layouts(lowered: &hir::lower::Lowered) -> Vec<&Layout> {
 /// `Closure9.call is (D)V where the method it overrides is (D)D`.
 #[test]
 fn three_signatures_are_three_layouts() {
-    let Some(lowered) = lowered("function-values") else {
-        return;
-    };
+    let lowered = lowered("function-values");
     let names: Vec<&str> = signature_layouts(&lowered)
         .iter()
         .map(|layout| layout.name.as_str())
@@ -79,9 +77,7 @@ fn three_signatures_are_three_layouts() {
 /// id would pass the test above and break this one.
 #[test]
 fn one_signature_is_one_layout_however_many_ids() {
-    let Some(lowered) = lowered("function-values") else {
-        return;
-    };
+    let lowered = lowered("function-values");
     let shared = signature_layouts(&lowered)
         .iter()
         .filter(|layout| layout.types.len() > 1)
@@ -95,9 +91,7 @@ fn one_signature_is_one_layout_however_many_ids() {
 /// A closure's layout names the signature it is a value of as its base.
 #[test]
 fn a_closure_extends_its_signature() {
-    let Some(lowered) = lowered("closures") else {
-        return;
-    };
+    let lowered = lowered("closures");
     let closures: Vec<&Layout> = lowered
         .program
         .layouts
@@ -144,9 +138,7 @@ fn a_closure_extends_its_signature() {
 /// `abstract` methods and turns out to name the same concept.
 #[test]
 fn the_signature_declares_what_closures_override() {
-    let Some(lowered) = lowered("closures") else {
-        return;
-    };
+    let lowered = lowered("closures");
     let declaring: Vec<&Layout> = signature_layouts(&lowered)
         .into_iter()
         .filter(|layout| layout.methods.iter().any(Option::is_some))

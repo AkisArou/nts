@@ -7,35 +7,33 @@
 //! after the landing that caused it. These are the same facts, static, in the
 //! core gate.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn counted(case: &str) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn counted(case: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/memory")
         .join(case)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/memory/{case} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(
-        hir::prepare_with(
-            &snapshot,
-            &hir::Options {
-                provider: hir::Provider::ReferenceCounting,
-                ..hir::Options::default()
-            },
-        )
-        .expect("prepared HIR should verify"),
+    hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::ReferenceCounting,
+            ..hir::Options::default()
+        },
     )
+    .expect("prepared HIR should verify")
 }
 
 /// The retains and releases left in the function named `name`, none if it is
@@ -63,9 +61,7 @@ fn counting_in(prepared: &hir::Prepared, name: &str) -> usize {
 /// iteration: 33 counting operations at run time became 97.
 #[test]
 fn a_forwarding_that_takes_nothing_apart_is_not_made() {
-    let Some(prepared) = counted("borrowed-call") else {
-        return;
-    };
+    let prepared = counted("borrowed-call");
     assert_eq!(counting_in(&prepared, "chain"), 0);
 }
 
@@ -75,9 +71,7 @@ fn a_forwarding_that_takes_nothing_apart_is_not_made() {
 /// 40 operations at run time for an ideal of 20.
 #[test]
 fn an_erasure_of_a_dying_reference_is_a_move() {
-    let Some(prepared) = counted("tuple-cycle") else {
-        return;
-    };
+    let prepared = counted("tuple-cycle");
     assert_eq!(counting_in(&prepared, "Node#constructor"), 0);
     // What is left is the store over `pair`, giving back the tuple it held,
     // and `n` erased into the new one while `link`'s caller still holds it.
@@ -118,9 +112,7 @@ fn retained_receiver_fields(prepared: &hir::Prepared, name: &str) -> usize {
 /// operations at run time in `tests/memory/a-field-behind-an-assertion`, 2 now).
 #[test]
 fn a_field_behind_an_assertion_is_borrowed() {
-    let Some(prepared) = counted("a-field-behind-an-assertion") else {
-        return;
-    };
+    let prepared = counted("a-field-behind-an-assertion");
     assert_eq!(retained_receiver_fields(&prepared, "Board#free"), 0);
     assert_eq!(retained_receiver_fields(&prepared, "Board#check"), 0);
 }
@@ -131,8 +123,6 @@ fn a_field_behind_an_assertion_is_borrowed() {
 /// `Piles#constructor` on main).
 #[test]
 fn a_handed_back_receiver_is_a_move() {
-    let Some(prepared) = counted("pile-shuffle") else {
-        return;
-    };
+    let prepared = counted("pile-shuffle");
     assert_eq!(counting_in(&prepared, "Piles#constructor"), 0);
 }

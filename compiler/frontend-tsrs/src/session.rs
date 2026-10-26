@@ -3,7 +3,7 @@
 //! Capture uses one independently owned checker for every semantic question.
 //! Its diagnostics are never program diagnostics. At a total count of one,
 //! the separate diagnostic pool runs on the same thread after capture; at N >= 2
-//! it runs concurrently with at most N - 1 checkers. Its handles never feed capture identities.
+//! it runs concurrently with at most N - 1 checkers after explicit scope selection. Its handles never feed capture identities.
 //! Stable type ordering is pinned on. AST/file views may be live during a
 //! typing question, but no internal checker borrow escapes a query method.
 
@@ -110,10 +110,15 @@ impl Session {
         crate::environment::initialize();
         self.current = None;
         self.spec = Some(spec);
-        let program = OwnedProgram::open(&self.options, self.spec.as_ref().expect("project set"))?;
+        let program = OwnedProgram::open(
+            &self.options,
+            self.spec.as_ref().expect(
+                "open or resolve stored the requested ProjectSpec immediately before this call",
+            ),
+        )?;
         self.current = Some(program);
         Ok(Checked::new(
-            self.current.as_ref().expect("program set"),
+            self.current.as_ref().expect("successful open or resolve stored the owned program immediately before this borrow"),
             self.case_sensitivity,
         ))
     }
@@ -127,10 +132,12 @@ impl Session {
         self.spec = Some(spec);
         self.current = Some(OwnedProgram::resolve(
             &self.options,
-            self.spec.as_ref().expect("project set"),
+            self.spec.as_ref().expect(
+                "open or resolve stored the requested ProjectSpec immediately before this call",
+            ),
         )?);
         Ok(Resolved::new(
-            self.current.as_ref().expect("program set"),
+            self.current.as_ref().expect("successful open or resolve stored the owned program immediately before this borrow"),
             self.case_sensitivity,
         ))
     }
@@ -163,7 +170,7 @@ pub fn run<R: Send>(options: SessionOptions, build: impl FnOnce(&mut Session) ->
             .name("nts-tsrs".to_owned())
             .stack_size(512 << 20)
             .spawn_scoped(scope, move || build(&mut Session::new(options)))
-            .expect("could not start the native checking thread");
+            .expect("OS could not start the native checking thread");
         match checking.join() {
             Ok(output) => output,
             Err(payload) => std::panic::resume_unwind(payload),

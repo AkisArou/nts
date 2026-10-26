@@ -9,7 +9,7 @@ use crate::{CapturePhase, SyntaxPhase, ViewPhase};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{Diagnostic as NativeDiagnostic, SourceFile};
 use tsrs_compiler::{Context, Program, ProgramOptions, ProgramRegions};
 use tsrs_core::{P, Tristate, arena::Region, tspath};
@@ -93,12 +93,36 @@ pub struct ProjectSemantics {
     pub isolated_modules: bool,
 }
 
+/// Files to check for diagnostics. Config, program/options and global errors
+/// are always collected. `Files` must name files of this revision and excludes
+/// default libraries; choose `Program` explicitly to check those too.
+#[derive(Debug, Clone, Copy)]
+pub enum DiagnosticScope<'a> {
+    Files(&'a [Utf8PathBuf]),
+    Program,
+}
+
+/// A capture revision whose diagnostic scope has not yet been chosen.
+#[derive(Debug)]
+pub enum DiagnosticsUnselected {}
+
+/// A capture revision with an explicit diagnostic scope; it can be finished.
+#[derive(Debug)]
+pub enum DiagnosticsSelected {}
+
+#[derive(Clone)]
+enum NativeDiagnosticScope {
+    Files(Vec<P<SourceFile>>),
+    Program,
+}
+
 struct NativeProject {
     program: &'static Program,
     capture: RefCell<Option<Box<tsrs_checker::Checker>>>,
     capture_region: Region,
     diagnostics_task: RefCell<Option<std::thread::JoinHandle<NativeDiagnostics>>>,
     diagnostic_results: OnceCell<NativeDiagnostics>,
+    diagnostic_scope: OnceCell<NativeDiagnosticScope>,
     parallel_capture: bool,
     files: Vec<NativeFile>,
     file_index: FxHashMap<P<SourceFile>, usize>,
@@ -114,17 +138,29 @@ struct NativeDiagnostics {
 }
 
 impl NativeDiagnostics {
-    fn collect(program: &'static Program) -> Self {
+    fn collect(program: &'static Program, selected: &NativeDiagnosticScope) -> Self {
         let region = Region::new_scratch(1 << 20);
         let scope = region.enter();
         let ctx = Context::default();
         let mut ordinary = program.get_config_file_parsing_diagnostics().clone();
         ordinary.extend(program.get_program_diagnostics());
-        ordinary.extend(program.get_syntactic_diagnostics(&ctx, None));
-        ordinary.extend(program.get_semantic_diagnostics(&ctx, None));
+        let files = match selected {
+            NativeDiagnosticScope::Program => {
+                ordinary.extend(program.get_syntactic_diagnostics(&ctx, None));
+                ordinary.extend(program.get_semantic_diagnostics(&ctx, None));
+                program.source_files()
+            }
+            NativeDiagnosticScope::Files(files) => {
+                for &file in files {
+                    ordinary.extend(program.get_syntactic_diagnostics(&ctx, Some(file)));
+                }
+                ordinary.extend(semantic_diagnostics_for_files(program, &ctx, files));
+                files.as_slice()
+            }
+        };
         ordinary.extend(program.get_global_diagnostics(&ctx));
         let mut plain_js = Vec::new();
-        for &file in program.source_files() {
+        for &file in files {
             if tsrs_ast::is_plain_js_file(Some(file), program.options().check_js)
                 && !program.skip_type_checking(file, false)
             {
@@ -144,20 +180,49 @@ impl NativeDiagnostics {
     }
 }
 
+// The incremental-shaped API is the public file-set scheduler. It already
+// applies checkJs and preceding directives. Compose the two public ordinary
+// steps it omits, without issuing a second checker computation. Its deferred
+// globals are also collected explicitly by NativeDiagnostics::collect.
+fn semantic_diagnostics_for_files(
+    program: &'static Program,
+    ctx: &Context,
+    files: &[P<SourceFile>],
+) -> Vec<P<NativeDiagnostic>> {
+    let mut by_file = program.get_semantic_diagnostics_for_incremental(ctx, files);
+    let mut diagnostics = Vec::new();
+    for &file in files {
+        diagnostics.extend(tsrs_compiler::filter_no_emit_semantic_diagnostics(
+            by_file.remove(&file).expect(
+                "native scheduler returns one result for each explicitly selected source file",
+            ),
+            &program.options(),
+        ));
+        diagnostics.extend(program.get_include_processor_diagnostics(file));
+    }
+    diagnostics
+}
+
 impl NativeProject {
     fn start_capture(&mut self) {
         {
             let _scope = self.capture_region.enter_scratch();
             *self.capture.get_mut() = Some(tsrs_checker::new_checker(self.program));
         }
+    }
+
+    fn start_diagnostics(&self, selected: NativeDiagnosticScope) {
+        self.diagnostic_scope.set(selected.clone()).ok().expect(
+            "consuming DiagnosticsUnselected permits selecting the diagnostic scope only once",
+        );
         if self.parallel_capture {
             let program = self.program;
-            *self.diagnostics_task.get_mut() = Some(
+            *self.diagnostics_task.borrow_mut() = Some(
                 std::thread::Builder::new()
                     .name("nts-tsrs-diagnostics".to_owned())
                     .stack_size(512 << 20)
-                    .spawn(move || NativeDiagnostics::collect(program))
-                    .expect("could not start the native diagnostic thread"),
+                    .spawn(move || NativeDiagnostics::collect(program, &selected))
+                    .expect("OS could not start the native diagnostic thread"),
             );
         }
     }
@@ -165,7 +230,14 @@ impl NativeProject {
     fn finish_diagnostics(&self) -> &NativeDiagnostics {
         self.diagnostic_results.get_or_init(|| {
             self.diagnostics_task.borrow_mut().take().map_or_else(
-                || NativeDiagnostics::collect(self.program),
+                || {
+                    NativeDiagnostics::collect(
+                        self.program,
+                        self.diagnostic_scope
+                            .get()
+                            .expect("diagnostics run only after the caller selected a scope"),
+                    )
+                },
                 |task| match task.join() {
                     Ok(results) => results,
                     Err(panic) => std::panic::resume_unwind(panic),
@@ -227,12 +299,15 @@ impl OwnedProgram {
         diagnostics.extend(crate::environment::initialize().notes());
         diagnostics.sort();
         diagnostics.dedup();
-        owned.diagnostics.set(diagnostics).expect("new resolution");
+        owned
+            .diagnostics
+            .set(diagnostics)
+            .expect("new resolution owns an uninitialized diagnostics cell");
         // No checker facts exist on a resolution-only revision.
         owned
             .plain_js_unfiltered
             .set(Vec::new())
-            .expect("new resolution");
+            .expect("new resolution owns an uninitialized plain-JS diagnostics cell");
         Ok(owned)
     }
 
@@ -272,10 +347,9 @@ impl OwnedProgram {
             .library_path
             .as_ref()
             .map_or_else(tsrs_vfs::bundled::lib_path, ToString::to_string);
-        let fs: Arc<dyn tsrs_vfs::FS> = owned.host.clone();
         let compiler_host = tsrs_compiler::new_compiler_host(
             options.cwd.as_str(),
-            fs,
+            owned.host.clone(),
             &library_path,
             None,
             None,
@@ -315,6 +389,7 @@ impl OwnedProgram {
                 capture_region: Region::new_scratch(1 << 20),
                 diagnostics_task: RefCell::new(None),
                 diagnostic_results: OnceCell::new(),
+                diagnostic_scope: OnceCell::new(),
                 parallel_capture: options
                     .checker_count
                     .map_or_else(|| !program.single_threaded(), |count| count.get() > 1),
@@ -322,7 +397,8 @@ impl OwnedProgram {
                 file_index: FxHashMap::default(),
                 strings: crate::strings::StringPool::new(region.clone()),
             });
-            owned.projects.last_mut().expect("program registered").files = program
+            let project = owned.projects.last_mut().expect("project was just pushed");
+            project.files = program
                 .source_files()
                 .iter()
                 .copied()
@@ -331,7 +407,6 @@ impl OwnedProgram {
                     utf16: OnceCell::new(),
                 })
                 .collect();
-            let project = owned.projects.last_mut().expect("program registered");
             project.file_index = project
                 .files
                 .iter()
@@ -342,8 +417,8 @@ impl OwnedProgram {
                 project.start_capture();
             }
         }
-        // Capture's pristine C0 never belongs to the diagnostics pool. At one
-        // checker diagnostics wait for finish; otherwise they run independently.
+        // Capture's pristine C0 never belongs to the diagnostics pool. No
+        // diagnostic work starts until the caller explicitly selects its files.
         drop(scope);
         Ok(owned)
     }
@@ -407,6 +482,9 @@ impl OwnedProgram {
         let mut diagnostics: Vec<_> = native.into_iter().map(|d| self.diagnostic(d)).collect();
         diagnostics.extend(crate::environment::initialize().notes());
         diagnostics.sort();
+        // Diagnostic's derived Eq compares every field, including file, span,
+        // code, full message chain and related information. This also removes
+        // deferred globals returned by the file-set API and the explicit sweep.
         diagnostics.dedup();
         diagnostics
     }
@@ -450,9 +528,13 @@ fn pin_settings(config: P<ParsedCommandLine>, options: &SessionOptions) -> P<Par
     let mut parsed = config.with_file_names(config.file_names().to_vec());
     let mut compiler_options = config
         .compiler_options()
-        .expect("parsed compiler options")
+        .expect("top-level config parsing initializes compiler options even when it reports errors")
         .get()
         .clone();
+    // nts owns emission, so TypeScript's emit options cannot apply. Check the
+    // project as `tsc --noEmit` does; only this cloned effective option changes,
+    // never the user's tsconfig on disk.
+    compiler_options.no_emit = Tristate::True;
     compiler_options.stable_type_ordering = Tristate::True;
     if let Some(count) = options.checker_count {
         let diagnostics = count.get().saturating_sub(1).max(1);
@@ -492,15 +574,25 @@ impl Drop for OwnedProgram {
 
 /// Capture phase of one native revision, on its pristine designated checker.
 ///
-/// Semantic views borrow this value. `finish` consumes it after capture,
-/// joins independent pool diagnostics (running them here at one checker), and
-/// returns syntax-only access and owned answers. Capture never feeds that pool.
+/// First choose an explicit scope with `start_diagnostics`. It consumes the
+/// unselected state, so reborrow semantic views afterwards. Only the selected
+/// state has `finish`, which ends capture and joins independent diagnostics
+/// (running them then at one checker). Capture never feeds the diagnostic pool.
 /// Dropping the current phase and all its views permits `Session::revise`.
-pub struct Checked<'s> {
+///
+/// ```compile_fail
+/// use nts_frontend_tsrs::{Session, ProjectSpec};
+/// fn invalid(session: &mut Session, spec: ProjectSpec) {
+///     let unselected = session.open(spec).unwrap();
+///     let _ = unselected.finish(); // choose a DiagnosticScope first
+/// }
+/// ```
+pub struct Checked<'s, State = DiagnosticsUnselected> {
     owner: &'s OwnedProgram,
     case_sensitivity: CaseSensitivity,
+    state: PhantomData<State>,
 }
-impl fmt::Debug for Checked<'_> {
+impl<State> fmt::Debug for Checked<'_, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Checked")
             .field("projects", &self.owner.projects.len())
@@ -512,8 +604,65 @@ impl<'s> Checked<'s> {
         Self {
             owner,
             case_sensitivity,
+            state: PhantomData,
         }
     }
+
+    /// Test fixtures check their own source/imported files, never bundled libs.
+    #[cfg(test)]
+    pub(crate) fn diagnose_fixture_files(self) -> Checked<'s, DiagnosticsSelected> {
+        let paths: Vec<_> = self
+            .projects()
+            .flat_map(Project::files)
+            .filter(|file| !file.is_default_library())
+            .map(|file| file.path().to_owned())
+            .collect();
+        self.start_diagnostics(DiagnosticScope::Files(&paths))
+    }
+
+    /// Select the diagnostic scope before finishing or starting pool work.
+    /// Paths are copied into revision-local native identities; the input slice
+    /// need not outlive this call. At N >= 2 this starts the independent pool.
+    #[must_use]
+    pub fn start_diagnostics(self, scope: DiagnosticScope<'_>) -> Checked<'s, DiagnosticsSelected> {
+        for project in &self.owner.projects {
+            let selected = match scope {
+                DiagnosticScope::Program => NativeDiagnosticScope::Program,
+                DiagnosticScope::Files(paths) => {
+                    let mut files = Vec::with_capacity(paths.len());
+                    let mut seen = FxHashSet::default();
+                    for path in paths {
+                        let file = project
+                            .program
+                            .get_source_file(path.as_str())
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "diagnostic file {path} is not in {}",
+                                    project.program.command_line().get().config_name()
+                                )
+                            });
+                        assert!(
+                            !project.program.is_source_file_default_library(file.path()),
+                            "default library {path} requires DiagnosticScope::Program"
+                        );
+                        if seen.insert(file) {
+                            files.push(file);
+                        }
+                    }
+                    NativeDiagnosticScope::Files(files)
+                }
+            };
+            project.start_diagnostics(selected);
+        }
+        Checked {
+            owner: self.owner,
+            case_sensitivity: self.case_sensitivity,
+            state: PhantomData,
+        }
+    }
+}
+
+impl<State> Checked<'_, State> {
     #[must_use]
     pub const fn case_sensitivity(&self) -> CaseSensitivity {
         self.case_sensitivity
@@ -529,7 +678,10 @@ impl<'s> Checked<'s> {
     pub fn inputs(&self) -> Vec<Input> {
         self.owner.host.inputs()
     }
-    /// End semantic capture and join the independent diagnostic work.
+}
+
+impl<'s> Checked<'s, DiagnosticsSelected> {
+    /// End semantic capture and join only the explicitly selected diagnostic work.
     #[must_use]
     pub fn finish(self) -> Finished<'s> {
         self.owner.finish();
@@ -618,7 +770,7 @@ impl Finished<'_> {
         self.owner
             .diagnostics
             .get()
-            .expect("Finished ran diagnostics")
+            .expect("Finished is constructed only after all program diagnostics were collected")
             .clone()
     }
     /// Raw bind/check facts only for native plain JS, before its error filter.
@@ -628,7 +780,7 @@ impl Finished<'_> {
         self.owner
             .plain_js_unfiltered
             .get()
-            .expect("Finished collected plain-JS facts")
+            .expect("Finished is constructed only after plain-JS diagnostics were collected")
             .clone()
     }
 }
@@ -656,7 +808,7 @@ impl Project<'_, SyntaxPhase> {
         self.owner
             .diagnostics
             .get()
-            .expect("Finished ran diagnostics")
+            .expect("Finished is constructed only after all program diagnostics were collected")
             .clone()
     }
     /// Raw bind/check facts only for native plain JS, before its error filter.
@@ -666,7 +818,7 @@ impl Project<'_, SyntaxPhase> {
         self.owner
             .plain_js_unfiltered
             .get()
-            .expect("Finished collected plain-JS facts")
+            .expect("Finished is constructed only after plain-JS diagnostics were collected")
             .clone()
     }
 }
@@ -793,8 +945,9 @@ impl<'s, S: ViewPhase> File<'s, S> {
     }
     #[must_use]
     pub fn text(self) -> &'s str {
-        std::str::from_utf8(self.native.source.text().as_bytes())
-            .expect("source text supplied by UTF-8 host")
+        std::str::from_utf8(self.native.source.text().as_bytes()).expect(
+            "source text comes from validated overlays or the native UTF-8/UTF-16 file decoder",
+        )
     }
     #[must_use]
     pub fn content_digest(self) -> u128 {
@@ -859,7 +1012,9 @@ impl<'s> File<'s> {
     ) -> R {
         let _scope = self.project.capture_region.enter_scratch();
         let mut checker = self.project.capture.borrow_mut();
-        question(checker.as_mut().expect("capture checker initialized"))
+        question(checker.as_mut().expect(
+            "only capture-phase views may ask questions, after their checker was initialized",
+        ))
     }
     pub(crate) fn node_view(self, native: P<tsrs_ast::Node>) -> Option<crate::Node<'s>> {
         let source = tsrs_ast::get_source_file_of_node(native)?;
@@ -915,7 +1070,7 @@ mod tests {
             let native = &capture.owner.projects[0];
             assert!(native.diagnostics_task.borrow().is_none());
             assert!(native.diagnostic_results.get().is_none());
-            let checked = capture.finish();
+            let checked = capture.diagnose_fixture_files().finish();
             let project = checked.projects().next().expect("root program");
             assert_eq!(project.checker_count(), 1);
             assert_eq!(
@@ -949,7 +1104,14 @@ mod tests {
     #[test]
     fn parallel_capture_uses_a_separate_diagnostic_thread_within_the_total_budget() {
         run(options(4), |session| {
-            let capture = session.open(project()).expect("inline project loads");
+            let unselected = session.open(project()).expect("inline project loads");
+            assert!(
+                unselected.owner.projects[0]
+                    .diagnostics_task
+                    .borrow()
+                    .is_none()
+            );
+            let capture = unselected.diagnose_fixture_files();
             assert!(
                 capture.owner.projects[0]
                     .diagnostics_task
@@ -976,7 +1138,10 @@ mod tests {
     #[should_panic(expected = "capture unwinds while independent diagnostics run")]
     fn capture_unwind_joins_diagnostics_before_freeing_the_program() {
         run(options(4), |session| {
-            let _capture = session.open(project()).expect("inline project loads");
+            let _capture = session
+                .open(project())
+                .expect("inline project loads")
+                .diagnose_fixture_files();
             panic!("capture unwinds while independent diagnostics run");
         });
     }
@@ -986,6 +1151,7 @@ mod tests {
             let checked = session
                 .open(project())
                 .expect("inline project loads")
+                .diagnose_fixture_files()
                 .finish();
             let project = checked.projects().next().expect("root program");
             assert_eq!(project.checker_count(), usize::from(count));
@@ -1013,7 +1179,11 @@ mod tests {
         for _ in 0..8 {
             run(options(1), |session| {
                 {
-                    let checked = session.open(project()).expect("initial project").finish();
+                    let checked = session
+                        .open(project())
+                        .expect("initial project")
+                        .diagnose_fixture_files()
+                        .finish();
                     let file = checked
                         .projects()
                         .next()
@@ -1031,7 +1201,11 @@ mod tests {
                     "a.ts".into(),
                     Some("export const value: string = 'now';".to_owned()),
                 );
-                let checked = session.revise(changes).expect("revision loads").finish();
+                let checked = session
+                    .revise(changes)
+                    .expect("revision loads")
+                    .diagnose_fixture_files()
+                    .finish();
                 assert!(!checked.diagnostics().iter().any(|d| d.code == 2322));
                 assert!(
                     checked
@@ -1095,7 +1269,11 @@ mod tests {
                 ] {
                     spec.overlays.insert(name.into(), text.to_owned());
                 }
-                let checked = session.open(spec).expect("reference graph loads").finish();
+                let checked = session
+                    .open(spec)
+                    .expect("reference graph loads")
+                    .diagnose_fixture_files()
+                    .finish();
                 assert_eq!(checked.projects().len(), 1);
                 assert_eq!(
                     checked
@@ -1136,7 +1314,11 @@ mod tests {
                 "index.js".into(),
                 "let duplicate; let duplicate;".to_owned(),
             );
-            let checked = session.open(spec).expect("JavaScript config").finish();
+            let checked = session
+                .open(spec)
+                .expect("JavaScript config")
+                .diagnose_fixture_files()
+                .finish();
             assert!(checked.plain_js_unfiltered().iter().any(|d| d.code == 2451));
         });
     }
@@ -1169,7 +1351,11 @@ mod tests {
                     "index.ts".into(),
                     "export class Value { value = 1; }".to_owned(),
                 );
-                let checked = session.open(spec).expect("semantics config").finish();
+                let checked = session
+                    .open(spec)
+                    .expect("semantics config")
+                    .diagnose_fixture_files()
+                    .finish();
                 let semantics = checked.projects().next().expect("root program").semantics();
                 assert_eq!(semantics.use_define_for_class_fields, define);
                 assert_eq!(semantics.isolated_modules, isolated);
@@ -1188,6 +1374,7 @@ mod tests {
                 let checked = session
                     .open(ProjectSpec::new("tests/workspace/apps/node/tsconfig.json"))
                     .expect("node workspace app")
+                    .diagnose_fixture_files()
                     .finish();
                 assert_eq!(checked.projects().len(), 1);
                 let project = checked.projects().next().expect("requested program");
@@ -1217,6 +1404,7 @@ mod tests {
                 let checked = session
                     .open(ProjectSpec::new("tests/workspace/tsconfig.solution.json"))
                     .expect("workspace solution")
+                    .diagnose_fixture_files()
                     .finish();
                 assert_eq!(checked.projects().len(), 1);
                 let project = checked.projects().next().expect("solution program");
@@ -1239,7 +1427,11 @@ mod tests {
                 assert!(!resolved.diagnostics().iter().any(|d| d.code == 2322));
                 assert_ne!(resolved.inputs(), []);
             }
-            let checked = session.open(project()).expect("full check").finish();
+            let checked = session
+                .open(project())
+                .expect("full check")
+                .diagnose_fixture_files()
+                .finish();
             assert!(checked.diagnostics().iter().any(|d| d.code == 2322));
         });
     }
@@ -1282,6 +1474,7 @@ mod tests {
                 let checked = session
                     .open(ProjectSpec::new(config))
                     .expect("full program")
+                    .diagnose_fixture_files()
                     .finish();
                 assert_eq!(
                     resolution,
@@ -1296,6 +1489,8 @@ mod tests {
     fn shared_graph_environment_probe() {
         let one = capture(1);
         assert_eq!(one, capture(4));
+        let flags = public_object_flag_facts(1);
+        assert_eq!(flags, public_object_flag_facts(4));
         let has_note = one
             .1
             .iter()
@@ -1306,9 +1501,102 @@ mod tests {
             .iter()
             .filter(|d| d.code != 0 || d.category != DiagnosticCategory::Message)
             .collect();
-        let fingerprint = xxh3_128(format!("{:?}{semantic:?}", one.0).as_bytes());
+        let fingerprint = xxh3_128(format!("{:?}{semantic:?}{flags:?}", one.0).as_bytes());
         println!("NTS_NATIVE_FACTS {fingerprint:032x}");
         println!("NTS_NATIVE_ID {}", run(options(1), |s| s.cache_identity()));
+    }
+
+    fn public_object_flag_facts(count: u16) -> Vec<String> {
+        use crate::{SignatureKind, SymbolName, TypeKind};
+        run(options(count), |session| {
+            let mut spec = ProjectSpec::new("tsconfig.json");
+            spec.overlays.insert("tsconfig.json".into(),
+                r#"{"compilerOptions":{"strict":true,"target":"ESNext","types":[]},"files":["main.ts"]}"#.into());
+            spec.overlays.insert(
+                "main.ts".into(),
+                r"
+export type Numbers = number[];
+export type Tuple = [number, string];
+export interface Box<T> { value: T; method(value: T): T; }
+export type Boxed = Box<string>;
+export const callable = (value: number) => value;
+"
+                .into(),
+            );
+            let checked = session.open(spec).expect("semantic flag project");
+            let file = checked
+                .projects()
+                .next()
+                .expect("project")
+                .files()
+                .find(|file| file.path().ends_with("main.ts"))
+                .expect("source");
+            let mut facts = Vec::new();
+            let mut references = 0;
+            for export in file.module_symbol().expect("module").exports() {
+                let SymbolName::Plain(name) = export.name else {
+                    panic!("plain export");
+                };
+                let name = name.utf8().expect("Unicode export");
+                let ty = export
+                    .symbol
+                    .declared_type()
+                    .unwrap_or_else(|| export.symbol.ty());
+                let before = (ty.kind(), ty.non_inferrable(), ty.evolving_any());
+                let arguments = ty.reference().map(|reference| {
+                    reference
+                        .arguments
+                        .iter()
+                        .map(|argument| argument.kind())
+                        .collect::<Vec<_>>()
+                });
+                references += usize::from(arguments.is_some());
+                if name == "Numbers" {
+                    assert_eq!(before, (TypeKind::Reference, false, false));
+                    assert_eq!(arguments, Some(vec![TypeKind::Number]));
+                }
+                let mut properties: Vec<_> = ty
+                    .properties()
+                    .iter()
+                    .filter_map(|property| {
+                        let SymbolName::Plain(name) = property.name else {
+                            return None;
+                        };
+                        Some((
+                            name.utf8().expect("Unicode property").to_owned(),
+                            property.ty.kind(),
+                        ))
+                    })
+                    .collect();
+                properties.sort_by(|a, b| a.0.cmp(&b.0));
+                let signatures: Vec<_> = ty
+                    .signatures(SignatureKind::Call)
+                    .iter()
+                    .map(|signature| signature.return_type().kind())
+                    .collect();
+                assert_eq!(
+                    before,
+                    (ty.kind(), ty.non_inferrable(), ty.evolving_any()),
+                    "lazy member/signature queries changed semantic bits for {name}"
+                );
+                facts.push(format!(
+                    "{name}:{before:?}:{arguments:?}:{properties:?}:{signatures:?}"
+                ));
+            }
+            assert!(
+                references >= 3,
+                "array, tuple and instantiated interface queried"
+            );
+            facts.sort();
+            let diagnostics = checked.diagnose_fixture_files().finish().diagnostics();
+            assert!(
+                diagnostics.iter().all(|diagnostic| diagnostic.category
+                    == DiagnosticCategory::Message
+                    && diagnostic.code == 0),
+                "{diagnostics:?}"
+            );
+            facts
+        })
     }
 
     #[test]
@@ -1373,3 +1661,11 @@ mod resolution_tests;
 #[cfg(test)]
 #[path = "diagnostics_test.rs"]
 mod diagnostic_tests;
+
+#[cfg(test)]
+#[path = "diagnostic_scope_test.rs"]
+mod diagnostic_scope_tests;
+
+#[cfg(test)]
+#[path = "no_emit_test.rs"]
+mod no_emit_tests;

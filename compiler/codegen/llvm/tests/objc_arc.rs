@@ -24,7 +24,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 const BINDING: &str = r#"
@@ -186,8 +186,7 @@ int main(void) {
 }
 "#;
 
-fn prepare(name: &str, provider: hir::Provider) -> Option<(ScratchDir, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepare(name: &str, provider: hir::Provider) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -202,11 +201,12 @@ fn prepare(name: &str, provider: hir::Provider) -> Option<(ScratchDir, hir::Prep
     .unwrap();
     std::fs::write(dir.join("stub.d.ts"), BINDING).unwrap();
     std::fs::write(dir.join("main.ts"), PROGRAM).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((
+    (
         dir,
         hir::prepare_with(
             &snapshot,
@@ -216,7 +216,7 @@ fn prepare(name: &str, provider: hir::Provider) -> Option<(ScratchDir, hir::Prep
             },
         )
         .unwrap(),
-    ))
+    )
 }
 
 fn clang(dir: &Utf8Path, args: &[&str]) {
@@ -233,8 +233,8 @@ fn clang(dir: &Utf8Path, args: &[&str]) {
 }
 
 /// `(objects made, objects still alive)` after `run()`, per backend.
-fn made_and_alive(provider: hir::Provider, label: &str) -> Option<Vec<(String, u32, u32)>> {
-    let (dir, prepared) = prepare(label, provider)?;
+fn made_and_alive(provider: hir::Provider, label: &str) -> Vec<(String, u32, u32)> {
+    let (dir, prepared) = prepare(label, provider);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -305,15 +305,12 @@ fn made_and_alive(provider: hir::Provider, label: &str) -> Option<Vec<(String, u
             numbers.next().unwrap(),
         ));
     }
-    Some(answers)
+    answers
 }
 
 #[test]
 fn every_object_the_program_owns_is_released_once_on_both_backends() {
-    let Some(counted) = made_and_alive(hir::Provider::ReferenceCounting, "rc") else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let counted = made_and_alive(hir::Provider::ReferenceCounting, "rc");
     // `new`, `copy`, `child`, `alloc`, the object `init` returns, the
     // holder's and the closure's: seven. All gone, `child` with its parent.
     // No abort means no object was retained after it was freed, released
@@ -330,9 +327,7 @@ fn every_object_the_program_owns_is_released_once_on_both_backends() {
     }
     // The control: the same program with nothing counted. `alloc`'s object is
     // still consumed by `init` (the stub's `init` releases it), so six live on.
-    let Some(uncounted) = made_and_alive(hir::Provider::NoGc, "nogc") else {
-        return;
-    };
+    let uncounted = made_and_alive(hir::Provider::NoGc, "nogc");
     for (backend, made, alive) in &uncounted {
         assert_eq!(*made, 7, "{backend}");
         assert_eq!(
@@ -365,9 +360,7 @@ fn arc_reserved_selectors_and_uncounted_ownership_are_refused() {
                 "  export type Thing = ObjcClass",
                 "  export type Plain = import(\"c:types\").Class<\"Plain\">;\n  /**\n   * @ntsSelector new\n   * @ntsClass Plain\n   */\n  export function makePlain(): Plain;\n  export type Thing = ObjcClass",
             );
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
+
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
             .canonicalize_utf8()
@@ -382,7 +375,8 @@ fn arc_reserved_selectors_and_uncounted_ownership_are_refused() {
         .unwrap();
         std::fs::write(dir.join("stub.d.ts"), binding).unwrap();
         std::fs::write(dir.join("main.ts"), program).unwrap();
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&dir.join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

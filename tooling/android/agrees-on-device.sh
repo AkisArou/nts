@@ -173,7 +173,7 @@ for case in $cases; do
   cat > "$out/tsconfig.json" <<JSON
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benchmarks/cases/$case"] }
 JSON
-  if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
+  if ! NTS_CHECKERS=1 "$nts" emit-jvm "$out/tsconfig.json" \
     --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1; then
     printf "%-22s the backend declined it\n" "$case"
     noted=$((noted + 1))

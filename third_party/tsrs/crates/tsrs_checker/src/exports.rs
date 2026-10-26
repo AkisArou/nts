@@ -2,6 +2,11 @@ use crate::*;
 use tsrs_ast as ast;
 
 impl Checker {
+    /// Observe completed checking without triggering any checker work.
+    pub fn is_source_file_type_checked_exported(&self, file: P<ast::SourceFile>) -> bool {
+        self.source_file_links.try_get(file).is_some_and(|links| links.type_checked.get())
+    }
+
     // exports.go:8
     pub fn get_string_type(&self) -> P<Type> {
         self.string_type
@@ -441,7 +446,7 @@ impl Checker {
     }
 
     // exports.go:300
-    pub fn get_jsx_fragment_factory(&mut self, location: P<Node>) -> String {
+    pub(crate) fn get_jsx_fragment_factory(&mut self, location: P<Node>) -> String {
         let entity = self.get_jsx_fragment_factory_entity(Some(location));
         if let Some(entity) = entity {
             return ast::get_first_identifier(entity).text().to_string();

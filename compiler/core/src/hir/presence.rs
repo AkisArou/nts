@@ -80,14 +80,18 @@ pub enum Presence {
 /// `optional` answers whether a field name is an optional property of the type
 /// being asked about; it is the caller's because it is a question about the
 /// snapshot, and this module is about the layout.
-pub fn of(layout: &Layout, optional: impl Fn(&str) -> bool, key: &str) -> Presence {
+pub fn of(
+    layout: &Layout,
+    optional: impl Fn(&nts_semantic_schema::PropertyKey) -> bool,
+    key: &nts_semantic_schema::PropertyKey,
+) -> Presence {
     let mut index = 0u32;
     let mut found = None;
     for field in &layout.fields {
         if !optional(&field.name) {
             continue;
         }
-        if field.name == key {
+        if &field.name == key {
             found = Some(index);
         }
         index += 1;

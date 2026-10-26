@@ -1,8 +1,8 @@
 {
-  "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
+  "libDom": "third_party/tsrs/crates/tsrs_vfs/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3155,
-    "skipped": 233,
+    "bound": 3156,
+    "skipped": 239,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
@@ -10,7 +10,7 @@
   },
   "skippedBy": {
     "result type": 64,
-    "defined in": 59,
+    "defined in": 62,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
     "parameter type": 13,
     "interface SVGPoint": 11,
@@ -26,6 +26,7 @@
     "interface TextTrack": 2,
     "[RuntimeEnabled=RemotePlayback] overridable": 2,
     "[RuntimeEnabled=AudioOutputDevices] overridable": 2,
+    "[RuntimeEnabled=HTMLAreaHreflangType] test": 2,
     "[RuntimeEnabled=AOMAriaRelationshipPropertiesAriaOwns] overridable": 1,
     "interface StylePropertyMapReadOnly": 1,
     "[RuntimeEnabled=StandardizedBrowserZoom] overridable": 1,
@@ -37,6 +38,7 @@
     "[RuntimeEnabled=AccessKeyLabel] experimental": 1,
     "interface ElementInternals": 1,
     "[RuntimeEnabled=MediaCapture] per-platform": 1,
+    "[RuntimeEnabled=InputTypeColorEnhancements] experimental": 1,
     "interface External": 1,
     "interface Navigation": 1,
     "[RuntimeEnabled=OriginIsolationHeader] overridable": 1,
@@ -253,6 +255,7 @@
         "setAttributeNS",
         "setAttributeNode",
         "setAttributeNodeNS",
+        "setHTML",
         "setHTMLUnsafe",
         "setPointerCapture",
         "shadowRoot",
@@ -761,6 +764,7 @@
       ],
       "skipped": {
         "capture": "[RuntimeEnabled=MediaCapture] per-platform",
+        "colorSpace": "[RuntimeEnabled=InputTypeColorEnhancements] experimental",
         "selectionEnd": "result type unsigned long?",
         "selectionStart": "result type unsigned long?",
         "valueAsDate": "result type object?",
@@ -2107,6 +2111,7 @@
         "cookieStore": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "createImageBitmap": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "customElements": "interface CustomElementRegistry is not bound",
+        "documentPictureInPicture": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "event": "result type any",
         "external": "interface External is not bound",
         "indexedDB": "defined in Blink's modules component, on an interface the allowlist does not take from there",
@@ -2420,6 +2425,7 @@
         "isContextLost",
         "isPointInPath",
         "isPointInStroke",
+        "lang",
         "letterSpacing",
         "lineCap",
         "lineDashOffset",
@@ -2703,6 +2709,7 @@
         "requestMIDIAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "requestMediaKeySystemAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "sendBeacon": "defined in Blink's modules component, on an interface the allowlist does not take from there",
+        "serial": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "serviceWorker": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "setAppBadge": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "share": "defined in Blink's modules component, on an interface the allowlist does not take from there",
@@ -3168,6 +3175,7 @@
       ],
       "skipped": {
         "addTextTrack": "interface TextTrack is not bound",
+        "captureStream": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "disableRemotePlayback": "[RuntimeEnabled=RemotePlayback] overridable",
         "mediaKeys": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "onencrypted": "defined in Blink's modules component, on an interface the allowlist does not take from there",
@@ -3722,7 +3730,10 @@
         "target",
         "username"
       ],
-      "skipped": {},
+      "skipped": {
+        "hreflang": "[RuntimeEnabled=HTMLAreaHreflangType] test",
+        "type": "[RuntimeEnabled=HTMLAreaHreflangType] test"
+      },
       "absent": {
         "stringifier": [
           "toString"
@@ -5057,7 +5068,6 @@
       "bound": [
         "filterUnits",
         "height",
-        "href",
         "primitiveUnits",
         "width",
         "x",

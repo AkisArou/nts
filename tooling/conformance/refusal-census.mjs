@@ -115,7 +115,7 @@ for (const module of modules) {
   const run = spawnSync(
     compiler,
     ["emit-c", join(ROOT, "runtime/node", module, "tsconfig.json"), "--out", out, "--napi"],
-    { encoding: "utf8", env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") }, timeout: 900_000 },
+    { encoding: "utf8", env: { ...process.env, NTS_CHECKERS: "1" }, timeout: 900_000 },
   );
   rmSync(out, { recursive: true, force: true });
   const text = `${run.stdout ?? ""}${run.stderr ?? ""}`;

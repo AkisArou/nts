@@ -36,6 +36,29 @@ pub(super) struct Contract {
 }
 
 pub(super) fn signature(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&SignatureRecord> {
+    // Optional methods retain `undefined` in their property type even after
+    // the caller has checked presence. Absence decides availability, not the
+    // dispatch ABI. Only one callable plus absences proves that ABI; multiple
+    // callables and noncallable union arms do not.
+    let ty = match &snapshot.types.get(ty.0 as usize)?.kind {
+        TypeKind::Union(members) => {
+            let mut present = members.iter().filter(|member| {
+                !matches!(
+                    snapshot
+                        .types
+                        .get(member.0 as usize)
+                        .map(|record| &record.kind),
+                    Some(TypeKind::Null | TypeKind::Undefined)
+                )
+            });
+            let only = *present.next()?;
+            if present.next().is_some() {
+                return None;
+            }
+            only
+        }
+        _ => ty,
+    };
     let TypeKind::Function(at) = snapshot.types.get(ty.0 as usize)?.kind else {
         return None;
     };
@@ -142,18 +165,21 @@ fn parameter_contract(
 }
 
 /// Whether every input can widen into the body and its answer into the slot.
-/// Additional optional implementation parameters remain a future relaxation:
-/// they need explicit undefined arguments, which this contract never invents.
+/// A class body may also have an owned written optional erased tail. Literal
+/// supplies retain `fits_contracts`, whose uniform adapters have a separate ABI.
 pub(super) fn fits(
     probe: &FuncBuilder,
     hierarchy: &Hierarchy,
     mine: &PropertyRecord,
     wanted: &PropertyRecord,
 ) -> bool {
+    let property = mine;
     let (Some(mine), Some(wanted)) = (contract(probe, mine), contract(probe, wanted)) else {
         return false;
     };
-    fits_contracts(probe.snapshot, hierarchy, &mine, &wanted)
+    (mine.params.len() <= wanted.params.len()
+        || optional_tail(probe, property, &mine, wanted.params.len()).is_some())
+        && fits_prefix(probe.snapshot, hierarchy, &mine, &wanted)
 }
 
 pub(super) fn fits_contracts(
@@ -162,9 +188,15 @@ pub(super) fn fits_contracts(
     mine: &Contract,
     wanted: &Contract,
 ) -> bool {
-    if mine.params.len() > wanted.params.len() {
-        return false;
-    }
+    mine.params.len() <= wanted.params.len() && fits_prefix(snapshot, hierarchy, mine, wanted)
+}
+
+fn fits_prefix(
+    snapshot: &SemanticSnapshot,
+    hierarchy: &Hierarchy,
+    mine: &Contract,
+    wanted: &Contract,
+) -> bool {
     let inputs =
         mine.params
             .iter()
@@ -178,6 +210,223 @@ pub(super) fn fits_contracts(
         && (wanted.returns == HirType::Void
             || (widens(snapshot, hierarchy, mine.result, wanted.result, 0)
                 && converts(snapshot, hierarchy, &mine.returns, &wanted.returns)))
+}
+
+/// Permission to fill a class implementation's missing arguments. The body
+/// and every parameter are bound to owned written nodes, not optional bits on
+/// a signature. This is intentionally unavailable to literal-method admission.
+#[derive(Debug)]
+pub(super) struct OptionalTail {
+    body: super::Location,
+    params: Vec<Param>,
+    first: usize,
+}
+
+impl OptionalTail {
+    pub(super) fn matches(&self, target: &super::Func, supplied: usize) -> bool {
+        supplied == self.first + 1
+            && target.origin.generated.is_none()
+            && target.origin.location == self.body
+            && target.params.len() == self.params.len() + 1
+            && target
+                .params
+                .iter()
+                .skip(1)
+                .zip(&self.params)
+                .all(|(actual, written)| {
+                    actual.ty == written.ty
+                        && actual.shape == written.shape
+                        && actual.written == written.written
+                        && actual.origin.generated.is_none()
+                        && actual.origin.location == written.origin.location
+                })
+    }
+}
+
+fn class_body(probe: &FuncBuilder, property: &PropertyRecord, declaration: super::NodeId) -> bool {
+    let Some(parent) = probe.syntactic_parent(declaration) else {
+        return false;
+    };
+    if !probe.kind_of(parent).is_some_and(super::declares_a_class)
+        || probe.kind_of(declaration) != Some(super::syntax::METHOD_DECLARATION)
+        || probe.origin(declaration).generated.is_some()
+        || probe
+            .node(declaration)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        || probe
+            .node(declaration)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+        || probe.children(declaration).iter().any(|child| {
+            matches!(
+                probe.kind_of(*child),
+                Some(super::syntax::TYPE_PARAMETER | super::syntax::ASTERISK_TOKEN)
+            )
+        })
+    {
+        return false;
+    }
+    let implementations: Vec<_> = probe
+        .children(parent)
+        .into_iter()
+        .filter(|child| {
+            probe.kind_of(*child) == Some(super::syntax::METHOD_DECLARATION)
+                && probe.member_key(*child).as_ref() == Some(&property.name)
+                && probe.has_a_body(*child)
+        })
+        .collect();
+    implementations.as_slice() == [declaration]
+}
+
+fn written_params(
+    probe: &FuncBuilder,
+    declaration: super::NodeId,
+    expected: &[Param],
+    supplied: usize,
+) -> Option<Vec<Param>> {
+    let nodes = super::parameters_of(probe, declaration);
+    if nodes.len() != expected.len() || supplied >= expected.len() {
+        return None;
+    }
+    let mut params = expected.to_vec();
+    for (at, (parameter, param)) in nodes.iter().zip(&mut params).enumerate() {
+        let name = probe.name_node(*parameter)?;
+        let source = probe.snapshot.node_types.get(&name)?;
+        if probe.kind_of(name) != Some(super::syntax::IDENTIFIER)
+            || probe.origin(name).generated.is_some()
+            || param.ty != in_a_slot(probe.represent(*source)?)
+            || param.written != probe.written_kind(name)
+            || param.shape != written_shape(probe, *parameter)
+        {
+            return None;
+        }
+        param.origin = probe.origin(name);
+        if at >= supplied && !written_omittable(probe, *parameter, param) {
+            return None;
+        }
+    }
+    Some(params)
+}
+
+fn written_shape(probe: &FuncBuilder, node: super::NodeId) -> ParamShape {
+    let children = probe.children(node);
+    if children
+        .iter()
+        .any(|child| probe.kind_of(*child) == Some(super::syntax::DOT_DOT_DOT_TOKEN))
+    {
+        ParamShape::Rest
+    } else if probe.default_of(node).is_some() {
+        ParamShape::Defaulted
+    } else if children
+        .iter()
+        .any(|child| probe.kind_of(*child) == Some(super::syntax::QUESTION_TOKEN))
+    {
+        ParamShape::Optional
+    } else {
+        ParamShape::Ordinary
+    }
+}
+
+fn optional_tail(
+    probe: &FuncBuilder,
+    property: &PropertyRecord,
+    contract: &Contract,
+    supplied: usize,
+) -> Option<OptionalTail> {
+    let declaration = property.declaration?;
+    if !class_body(probe, property, declaration)
+        || probe.implementation_of(declaration) != declaration
+    {
+        return None;
+    }
+    Some(OptionalTail {
+        body: probe.location(declaration),
+        params: written_params(probe, declaration, &contract.params, supplied)?,
+        first: supplied,
+    })
+}
+
+fn written_omittable(probe: &FuncBuilder, node: super::NodeId, param: &Param) -> bool {
+    param.ty == HirType::Erased
+        && param.shape == ParamShape::Optional
+        && param.written.is_none()
+        && probe.default_of(node).is_none()
+        && probe
+            .children(node)
+            .iter()
+            .any(|child| probe.kind_of(*child) == Some(super::syntax::QUESTION_TOKEN))
+        && !probe
+            .children(node)
+            .iter()
+            .any(|child| probe.kind_of(*child) == Some(super::syntax::DOT_DOT_DOT_TOKEN))
+}
+
+/// Join the actual receiver property to its unique owned implementation body.
+/// An overloaded callable's primary signature is NOT that body's contract.
+fn bound_body(
+    probe: &FuncBuilder,
+    property: &PropertyRecord,
+    target: &super::Func,
+) -> Option<super::NodeId> {
+    let declaration = property.declaration?;
+    let symbol = probe.node(declaration).symbol.or_else(|| {
+        probe
+            .name_node(declaration)
+            .and_then(|name| probe.node(name).symbol)
+    });
+    let mut candidates: Vec<_> = symbol
+        .and_then(|symbol| probe.snapshot.symbols.get(symbol.0 as usize))
+        .into_iter()
+        .flat_map(|symbol| &symbol.declarations)
+        .copied()
+        .chain(std::iter::once(declaration))
+        .filter(|node| {
+            probe.location(*node) == target.origin.location && class_body(probe, property, *node)
+        })
+        .collect();
+    candidates.sort_unstable();
+    candidates.dedup();
+    let [body] = candidates.as_slice() else {
+        return None;
+    };
+    Some(*body)
+}
+
+/// Recheck a previously bound target using written body/parameter provenance,
+/// independently of generic/overloaded property signatures. CLASS inference
+/// still uses `contract` and keeps all of its existing exclusions.
+pub(super) fn target_optional_tail(
+    probe: &FuncBuilder,
+    member: &super::MemberKey,
+    target: &super::Func,
+    supplied: usize,
+) -> Option<OptionalTail> {
+    if target.params.len() <= supplied {
+        return None;
+    }
+    let HirType::Managed(ManagedType::Object(receiver)) = &target.params.first()?.ty else {
+        return None;
+    };
+    let TypeKind::Object { properties } = &probe.snapshot.types.get(receiver.0 as usize)?.kind
+    else {
+        return None;
+    };
+    let mut properties = properties
+        .iter()
+        .filter(|property| property.name == member.key);
+    let property = properties.next()?;
+    if properties.next().is_some() {
+        return None;
+    }
+    let body = bound_body(probe, property, target)?;
+    let first = supplied.checked_sub(1)?;
+    let tail = OptionalTail {
+        body: probe.location(body),
+        params: written_params(probe, body, &target.params[1..], first)?,
+        first,
+    };
+    tail.matches(target, supplied).then_some(tail)
 }
 
 /// Could TypeScript pass this method as the wanted one, even under parameter
@@ -219,7 +468,7 @@ fn primitive_families(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Op
         | TypeKind::TemplateLiteral { .. } => 2,
         TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => 4,
         TypeKind::BigInt | TypeKind::Literal(LiteralValue::BigInt(_)) => 8,
-        TypeKind::Symbol => 16,
+        TypeKind::Symbol | TypeKind::UniqueSymbol => 16,
         TypeKind::Null => 32,
         TypeKind::Undefined | TypeKind::Void => 64,
         TypeKind::Union(arms) => arms.iter().try_fold(0, |found, arm| {
@@ -227,6 +476,11 @@ fn primitive_families(snapshot: &SemanticSnapshot, ty: TypeId, depth: u32) -> Op
         })?,
         // `never` fits every result; intersections can be branded primitives.
         // Neither is evidence that this candidate cannot reach the face.
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive => return None,
         _ => return None,
     })
 }
@@ -318,11 +572,23 @@ fn widens(
             TypeKind::Literal(super::LiteralValue::BigInt(_)) | TypeKind::BigInt,
             TypeKind::BigInt,
         )
-        | (TypeKind::Symbol, TypeKind::Symbol)
+        | (TypeKind::Symbol | TypeKind::UniqueSymbol, TypeKind::Symbol)
         | (TypeKind::Undefined, TypeKind::Undefined)
         | (TypeKind::Null, TypeKind::Null)
         | (TypeKind::Void, TypeKind::Void) => true,
         (TypeKind::Literal(one), TypeKind::Literal(other)) => one == other,
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        (TypeKind::UniqueSymbol, TypeKind::UniqueSymbol) => false,
+        // A unique symbol can widen to symbol above; object is a supertype of
+        // reference values, not a new generated hierarchy node here.
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        (TypeKind::NonPrimitive, _) | (_, TypeKind::NonPrimitive) => false,
         _ => false,
     }
 }
@@ -357,31 +623,18 @@ fn callable_widens(
             || widens(snapshot, hierarchy, from.return_type, to.return_type, depth))
 }
 
-pub(super) fn property<'a>(
-    snapshot: &'a SemanticSnapshot,
-    owner: TypeId,
-    member: &str,
-) -> Option<&'a PropertyRecord> {
-    let TypeKind::Object { properties } = &snapshot.types.get(owner.0 as usize)?.kind else {
-        return None;
-    };
-    properties.iter().find(|property| property.name == member)
-}
+pub(super) use super::super::native::schema::property_key as property;
 
 /// A declaration belongs to the interface, including every parameter value
 /// op. Materialize its referenced layouts before completing callable entries.
 pub(super) fn declaration(
     builder: &mut FuncBuilder,
     root: TypeId,
-    member: &str,
+    member: &super::MemberKey,
     body: &super::Func,
     name: &str,
 ) -> Option<super::Func> {
-    let property = property(
-        builder.snapshot,
-        root,
-        super::without_the_raising_suffix(member).0,
-    )?;
+    let property = property(builder.snapshot, root, &member.key)?;
     let contract = contract(builder, property)?;
     let at = property.declaration.unwrap_or(super::NodeId(0));
     for param in &contract.params {
@@ -404,6 +657,11 @@ pub(super) fn declaration(
             .iter()
             .map(|ty| super::super::native::present_scalar(builder.snapshot, *ty))
             .collect(),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => Vec::new(),
         _ => Vec::new(),
     };
     shell.values = shell
@@ -417,4 +675,54 @@ pub(super) fn declaration(
         })
         .collect();
     Some(shell)
+}
+
+#[cfg(test)]
+mod tests {
+    use nts_semantic_schema::{SignatureId, TypeRecord};
+
+    use super::*;
+
+    #[test]
+    fn optional_callable_projection_does_not_prove_other_unions() {
+        let mut snapshot = SemanticSnapshot::default();
+        let signature = |returned| SignatureRecord {
+            parameters: Vec::new(),
+            return_type: TypeId(returned),
+            type_parameters: Vec::new(),
+            is_construct: false,
+            type_predicate: None,
+            this_type: None,
+        };
+        snapshot.signatures = vec![signature(2), signature(0)];
+        let union =
+            |members: &[u32]| TypeKind::Union(members.iter().copied().map(TypeId).collect());
+        snapshot.types = vec![
+            TypeKind::Undefined,
+            TypeKind::Null,
+            TypeKind::Number,
+            TypeKind::Function(SignatureId(0)),
+            TypeKind::Function(SignatureId(1)),
+            union(&[0, 3]),
+            union(&[1, 3, 0]),
+            union(&[3, 4]),
+            union(&[3, 2]),
+            union(&[0, 1]),
+            union(&[10, 3]),
+            union(&[3, 99]),
+        ]
+        .into_iter()
+        .map(|kind| TypeRecord { kind, symbol: None })
+        .collect();
+        for ty in [3, 5, 6] {
+            assert_eq!(signature_of(&snapshot, ty), snapshot.signatures.first());
+        }
+        for ty in [7, 8, 9, 10, 11] {
+            assert!(signature_of(&snapshot, ty).is_none(), "unproved type {ty}");
+        }
+    }
+
+    fn signature_of(snapshot: &SemanticSnapshot, ty: u32) -> Option<&SignatureRecord> {
+        super::signature(snapshot, TypeId(ty))
+    }
 }

@@ -50,7 +50,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, readdirSync, copyFileSync, 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armLines, frontendFor, oneChange } from "../conformance/pin.ts";
+import { armLines, oneChange } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -179,25 +179,9 @@ const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) =
   const nts = join(dir, "nts");
   copyFileSync(source, nts);
   chmodSync(nts, 0o755);
-  // The frontend each arm was built with, rather than one for both. A pin
-  // records its own, so a run from a worktree needs no `NTS_TSGO` -- which is
-  // the reading failure this replaces: `join(ROOT, "target/tsgo")` resolves
-  // against the *worktree*, which has none, and every project then emitted
-  // nothing and the run read as "no message moved".
-  //
-  // Asked about `source` and not `nts`: provenance is a file beside the binary
-  // and the copy this makes has none.
-  return { name, source, dir, nts, tsgo: frontendFor(source, ROOT) };
+  return { name, source, dir, nts };
 });
 
-// Before any project, because a missing frontend is indistinguishable from a
-// corpus in which nothing refuses.
-const headless = arms.filter((arm) => !arm.tsgo.exists);
-if (headless.length > 0) {
-  for (const arm of headless) console.log(`  NOT MEASURED  ${arm.name}: no frontend at ${arm.tsgo.path}`);
-  console.log("  nothing ran: each arm needs the frontend its binary was built with");
-  process.exit(2);
-}
 const jobs = Number(process.env.NTS_MESSAGES_JOBS ?? 4);
 
 const run = (cmd, args, env) =>
@@ -217,8 +201,7 @@ const run = (cmd, args, env) =>
  */
 async function refusalsOf(arm, project) {
   const out = join(arm.dir, "out", project.replace(/\//g, "_"));
-  const env = { ...process.env, NTS_TSGO: arm.tsgo.path, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots") };
-  delete env.NTS_NO_SNAPSHOT_CACHE;
+  const env = { ...process.env, NTS_CHECKERS: "1" };
   const r = await run(arm.nts, ["emit-c", join(project, "tsconfig.json"), "--out", out, "--napi"], env);
   if (r.error || r.signal || !existsSync(join(out, "program.c"))) {
     return { unmeasured: r.signal ? `killed by ${r.signal}` : "no program.c was written" };

@@ -41,6 +41,16 @@ node_modules
 # `docs/conformance/test262.md`.
 /third_party/test262
 
+# Upstream tests only, at TYPESCRIPT_PIN beside TEST262_PIN, verified against
+# the native checker. Prepared by: node tooling/bootstrap/typescript.ts
+# Its shallow clone is the pinned equivalent of:
+#   git init third_party/typescript
+#   git -C third_party/typescript remote add origin https://github.com/microsoft/TypeScript
+#   git -C third_party/typescript sparse-checkout set --no-cone /tsc/testdata/tests/
+#   git -C third_party/typescript fetch --depth 1 --filter=blob:none origin <TYPESCRIPT_PIN>
+#   git -C third_party/typescript checkout --detach FETCH_HEAD
+/third_party/typescript
+
 # Are We Fast Yet, cloned sparsely. Not vendored, for the same reason: it is
 # somebody else's repository, and the TypeScript port in `benchmarks/awfy` is ours.
 # What the clone is for is the *fidelity gate* -- running their `.js` and our

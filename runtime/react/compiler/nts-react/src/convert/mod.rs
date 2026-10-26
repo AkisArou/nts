@@ -21,7 +21,7 @@ use nts_semantic_schema::{NodeData, NodeId, NodeKind};
 use react_compiler_ast::common::{BaseNode, Comment, CommentData};
 use react_compiler_ast::{File, Program, SourceType};
 
-use crate::tsgo::{Nodes, kinds as k};
+use crate::syntax::{Nodes, kinds as k};
 use text::SourceText;
 
 /// A construct the converter does not handle, at the node where it met it.
@@ -73,7 +73,12 @@ impl Converter<'_> {
 
     /// The node's own text: an identifier's name, a literal's cooked value.
     fn text_of(&self, id: NodeId) -> String {
-        self.record(id).text.clone().unwrap_or_default()
+        self.record(id)
+            .text
+            .as_ref()
+            .and_then(|text| text.as_utf8())
+            .map(str::to_owned)
+            .unwrap_or_default()
     }
 
     /// A string literal's value, cooked from its source.
@@ -86,13 +91,10 @@ impl Converter<'_> {
         self.record(id).flags
     }
 
-    /// The per-kind bits tsgo's encoder keeps beside the children: a unary
-    /// operator, whether an import is type-only.
+    /// Semantic per-kind flags: a unary operator or an import's phase.
     fn small(&self, id: NodeId) -> u8 {
         match self.record(id).data {
-            NodeData::Children { small, .. }
-            | NodeData::String { small, .. }
-            | NodeData::Extended { small, .. } => small,
+            NodeData::Children { small, .. } | NodeData::Flags { small } => small,
             NodeData::ListLength(_) => 0,
         }
     }
@@ -161,7 +163,7 @@ impl Converter<'_> {
     }
 
     /// The offset of the first token at or after `from` that is `token`,
-    /// skipping trivia only. Used for punctuation tsgo keeps no node for, like
+    /// skipping trivia only. Used for punctuation the frontend keeps no node for, like
     /// the `:` that starts a type annotation or the `<` of type arguments.
     fn token_at(&self, from: u32, token: &str) -> Option<u32> {
         let at = self.text.token_start(from);
@@ -277,7 +279,7 @@ impl Converter<'_> {
             .children
             .iter()
             .copied()
-            .filter(|child| matches!(self.record(*child).kind, NodeKind::Syntax(kind) if crate::tsgo::children::is_jsdoc(kind)))
+            .filter(|child| matches!(self.record(*child).kind, NodeKind::Syntax(kind) if nts_semantic_schema::children::is_jsdoc(kind)))
     }
 
     /// Comments in `from..to`, a region holding only trivia and punctuation.

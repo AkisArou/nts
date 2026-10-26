@@ -387,6 +387,7 @@ fn one_reference_class_does_not_repeat_fieldless_relationships() {
 #[test]
 fn prefix_keys_keep_private_owners_public_names_and_exact_types() {
     let private = |owner| Field {
+        name: nts_semantic_schema::PropertyKey::Private("#next".to_owned()),
         declared_by: Some(TypeId(owner)),
         ..field("#next", object(1))
     };

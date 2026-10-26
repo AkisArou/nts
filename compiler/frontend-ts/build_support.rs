@@ -6,6 +6,7 @@ use std::path::Path;
 pub(crate) const CRATES: &[(&str, &str)] = &[
     ("nts-diagnostics", "compiler/diagnostics"),
     ("nts-frontend-ts", "compiler/frontend-ts"),
+    ("nts-frontend-tsrs", "compiler/frontend-tsrs"),
     ("nts-semantic-schema", "compiler/semantic-schema"),
 ];
 

@@ -10,36 +10,34 @@
 //! helper's slot, and `keeps`, which reads its string after the append, does
 //! not.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind, Options, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-string-appended-by-a-runtime-helper";
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
         provider: Provider::ReferenceCounting,
         ..Options::default()
     };
-    Some(
-        hir::prepare_with(&snapshot, &options)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &options)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 /// How many calls `func` makes to the runtime helper `helper`.
@@ -58,9 +56,7 @@ fn calls(func: &hir::Func, helper: &str) -> usize {
 
 #[test]
 fn a_helper_answer_only_appended_is_written_where_it_is_appended() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     for func in &program.funcs {
         let left: Vec<String> = hir::appended_runtime_calls(func)
             .into_iter()

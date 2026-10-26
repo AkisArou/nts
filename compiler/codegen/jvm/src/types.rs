@@ -160,14 +160,19 @@ pub fn is_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
 ///
 /// It is a face's type promising nothing a JVM type could carry: a type an
 /// interface identity names and no class identity does, whose layout has
-/// no fields, no method slots and no layout extending it as a superclass,
-/// and through which no access family reads. `Iterable<T>` in a program
-/// that only stores a generator where it is declared is the case: the core
+/// no fields, no ordinary method slots and no layout extending it as a
+/// superclass, and through which no access family reads. `Iterable<T>` in a
+/// program that only stores a generator where it is declared is the case: the core
 /// licenses the store as a vacuous prefix and C's cast is free. There is
 /// nothing to split -- no member an interface could declare -- and no
 /// holder evidence to split it by, since receivers and families are owed
 /// to accesses through the face and there are none. A face with a field,
-/// a slot or a family keeps the split-face path.
+/// an ordinary slot or its own family keeps the split-face path. Populated
+/// missing-field defaults whose actual body receiver is another type on this
+/// merged layout do not promise a member through this type. A recognized
+/// selector alone is insufficient: the source must publish the default, its
+/// face must resolve, and the live body must have that distinct, co-located
+/// owned receiver. Other populated field-family rows stay conservative.
 ///
 /// **Per type, not per layout.** test262's `class C { method([]) {} }`
 /// puts `C` and its parameter's `Iterable<T>` in one empty layout, and
@@ -176,14 +181,23 @@ pub fn is_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
 /// through, is the root. Per type is also per specialization:
 /// `Iterable<number>` and `Iterable<string>` share that layout too, and a
 /// family reading through one says nothing of the other. Only the shape --
-/// fields, slots, a subclass -- is the layout's, because it is one class.
+/// fields, ordinary slots, a subclass -- is the layout's, because it is one
+/// class. Field-family slot ownership remains per semantic face even when
+/// materialization adds unrelated rows to that shared layout.
 #[must_use]
 pub fn root_typed(program: &JvmProgram<'_>, id: nts_semantic_schema::TypeId) -> bool {
     let Some(layout) = program.layout(id) else {
         return false;
     };
-    layout.fields.is_empty()
-        && layout.methods.iter().all(Option::is_none)
+    !nts_core::hir::runtime::is_foreign_layout_name(&layout.name)
+        && layout.fields.is_empty()
+        && layout.methods.iter().enumerate().all(|(slot, entry)| {
+            entry.as_deref().is_none_or(|body| {
+                program
+                    .selector_receiver(slot, body)
+                    .is_some_and(|receiver| receiver != id && layout.types.contains(&receiver))
+            })
+        })
         && !crate::hierarchy::extended_by_a_base(program, layout)
         && crate::hierarchy::identity_of(program, id).is_none()
         && program

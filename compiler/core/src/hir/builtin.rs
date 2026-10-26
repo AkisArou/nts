@@ -261,14 +261,14 @@ pub(super) const ITERATOR_RESULT: &str = "IteratorResult";
 pub(super) fn iterator_result_fields(value: HirType) -> Vec<Field> {
     vec![
         Field {
-            name: "done".to_owned(),
+            name: ("done".to_owned()).into(),
             ty: HirType::Bool,
             readonly: false,
             declared_by: None,
             written: None,
         },
         Field {
-            name: "value".to_owned(),
+            name: ("value".to_owned()).into(),
             ty: value,
             readonly: false,
             declared_by: None,
@@ -290,7 +290,7 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
     let mut fields: Vec<Field> = ["message", "name"]
         .into_iter()
         .map(|name| Field {
-            name: name.to_owned(),
+            name: (name.to_owned()).into(),
             ty: HirType::Managed(ManagedType::String),
             readonly: false,
             declared_by: None,
@@ -325,7 +325,7 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
     // gets that right on its own, since an interface's `PROPERTY_SIGNATURE` is not
     // a class's `PROPERTY_DECLARATION`.
     fields.push(Field {
-        name: CAUSE_FIELD.to_owned(),
+        name: (CAUSE_FIELD.to_owned()).into(),
         ty: HirType::Erased,
         readonly: false,
         declared_by: None,
@@ -333,7 +333,7 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
     });
     if class == "AggregateError" {
         fields.push(Field {
-            name: AGGREGATE_ERRORS_FIELD.to_owned(),
+            name: (AGGREGATE_ERRORS_FIELD.to_owned()).into(),
             // **The array erased, not an array of erased values**, and the
             // difference is a representation change rather than a cast.
             //

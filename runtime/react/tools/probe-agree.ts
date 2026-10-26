@@ -12,8 +12,7 @@
 // different inputs, or agreement would say nothing.
 //
 // usage: node tools/probe-agree.ts
-//   NTS_REACT names the nts-react binary (default: the lane's debug build),
-//   NTS_TSGO the tsgo it drives.
+//   NTS_REACT names the nts-react binary (default: the lane's debug build).
 
 import { build, type Plugin } from "esbuild";
 import { execFileSync } from "node:child_process";

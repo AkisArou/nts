@@ -4,17 +4,16 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind, UnOp};
-use nts_frontend_ts::SemanticSource;
 
-fn snapshot() -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> nts_semantic_schema::SemanticSnapshot {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/builtin-numeric-arguments/tsconfig.json");
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("the fixture typechecks");
     assert!(!snapshot.has_errors());
-    Some(snapshot)
+    snapshot
 }
 
 fn live(func: &hir::Func) -> impl Iterator<Item = &OpKind> {
@@ -26,7 +25,7 @@ fn live(func: &hir::Func) -> impl Iterator<Item = &OpKind> {
 
 #[test]
 fn an_erased_number_takes_a_branch_without_a_runtime_call() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     let func = lowered
@@ -60,7 +59,7 @@ fn an_erased_number_takes_a_branch_without_a_runtime_call() {
 
 #[test]
 fn a_static_number_round_trip_reaches_no_backend() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let options = hir::Options {
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
@@ -97,7 +96,7 @@ fn a_static_number_round_trip_reaches_no_backend() {
 
 #[test]
 fn constant_digits_reach_the_formatter_without_a_conversion_merge() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     for (name, expected) in [

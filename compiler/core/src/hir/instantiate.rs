@@ -621,31 +621,48 @@ fn substitute_kind(site: &mut impl Site, ty: TypeId, sigma: &Sigma, depth: u32) 
     // Cloned rather than borrowed because the walk below asks the site for
     // records, and the writing site holds the snapshot mutably.
     let record = site.snapshot().types.get(ty.0 as usize)?.clone();
-    let wanted = match &record.kind {
-        TypeKind::Object { properties } => {
-            // A template of a generic this program declares -- `Inner<T>` --
-            // is the *instantiation* `Inner<σ(T)>`, not a fresh object with
-            // substituted members: it has a symbol, a hierarchy and copies of
-            // its own, and an anonymous twin of it would have none of them.
-            if let Some(symbol) = record.symbol
-                && let Some(&declaration) = site.declarations().get(&symbol)
+    // A template of a generic this program declares -- `Inner<T>` --
+    // is the *instantiation* `Inner<σ(T)>`, not a fresh object with
+    // substituted members: it has a symbol, a hierarchy and copies of
+    // its own, and an anonymous twin of it would have none of them.
+    // A demanded named formal may intentionally be captured shallowly. Its
+    // own complete declaration and recorded arguments already own the answer;
+    // no native expansion is needed to resolve it under concrete bindings.
+    let named = record.symbol.and_then(|symbol| {
+        site.declarations()
+            .get(&symbol)
+            .copied()
+            .map(|declaration| (symbol, declaration))
+    });
+    if let Some((symbol, declaration)) = named {
+        let is_owned_shallow = matches!(&record.kind, TypeKind::Structured)
+            && matches!(
+                site.snapshot()
+                    .types
+                    .get(declaration.0 as usize)
+                    .map(|record| &record.kind),
+                Some(TypeKind::Object { .. })
+            )
+            && arguments(site.snapshot(), ty).len()
+                == arguments(site.snapshot(), declaration).len();
+        if matches!(&record.kind, TypeKind::Object { .. }) || is_owned_shallow {
+            let args = instantiation_arguments(site.snapshot(), ty, declaration);
+            let args = substitute_all(site, &args, sigma, depth + 1)?;
+            // A binding that is itself a parameter leaves the result a
+            // template, and a template is not something to materialise.
+            if args
+                .iter()
+                .any(|arg| mentions_a_parameter(site.snapshot(), *arg))
             {
-                let args = instantiation_arguments(site.snapshot(), ty, declaration);
-                let args = substitute_all(site, &args, sigma, depth + 1)?;
-                // A binding that is itself a parameter leaves the result a
-                // template, and a template is not something to materialise.
-                if args
-                    .iter()
-                    .any(|arg| mentions_a_parameter(site.snapshot(), *arg))
-                {
-                    return None;
-                }
-                return site.instance(symbol, declaration, args, depth + 1);
+                return None;
             }
-            TypeKind::Object {
-                properties: substitute_properties(site, properties, sigma, depth + 1)?,
-            }
+            return site.instance(symbol, declaration, args, depth + 1);
         }
+    }
+    let wanted = match &record.kind {
+        TypeKind::Object { properties } => TypeKind::Object {
+            properties: substitute_properties(site, properties, sigma, depth + 1)?,
+        },
         TypeKind::Array(element) => TypeKind::Array(substitute(site, *element, sigma, depth + 1)?),
         TypeKind::Tuple(items) => TypeKind::Tuple(substitute_all(site, items, sigma, depth + 1)?),
         TypeKind::Union(items) => TypeKind::Union(substitute_all(site, items, sigma, depth + 1)?),
@@ -1020,10 +1037,18 @@ impl<'s> Writer<'s> {
         changed
     }
 
-    fn push(&mut self, record: TypeRecord) -> TypeId {
+    fn push(&mut self, record: TypeRecord) -> Option<TypeId> {
+        // Substituting a child can consume the final record after the
+        // parent's entry check. Enforce the limit at the allocation itself,
+        // before either caller publishes a new record's sidecars or index.
+        if self.created >= BUDGET {
+            return None;
+        }
         self.snapshot.types.push(record);
         self.created += 1;
-        TypeId(u32::try_from(self.snapshot.types.len() - 1).unwrap_or(u32::MAX))
+        Some(TypeId(
+            u32::try_from(self.snapshot.types.len() - 1).unwrap_or(u32::MAX),
+        ))
     }
 }
 
@@ -1044,10 +1069,10 @@ impl Site for Writer<'_> {
         if let Some(found) = find_record(self.snapshot, &wanted, symbol) {
             return Some(found);
         }
-        Some(self.push(TypeRecord {
+        self.push(TypeRecord {
             kind: wanted,
             symbol,
-        }))
+        })
     }
 
     /// `D<args>`: the record with those arguments, made if it does not exist.
@@ -1070,8 +1095,11 @@ impl Site for Writer<'_> {
                 properties: Vec::new(),
             },
             symbol: Some(symbol),
-        });
+        })?;
         self.snapshot.type_arguments.insert(id, args.clone());
+        if let Some(&count) = self.snapshot.reference_parameter_counts.get(&declaration) {
+            self.snapshot.reference_parameter_counts.insert(id, count);
+        }
         self.index.insert((symbol, args.clone()), id);
 
         let own: Sigma = arguments(self.snapshot, declaration)
@@ -1389,6 +1417,44 @@ mod tests {
     use super::*;
     use nts_semantic_schema::{LiteralValue, ParameterRecord, TypeRecord};
 
+    #[test]
+    fn created_instances_keep_known_zero_and_nonzero_reference_arity() {
+        for count in [None, Some(0), Some(1)] {
+            let mut snapshot = snapshot(vec![
+                TypeKind::Object {
+                    properties: Vec::new(),
+                },
+                TypeKind::TypeParameter {
+                    name: "T".into(),
+                    is_this: false,
+                    constraint: None,
+                },
+                TypeKind::Number,
+            ]);
+            let (declared, actual) = if count == Some(1) {
+                (vec![TypeId(1)], vec![TypeId(2)])
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            snapshot.type_arguments.insert(TypeId(0), declared);
+            if let Some(count) = count {
+                snapshot.reference_parameter_counts.insert(TypeId(0), count);
+            }
+            let mut writer = Writer::new(&mut snapshot, FxHashMap::default(), FxHashMap::default());
+            let created = writer
+                .instance(SymbolId(0), TypeId(0), actual, 0)
+                .expect("empty owned instance");
+            assert_eq!(
+                writer
+                    .snapshot
+                    .reference_parameter_counts
+                    .get(&created)
+                    .copied(),
+                count
+            );
+        }
+    }
+
     fn snapshot(kinds: Vec<TypeKind>) -> SemanticSnapshot {
         SemanticSnapshot {
             types: kinds
@@ -1397,6 +1463,239 @@ mod tests {
                 .collect(),
             ..SemanticSnapshot::default()
         }
+    }
+
+    // The captured declaration is Box<T,P>, the shallow formal Box<F,unknown>,
+    // and the already captured concrete parameter is Box<unknown,unknown>.
+    fn owned_form_snapshot() -> SemanticSnapshot {
+        let field = |name: &str, ty: TypeId| PropertyRecord {
+            name: name.into(),
+            ty,
+            readonly: true,
+            optional: false,
+            declaration: None,
+            kind: nts_semantic_schema::MemberKind::Field,
+            own: true,
+        };
+        let parameter = |name: &str| TypeKind::TypeParameter {
+            name: name.into(),
+            constraint: None,
+            is_this: false,
+        };
+        let mut snapshot = snapshot(vec![
+            TypeKind::Object {
+                properties: vec![field("value", TypeId(1)), field("payload", TypeId(2))],
+            },
+            parameter("T"),
+            parameter("P"),
+            parameter("F"),
+            TypeKind::Unknown,
+            TypeKind::Structured,
+            TypeKind::Object {
+                properties: vec![field("value", TypeId(4)), field("payload", TypeId(4))],
+            },
+        ]);
+        for id in [0, 5, 6] {
+            snapshot.types[id].symbol = Some(SymbolId(0));
+        }
+        snapshot
+            .type_arguments
+            .insert(TypeId(0), vec![TypeId(1), TypeId(2)]);
+        snapshot
+            .type_arguments
+            .insert(TypeId(5), vec![TypeId(3), TypeId(4)]);
+        snapshot
+            .type_arguments
+            .insert(TypeId(6), vec![TypeId(4), TypeId(4)]);
+        snapshot
+    }
+
+    #[test]
+    fn a_shallow_owned_form_reuses_the_exact_concrete_parameter() {
+        for shallow in [false, true] {
+            let mut snapshot = owned_form_snapshot();
+            if !shallow {
+                snapshot.types[5].kind = TypeKind::Object {
+                    properties: Vec::new(),
+                };
+            }
+            let index =
+                FxHashMap::from_iter([((SymbolId(0), vec![TypeId(4), TypeId(4)]), TypeId(6))]);
+            let declarations = FxHashMap::from_iter([(SymbolId(0), TypeId(0))]);
+            let sigma = Sigma::from([(TypeId(3), TypeId(4))]);
+            // Both the writer and the read-only lookup must find the same
+            // nominal instance, with no new records when it already exists.
+            let mut templates = Templates::new(&snapshot);
+            templates.index = index.clone();
+            templates.declarations = declarations.clone();
+            assert_eq!(templates.resolve(TypeId(5), &sigma), Some(TypeId(6)));
+            let length = snapshot.types.len();
+            let mut writer = Writer::new(&mut snapshot, index, declarations);
+            assert_eq!(
+                substitute(&mut writer, TypeId(5), &sigma, 0),
+                Some(TypeId(6))
+            );
+            assert_eq!(writer.created, 0);
+            assert_eq!(writer.snapshot.types.len(), length);
+        }
+    }
+
+    #[test]
+    fn a_shallow_form_can_materialise_only_the_owned_declaration_members() {
+        let mut snapshot = owned_form_snapshot();
+        snapshot.types.pop();
+        snapshot.type_arguments.remove(&TypeId(6));
+        let declarations = FxHashMap::from_iter([(SymbolId(0), TypeId(0))]);
+        let sigma = Sigma::from([(TypeId(3), TypeId(4))]);
+        let mut writer = Writer::new(&mut snapshot, FxHashMap::default(), declarations);
+        let found = substitute(&mut writer, TypeId(5), &sigma, 0).expect("owned concrete instance");
+        assert_eq!(writer.created, 1);
+        assert_eq!(
+            writer.snapshot.types[found.0 as usize].symbol,
+            Some(SymbolId(0))
+        );
+        assert_eq!(
+            writer.snapshot.type_arguments[&found],
+            vec![TypeId(4), TypeId(4)]
+        );
+        let TypeKind::Object { properties } = &writer.snapshot.types[found.0 as usize].kind else {
+            panic!("the owned declaration supplies an object");
+        };
+        assert_eq!(properties.len(), 2);
+        assert!(properties.iter().all(|property| property.ty == TypeId(4)));
+    }
+
+    #[test]
+    fn shallow_forms_do_not_rescue_missing_contracts_or_open_bindings() {
+        for case in 0..6 {
+            let mut snapshot = owned_form_snapshot();
+            let mut declarations = FxHashMap::from_iter([(SymbolId(0), TypeId(0))]);
+            let mut sigma = Sigma::from([(TypeId(3), TypeId(4))]);
+            match case {
+                0 => declarations.clear(),
+                1 => snapshot.types[0].kind = TypeKind::Structured,
+                2 => {
+                    snapshot.types[5].symbol = None;
+                }
+                3 => {
+                    snapshot.type_arguments.insert(TypeId(5), vec![TypeId(3)]);
+                }
+                4 => {
+                    snapshot
+                        .type_arguments
+                        .insert(TypeId(5), vec![TypeId(3), TypeId(4), TypeId(4)]);
+                }
+                _ => sigma.clear(),
+            }
+            let length = snapshot.types.len();
+            let mut writer = Writer::new(&mut snapshot, FxHashMap::default(), declarations);
+            assert_eq!(
+                substitute(&mut writer, TypeId(5), &sigma, 0),
+                None,
+                "case {case}"
+            );
+            assert_eq!(writer.created, 0, "case {case}");
+            assert_eq!(writer.snapshot.types.len(), length);
+            assert!(matches!(
+                writer.snapshot.types[5].kind,
+                TypeKind::Structured
+            ));
+        }
+    }
+
+    #[test]
+    fn nominal_parents_cannot_exceed_the_record_cap_after_their_argument() {
+        for shallow in [false, true] {
+            let mut snapshot = owned_form_snapshot();
+            if !shallow {
+                snapshot.types[5].kind = TypeKind::Object {
+                    properties: Vec::new(),
+                };
+            }
+            snapshot.types.push(TypeRecord {
+                kind: TypeKind::Array(TypeId(3)),
+                symbol: None,
+            });
+            snapshot.type_arguments.insert(TypeId(0), vec![TypeId(1)]);
+            snapshot.type_arguments.insert(TypeId(5), vec![TypeId(7)]);
+            snapshot.reference_parameter_counts.insert(TypeId(0), 1);
+            let length = snapshot.types.len();
+            let arguments_before = snapshot.type_arguments.clone();
+            let counts_before = snapshot.reference_parameter_counts.clone();
+            let declarations = FxHashMap::from_iter([(SymbolId(0), TypeId(0))]);
+            let sigma = Sigma::from([(TypeId(3), TypeId(4))]);
+            let mut writer = Writer::new(&mut snapshot, FxHashMap::default(), declarations);
+            // Inject the accounting edge without allocating 20,000 filler
+            // records: Array<unknown> takes the last slot, its parent cannot.
+            writer.created = BUDGET - 1;
+            assert_eq!(substitute(&mut writer, TypeId(5), &sigma, 0), None);
+            assert_eq!(writer.created, BUDGET);
+            assert_eq!(writer.snapshot.types.len(), length + 1);
+            assert_eq!(
+                writer.snapshot.types[length].kind,
+                TypeKind::Array(TypeId(4))
+            );
+            assert!(
+                writer.index.is_empty(),
+                "unexpected instance index: {:?}",
+                writer.index
+            );
+            assert_eq!(writer.snapshot.type_arguments, arguments_before);
+            assert_eq!(writer.snapshot.reference_parameter_counts, counts_before);
+        }
+    }
+
+    #[test]
+    fn composite_parents_cannot_exceed_the_record_cap_when_unwinding() {
+        let mut snapshot = snapshot(vec![
+            TypeKind::TypeParameter {
+                name: "F".into(),
+                constraint: None,
+                is_this: false,
+            },
+            TypeKind::Number,
+            TypeKind::Array(TypeId(0)),
+            TypeKind::Array(TypeId(2)),
+        ]);
+        let length = snapshot.types.len();
+        let sigma = Sigma::from([(TypeId(0), TypeId(1))]);
+        let mut writer = Writer::new(&mut snapshot, FxHashMap::default(), FxHashMap::default());
+        writer.created = BUDGET - 1;
+        assert_eq!(substitute(&mut writer, TypeId(3), &sigma, 0), None);
+        assert_eq!(writer.created, BUDGET);
+        assert_eq!(writer.snapshot.types.len(), length + 1);
+        assert_eq!(
+            writer.snapshot.types[length].kind,
+            TypeKind::Array(TypeId(1))
+        );
+        assert!(
+            writer.index.is_empty(),
+            "unexpected instance index: {:?}",
+            writer.index
+        );
+        assert!(
+            writer.snapshot.type_arguments.is_empty(),
+            "unexpected type-argument sidecars: {:?}",
+            writer.snapshot.type_arguments
+        );
+    }
+
+    #[test]
+    fn the_record_cap_preserves_exact_existing_instance_and_composite_reuse() {
+        let mut snapshot = owned_form_snapshot();
+        let length = snapshot.types.len();
+        let index = FxHashMap::from_iter([((SymbolId(0), vec![TypeId(4), TypeId(4)]), TypeId(6))]);
+        let declarations = FxHashMap::from_iter([(SymbolId(0), TypeId(0))]);
+        let mut writer = Writer::new(&mut snapshot, index.clone(), declarations);
+        writer.created = BUDGET;
+        assert_eq!(
+            writer.instance(SymbolId(0), TypeId(0), vec![TypeId(4), TypeId(4)], 0),
+            Some(TypeId(6))
+        );
+        assert_eq!(writer.composite(TypeKind::Unknown, None), Some(TypeId(4)));
+        assert_eq!(writer.created, BUDGET);
+        assert_eq!(writer.snapshot.types.len(), length);
+        assert_eq!(writer.index, index);
     }
 
     #[test]
@@ -1492,7 +1791,7 @@ mod tests {
     #[test]
     fn coarse_object_bucket_preserves_member_flags_and_identity() {
         let property = PropertyRecord {
-            name: "value".to_owned(),
+            name: "value".to_owned().into(),
             ty: TypeId(0),
             readonly: false,
             optional: false,
@@ -1505,7 +1804,7 @@ mod tests {
         let mut readonly = property.clone();
         readonly.readonly = true;
         let mut renamed = property.clone();
-        renamed.name = "other".to_owned();
+        renamed.name = "other".to_owned().into();
         let snapshot = snapshot(vec![
             TypeKind::Number,
             TypeKind::Object {
@@ -1537,6 +1836,7 @@ mod tests {
         let snapshot = snapshot(vec![
             TypeKind::TypeParameter {
                 name: "T".to_owned(),
+                is_this: false,
                 constraint: None,
             },
             TypeKind::Array(TypeId(0)),
@@ -1558,6 +1858,7 @@ mod tests {
     fn call_form_roots_exclude_unused_class_and_mixed_owners() {
         let parameter = |name: &str| TypeKind::TypeParameter {
             name: name.to_owned(),
+            is_this: false,
             constraint: None,
         };
         let mut snapshot = snapshot(vec![

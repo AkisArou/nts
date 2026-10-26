@@ -116,7 +116,7 @@ JSON
   # `agrees-on-device.sh`, which passes `--entry` explicitly -- so the
   # `__@kCount@2` defect that motivated this ratchet was found on a real
   # program, and it is this ratchet that was hollow rather than the finding.
-  if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$config" \
+  if ! NTS_CHECKERS=1 "$nts" emit-jvm "$config" \
        --out "$out/classes" > "$out/emit.log" 2>&1; then
     # A refusal is this backend working. It is counted, not failed: the corpus
     # has programs every backend declines, and a lane that reported those as

@@ -2,9 +2,11 @@ package nts.rt;
 
 import java.io.BufferedReader;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -99,7 +101,7 @@ public final class Check {
         try { program.getMethod("module$init").invoke(null); }
         catch (NoSuchMethodException absent) { /* No module-scope initializer. */ }
         Map<String, Map<String, Plan>> plans = new HashMap<String, Map<String, Plan>>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+        try (BufferedReader reader = Files.newBufferedReader(Paths.get(file), StandardCharsets.UTF_8)) {
             long index = 0;
             for (String line = reader.readLine(); line != null; line = reader.readLine()) {
                 if (line.isEmpty()) { continue; }
@@ -117,20 +119,32 @@ public final class Check {
     }
     private static void one(Class<?> program, Map<String, Map<String, Plan>> plans, String line) throws Exception {
         String[] parts = line.split(" ");
-        // `parts[3]` is what a null result stands for (`Func::result_absent`):
+        // nts-check v2 target source at returns absence parameters [arguments]
+        // The literal v2 occupies the old case-number slot, so an old runtime
+        // rejects new cases too. A mixed compiler/runtime must not silently
+        // compare an emitted spelling against the oracle's source identity.
+        if (parts.length < 8 || !parts[0].equals("nts-check") || !parts[1].equals("v2")) {
+            throw new IllegalArgumentException("incompatible JVM check case protocol: expected nts-check v2");
+        }
+        String target = parts[2], name = parts[3], returns = parts[5], descriptors = parts[7];
+        // `parts[6]` is what a null result stands for (`Func::result_absent`):
         // `null` for a `string | null` return, `-` for every other.
-        String name = parts[0], returns = parts[2], descriptors = parts[4];
-        boolean nullIsNull = parts[3].equals("null");
-        int at = Integer.parseInt(parts[1]);
-        Map<String, Plan> overloads = plans.get(name);
+        boolean nullIsNull = parts[6].equals("null");
+        int at = Integer.parseInt(parts[4]);
+        // Invocation metadata belongs to the actual method and descriptor;
+        // every result below keeps the independent source name.
+        Map<String, Plan> overloads = plans.get(target);
         if (overloads == null) {
-            overloads = new HashMap<String, Plan>(); plans.put(name, overloads);
+            overloads = new HashMap<String, Plan>(); plans.put(target, overloads);
         }
         Plan plan = overloads.get(descriptors);
-        if (plan == null) { plan = new Plan(program, name, descriptors); overloads.put(descriptors, plan); }
+        if (plan == null) { plan = new Plan(program, target, descriptors); overloads.put(descriptors, plan); }
+        if (parts.length != 8 + plan.parameters.length) {
+            throw new IllegalArgumentException("wrong JVM check case argument count");
+        }
         Object result;
         try {
-            for (int i = 0; i < plan.parameters.length; ++i) { plan.arguments[i] = coerce(plan.parameters[i], parts[5 + i]); }
+            for (int i = 0; i < plan.parameters.length; ++i) { plan.arguments[i] = coerce(plan.parameters[i], parts[8 + i]); }
             result = plan.method.invoke(null, plan.arguments);
         } finally {
             // A cached plan must not retain the last case's reference arguments.

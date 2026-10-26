@@ -25,24 +25,17 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
-
-fn tsgo() -> Option<String> {
-    let path = std::env::var("NTS_TSGO").ok()?;
-    std::path::Path::new(&path).exists().then_some(path)
-}
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn read_only_literals_carry_settled_native_hashes() {
-    let Some((module, _)) = rendered(
+    let (module, _) = rendered(
         "literal-hashes",
         r#"export function pick(i: number): string {
           const texts = ["", "ascii", "caf\u00e9", "\u4e16\u754c", "\ud83d\ude00", "a\u0000b"];
           return texts[i % texts.length];
         }"#,
-    ) else {
-        return;
-    };
+    );
     for text in [
         "",
         "ascii",
@@ -64,8 +57,7 @@ fn read_only_literals_carry_settled_native_hashes() {
 }
 
 /// The LLVM module for one small program, and the HIR behind it.
-fn rendered(case: &str, source: &str) -> Option<(String, hir::Program)> {
-    let tsgo = tsgo()?;
+fn rendered(case: &str, source: &str) -> (String, hir::Program) {
     // Per case, because `cargo test` runs these in parallel.
     let dir = std::env::temp_dir().join(format!("nts-opt-{}-{case}", std::process::id()));
     let src = dir.join("src");
@@ -82,7 +74,8 @@ fn rendered(case: &str, source: &str) -> Option<(String, hir::Program)> {
     let tsconfig = Utf8Path::from_path(&dir)
         .expect("utf-8 path")
         .join("tsconfig.json");
-    let mut api = TsgoApi::for_compilation(tsgo);
+    let mut api =
+        Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
     let snapshot = api.snapshot(&tsconfig).expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "the fixture should typecheck");
     let prepared = hir::prepare(&snapshot).expect("prepared HIR should verify");
@@ -97,7 +90,7 @@ fn rendered(case: &str, source: &str) -> Option<(String, hir::Program)> {
             .map(|d| &d.message)
             .collect::<Vec<_>>()
     );
-    Some((emitted.text, prepared.program))
+    (emitted.text, prepared.program)
 }
 
 /// Optimize the module the way `tooling/bench` does and hand back the assembly.
@@ -140,14 +133,11 @@ fn optimized(case: &str, module: &str) -> Option<String> {
 /// fails here rather than nowhere.
 #[test]
 fn a_length_bounded_counter_is_an_integer() {
-    let Some((module, _)) = rendered(
+    let (module, _) = rendered(
         "counter",
         "export function scale(xs: number[]): void {\n\
          for (let i = 0; i < xs.length; i++) { xs[i] = xs[i] * 2; }\n}",
-    ) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
-        return;
-    };
+    );
     assert!(
         module.contains("phi i32"),
         "the counter is not an `i32` -- a wider one is not a counted loop to \
@@ -167,14 +157,11 @@ fn a_length_bounded_counter_is_an_integer() {
 /// not.
 #[test]
 fn an_elementwise_loop_vectorizes() {
-    let Some((module, _)) = rendered(
+    let (module, _) = rendered(
         "vectorize",
         "export function scale(xs: number[], k: number): void {\n\
          for (let i = 0; i < xs.length; i++) { xs[i] = xs[i] * k; }\n}",
-    ) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
-        return;
-    };
+    );
     let Some(assembly) = optimized("vectorize", &module) else {
         eprintln!("SKIP: clang is unavailable");
         return;
@@ -197,16 +184,13 @@ fn an_elementwise_loop_vectorizes() {
 /// destination made bytes 128..255 negative.
 #[test]
 fn a_byte_does_not_travel_through_a_double() {
-    let Some((module, _)) = rendered(
+    let (module, _) = rendered(
         "bytes",
         "export function sum(data: Uint8Array): number {\n\
          let total = 0;\n\
          for (let i = 0; i < data.length; i++) { total = (total + data[i]) | 0; }\n\
          return total;\n}",
-    ) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
-        return;
-    };
+    );
     assert!(
         module.contains("zext i8"),
         "a byte is not widened with `zext`:\n{module}"
@@ -225,16 +209,13 @@ fn a_byte_does_not_travel_through_a_double() {
 /// counter it was meant to fix.
 #[test]
 fn a_proven_index_costs_no_check() {
-    let Some((module, _)) = rendered(
+    let (module, _) = rendered(
         "checks",
         "export function total(xs: number[]): number {\n\
          let t = 0;\n\
          for (let i = 0; i < xs.length; i++) { t = t + xs[i]; }\n\
          return t;\n}",
-    ) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
-        return;
-    };
+    );
     let body: String = module
         .lines()
         .filter(|line| !line.starts_with("declare"))
@@ -266,16 +247,13 @@ fn a_proven_index_costs_no_check() {
 /// control for this needs to be.
 #[test]
 fn the_check_for_a_check_can_see_one() {
-    let Some((module, _)) = rendered(
+    let (module, _) = rendered(
         "control",
         "export function total(xs: number[], n: number): number {\n\
          let t = 0;\n\
          for (let i = 0; i < n; i++) { t = t + xs[i]; }\n\
          return t;\n}",
-    ) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
-        return;
-    };
+    );
     let body: String = module
         .lines()
         .filter(|line| !line.starts_with("declare"))

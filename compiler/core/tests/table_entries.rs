@@ -7,29 +7,29 @@
 //! host's heap keeps the plain calls unless its backend's tables answer an
 //! entry (`Options::table_entries`): the JVM's do not, Wasm's do.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind, Options, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-table-key-updated-in-place";
 
-fn prepared(provider: Provider) -> Option<hir::Program> {
+fn prepared(provider: Provider) -> hir::Program {
     prepared_with(provider, None)
 }
 
-fn prepared_with(provider: Provider, table_entries: Option<bool>) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared_with(provider: Provider, table_entries: Option<bool>) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
@@ -37,11 +37,9 @@ fn prepared_with(provider: Provider, table_entries: Option<bool>) -> Option<hir:
         table_entries,
         ..Options::default()
     };
-    Some(
-        hir::prepare_with(&snapshot, &options)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &options)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 /// How many calls to `helper` the function `name` makes.
@@ -65,9 +63,7 @@ fn calls(program: &hir::Program, name: &str, helper: &str) -> usize {
 
 #[test]
 fn a_read_then_a_write_of_one_key_shares_the_lookup() {
-    let Some(program) = prepared(Provider::NoGc) else {
-        return;
-    };
+    let program = prepared(Provider::NoGc);
     // (function, entries, writes through one)
     for (name, entries, sets) in [
         ("recordCounts", 1, 1),
@@ -99,9 +95,7 @@ fn a_read_then_a_write_of_one_key_shares_the_lookup() {
 
 #[test]
 fn a_write_that_might_not_be_the_read_keeps_its_own_lookup() {
-    let Some(program) = prepared(Provider::NoGc) else {
-        return;
-    };
+    let program = prepared(Provider::NoGc);
     for name in ["callBetween", "anotherKey", "anotherTable"] {
         assert_eq!(
             calls(&program, name, hir::entries::ENTRY),
@@ -121,15 +115,9 @@ fn a_write_that_might_not_be_the_read_keeps_its_own_lookup() {
 /// which sets it, shares exactly the lookups native preparation shares.
 #[test]
 fn a_host_heap_shares_only_where_its_backend_says_so() {
-    let Some(plain) = prepared(Provider::HostGc) else {
-        return;
-    };
-    let Some(shared) = prepared_with(Provider::HostGc, Some(true)) else {
-        return;
-    };
-    let Some(native) = prepared(Provider::NoGc) else {
-        return;
-    };
+    let plain = prepared(Provider::HostGc);
+    let shared = prepared_with(Provider::HostGc, Some(true));
+    let native = prepared(Provider::NoGc);
     for name in ["recordCounts", "mapCounts", "eitherArm"] {
         assert_eq!(calls(&plain, name, hir::entries::ENTRY), 0, "`{name}`");
         assert!(calls(&plain, name, "nts_map_set") > 0, "`{name}`");

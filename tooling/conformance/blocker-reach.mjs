@@ -78,7 +78,7 @@ function shapeOf(message) {
 const reach = new Map();   // shape -> { own: Set, inherited: Set }
 for (const module of modules) {
   const tsconfig = join(ROOT, "runtime/node", module, "tsconfig.json");
-  const env = { NTS_TSGO: join(ROOT, "target/tsgo"), ...process.env };
+  const env = { NTS_CHECKERS: "1", ...process.env };
   const runs = [spawnSync(compiler, ["hir", tsconfig], {
     encoding: "utf8", maxBuffer: 128 * 1024 * 1024, timeout: 600_000, env,
   })];
@@ -130,14 +130,13 @@ const rows = [...reach].map(([shape, { own, inherited }]) => ({
 
 // A corpus of twenty-two node modules has never emitted without a diagnostic, so
 // zero is the instrument failing rather than the tree improving. The most likely
-// cause is `NTS_TSGO` unset, which makes the frontend fail on every module and
-// produces a perfect, meaningless zero.
+// cause is a frontend failure on every module, producing a perfect,
+// meaningless zero before lowering ever runs.
 if (rows.length === 0) {
   console.error(
     "  INSTRUMENT FAILURE: zero refusal shapes across " + modules.length +
-      " modules.\n  This corpus has never emitted without a diagnostic. Check that " +
-      "NTS_TSGO points\n  at a real tsgo -- an unset one fails the frontend on every " +
-      "module and reads as a\n  clean sweep.",
+      " modules.\n  This corpus has never emitted without a diagnostic. Check the " +
+      "frontend's\n  stderr and the selected compiler before believing a clean sweep.",
   );
   process.exitCode = 2;
 }

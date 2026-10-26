@@ -8,21 +8,20 @@
 //! the shape, with a control that differs in one thing: an identity that also
 //! counts its calls is not one, and keeps all three.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::SemanticSource;
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/identity-forwarding/tsconfig.json")
         .canonicalize_utf8()
         .expect("the fixture is checked in");
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     // The options `nts hir --prepared` uses, and verified: a decided branch
@@ -33,7 +32,7 @@ fn prepared() -> Option<hir::Program> {
         ..hir::Options::default()
     };
     match hir::prepare_with(&snapshot, &options) {
-        Ok(prepared) => Some(prepared.program),
+        Ok(prepared) => prepared.program,
         Err(unprepared) => panic!("the fixture should prepare: {unprepared:?}"),
     }
 }
@@ -77,9 +76,7 @@ fn kinds(program: &hir::Program, name: &str) -> Vec<String> {
 
 #[test]
 fn an_identity_call_is_its_argument_and_the_erasure_folds() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     assert_eq!(
         kinds(&program, "eraseNumbers"),
         Vec::<String>::new(),
@@ -97,9 +94,7 @@ fn an_identity_call_is_its_argument_and_the_erasure_folds() {
 
 #[test]
 fn a_tag_the_erasure_decides_removes_the_arm_it_rules_out() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     // `typeof value === "string"` on an erased number is false, and the arm
     // that read `value.length` through an unerase is reached by nothing: gone,
     // not stranded -- `prepared` verifies, and a block left behind is
@@ -114,9 +109,7 @@ fn a_tag_the_erasure_decides_removes_the_arm_it_rules_out() {
 /// disagreement `shed_erasure` surveys every call site for, and it stays erased.
 #[test]
 fn a_caller_through_an_identity_agrees_with_one_passing_the_value() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     let parameter = |name: &str| {
         program
             .funcs

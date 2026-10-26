@@ -231,7 +231,7 @@ fn call_helper(b: &mut Body<'_, '_>, helper: Helper) -> Result<(), Failure> {
 
 /// The calling function's name, for a refusal inside a helper.
 fn name(b: &mut Body<'_, '_>) {
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
 }
 
 pub(crate) fn constant(b: &mut Body<'_, '_>, value: i128) {

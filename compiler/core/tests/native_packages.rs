@@ -10,18 +10,10 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, NativePackage};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// A program of `main` beside `bindings`, a script of `declare module`s.
-fn snapshot(
-    name: &str,
-    bindings: &str,
-    main: &str,
-) -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP native packages: tsgo is required");
-        return None;
-    };
+fn snapshot(name: &str, bindings: &str, main: &str) -> nts_semantic_schema::SemanticSnapshot {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
@@ -36,11 +28,12 @@ fn snapshot(
     .unwrap();
     std::fs::write(dir.join("bindings.d.ts"), bindings).unwrap();
     std::fs::write(dir.join("main.ts"), main).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some(snapshot)
+    snapshot
 }
 
 const BINDINGS: &str = r#"/**
@@ -72,7 +65,7 @@ declare module "c:unused" {
 
 #[test]
 fn a_program_takes_the_packages_of_the_modules_it_uses() {
-    let Some(used) = snapshot(
+    let used = snapshot(
         "packages",
         BINDINGS,
         r#"import { called_value } from "c:called";
@@ -84,9 +77,7 @@ export function run(): number {
   return called_value() + point.x;
 }
 "#,
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&used).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
@@ -109,13 +100,11 @@ export function run(): number {
 
 #[test]
 fn a_package_named_like_a_flag_is_refused_at_its_module() {
-    let Some(flagged) = snapshot(
+    let flagged = snapshot(
         "packages-bad",
         "/**\n * @ntsHeader f.h\n * @ntsPackage --libs\n */\ndeclare module \"c:flagged\" {\n  import type { c_int } from \"@nts/scalars\";\n  export function flagged_value(): c_int;\n}\n",
         "import { flagged_value } from \"c:flagged\";\nexport function run(): number { return flagged_value(); }\n",
-    ) else {
-        return;
-    };
+    );
     let prepared = hir::prepare(&flagged).unwrap();
     // The source's error, said once and whole: no lowering-gap suffix.
     assert!(

@@ -13,26 +13,25 @@
 //! are refused for three separate reasons and each would be a different kind of
 //! wrong if it were not.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
-use nts_frontend_ts::SemanticSource;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn externals(lowered: &hir::lower::Lowered) -> Vec<&str> {
@@ -58,9 +57,7 @@ fn externals(lowered: &hir::lower::Lowered) -> Vec<&str> {
 /// and the reason this is a managed type rather than a class.
 #[test]
 fn a_date_is_its_own_representation() {
-    let Some(lowered) = lowered("dates") else {
-        return;
-    };
+    let lowered = lowered("dates");
     assert_eq!(lowered.diagnostics, [], "nothing in the fixture is refused");
     assert!(
         lowered
@@ -88,9 +85,7 @@ fn a_date_is_its_own_representation() {
 /// entry points for one answer is two chances to make them disagree.
 #[test]
 fn get_time_and_value_of_are_one_operation() {
-    let Some(lowered) = lowered("dates") else {
-        return;
-    };
+    let lowered = lowered("dates");
     let calls = externals(&lowered);
     assert!(
         calls.contains(&"nts_date_new"),
@@ -121,9 +116,7 @@ fn get_time_and_value_of_are_one_operation() {
 ///   capability for, and which no differential could check if it had one.
 #[test]
 fn what_is_refused_and_why() {
-    let Some(lowered) = lowered("dates-unsupported") else {
-        return;
-    };
+    let lowered = lowered("dates-unsupported");
     let said: Vec<&str> = lowered
         .diagnostics
         .iter()

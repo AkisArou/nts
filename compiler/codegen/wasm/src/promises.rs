@@ -358,7 +358,7 @@ fn combinator(b: &mut Body<'_, '_>, op: Op, args: &[ValueId]) -> Result<(), Fail
     for &arg in args {
         b.load(arg)?;
     }
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.call(helper);
     Ok(())
 }
@@ -460,7 +460,7 @@ fn read(b: &mut Body<'_, '_>, result: ValueId, op: Op, promise: ValueId) -> Resu
     };
     let reader = callee(b.m, Helper::Read(state, kind))?;
     b.load(promise)?;
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.call(reader);
     Ok(())
 }

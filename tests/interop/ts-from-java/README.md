@@ -17,17 +17,21 @@ The published class is:
 
 ```
 public final class nts.gen.Session {
-  double $hits;
+  double p$$hits;
   public nts.gen.Session();
 }
 ```
 
-`double $hits` with **no `public`**. Uncommenting the `s.$hits` line in
+`double p$$hits` with **no `public`**. Uncommenting the `s.p$$hits` line in
 `Main.java` gives:
 
 ```
-error: $hits is not public in Session; cannot be accessed from outside package
+error: p$$hits is not public in Session; cannot be accessed from outside package
 ```
+
+The storage spelling includes the typed private-key namespace; it is not a
+public Java member. The capture also includes package-private closure fields
+so a visibility change stays visible.
 
 That is the whole of item 0 working, checked by a third-party tool. A Java
 caller that wants to mutate has to go through `Session$bump`, whose store is a
@@ -71,7 +75,7 @@ exported method that forwards to the static.
 
 ```java
 public final class Session {
-  double $hits;
+  double p$$hits;
   public double bump() { return Program.Session$bump(this); }
   public double hits() { return Program.Session$hits(this); }
 }

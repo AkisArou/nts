@@ -1,4 +1,4 @@
-# Generated from oxc-project/tsrs bb5c6037ad04decdd7c5832997e810000e85943d; crate sources are unmodified.
+# Generated from oxc-project/tsrs a0db53eabe483062205717f067a49b6ccb3fc868; local patches disclosed in UPSTREAM.json.
 [workspace]
 resolver = "3"
 members = ["crates/*"]

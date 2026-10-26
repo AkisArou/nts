@@ -9,7 +9,7 @@ mod scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use scratch::ScratchDir;
 use std::process::Command;
 
@@ -217,8 +217,7 @@ fn actual_helpers() -> String {
     helpers
 }
 
-fn build(case: &Case, provider: hir::Provider) -> Option<ScratchDir> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn build(case: &Case, provider: hir::Provider) -> ScratchDir {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -258,7 +257,8 @@ export function run(probe: Probe, mode: c_int): Float64 {{
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), program).unwrap();
     std::fs::write(dir.join("tsconfig.json"), format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts","{root}/runtime/winrt/winrt.d.ts"]}}"#)).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -311,16 +311,14 @@ export function run(probe: Probe, mode: c_int): Float64 {{
         case.name,
         String::from_utf8_lossy(&output.stderr)
     );
-    Some(dir)
+    dir
 }
 
 #[test]
 fn failed_outputs_are_not_interpreted_and_successful_outputs_are_preserved() {
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         for case in CASES {
-            let Some(dir) = build(case, provider) else {
-                panic!("NTS_TSGO is required for this guard");
-            };
+            let dir = build(case, provider);
             for mode in [1, 2, 3] {
                 let output = Command::new(dir.join("caller"))
                     .arg(mode.to_string())

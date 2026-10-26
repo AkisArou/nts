@@ -1,0 +1,44 @@
+--- a/crates/tsrs_checker/src/checker_10.rs
++++ b/crates/tsrs_checker/src/checker_10.rs
+@@ -1579,16 +1579,17 @@
+             {
+                 yield_expr_type = self.get_regular_type_of_literal_type(yield_expr_type);
+             }
+-            // Go appends a possibly-nil result here; a nil constituent would crash the union below.
+-            let yielded = self
+-                .get_yielded_type_of_yield_expression(
+-                    yield_expr,
+-                    yield_expr_type,
+-                    self.any_type,
+-                    is_async,
+-                )
+-                .unwrap();
+-            append_if_unique(&mut yield_types, yielded);
++            // An invalid async yield has already reported its diagnostic and
++            // contributes no inferred type. Retain valid yield constituents
++            // and continue collecting next types and later diagnostics.
++            if let Some(yielded) = self.get_yielded_type_of_yield_expression(
++                yield_expr,
++                yield_expr_type,
++                self.any_type,
++                is_async,
++            ) {
++                append_if_unique(&mut yield_types, yielded);
++            }
+ 
+             let next_type = if yield_expr.as_yield_expression().asterisk_token.is_some() {
+                 let use_ =
+--- a/crates/tsrs_checker/src/exports.rs
++++ b/crates/tsrs_checker/src/exports.rs
+@@ -2,6 +2,11 @@
+ use tsrs_ast as ast;
+ 
+ impl Checker {
++    /// Observe completed checking without triggering any checker work.
++    pub fn is_source_file_type_checked_exported(&self, file: P<ast::SourceFile>) -> bool {
++        self.source_file_links.try_get(file).is_some_and(|links| links.type_checked.get())
++    }
++
+     // exports.go:8
+     pub fn get_string_type(&self) -> P<Type> {
+         self.string_type

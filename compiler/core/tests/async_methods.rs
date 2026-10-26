@@ -13,27 +13,27 @@
 //! beside the others and comes back out on resumption — and a frame that lost
 //! it would read `this` off whatever the slot held.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// The program as `lower` and `hir::suspend` leave it.
 ///
 /// The resumptions do not exist until that pass has run, and they are the
 /// subject: an `async` method is two functions and a frame.
-fn machine(name: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn machine(name: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let mut lowered = hir::lower::lower(&snapshot);
@@ -48,7 +48,7 @@ fn machine(name: &str) -> Option<hir::Program> {
     );
     let refusals = hir::suspend::transform(&mut lowered.program);
     assert!(refusals.is_empty(), "and nothing is refused by the split");
-    Some(lowered.program)
+    lowered.program
 }
 
 fn layout<'a>(program: &'a hir::Program, name: &str) -> &'a hir::Layout {
@@ -66,9 +66,7 @@ fn layout<'a>(program: &'a hir::Program, name: &str) -> &'a hir::Layout {
 /// one path in rather than on each path out.
 #[test]
 fn an_async_method_allocates_its_promise_once() {
-    let Some(program) = machine("async-methods") else {
-        return;
-    };
+    let program = machine("async-methods");
     let entry = program
         .funcs
         .iter()
@@ -101,9 +99,7 @@ fn an_async_method_allocates_its_promise_once() {
 /// enough that one instrument sees each.
 #[test]
 fn falling_off_the_end_settles_the_promise() {
-    let Some(program) = machine("async-methods") else {
-        return;
-    };
+    let program = machine("async-methods");
     let entry = program
         .funcs
         .iter()
@@ -145,14 +141,17 @@ fn falling_off_the_end_settles_the_promise() {
 /// zeroed slot is a valid-looking pointer to nothing.
 #[test]
 fn the_receiver_is_in_the_frame() {
-    let Some(program) = machine("async-methods") else {
-        return;
-    };
+    let program = machine("async-methods");
     let frame = layout(&program, "Counter#afterASuspension#frame");
     let names: Vec<&str> = frame
         .fields
         .iter()
-        .map(|field| field.name.as_str())
+        .map(|field| {
+            field
+                .name
+                .public_name()
+                .expect("this fixture uses public fields")
+        })
         .collect();
     assert_eq!(
         &names[..3],
@@ -187,9 +186,7 @@ fn the_receiver_is_in_the_frame() {
 /// is the only test that depends on it.
 #[test]
 fn a_static_async_method_has_no_receiver_in_its_frame() {
-    let Some(program) = machine("async-methods") else {
-        return;
-    };
+    let program = machine("async-methods");
     let frame = layout(&program, "Statics.viaAnother#frame");
     assert_eq!(
         frame.fields.len(),
@@ -198,7 +195,10 @@ fn a_static_async_method_has_no_receiver_in_its_frame() {
         frame
             .fields
             .iter()
-            .map(|field| field.name.as_str())
+            .map(|field| field
+                .name
+                .public_name()
+                .expect("this fixture uses public fields"))
             .collect::<Vec<_>>(),
     );
 }
@@ -210,9 +210,7 @@ fn a_static_async_method_has_no_receiver_in_its_frame() {
 /// produced one would give every receiver the same body.
 #[test]
 fn an_overridden_async_method_is_two_state_machines() {
-    let Some(program) = machine("async-methods") else {
-        return;
-    };
+    let program = machine("async-methods");
     for name in [
         "Base#describe",
         "Base#describe__resume",

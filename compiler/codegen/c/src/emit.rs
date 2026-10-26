@@ -21,7 +21,7 @@ use nts_core::hir::{
     Terminator, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
-use nts_semantic_schema::Origin;
+use nts_semantic_schema::{JsText, Origin};
 
 mod header;
 mod notices;
@@ -496,7 +496,7 @@ struct Context<'a> {
     cycles: &'a nts_core::hir::Cycles,
     /// The target's C ABI, which decides every size and offset emitted.
     abi: NativeAbi,
-    literals: &'a [String],
+    literals: &'a [JsText],
     templates: bool,
     /// Values something in this function reads.
     ///
@@ -1603,7 +1603,7 @@ fn declares_the_name(header: &str, name: &str) -> bool {
 }
 
 /// The C name of a string literal's static data.
-fn literal_name(literals: &[String], text: &str) -> String {
+fn literal_name(literals: &[JsText], text: &JsText) -> String {
     let index = literals.iter().position(|known| known == text).unwrap_or(0);
     format!("nts_str_{index}")
 }
@@ -1644,7 +1644,7 @@ fn emit_bodies<'a>(
     program: &'a Program,
     abi: NativeAbi,
     cycles: &nts_core::hir::Cycles,
-    literals: &[String],
+    literals: &[JsText],
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
 ) -> Vec<(String, CodeWriter, &'a Func)> {
@@ -2604,21 +2604,43 @@ fn field_load(
 /// the reference tables and at every load and store, which is the only property
 /// that matters. A layout with no shadowing is spelled exactly as before, which
 /// is every layout in the corpus but one.
+#[must_use]
+pub fn object_field_name(layout: &nts_core::hir::Layout, at: usize) -> String {
+    c_member_at(layout, at)
+}
+
 fn c_member_at(layout: &nts_core::hir::Layout, at: usize) -> String {
     let Some(field) = layout.fields.get(at) else {
         return String::new();
     };
-    let spelled = c_member_escaped(&field.name);
+    let spelled = typed_member_spelling(&field.name);
     // **Compared after escaping, not before.** Two fields collide in C when
     // their *spellings* match, which is a weaker condition than their names
     // matching once the escape below can map several characters to one shape.
-    if layout.fields[..at]
-        .iter()
-        .any(|before| c_member_escaped(&before.name) == spelled)
-    {
+    let public = matches!(field.name, nts_semantic_schema::PropertyKey::Name(_));
+    if layout.fields.iter().enumerate().any(|(index, other)| {
+        let other_public = matches!(other.name, nts_semantic_schema::PropertyKey::Name(_));
+        let preferred = if public {
+            other_public && index < at
+        } else {
+            other_public || index < at
+        };
+        preferred && typed_member_spelling(&other.name) == spelled
+    }) {
         format!("{spelled}_{at}")
     } else {
         spelled
+    }
+}
+
+// Plain fields are also the public C header's members. Preserve their written
+// spelling; private and symbol keys keep their typed identity encoding. The
+// layout's post-escape collision check above applies across all key variants.
+fn typed_member_spelling(key: &nts_semantic_schema::PropertyKey) -> String {
+    match key {
+        nts_semantic_schema::PropertyKey::Name(name) => c_member_escaped(name),
+        nts_semantic_schema::PropertyKey::Private(_)
+        | nts_semantic_schema::PropertyKey::Symbol(_) => c_member_escaped(&key.storage_name()),
     }
 }
 
@@ -2685,33 +2707,16 @@ fn c_string(text: &str) -> String {
 /// that must agree is the defect it was written to prevent, which the comment
 /// fifty lines below it describes arriving through a different door.
 ///
-/// So it is spelled instead. A numeric or hyphenated key is an ordinary
-/// property; nothing about it is unrepresentable, and only the C *name* was
-/// ever the problem. `_x` plus two hex digits per byte, and a leading `_` where
-/// the name starts with a digit -- unambiguous, and it keeps an ordinary name
-/// spelled as itself so a struct stays readable.
+/// Escape the complete semantic storage namespace before checking it as a C
+/// identifier. Public, private and symbol keys already have disjoint prefixes;
+/// punctuation uses the common ASCII escape, with a leading `_` for a digit.
+/// Node-API calls this same spelling authority for its struct declarations.
 fn c_member_escaped(name: &str) -> String {
-    let spelled = c_member(name);
-    if spelled
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        && !spelled.starts_with(|c: char| c.is_ascii_digit())
-    {
-        return spelled;
+    let mut escaped = nts_codegen_common::symbols::ascii_identifier(name);
+    if escaped.starts_with(|c: char| c.is_ascii_digit()) {
+        escaped.insert(0, '_');
     }
-    let mut out = String::with_capacity(spelled.len() + 4);
-    if spelled.starts_with(|c: char| c.is_ascii_digit()) {
-        out.push('_');
-    }
-    for byte in spelled.bytes() {
-        if byte.is_ascii_alphanumeric() || byte == b'_' {
-            out.push(char::from(byte));
-        } else {
-            use std::fmt::Write as _;
-            let _ = write!(out, "_x{byte:02x}");
-        }
-    }
-    out
+    c_member(&escaped)
 }
 
 fn field_store(
@@ -2984,12 +2989,12 @@ fn float_literal(value: f64) -> String {
     format!("{value:?}")
 }
 
-fn literal_table(program: &Program) -> Vec<String> {
-    let mut literals: Vec<String> = Vec::new();
+fn literal_table(program: &Program) -> Vec<JsText> {
+    let mut literals: Vec<JsText> = Vec::new();
     for func in program.native_funcs() {
         for block in &func.blocks {
             for value in &block.ops {
-                let texts: &[String] = match &func.values[value.0 as usize].kind {
+                let texts: &[JsText] = match &func.values[value.0 as usize].kind {
                     OpKind::ConstString(text) => std::slice::from_ref(text),
                     OpKind::ConstTemplate { cooked, .. } => cooked,
                     _ => &[],
@@ -3006,10 +3011,11 @@ fn literal_table(program: &Program) -> Vec<String> {
     // And what each function is called (`Program::function_names`), which its
     // descriptor points at.
     for name in program.function_names.values() {
-        if let FunctionName::Is(text) = name
-            && !literals.contains(text)
-        {
-            literals.push(text.clone());
+        if let FunctionName::Is(text) = name {
+            let text = JsText::from(text.clone());
+            if !literals.contains(&text) {
+                literals.push(text);
+            }
         }
     }
     literals
@@ -3020,7 +3026,7 @@ fn literal_table(program: &Program) -> Vec<String> {
 /// Emitted as numeric code units rather than as C string literals: a C literal
 /// would need escaping rules that do not match JavaScript's, and would carry
 /// its own idea of what a byte means.
-fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) {
+fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[JsText]) {
     writer.line(
         origin,
         format!(
@@ -3064,7 +3070,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
 
 /// Immutable arrays are static data. Their identity is the source site rather
 /// than their contents; ordinary arrays retain their existing storage and ABI.
-fn emit_templates(writer: &mut CodeWriter, program: &Program, literals: &[String]) {
+fn emit_templates(writer: &mut CodeWriter, program: &Program, literals: &[JsText]) {
     for object in nts_core::hir::templates::objects(program) {
         let site = object.site;
         let pieces: Vec<String> = object
@@ -3504,7 +3510,7 @@ fn emit_object_descriptors(
     program: &Program,
     cycles: &nts_core::hir::Cycles,
     defined: &rustc_hash::FxHashSet<String>,
-    literals: &[String],
+    literals: &[JsText],
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let cyclic_layouts = &cycles.cyclic;
@@ -3677,7 +3683,10 @@ fn emit_object_descriptors(
         // its target's. Null refuses by name.
         let function_name = match program.function_names.get(&layout.name) {
             Some(FunctionName::Is(text)) => {
-                format!("(const NtsHeader *)&{}", literal_name(literals, text))
+                format!(
+                    "(const NtsHeader *)&{}",
+                    literal_name(literals, &JsText::from(text))
+                )
             }
             Some(FunctionName::Bound) => "&nts_bound_function_name".to_owned(),
             None => "NULL".to_owned(),
@@ -6370,7 +6379,7 @@ mod tests {
             file: SourceId(0),
             span: Span::new(0, 1),
         });
-        let texts: Vec<String> = [
+        let mut texts: Vec<JsText> = [
             "",
             "ascii",
             "caf\u{e9}",
@@ -6379,8 +6388,9 @@ mod tests {
             "a\0b",
         ]
         .into_iter()
-        .map(str::to_owned)
+        .map(JsText::from)
         .collect();
+        texts.push(JsText::from_utf16(vec![0xd800, 0, 0xdc00]));
         let mut writer = CodeWriter::new();
         emit_literals(&mut writer, &origin, &texts);
         for (index, text) in texts.iter().enumerate() {
@@ -6433,7 +6443,7 @@ mod tests {
             ]
             .into_iter()
             .map(|(name, ty)| Field {
-                name: name.to_owned(),
+                name: name.to_owned().into(),
                 ty,
                 written: None,
                 declared_by: None,
@@ -6449,8 +6459,13 @@ mod tests {
         let text = writer.text();
         // Neither member is counted: limiting initialization to references
         // left both the value and the readiness guard as stack garbage.
-        assert!(text.contains("cell_frame.value = 0;"), "{text}");
-        assert!(text.contains("cell_frame.ready = 0;"), "{text}");
+        for at in 0..layout.fields.len() {
+            let member = object_field_name(&layout, at);
+            assert!(
+                text.contains(&format!("cell_frame.{member} = 0;")),
+                "{text}"
+            );
+        }
     }
 
     /// Every scalar an array can hold has a kind, so that "unknown" keeps

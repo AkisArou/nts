@@ -112,7 +112,7 @@ pub(crate) fn require_compiler(b: &mut Body<'_, '_>, why: &str) -> Result<(), Fa
     b.instruction(&I::I32Eqz);
     b.instruction(&I::If(BlockType::Empty));
     let target = compiler_stop(b.m)?;
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     strings::constant(b, why);
     b.call(target);
     b.instruction(&I::Unreachable);

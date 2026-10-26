@@ -2,21 +2,18 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 mod common;
 
 #[test]
 fn conflicting_absence_adapters_decline_the_class_by_name() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP structural_adapters: NTS_TSGO is not set");
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../core/tests/programs/structural-absence/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
@@ -42,15 +39,12 @@ fn conflicting_absence_adapters_decline_the_class_by_name() {
 
 #[test]
 fn a_new_slot_cannot_replace_an_inherited_slots_absence_conversion() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP structural_adapters: NTS_TSGO is not set");
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../core/tests/programs/structural-inherited-absence/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
@@ -73,15 +67,12 @@ fn a_new_slot_cannot_replace_an_inherited_slots_absence_conversion() {
 
 #[test]
 fn a_covariant_bridge_shares_a_slot_only_with_a_proven_identity() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP structural_adapters: NTS_TSGO is not set");
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../tests/programs/a-method-adapted-to-a-structural-interface/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());

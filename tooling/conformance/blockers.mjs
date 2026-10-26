@@ -120,7 +120,7 @@ function nts(args) {
   const run = spawnSync(compiler, args, {
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
-    env: { NTS_TSGO: join(ROOT, "target/tsgo"), ...process.env },
+    env: { NTS_CHECKERS: "1", ...process.env },
   });
   return `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
 }

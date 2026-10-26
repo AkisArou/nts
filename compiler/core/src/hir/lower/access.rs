@@ -206,7 +206,7 @@ pub(super) fn require_record_membership(builder: &mut FuncBuilder<'_>, at: NodeI
     let origin = builder.origin(at);
     let message = builder.push(
         OpKind::ConstString(
-            "property membership on an absent record, whose TypeError this compiler does not yet lower".to_owned(),
+            "property membership on an absent record, whose TypeError this compiler does not yet lower".to_owned().into(),
         ),
         HirType::Managed(ManagedType::String),
         origin.clone(),
@@ -235,7 +235,7 @@ pub(super) fn require_delete(
     builder.switch_to(rejected);
     let origin = builder.origin(at);
     let message = builder.push(
-        OpKind::ConstString("Cannot convert undefined or null to object".to_owned()),
+        OpKind::ConstString("Cannot convert undefined or null to object".into()),
         HirType::Managed(ManagedType::String),
         origin,
     );
@@ -293,7 +293,7 @@ fn throw(
     match key {
         Key::Name(name) => {
             let message = builder.push(
-                OpKind::ConstString(format!("{message} ({participle} '{name}')")),
+                OpKind::ConstString(format!("{message} ({participle} '{name}')").into()),
                 text,
                 origin,
             );
@@ -375,14 +375,14 @@ fn throw_index(
     // that metadata we omit it.
     // This text divergence is recorded, while the TypeError stays catchable.
     let plain = builder.push(
-        OpKind::ConstString(message.to_owned()),
+        OpKind::ConstString(message.to_owned().into()),
         text.clone(),
         origin.clone(),
     );
     builder.throw_provided_error_text(at, "TypeError", plain)?;
     builder.switch_to(with_key);
     let prefix = builder.push(
-        OpKind::ConstString(format!("{message} ({participle} '")),
+        OpKind::ConstString(format!("{message} ({participle} '").into()),
         text.clone(),
         origin.clone(),
     );
@@ -396,7 +396,7 @@ fn throw_index(
         origin.clone(),
     );
     let suffix = builder.push(
-        OpKind::ConstString("')".to_owned()),
+        OpKind::ConstString("')".into()),
         text.clone(),
         origin.clone(),
     );

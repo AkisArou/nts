@@ -6,7 +6,6 @@ use std::process::Command;
 
 #[test]
 fn every_layout_slot_names_one_prepared_definition() {
-    nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../compiler/core/tests/programs/refused-virtual-slots/runtime.json");
     let listing = |args: &[&str]| {
@@ -55,7 +54,6 @@ fn every_layout_slot_names_one_prepared_definition() {
 
 #[test]
 fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
-    nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../compiler/core/tests/programs/refused-virtual-slot-arity/tsconfig.json");
     let result = Command::new(env!("CARGO_BIN_EXE_nts"))
@@ -86,7 +84,6 @@ fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
 
 #[test]
 fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
-    nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../compiler/core/tests/programs/refused-virtual-slots/runtime.json");
     let scratch = std::env::temp_dir().join(format!("nts-refused-slot-{}", std::process::id()));

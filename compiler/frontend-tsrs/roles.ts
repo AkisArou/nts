@@ -40,7 +40,10 @@ for (const text of [generated, manual]) {
     const owner = match[1];
     const body = block(text, match.index! + match[0].length - 1);
     implementations.set(owner, [...(implementations.get(owner) ?? []), body]);
-    const visitor = /pub fn for_each_child(?:<[^\n]+>)?\([^]*?\) -> bool \{/.exec(body);
+    // Visibility controls who may invoke the visitor, never which children
+    // belong to its payload. An internal visitor is still the native order.
+    const visitor = /(?:pub(?:\([^)]*\))?\s+)?fn for_each_child(?:<[^\n]+>)?\([^{};]*?\) -> bool \{/.exec(body);
+    if (payloads.has(owner) && /\bfn\s+for_each_child\b/.test(body) && !visitor) throw new Error(`unrecognized native visitor declaration: ${owner}`);
     if (visitor && payloads.has(owner)) visitors.push({ owner, body: block(body, visitor.index + visitor[0].length - 1) });
   }
 }

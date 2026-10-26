@@ -1,13 +1,13 @@
 {
   "//": [
     "Codes that count as evidence of a SyntaxError although some valid JavaScript draws them,",
-    "because every positive that draws them is a known gap in the pinned tsgo's parser rather",
+    "because every listed language positive is a known gap in the pinned checker's parser rather",
     "than a sign the code is loose. Read by tooling/census/conformance262.ts (judgeNegative).",
     "",
     "An entry applies only while all of these hold, and the run fails its audit otherwise:",
-    "  - it has a reason and the tsgo pin it was audited against, and that pin is the one the",
-    "    compiler under test reports (`nts version`: 'pinned tsgo X'). A gap is true of a",
-    "    version, not of tsgo: when the pin moves, re-audit every entry -- a fixed gap would",
+    "  - it has a reason and the checker pin it was audited against, and that pin is the one the",
+    "    compiler under test reports (both native and TypeScript commits). A gap is true of a",
+    "    checker revision: when either pin moves, re-audit every entry -- a fixed gap would",
     "    otherwise keep negatives passing for the wrong reason.",
     "  - every positive it lists is still in the suite;",
     "  - in a whole test/language run, no positive it does NOT list draws the code.",
@@ -19,20 +19,22 @@
   "overrides": [
     {
       "code": "TS1005",
-      "tsgo_pin": "7.0.2",
-      "reason": "tsgo parse gaps on valid JavaScript: Unicode 16/17 identifier characters (its identifier tables predate them), and `in` inside an initializer in a for-of or for-await-of destructuring head (the for-await-of twins listed since 2026-09-29, when async tests began to be attempted). 554 negatives draw TS1005 ('X' expected).",
+      "checker_pin": "tsrs:a0db53eabe483062205717f067a49b6ccb3fc868/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
+      "reason": "Pinned checker parser gaps on valid JavaScript: Unicode 16/17 identifier characters exceed its Unicode 15.1 tables, and `in` in a for-of/for-await-of destructuring initializer. Re-audited over 47,504 files with zero unmeasured on nts bfe47788d (TSRS a0db plus disclosed yield patch): 611 negative files draw TS1005. The two added start-escaped paths were already present in the old bb5 raw audit and reproduce on pristine TypeScript 3e and old Go; they are stale path-list omissions, not effects of the new pin or patch. Earlier for-await entries date to 2026-09-29.",
       "positives": [
         "test/language/identifiers/part-unicode-16.0.0-escaped.js",
         "test/language/identifiers/part-unicode-17.0.0-escaped.js",
         "test/language/statements/for-of/dstr/array-elem-init-in.js",
         "test/language/statements/for-await-of/async-func-decl-dstr-array-elem-init-in.js",
-        "test/language/statements/for-await-of/async-gen-decl-dstr-array-elem-init-in.js"
+        "test/language/statements/for-await-of/async-gen-decl-dstr-array-elem-init-in.js",
+        "test/language/identifiers/start-unicode-16.0.0-escaped.js",
+        "test/language/identifiers/start-unicode-17.0.0-escaped.js"
       ]
     },
     {
       "code": "TS1109",
-      "tsgo_pin": "7.0.2",
-      "reason": "tsgo parse gaps on valid JavaScript: `await` treated as reserved at the top level of a script, where it is an ordinary identifier (`var await;`); and, since module tests entered the lane on 2026-10-02, `new import.meta()` -- a NewExpression of import.meta, valid syntax that throws a TypeError at run time -- rejected at parse. 399 negatives draw TS1109 (Expression expected).",
+      "checker_pin": "tsrs:a0db53eabe483062205717f067a49b6ccb3fc868/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
+      "reason": "Pinned checker parser gaps on valid JavaScript: `await` is rejected as a top-level script identifier, and `new import.meta()` is rejected at parse rather than throwing TypeError at runtime. Re-audited over 47,504 files with zero unmeasured on nts bfe47788d (TSRS a0db plus disclosed yield patch): 415 negative files draw TS1109; both positive paths remain unchanged. The module-goal entry dates to 2026-10-02.",
       "positives": [
         "test/language/expressions/await/await-BindingIdentifier-in-global.js",
         "test/language/expressions/import.meta/import-meta-is-an-ordinary-object.js"
@@ -40,8 +42,8 @@
     },
     {
       "code": "TS1127",
-      "tsgo_pin": "7.0.2",
-      "reason": "tsgo's identifier tables predate Unicode 16 and 17, so identifier characters those versions added are an Invalid character. 93 negatives draw TS1127.",
+      "checker_pin": "tsrs:a0db53eabe483062205717f067a49b6ccb3fc868/typescript:3e9236361fa97a9e6c685f4833ac457ae2d8c50a/patch:yield-thenable-diagnostics-and-check-state:31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
+      "reason": "Pinned checker identifier tables implement Unicode 15.1 and reject identifier characters added in Unicode 16/17. Re-audited over 47,504 files with zero unmeasured on nts bfe47788d (TSRS a0db plus disclosed yield patch): 93 negative files draw TS1127. The four added start-escaped/start-class paths were already present in the old bb5 raw audit and reproduce on pristine TypeScript 3e and old Go; they are stale path-list omissions, not effects of the new pin or patch.",
       "positives": [
         "test/language/identifiers/part-unicode-16.0.0.js",
         "test/language/identifiers/part-unicode-16.0.0-class-escaped.js",
@@ -54,7 +56,11 @@
         "test/language/identifiers/start-unicode-16.0.0.js",
         "test/language/identifiers/start-unicode-16.0.0-class-escaped.js",
         "test/language/identifiers/start-unicode-17.0.0.js",
-        "test/language/identifiers/start-unicode-17.0.0-class-escaped.js"
+        "test/language/identifiers/start-unicode-17.0.0-class-escaped.js",
+        "test/language/identifiers/start-unicode-16.0.0-escaped.js",
+        "test/language/identifiers/start-unicode-17.0.0-escaped.js",
+        "test/language/identifiers/start-unicode-16.0.0-class.js",
+        "test/language/identifiers/start-unicode-17.0.0-class.js"
       ]
     }
   ]

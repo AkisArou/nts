@@ -2,7 +2,7 @@
 
 The production dependency closure of tsrs_compiler from
 [oxc-project/tsrs](https://github.com/oxc-project/tsrs) at
-`bb5c6037ad04decdd7c5832997e810000e85943d` (version 0.19.0), unmodified, with LICENSE and NOTICE.
+`a0db53eabe483062205717f067a49b6ccb3fc868` (version 0.19.0), with the explicit local patches below, LICENSE and NOTICE.
 The generated root Cargo.toml retains upstream package metadata, dependencies
 and lints, over these crates only. nts excludes this standalone workspace
 and consumes its crates by path. UPSTREAM.json records the exact closure.
@@ -18,5 +18,9 @@ Before replacing an existing copy it verifies MANIFEST and refuses local edits.
 
 The gate checks the SHA-256 manifest, including file inventory, without an
 upstream checkout. --source <checkout> --rev <commit> --check additionally
-compares the copy with the exact upstream objects. Upstream source is never
-formatted or edited as part of an nts change.
+compares the copy with the exact upstream objects plus these reviewed patches.
+A new revision is refused until patch applicability or removal is reviewed.
+
+Local patches (base revision and exact SHA-256 are in UPSTREAM.json):
+
+- yield-thenable-diagnostics-and-check-state: 31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840. Retain reported TS1321 while recovering valid yield constituents; expose a computation-free completed-file observation for the scoped-diagnostics work guard. Remove when: Drop the semantic hunk independently when an official upstream equivalent passes the permanent controls and completes the raw checker audit with zero unmeasured cases. Retain the read-only observation hunk only until an intended upstream completed-file query exists. Review and re-hash the remaining patch at each change.

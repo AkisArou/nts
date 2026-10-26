@@ -2,13 +2,13 @@ use super::*;
 
 #[derive(Default)]
 pub struct ExternalModuleInfo {
-    pub(crate) external_imports: Vec<P<Node>>, // ImportDeclaration | ImportEqualsDeclaration | ExportDeclaration. imports and reexports of other external modules
+    external_imports: Vec<P<Node>>, // ImportDeclaration | ImportEqualsDeclaration | ExportDeclaration. imports and reexports of other external modules
     pub(crate) export_specifiers: MultiMap<&'static str, P<Node>>, // Maps local names to their associated export specifiers (excludes reexports)
     pub(crate) exported_bindings: MultiMap<P<Node>, P<Node>>, // Maps local declarations to their associated export aliases
     pub(crate) exported_names: Vec<P<Node>>, // all exported names in the module, both local and re-exported, excluding the names of locally exported function declarations
     pub(crate) exported_functions: OrderedSet<P<Node>>, // all of the top-level exported function declarations
     pub(crate) export_equals: Option<P<Node>>, // an export=/module.exports= declaration if one was present
-    pub(crate) has_export_stars_to_export_values: bool, // whether this module contains export*
+    has_export_stars_to_export_values: bool,   // whether this module contains export*
 }
 
 struct ExternalModuleInfoCollector {
@@ -252,7 +252,7 @@ impl ExternalModuleInfoCollector {
         name: Option<P<Node>>,
         is_default: bool,
     ) {
-        self.output.exported_functions.add(self.emit_context.most_original(Some(node)).unwrap());
+        self.output.exported_functions.insert(self.emit_context.most_original(Some(node)).unwrap());
         if is_default {
             // export default function() { }
             // function x() { } + export { x as default };

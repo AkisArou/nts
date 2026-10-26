@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 #[derive(Debug)]
 pub struct Object<'a> {
     pub site: u32,
-    pub cooked: &'a [String],
+    pub cooked: &'a [nts_semantic_schema::JsText],
     pub origin: &'a Origin,
 }
 

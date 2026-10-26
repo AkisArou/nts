@@ -8,12 +8,12 @@
 use super::{
     Cycles, Field, HirType, ManagedType, Program, is_closure_type, native, strongly_connected,
 };
-use nts_semantic_schema::TypeId;
+use nts_semantic_schema::{PropertyKey, TypeId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Hash, PartialEq, Eq)]
 struct Slot<'a> {
-    name: &'a str,
+    name: &'a PropertyKey,
     declared_by: Option<TypeId>,
     ty: &'a HirType,
 }
@@ -22,7 +22,7 @@ impl<'a> From<&'a Field> for Slot<'a> {
     fn from(field: &'a Field) -> Self {
         Self {
             name: &field.name,
-            declared_by: if field.name.starts_with('#') {
+            declared_by: if matches!(field.name, PropertyKey::Private(_)) {
                 field.declared_by
             } else {
                 None

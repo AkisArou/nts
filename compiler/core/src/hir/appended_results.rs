@@ -572,10 +572,10 @@ mod tests {
     fn row() -> Func {
         func(
             vec![
-                op(OpKind::ConstString("{".to_owned()), STR),
+                op(OpKind::ConstString("{".into()), STR),
                 op(call("g", &[]), STR),
                 op(concat(0, 1), STR),
-                op(OpKind::ConstString("}".to_owned()), STR),
+                op(OpKind::ConstString("}".into()), STR),
                 op(concat(2, 3), STR),
             ],
             Terminator::Return(Some(ValueId(4))),
@@ -627,7 +627,7 @@ mod tests {
         let member = func(
             vec![
                 op(call("quote", &[]), STR),
-                op(OpKind::ConstString(":".to_owned()), STR),
+                op(OpKind::ConstString(":".into()), STR),
                 op(concat(0, 1), STR),
                 op(call("value", &[]), STR),
                 op(concat(2, 3), STR),
@@ -661,7 +661,7 @@ mod tests {
                     },
                     STR,
                 ),
-                op(OpKind::ConstString("null".to_owned()), STR),
+                op(OpKind::ConstString("null".into()), STR),
                 op(OpKind::BlockParam(0), STR),
             ],
             blocks: vec![
@@ -751,10 +751,10 @@ mod tests {
     fn a_member_appended_twice_is_a_value() {
         let forked = func(
             vec![
-                op(OpKind::ConstString("a".to_owned()), STR),
-                op(OpKind::ConstString("x".to_owned()), STR),
+                op(OpKind::ConstString("a".into()), STR),
+                op(OpKind::ConstString("x".into()), STR),
                 op(concat(0, 1), STR),
-                op(OpKind::ConstString("y".to_owned()), STR),
+                op(OpKind::ConstString("y".into()), STR),
                 op(concat(0, 3), STR),
             ],
             Terminator::Return(Some(ValueId(4))),
@@ -772,10 +772,10 @@ mod tests {
     fn a_prepended_accumulation_is_a_value() {
         let mut looped = func(
             vec![
-                op(OpKind::ConstString(String::new()), STR),
+                op(OpKind::ConstString("".into()), STR),
                 op(OpKind::BlockParam(0), STR),
                 op(OpKind::ConstBool(true), HirType::Bool),
-                op(OpKind::ConstString("x".to_owned()), STR),
+                op(OpKind::ConstString("x".into()), STR),
                 op(concat(3, 1), STR),
             ],
             Terminator::Jump {
@@ -796,10 +796,10 @@ mod tests {
     fn an_accumulation_round_a_loop_is_accumulated() {
         let mut looped = func(
             vec![
-                op(OpKind::ConstString(String::new()), STR),
+                op(OpKind::ConstString("".into()), STR),
                 op(OpKind::BlockParam(0), STR),
                 op(OpKind::ConstBool(true), HirType::Bool),
-                op(OpKind::ConstString("x".to_owned()), STR),
+                op(OpKind::ConstString("x".into()), STR),
                 op(concat(1, 3), STR),
             ],
             Terminator::Jump {
@@ -825,10 +825,10 @@ mod tests {
         let mut joined = func(
             vec![
                 op(OpKind::ConstBool(true), HirType::Bool),
-                op(OpKind::ConstString("a".to_owned()), STR),
-                op(OpKind::ConstString("b".to_owned()), STR),
+                op(OpKind::ConstString("a".into()), STR),
+                op(OpKind::ConstString("b".into()), STR),
                 op(OpKind::BlockParam(0), STR),
-                op(OpKind::ConstString("x".to_owned()), STR),
+                op(OpKind::ConstString("x".into()), STR),
                 op(concat(3, 4), STR),
             ],
             Terminator::Branch {
@@ -873,10 +873,10 @@ mod tests {
         let mut dropped = func(
             vec![
                 op(OpKind::ConstBool(true), HirType::Bool),
-                op(OpKind::ConstString("a".to_owned()), STR),
-                op(OpKind::ConstString("b".to_owned()), STR),
+                op(OpKind::ConstString("a".into()), STR),
+                op(OpKind::ConstString("b".into()), STR),
                 op(OpKind::BlockParam(0), STR),
-                op(OpKind::ConstString("x".to_owned()), STR),
+                op(OpKind::ConstString("x".into()), STR),
                 op(concat(3, 4), STR),
             ],
             Terminator::Branch {
@@ -916,10 +916,10 @@ mod tests {
         let mut dropped = func(
             vec![
                 op(OpKind::ConstBool(true), HirType::Bool),
-                op(OpKind::ConstString("a".to_owned()), STR),
+                op(OpKind::ConstString("a".into()), STR),
                 op(OpKind::BlockParam(0), STR),
                 op(OpKind::BlockParam(0), STR),
-                op(OpKind::ConstString("q".to_owned()), STR),
+                op(OpKind::ConstString("q".into()), STR),
             ],
             Terminator::Branch {
                 cond: ValueId(0),
@@ -952,9 +952,9 @@ mod tests {
     fn seeds_live_at_once_are_a_value() {
         let mut overlapping = func(
             vec![
-                op(OpKind::ConstString("A".to_owned()), STR),
-                op(OpKind::ConstString("[".to_owned()), STR),
-                op(OpKind::ConstString("x".to_owned()), STR),
+                op(OpKind::ConstString("A".into()), STR),
+                op(OpKind::ConstString("[".into()), STR),
+                op(OpKind::ConstString("x".into()), STR),
                 op(concat(1, 2), STR),
                 op(OpKind::ConstBool(true), HirType::Bool),
                 op(OpKind::BlockParam(0), STR),

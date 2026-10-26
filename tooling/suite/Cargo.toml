@@ -39,3 +39,6 @@ measurements = [
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+nts-frontend-tsrs.workspace = true

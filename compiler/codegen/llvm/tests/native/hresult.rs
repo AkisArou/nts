@@ -21,7 +21,7 @@ fn a_hresult_output_size_reaches_win64_as_size_t() {
 export function run(value: Probe): number {
   try { return value.Read(); } catch { return 7; }
 }"#;
-    let Some((dir, prepared)) = super::prepare_with_files(
+    let (dir, prepared) = super::prepare_with_files(
         "hresult-size",
         source,
         hir::Provider::NoGc,
@@ -32,9 +32,7 @@ export function run(value: Probe): number {
                 include_str!("../../../../../runtime/winrt/winrt.d.ts"),
             ),
         ],
-    ) else {
-        panic!("NTS_TSGO is required for this guard");
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

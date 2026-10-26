@@ -25,6 +25,7 @@ nts-deps.workspace = true
 nts-differential.workspace = true
 nts-diagnostics.workspace = true
 nts-frontend-ts.workspace = true
+nts-frontend-tsrs.workspace = true
 nts-react.workspace = true
 nts-semantic-schema.workspace = true
 
@@ -42,8 +43,6 @@ roxmltree.workspace = true
 camino.workspace = true
 
 [dev-dependencies]
-# `tsgo::locate`, so an end-to-end test can skip when the frontend is absent
-# rather than fail for a reason that is not the compiler's.
 nts-frontend-ts.workspace = true
 # The same SHA-256 the build pins an artifact with, so a test that builds a jar
 # to depend on computes the pin the way the thing under test will read it.

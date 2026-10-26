@@ -17,7 +17,6 @@ out=${1:-"$root/target/gtk-bench"}
 # `nts frontend` stored under the same key -- a narrower snapshot, and a
 # smaller program -- and the timings would depend on what others happened to
 # build.
-export NTS_SNAPSHOT_CACHE="${NTS_SNAPSHOT_CACHE:-$out/snapshot-cache}"
 for tool in gjs xvfb-run hyperfine /usr/bin/time; do
   command -v "$tool" >/dev/null 2>&1 || { echo "SKIP gtk-bench: no $tool"; exit 0; }
 done

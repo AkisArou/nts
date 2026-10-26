@@ -61,8 +61,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
-NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
-export NTS_TSGO
+NTS_CHECKERS=1
+export NTS_CHECKERS
 
 # Where the run's temporary directories go, which is a property of the run
 # rather than of whoever remembered to set it.
@@ -355,12 +355,14 @@ profile() {
   ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
     m=$1
     name=$(basename "$(dirname "$m")")
-    out=$("'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
-            --out "'"$work"'/$name" --napi 2>&1)
+    "'"${NTS_BIN:-$root/target/release/nts}"'" emit-c "$m" \
+      --out "'"$work"'/$name" --napi > "'"$work"'/$name.output" 2>&1
     # How the emission ended, for `addons`: build.sh reuses this directory
     # instead of lowering the module again only when this says 0 and the
     # binary that wrote it is its own (see build.sh, NTS_ADDON_EMITTED).
     printf "%s\n" "$?" > "'"$work"'/$name.status"
+    # Keep complete diagnostics as well as the filtered census below.
+    out=$(cat "'"$work"'/$name.output")
     printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
     # **The whole diagnostic, not just its position**, because one reader counts
     # it: `tooling/census/node-refusals.ts --from` reads these files and reports
@@ -942,7 +944,7 @@ example_refusals() {
     d=$1
     n=$(basename "$(dirname "$d")")
     case "$n" in invalid|unsupported) exit 0 ;; esac
-    out=$(NTS_TSGO="${NTS_TSGO:-$PWD/target/tsgo}" "${NTS_BIN:-./target/release/nts}" hir "$d" 2>&1)
+    out=$("${NTS_BIN:-./target/release/nts}" hir "$d" 2>&1)
     st=$?
     # A crash prints no refusal, so it counted 0 and read as "refuses nothing
     # now" -- a note, and a pass. 101 is a Rust panic; above 128 a signal.
@@ -1128,8 +1130,8 @@ backend_examples() {
     # **Not counted against the floor, and the step fails anyway.** A case that
     # could not be run is not evidence in either direction, and scoring it as a
     # regression is how sixty-six contiguous plausible names appeared once and
-    # `0 of 128` appeared another time -- the second because `NTS_TSGO` was
-    # unset and the compiler never started, which read as every example
+    # `0 of 128` appeared another time -- the second because the frontend
+    # never started, which read as every example
     # disagreeing at once.
     printf '  %s could not be measured, so the floor below says nothing:\n' "$unmeasured"
     awk -F'\t' '/^unmeasured /{ sub(/^unmeasured /, "", $1); printf "    %-24s %s\n", $1, $2 }' \
@@ -1668,64 +1670,7 @@ wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/wasm.log.
   backend_examples 676 "through the Wasm backend" exact 10 ); }
 corpus() {
-  # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
-  # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
-  # `$root/target`, and a hardcoded path finds nothing there. The failure does
-  # not look like a missing file -- the report is one line of shell error, the
-  # grep below matches none of it, and the step reports `invalid HIR must be
-  # zero` over a suite that never ran.
-  mkdir -p "$root/target"
-  "${NTS_SUITE_BIN:-./target/release/nts-suite}" --root "$root" > "$root/target/suite-report.txt" 2>&1
-  grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
-    "$root/target/suite-report.txt"
-  # `invalid HIR` must be zero: a rejected SSA form on arbitrary input is a bug
-  # however well the hand-written tests do.
-  #
-  # Read as a number rather than matched as text. The first version was
-  # `grep "invalid HIR *[^0]"`, which matches the zero line too -- the ` *`
-  # gives back a space for `[^0]` to have -- so the gate failed on a clean run.
-  bad=$(awk '/invalid HIR/ { print $NF + 0 }' "$root/target/suite-report.txt")
-  [ "${bad:-1}" = "0" ] || { echo "  ^ invalid HIR must be zero"; return 1; }
-
-  # `uncompilable C` is *also* meant to be zero and is not quite. It was 15 --
-  # every one of them caused by module-scope variables being allowed to hold a
-  # reference, which is a feature that landed without this row being visible,
-  # because `report` did not print it. Two remain:
-  #
-  #   an `as const` nested object literal, whose inner layout is built by no
-  #   function and is not reached by materializing the outer type either
-  #   a quoted key on a generic function's returned object
-  #
-  # It is zero, so this is a hard row now, as the note above it always said it
-  # would become. What made it zero was not the repair the note describes: the
-  # emitter was *dropping* a field whose type had no layout while the descriptor
-  # kept pointing at it, and a field nothing dereferences turns out to need only
-  # a pointer, not a layout. What is left of that repair -- the compiler
-  # computing its own byte offsets -- is now about LLVM rather than about this.
-  known=0
-  now=$(awk '/uncompilable C/ { print $NF + 0 }' "$root/target/suite-report.txt")
-  if [ "${now:-0}" -gt "$known" ]; then
-    echo "  ^ uncompilable C rose from $known to $now"
-    return 1
-  fi
-
-  # `unverifiable class` must be zero, and it is the only row here that reports
-  # a lie about a *type*. The suite has counted it since it was added and no
-  # step asserted on it -- the same gap `uncompilable C` had, where a row that
-  # is printed but not checked is a number nobody reads.
-  #
-  # It earns its own assertion rather than sharing one because it fails
-  # differently: C and LLVM compile a merged layout, an erased-singleton scan
-  # and an unerase to `{}` without complaint, and the checked-cast backend is
-  # the only instrument that sees any of them. A zero here is a claim the other
-  # two rows cannot make.
-  #
-  # It reads zero when no JDK is present, which is not the same as verified.
-  # `examine` skips the check entirely in that case, so this row is a floor on
-  # a machine that can answer and silent on one that cannot -- and the `jvm`
-  # step below is what refuses to run at all without one.
-  bad=$(awk '/unverifiable class/ { print $NF + 0 }' "$root/target/suite-report.txt")
-  [ "${bad:-1}" = "0" ] || { echo "  ^ unverifiable class must be zero"; return 1; }
+  node tooling/gate/corpus.ts "$root" core
 }
 
 # Two records were committed as 0164 on 2026-09-06, by two sessions that each
@@ -2229,26 +2174,6 @@ integrity_runtime() {
   return $status
 }
 
-# Does the snapshot cache hit, and can a trip through it change anything? Per
-# project, through a private cache directory and a pinned copy of the binary:
-# one digest cache-off, cold and on two loads; the loads hit, counted by entry
-# writes and never by timing; `emit-c` from a stored entry byte-identical to
-# cache-off; and a bare `nts frontend`'s narrower snapshot never served to a
-# compilation. A cache that never hits passes every other step, and the last
-# check is the one that found a cross-lane bug on its first run: the key did
-# not carry which questions a snapshot answered, so after anyone ran `nts
-# frontend` on a project, its next build loaded that snapshot as a hit and
-# `tests/programs/math` compiled 16 functions of 40 -- through the default cache,
-# shared by every lane (fixed in 90aa37954). The 15 runtime programs that
-# include web-platform, where maps collide, plus a sample of examples. See
-# tooling/conformance/snapshot-cache.mjs. About 4 min.
-snapshot_cache() {
-  out=$(node tooling/conformance/snapshot-cache.mjs 2>&1)
-  status=$?
-  printf '%s\n' "$out" | awk '!/^$/'
-  return $status
-}
-
 # Does what `emit-llvm` writes for the runtime assemble? The `llvm` steps run
 # the examples, and nothing emitted -- let alone assembled -- LLVM for
 # runtime/node/* and runtime/web-platform, so 24 of 27 modules produced
@@ -2657,7 +2582,6 @@ tooling_tests() {
 }
 step "tooling" tooling_tests
 step "integrity-runtime" integrity_runtime
-step "snapshot-cache" snapshot_cache
 step "assembles" assembles
 # HIR and identical cached C do not prove the generated C compiles. The addon
 # floor compiles runtime/node only; web-platform's open field tests once named
@@ -2709,7 +2633,7 @@ step "config" node tooling/config/audit.mjs
 # is upstream's crates verbatim and deliberately outside the workspace, so no
 # clippy and no `cargo test` would notice an edit to it: this holds it to its
 # MANIFEST and to the pin in `runtime/react/upstream-compile/upstream.lock.json`.
-# And the JSX entity table the lowering decodes with, against the pinned tsgo it
+# And the JSX entity table the lowering decodes with, against the vendored native checker it
 # was generated from. Under a second.
 react_sources() {
   node runtime/react/tools/vendor-react-compiler.ts --check &&
@@ -2722,13 +2646,14 @@ licenses() {
 }
 step "licenses" licenses
 
-# Transitional while tsgo is still the default. The switch deletes the tsrs
-# feature and folds these native checks into workspace Clippy and tests.
-# Upstream stays immutable; the safe adapter is checked with the feature on.
+# Workspace Clippy and tests cover the native adapter. This step also checks
+# exact upstream plus disclosed carried patches, and capture completeness
+# over every program.
 frontend_tsrs() {
   node compiler/frontend-tsrs/vendor.ts --check &&
-    cargo clippy -p nts-frontend-tsrs --features tsrs --all-targets --jobs 4 -- -D warnings &&
-    cargo test -p nts-frontend-tsrs --features tsrs --no-fail-fast --jobs 4
+    node --test compiler/frontend-tsrs/*.test.ts &&
+    cargo test -p nts-frontend-ts --test native_invariants --no-fail-fast --jobs 4 -- \
+      --ignored --test-threads=1
 }
 step "frontend-tsrs" frontend_tsrs
 

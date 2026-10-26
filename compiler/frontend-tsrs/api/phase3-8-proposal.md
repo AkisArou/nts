@@ -121,7 +121,7 @@ pub enum TypeLiteral<'p> {
 }
 pub struct Reference<'p> { pub target: Type<'p>, pub arguments: Vec<Type<'p>> }
 pub struct TypeParameter<'p> {
-    pub name: JsString<'p>, pub constraint: Option<Type<'p>>,
+    pub name: JsString<'p>, pub constraint: Option<Type<'p>>, pub is_this: bool,
 }
 pub struct Conditional<'p> {
     pub check: Type<'p>, pub extends: Type<'p>,
@@ -160,6 +160,7 @@ pub struct TypePredicate<'p> {
 }
 pub enum PredicateSubject<'p> {
     This, Parameter { name: JsString<'p>, index: usize },
+    UnresolvedIdentifier { name: JsString<'p> }, // written name has no parameter
 }
 pub enum Constant<'p> { Number(f64), String(JsString<'p>) }
 ```

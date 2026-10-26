@@ -145,7 +145,7 @@ pub(crate) fn uses_winappsdk(program: &nts_core::hir::Program) -> bool {
                 if matches!(name.as_str(), "nts_winrt_factory" | "nts_winrt_activate") =>
             {
                 args.first().is_some_and(|class| {
-                    matches!(&func.values[class.0 as usize].kind, OpKind::ConstString(text) if text.starts_with("Microsoft."))
+                    matches!(&func.values[class.0 as usize].kind, OpKind::ConstString(text) if text.as_utf8().is_some_and(|text| text.starts_with("Microsoft.")))
                 })
             }
             _ => false,

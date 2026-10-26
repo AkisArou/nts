@@ -6,18 +6,17 @@ mod scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 #[test]
 fn exported_classes_on_one_shape_have_distinct_native_identities() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP class factories: tsgo is required");
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let config = root.join("tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors());
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let options = hir::Options {

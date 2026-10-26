@@ -54,6 +54,7 @@ pub mod layout;
 pub mod linearize;
 pub mod liveness;
 pub mod loops;
+mod member_key;
 pub mod obligations;
 pub mod presence;
 mod small_dispatch;
@@ -101,8 +102,9 @@ pub mod verify;
 pub mod views;
 pub mod zero_sign;
 
-use nts_semantic_schema::{Origin, SemanticSnapshot, TypeId};
+use nts_semantic_schema::{Origin, PropertyKey, SemanticSnapshot, TypeId};
 
+pub use nts_semantic_schema::JsText;
 /// Re-exported because it is already part of this module's surface -- a
 /// [`Layout`]'s `types` and an [`OpKind::InstanceOf`]'s `classes` are both made
 /// of these -- and a backend that has to read one needs to be able to name it.
@@ -1302,7 +1304,7 @@ pub enum OpKind {
     /// analysis must not fold or specialize it using the logical index.
     DispatchSlot(u32),
     ConstBool(bool),
-    ConstString(String),
+    ConstString(nts_semantic_schema::JsText),
     /// `typeof` of an `@ntsAbi intrinsic` declaration, a string: `"function"`
     /// where the backend the program is prepared for provides the helper,
     /// `"undefined"` where it does not. Lowering is shared by every backend and
@@ -1315,7 +1317,7 @@ pub enum OpKind {
     /// equal contents: different sites must have different identities.
     ConstTemplate {
         site: u32,
-        cooked: Vec<String>,
+        cooked: Vec<nts_semantic_schema::JsText>,
     },
     /// A concrete value becomes an erased one, tagged with what it was.
     ///
@@ -2123,7 +2125,7 @@ pub enum UnOp {
 /// One field of an object, in layout order.
 #[derive(Debug, Clone)]
 pub struct Field {
-    pub name: String,
+    pub name: PropertyKey,
     pub ty: HirType,
     /// The scalar kind the property's type was **written** as, or `None`;
     /// see [`Param::written`]. Every store must prove its value fits, and so
@@ -2362,11 +2364,11 @@ impl Layout {
     /// fact about the *layout* and the layout is decided here rather than by
     /// whatever collects later.
     #[must_use]
-    pub fn reference_fields(&self) -> Vec<&str> {
+    pub fn reference_fields(&self) -> Vec<&PropertyKey> {
         self.fields
             .iter()
             .filter(|field| field.ty.may_hold_a_reference())
-            .map(|field| field.name.as_str())
+            .map(|field| &field.name)
             .collect()
     }
 
@@ -2378,11 +2380,11 @@ impl Layout {
     /// zeroing all ask. It is not the collector's question, which is
     /// [`Self::reference_fields`]: a foreign object is released, never traced.
     #[must_use]
-    pub fn counted_fields(&self) -> Vec<&str> {
+    pub fn counted_fields(&self) -> Vec<&PropertyKey> {
         self.fields
             .iter()
             .filter(|field| field.ty.is_counted())
-            .map(|field| field.name.as_str())
+            .map(|field| &field.name)
             .collect()
     }
 
@@ -2408,6 +2410,11 @@ impl Layout {
     /// The index of a field by name.
     #[must_use]
     pub fn index_of(&self, name: &str) -> Option<u32> {
+        self.index_of_key(&PropertyKey::Name(name.to_owned()))
+    }
+
+    #[must_use]
+    pub fn index_of_key(&self, key: &PropertyKey) -> Option<u32> {
         // **The last match for a `#` name, the first for anything else.**
         //
         // A shadowed private name is two fields with one name -- `class Base
@@ -2425,10 +2432,10 @@ impl Layout {
         // running at a derived allocation -- the caller has the declaring class
         // and asks with [`Self::index_of_declared`] instead. Nothing else needs
         // to, because nothing else can see a `#` member of a class it is not in.
-        let found = if name.starts_with('#') {
-            self.fields.iter().rposition(|field| field.name == name)
+        let found = if matches!(key, PropertyKey::Private(_)) {
+            self.fields.iter().rposition(|field| &field.name == key)
         } else {
-            self.fields.iter().position(|field| field.name == name)
+            self.fields.iter().position(|field| &field.name == key)
         };
         found.and_then(|at| u32::try_from(at).ok())
     }
@@ -2442,10 +2449,10 @@ impl Layout {
     /// there. Without it both initializers wrote one offset and the other stayed
     /// zero.
     #[must_use]
-    pub fn index_of_declared(&self, name: &str, class: TypeId) -> Option<u32> {
+    pub fn index_of_declared(&self, key: &PropertyKey, class: TypeId) -> Option<u32> {
         self.fields
             .iter()
-            .position(|field| field.name == name && field.declared_by == Some(class))
+            .position(|field| &field.name == key && field.declared_by == Some(class))
             .and_then(|at| u32::try_from(at).ok())
     }
 }
@@ -3074,6 +3081,17 @@ pub struct NativePackage {
     pub module: String,
 }
 
+/// The provenance of a named virtual-entry stop made by refusal guarding.
+/// This is NOT identity/alias authority. Backends may represent its distinct
+/// logical slots separately while preserving its original reason and contract.
+#[derive(Debug, Clone)]
+pub struct GuardedDispatch {
+    pub original: String,
+    pub contract: String,
+    pub receiver: TypeId,
+    pub slots: std::collections::BTreeSet<u32>,
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
@@ -3116,6 +3134,20 @@ pub struct Program {
     /// uses this fact to prove that a slot forwarder can also serve as a
     /// covariant bridge. Table entries are pinned through specialization.
     pub identity_projections: std::collections::BTreeMap<String, String>,
+    /// Named stops produced by `refused::guard_slots`, keyed by generated body.
+    /// Optional provenance only: stale or mismatched rows cannot license a JVM
+    /// slot member, and their absence keeps its existing conflict refusal.
+    pub guarded_dispatch: std::collections::BTreeMap<String, GuardedDispatch>,
+    /// Each member slot whose semantic `Hierarchy` key has its raising bit set,
+    /// mapped to that key's encoded member spelling with the raising suffix.
+    ///
+    /// A quiet base fills both ordinary and raising slots with the same body;
+    /// its body name therefore cannot identify the slot. Backends that name
+    /// virtual members use this owned declaration fact for both publication
+    /// and invocation. Values are produced from `MemberKey` before it is lost,
+    /// never decoded from an implementation name. Slot indices remain stable
+    /// through preparation; removing an entry does not renumber its slot.
+    pub raising_members: std::collections::BTreeMap<u32, String>,
     /// How an object of each layout prints, by layout name: what `String(o)`,
     /// `${o}` and an array's text read off its descriptor
     /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every
@@ -5386,10 +5418,21 @@ pub fn unaccounted(
                         child.kind,
                         NodeKind::Syntax(syntax::IDENTIFIER | syntax::PRIVATE_IDENTIFIER)
                     )
-                    .then(|| child.text.clone())
+                    .then(|| {
+                        child
+                            .text
+                            .as_ref()
+                            .and_then(|text| text.as_utf8())
+                            .map(str::to_owned)
+                    })
                     .flatten()
                 })
-                .or_else(|| node.text.clone());
+                .or_else(|| {
+                    node.text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                        .map(str::to_owned)
+                });
             missing.push((here, name));
         }
     }
@@ -6063,7 +6106,7 @@ fn reorder_to_base_first(program: &mut Program) -> Vec<Vec<u32>> {
             if at == index {
                 continue;
             }
-            let order: Vec<(String, Option<TypeId>)> = program.layouts[at]
+            let order: Vec<(PropertyKey, Option<TypeId>)> = program.layouts[at]
                 .fields
                 .iter()
                 .map(|field| (field.name.clone(), field.declared_by))
@@ -6117,7 +6160,8 @@ impl Field {
     #[must_use]
     pub fn names_the_same_member(&self, other: &Self) -> bool {
         self.name == other.name
-            && (!self.name.starts_with('#') || self.declared_by == other.declared_by)
+            && (!matches!(self.name, PropertyKey::Private(_))
+                || self.declared_by == other.declared_by)
     }
 }
 
@@ -6135,7 +6179,7 @@ impl Field {
 /// base's slot, so a method of the base writes the derived's counter and the
 /// two classes share one again. That is the defect [`Field::declared_by`]
 /// exists to settle, and this is the pass that would otherwise undo it.
-fn base_first_positions(fields: &[Field], order: &[(String, Option<TypeId>)]) -> Vec<usize> {
+fn base_first_positions(fields: &[Field], order: &[(PropertyKey, Option<TypeId>)]) -> Vec<usize> {
     let mut taken = vec![false; fields.len()];
     let mut positions: Vec<usize> = Vec::with_capacity(fields.len());
     for (wanted, from) in order {
@@ -6143,7 +6187,8 @@ fn base_first_positions(fields: &[Field], order: &[(String, Option<TypeId>)]) ->
         // of: the base's fields arrive as a name and a declaring class rather
         // than as records, because the two layouts cannot be borrowed at once.
         let is_the_inherited_copy = |field: &Field| {
-            field.name == *wanted && (!wanted.starts_with('#') || field.declared_by == *from)
+            field.name == *wanted
+                && (!matches!(wanted, PropertyKey::Private(_)) || field.declared_by == *from)
         };
         if let Some(found) = fields
             .iter()
@@ -8406,13 +8451,13 @@ mod tests {
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used)]
     fn literal_null_reference_arguments_do_not_reinterpret_undefined() {
-        use nts_frontend_ts::{SemanticSource, TsgoApi};
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
+        use nts_frontend_ts::Frontend;
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/refusals/a-promise-settler-captured-by-a-closure/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .unwrap();
         assert!(!snapshot.has_errors());
         let prepared = prepare(&snapshot).expect("the promise guard verifies");
         let mut caller = prepared
@@ -8489,13 +8534,13 @@ mod tests {
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used)]
     fn awaited_catch_reasons_are_read_only_on_rejected_edges() {
-        use nts_frontend_ts::{SemanticSource, TsgoApi};
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
+        use nts_frontend_ts::Frontend;
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/caught-await-reasons/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .unwrap();
         assert!(!snapshot.has_errors());
         let prepared = prepare(&snapshot).expect("the actual fully prepared program verifies");
         let mut tested = 0;
@@ -8760,7 +8805,7 @@ mod tests {
             "Holder",
             7,
             vec![Field {
-                name: "message".to_owned(),
+                name: "message".to_owned().into(),
                 ty: HirType::Managed(ManagedType::String),
                 readonly: false,
                 declared_by: None,
@@ -8786,7 +8831,7 @@ mod tests {
             "Holder",
             7,
             vec![Field {
-                name: "count".to_owned(),
+                name: "count".to_owned().into(),
                 ty: HirType::Float { bits: 64 },
                 readonly: false,
                 declared_by: None,
@@ -8955,7 +9000,7 @@ mod tests {
 
     fn field(name: &str, ty: HirType) -> Field {
         Field {
-            name: name.to_owned(),
+            name: name.to_owned().into(),
             ty,
             readonly: false,
             declared_by: None,

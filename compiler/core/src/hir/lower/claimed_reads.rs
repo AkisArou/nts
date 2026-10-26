@@ -96,7 +96,7 @@ pub(super) fn family_read(
     at: NodeId,
     read: ValueId,
     face: super::TypeId,
-    member: &str,
+    member: &super::PropertyKey,
 ) -> Result<ValueId, Diagnostic> {
     let Some(schema) = builder.snapshot.node_types.get(&at).copied() else {
         return Ok(read);
@@ -384,8 +384,7 @@ fn typed_array_element(builder: &FuncBuilder<'_>, node: NodeId) -> bool {
 
 /// `null` or `undefined`, written.
 fn absent_literal(builder: &FuncBuilder<'_>, node: NodeId) -> bool {
-    builder.kind_of(node) == Some(syntax::NULL_KEYWORD)
-        || builder.node(node).text.as_deref() == Some("undefined")
+    builder.kind_of(node) == Some(syntax::NULL_KEYWORD) || builder.is_the_undefined_literal(node)
 }
 
 /// The number an erased `read` is for a consumer that converts it: its payload

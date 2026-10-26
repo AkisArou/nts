@@ -4,15 +4,14 @@ mod common;
 
 use camino::Utf8PathBuf;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::fmt::Write as _;
 use std::path::Path;
 
 fn prepared_project(fixture: &Path) -> hir::Program {
-    let tsgo = std::env::var("NTS_TSGO")
-        .expect("NTS_TSGO required: wasm execution tests must not silently skip");
     let tsconfig = Utf8PathBuf::from_path_buf(fixture.join("tsconfig.json")).unwrap();
-    let snapshot = TsgoApi::for_compilation(Utf8PathBuf::from(tsgo))
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
@@ -2062,7 +2061,7 @@ fn widen(func: &mut hir::Func) -> bool {
     for i in 0..100 {
         let key = push(
             func,
-            hir::OpKind::ConstString(format!("x{i}")),
+            hir::OpKind::ConstString(format!("x{i}").into()),
             hir::HirType::Managed(hir::ManagedType::String),
         );
         // 7, as the type the table holds its values as.

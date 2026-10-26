@@ -14,7 +14,6 @@ clang              extra  the C backend's compiler and the LLVM backend's assemb
 llvm               extra  opt, llc, llvm-mca, FileCheck, llvm-objdump: reading and measuring LLVM output
 lld                extra  the linker clang drives
 binaryen           extra  wasm-opt: Wasm size, and an optimised baseline to compare the Wasm backend with
-go                 extra  builds the tsgo frontend (target/tsgo)
 
 # The Wasm backend's comparators and second engine
 wabt               extra  wasm2wat, wasm-objdump: reading what the Wasm backend emits

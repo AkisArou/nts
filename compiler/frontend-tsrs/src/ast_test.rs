@@ -212,6 +212,28 @@ fn semantic_attributes_keep_inherited_ambient_chain_and_export_meta_facts() {
 }
 
 #[test]
+fn phase_import_callees_have_distinct_typed_meta_properties() {
+    with_file(
+        "import.source('./dep'); import.defer('./dep'); const m = import.meta; function f() { return new.target; }",
+        |file| {
+            let properties: Vec<_> = nodes(file)
+                .iter()
+                .filter_map(|node| node.attributes().meta_property)
+                .collect();
+            assert_eq!(
+                properties,
+                [
+                    MetaProperty::ImportSource,
+                    MetaProperty::ImportDefer,
+                    MetaProperty::ImportMeta,
+                    MetaProperty::NewTarget
+                ]
+            );
+        },
+    );
+}
+
+#[test]
 fn documentation_retains_tag_text_and_source_association() {
     with_file(
         "/** Greeting 😀\n * @nts.native entry_point\n * @jvm.name Work\n */\nexport function value(): number { return 1; }",
@@ -262,4 +284,32 @@ fn empty_argument_list_token_start_skips_comments_to_closing_parenthesis() {
                 < arguments.token_start().expect("token start").0
         );
     });
+}
+
+#[test]
+fn source_file_keeps_its_statement_list_and_eof_in_native_order() {
+    for (source, statements) in [
+        ("", 0),
+        ("const a = 1; export function f() { return a; }", 2),
+    ] {
+        with_file(source, move |file| {
+            let root = file.root();
+            let list = root
+                .list(ListRole::SourceFileStatements)
+                .expect("every source file owns a present statement list");
+            assert_eq!(list.iter().len(), statements);
+            let eof = root
+                .child(ChildRole::SourceFileEndOfFileToken)
+                .expect("every source file owns its EOF token");
+            assert_eq!(eof.native.kind(), Kind::EndOfFile);
+            let actual: Vec<_> = root
+                .edges()
+                .flat_map(|edge| match edge {
+                    Edge::Node { node, .. } => vec![node.native],
+                    Edge::List { list, .. } => list.iter().map(|node| node.native).collect(),
+                })
+                .collect();
+            assert_eq!(actual, root.native.iter_children());
+        });
+    }
 }

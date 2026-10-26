@@ -2,8 +2,8 @@
 //
 //   NTS_BIN=<pin> node tooling/conformance/c-compiles.mjs [project ...]
 //
-// The addon floor covers runtime/node only. HIR, byte-identical snapshot-cache
-// output and valid LLVM did not catch web-platform's undeclared descriptors.
+// The addon floor covers runtime/node only. HIR, the pre-switch cache check
+// and valid LLVM did not catch web-platform's undeclared descriptors.
 // This checks program.c itself with clang -std=c11 -fsyntax-only, without
 // requiring Node headers or linking each project's native provider.
 //
@@ -14,13 +14,10 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync,
-  readFileSync, rmSync, statSync,
-} from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,  } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { frontendFor } from "./pin.ts";
+
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 
@@ -79,12 +76,11 @@ export async function measure({ project, root, compiler, env, work, cached, cc }
 async function main() {
   const source = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
   const cc = process.env.NTS_C_COMPILES_CC ?? "clang";
-  const frontend = frontendFor(source, ROOT);
-  if (!existsSync(source) || !frontend.exists) {
-    console.log(`  NOT MEASURED: compiler ${source}; frontend ${frontend.path} -- both are required`);
+  if (!existsSync(source)) {
+    console.log(`  NOT MEASURED: no compiler at ${source}`);
     return 2;
   }
-  const env = { ...process.env, NTS_TSGO: frontend.path };
+  const env = { ...process.env, NTS_CHECKERS: "1" };
   const named = process.argv.slice(2);
   const nodeProjects = readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(ROOT, "runtime/node", entry.name, "tsconfig.json")))

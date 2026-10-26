@@ -58,7 +58,7 @@ for dir in runtime/node/*/; do
   module="$(basename "$dir")"
   [ -f "$dir/tsconfig.json" ] || continue
   log="$out/$module.log"
-  NTS_TSGO="$root/target/tsgo" "$compiler" emit-c "$dir/tsconfig.json" \
+  NTS_CHECKERS=1 "$compiler" emit-c "$dir/tsconfig.json" \
     --out "$out/$module" --napi > "$log" 2>&1
   # **An emit that failed must not report zero.** `cluster` printed `0 0 0` on the first run
   # of this script, which is implausible for a module importing `child_process` and `net` --

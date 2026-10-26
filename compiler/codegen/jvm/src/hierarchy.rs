@@ -137,11 +137,11 @@ pub fn field_name(program: &JvmProgram<'_>, owner: &Layout, at: usize) -> String
     let Some(field) = owner.fields.get(at) else {
         return String::new();
     };
-    let spelled = crate::body::method_name(&field.name);
+    let spelled = crate::body::method_name(&field.name.storage_name());
     let from = inherited(program, owner).min(at);
     if owner.fields[from..at]
         .iter()
-        .any(|before| crate::body::method_name(&before.name) == spelled)
+        .any(|before| crate::body::method_name(&before.name.storage_name()) == spelled)
     {
         format!("{spelled}_{at}")
     } else {
@@ -327,6 +327,35 @@ pub fn member_name(func_name: &str) -> String {
     crate::body::method_name(tail)
 }
 
+/// A member slot's published raising identity, or its existing declared name.
+/// The map is owned `Hierarchy` authority, not a test of the selected body.
+#[must_use]
+pub fn slot_member(program: &JvmProgram<'_>, slot: usize, declared: &str) -> String {
+    // Field families already carry a typed selector including their face identity.
+    // Keep that authority ahead of the plain semantic member spelling, as the
+    // declaration path does. Raising family entries have their own selector too.
+    if let Some(selector) = program.selector(slot) {
+        return member_name(selector);
+    }
+    if let Some(name) = program.guarded_member(slot) {
+        return name.to_owned();
+    }
+    original_slot_member(program, slot, declared)
+}
+
+fn original_slot_member(program: &JvmProgram<'_>, slot: usize, declared: &str) -> String {
+    if let Some(selector) = program.selector(slot) {
+        return member_name(selector);
+    }
+    u32::try_from(slot)
+        .ok()
+        .and_then(|slot| program.raising_members.get(&slot))
+        .map_or_else(
+            || member_name(declared),
+            |name| crate::body::method_name(name),
+        )
+}
+
 /// The JVM name a dispatch slot is known by, which is the *declaring* layout's
 /// and not the implementing function's.
 ///
@@ -370,6 +399,19 @@ pub fn member_name(func_name: &str) -> String {
 /// owner's, and the call names the family's (`JvmProgram::selector`).
 #[must_use]
 pub fn declared_member(program: &JvmProgram<'_>, layout: &Layout, slot: usize) -> Option<String> {
+    let original = original_declared_member(program, layout, slot)?;
+    if program.selector(slot).is_some() || uniform_member(program, slot).is_some() {
+        return Some(original);
+    }
+    Some(program.guarded_member(slot).map_or(original, str::to_owned))
+}
+
+/// The unchanged public spelling, also used by a default internal selector.
+pub(crate) fn original_declared_member(
+    program: &JvmProgram<'_>,
+    layout: &Layout,
+    slot: usize,
+) -> Option<String> {
     let mut at = layout;
     let mut name = at.methods.get(slot)?.as_ref()?;
     if let Some(selector) = program.selector(slot) {
@@ -381,7 +423,7 @@ pub fn declared_member(program: &JvmProgram<'_>, layout: &Layout, slot: usize) -
     if let Some(declared) =
         declaring_interface(program, layout, slot).and_then(|i| i.methods.get(slot)?.as_ref())
     {
-        return Some(member_name(declared));
+        return Some(original_slot_member(program, slot, declared));
     }
     // Up the chain while a base also declares this slot: the first declaration
     // is the one the JVM resolved against.
@@ -394,7 +436,7 @@ pub fn declared_member(program: &JvmProgram<'_>, layout: &Layout, slot: usize) -
             None => break,
         }
     }
-    Some(member_name(name))
+    Some(original_slot_member(program, slot, name))
 }
 
 /// The base-most layout above this one, which is where a field shared by a
@@ -761,9 +803,53 @@ mod tests {
     use nts_core::hir::Program;
 
     #[test]
+    fn owned_raising_slot_names_do_not_depend_on_the_implementation() {
+        let mut program = Program::default();
+        program.raising_members.insert(5, "step@raises".to_owned());
+        let facts = JvmProgram::new(&program);
+        for body in ["Base#step", "Child#step@raises", "another_body"] {
+            assert_eq!(slot_member(&facts, 5, body), "step$raises");
+        }
+        assert_eq!(slot_member(&facts, 0, "Base#step"), "step");
+        assert_eq!(slot_member(&facts, 6, "Base#step"), "step");
+    }
+
+    #[test]
+    fn a_field_familys_selector_keeps_its_face_and_raising_identity() {
+        use nts_core::hir::interface_access::{Entry, Family};
+
+        let mut program = Program::default();
+        program.raising_members.insert(6, "get_x@raises".to_owned());
+        program.interface_access.families.push(Family {
+            face: nts_semantic_schema::TypeId(7),
+            member: nts_semantic_schema::PropertyKey::Name("x".into()),
+            field: Some(0),
+            getter: Entry {
+                slot: 4,
+                declared: "Face#get_x@interface7".to_owned(),
+            },
+            setter: None,
+            raising: vec![Entry {
+                slot: 6,
+                declared: "Face#get_x@interface7@raises".to_owned(),
+            }],
+            owners: Vec::new(),
+            eager: false,
+            pending: false,
+            stored_dispatch: true,
+        });
+        let facts = JvmProgram::new(&program);
+        assert_eq!(slot_member(&facts, 4, "any_body"), "get_x$interface7");
+        assert_eq!(
+            slot_member(&facts, 6, "any_body"),
+            "get_x$interface7$raises"
+        );
+    }
+
+    #[test]
     fn a_flattened_record_field_belongs_to_its_emitted_class() {
         let field = |name: &str, owner| Field {
-            name: name.to_owned(),
+            name: name.to_owned().into(),
             ty: HirType::Float { bits: 64 },
             written: None,
             declared_by: Some(TypeId(owner)),

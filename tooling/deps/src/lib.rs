@@ -27,6 +27,9 @@ pub mod resolution;
 pub mod resolve;
 pub mod workspace;
 
+mod complaint_cache;
+mod seed;
+
 use std::collections::BTreeMap;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -104,6 +107,8 @@ pub struct Acquisition {
     /// Vendored packages removed because they left the closure.
     pub pruned: Vec<String>,
     pub files_written: usize,
+    /// Fresh resolution passes used to reach the current source graph.
+    pub passes: usize,
     /// True when nothing needed doing, which is the common case.
     pub unchanged: bool,
 }
@@ -120,90 +125,8 @@ impl Acquisition {
 pub struct Options {
     /// Report what would happen and write nothing.
     pub dry_run: bool,
-    /// Where `tsgo` is, so specifiers can be resolved by the authority rather
-    /// than by a second implementation of npm's `exports`.
-    ///
-    /// `None` falls back to reading each package's manifest, which is what the
-    /// tests use and what a checkout without a built tsgo gets. The fallback
-    /// cannot see subpath patterns or tell two installed versions apart, so it
-    /// is a degradation and the report says so.
-    pub tsgo: Option<Utf8PathBuf>,
-}
-
-/// A sibling package in the same repository, pointed at where it lives.
-///
-/// `None` when the package is installed from a registry, or when it is a
-/// workspace package that publishes only a build — a sibling's `dist` is as
-/// opaque as anybody else's, and gets the ordinary treatment.
-fn as_workspace_package(
-    installed: &resolve::Installed,
-    entry_points: &[manifest::EntryPoint],
-    patterns: &[String],
-) -> Option<PackageReport> {
-    if !workspace::is_workspace_package(&installed.dir) {
-        return None;
-    }
-    let mapped: Vec<(String, Utf8PathBuf)> = entry_points
-        .iter()
-        .filter_map(|entry| {
-            let target = entry
-                .targets
-                .iter()
-                .find(|target| is_source(target) && installed.dir.join(target).is_file())?;
-            Some((entry.specifier.clone(), installed.dir.join(target)))
-        })
-        .collect();
-    if mapped.is_empty() {
-        return None;
-    }
-    Some(PackageReport {
-        name: installed.name.clone(),
-        version: installed.version.clone(),
-        origin: Origin::Workspace,
-        route: Route::ShippedTypeScript,
-        depth: installed.depth,
-        imported: mapped.iter().map(|(name, _)| name.clone()).collect(),
-        mapped,
-        files: 0,
-        patterns: patterns.to_vec(),
-        complaints: Vec::new(),
-    })
-}
-
-/// The dependency graph a previous run wrote down.
-///
-/// Without it a settled tree walks the fixpoint from scratch: a dependency's
-/// own dependencies are invisible until its source is in the program, so each
-/// checker pass learns one layer that the last run already learned. Four passes
-/// on a 141-package closure became one.
-///
-/// Only packages whose recorded source is still on disk. A seed that outlived
-/// its source would keep a package in the graph after it was uninstalled.
-fn seeded_from_lock(
-    workspace: &Utf8Path,
-) -> Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> {
-    emit::read_lock(workspace)
-        .packages
-        .into_iter()
-        .filter(|(_, locked)| !locked.resolved.is_empty())
-        .filter_map(|(name, locked)| {
-            let dir = Utf8PathBuf::from(&locked.source);
-            dir.is_dir().then(|| {
-                (
-                    resolution::PackageRef {
-                        name,
-                        version: locked.version.clone(),
-                        dir,
-                    },
-                    locked
-                        .resolved
-                        .iter()
-                        .map(|(specifier, at)| (specifier.clone(), Utf8PathBuf::from(at)))
-                        .collect(),
-                )
-            })
-        })
-        .collect()
+    /// Native checker count for the standalone report; resolution starts no checker.
+    pub checker_count: Option<std::num::NonZeroU16>,
 }
 
 /// What one resolution pass found.
@@ -221,23 +144,23 @@ struct Traced {
 
 /// One package to work through, and — when the checker answered — the
 /// specifiers it has to satisfy. `None` means fall back to its manifest.
-type WorkList = Vec<(resolve::Installed, Option<Vec<(String, Utf8PathBuf)>>)>;
+type WorkList = Vec<(resolve::Installed, Vec<(String, Utf8PathBuf)>)>;
 
 /// The packages a program actually imports, as the checker resolved them.
 ///
-/// Returns `None` when there is no tsgo to ask, which is the signal to fall
-/// back to walking `node_modules` and reading manifests.
+/// Only the native program decides which dependencies are reached.
 fn resolved_packages(
-    tsgo: Option<&Utf8Path>,
+    checker_count: Option<std::num::NonZeroU16>,
     tsconfig: &Utf8Path,
     project: &Utf8Path,
     vendor_root: &Utf8Path,
-) -> Option<Traced> {
-    let tsgo = tsgo?;
-    let resolution = resolution::trace(tsgo, tsconfig).ok()?;
-    if resolution.modules.is_empty() {
-        return None;
-    }
+) -> Result<Traced, Error> {
+    let mut resolution = resolution::resolve(tsconfig, checker_count)?;
+    let workspace = vendor_root
+        .parent()
+        .and_then(Utf8Path::parent)
+        .expect("vendor root belongs to a workspace");
+    seed::restore(&mut resolution, workspace);
 
     let mut packages: Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> = Vec::new();
     let mut local: Vec<(String, Utf8PathBuf)> = Vec::new();
@@ -249,13 +172,16 @@ fn resolved_packages(
             continue;
         }
         if let Some(package) = &module.package {
-            if !packages.iter().any(|(known, _)| known.dir == package.dir) {
+            let index = if let Some(index) = packages
+                .iter()
+                .position(|(known, _)| known.dir == package.dir)
+            {
+                index
+            } else {
                 packages.push((package.clone(), Vec::new()));
-            }
-            let entries = &mut packages
-                .iter_mut()
-                .find(|(known, _)| known.dir == package.dir)?
-                .1;
+                packages.len() - 1
+            };
+            let entries = &mut packages[index].1;
             if !entries.iter().any(|(name, _)| *name == module.specifier) {
                 entries.push((module.specifier.clone(), module.file.clone()));
             }
@@ -283,7 +209,7 @@ fn resolved_packages(
             }
         }
     }
-    Some(Traced {
+    Ok(Traced {
         packages,
         locals: local,
         diagnostics: resolution.diagnostics,
@@ -315,14 +241,13 @@ pub fn acquire(
     let workspace_root = workspace::root(&project_dir);
     let vendor_root = workspace_root.join(".nts").join("vendor");
 
-    // Accumulated across passes. A pass can only *add*: a specifier that
-    // resolved into the vendor tree on a later pass is one this already knows
-    // about, and re-deriving the whole set from the newest trace would lose it.
-    let mut local: Vec<(String, Utf8PathBuf)> = Vec::new();
-    let mut complaints: Vec<resolution::Diagnostic> = Vec::new();
-    let mut discovered = seeded_from_lock(&workspace_root);
-
-    let mut trace_with = tsconfig.to_owned();
+    // The lock seeds source locations, while current roots decide admission.
+    let canonical_config = tsconfig
+        .canonicalize_utf8()
+        .unwrap_or_else(|_| tsconfig.to_owned());
+    let seed = seed::Seed::new(&project_dir, &canonical_config, &workspace_root)?;
+    let mut known = seed.known.clone();
+    let mut trace_with = seed.config().unwrap_or(canonical_config);
     let mut last: Option<Acquisition> = None;
     // Across all passes, not the last one. A run that acquired a package on
     // pass 0 and wrote nothing on pass 1 reported itself "unchanged", which is
@@ -332,53 +257,47 @@ pub fn acquire(
 
     for pass in 0..PASSES {
         let traced = resolved_packages(
-            options.tsgo.as_deref(),
+            options.checker_count,
             &trace_with,
             &project_dir,
             &vendor_root,
-        );
+        )?;
         let mut grew = false;
-        if let Some(Traced {
+        let Traced {
             packages,
             locals,
             diagnostics,
-        }) = traced
-        {
-            complaints = diagnostics;
-            for (package, specifiers) in packages {
-                if let Some((_, known)) = discovered
-                    .iter_mut()
-                    .find(|(known, _)| known.dir == package.dir)
-                {
-                    for entry in specifiers {
-                        if !known.iter().any(|(name, _)| *name == entry.0) {
-                            known.push(entry);
-                            grew = true;
-                        }
-                    }
-                } else {
-                    discovered.push((package, specifiers));
-                    grew = true;
-                }
-            }
-            for entry in locals {
-                if !local.iter().any(|(name, _)| *name == entry.0) {
-                    local.push(entry);
-                    grew = true;
-                }
+        } = traced;
+
+        let complaints = diagnostics;
+        for (package, specifiers) in &packages {
+            for (specifier, target) in specifiers {
+                grew |= known.insert((package.dir.clone(), specifier.clone(), target.clone()));
             }
         }
+        let discovered = packages;
+        let local = locals;
 
-        let resolved = options.tsgo.as_ref().map(|_| Traced {
+        let resolved = Traced {
             packages: discovered.clone(),
             locals: local.clone(),
             diagnostics: Vec::new(),
-        });
-        let mut acquisition = acquire_once(&project_dir, tsconfig, resolved.as_ref(), options)?;
-        // The trace that answered "where did this go" also typechecked, and its
-        // complaints about the *vendor tree* are the only evidence that the
-        // source just acquired can be built. Attributed from the previous
-        // pass's trace, which is the newest one that saw the current tree.
+        };
+        let mut acquisition = acquire_once(&project_dir, tsconfig, &resolved, options)?;
+        if let Some(previous) = &last {
+            for package in &mut acquisition.packages {
+                if matches!(package.route, Route::Recorded { .. })
+                    && let Some(first) = previous.packages.iter().find(|first| {
+                        first.name == package.name && first.version == package.version
+                    })
+                {
+                    package.route = first.route.clone();
+                }
+            }
+        }
+        // Resolution reports config and syntax errors only. The compile's
+        // snapshot (or the standalone report's final check) supplies semantic
+        // complaints once acquisition has settled.
         attribute(&mut acquisition, &complaints, &vendor_root);
         // Into the lock, after attribution and after the pass wrote it. A
         // settled run skips the checker pass that produces these, and a warm
@@ -387,6 +306,8 @@ pub fn acquire(
         if !options.dry_run {
             record_complaints(&workspace_root, &acquisition)?;
         }
+        grew |= acquisition.files_written != 0;
+        acquisition.passes = pass + 1;
         written_in_all += acquisition.files_written;
         for name in &acquisition.pruned {
             if !pruned_in_all.contains(name) {
@@ -405,7 +326,7 @@ pub fn acquire(
         if !grew {
             break;
         }
-        if options.tsgo.is_none() || pass + 1 == PASSES {
+        if pass + 1 == PASSES {
             break;
         }
         match next {
@@ -418,78 +339,71 @@ pub fn acquire(
 
 /// What to work through this pass, and the workspace specifiers to point at.
 ///
-/// Split out because it is the half that differs between "the checker told us"
-/// and "we read the manifests", and reading them side by side is the only way
-/// to see that they differ in *what they can see* rather than in what they do.
+/// Only native resolution admits an import to this list. A manifest can
+/// describe how to recover a resolved package's implementation, but cannot
+/// substitute for an unresolved import.
 fn work_list(
     project: &Utf8Path,
     closure: &resolve::Closure,
-    resolved: Option<&Traced>,
+    resolved: &Traced,
     paths: &mut BTreeMap<String, Vec<String>>,
     packages: &mut Vec<PackageReport>,
 ) -> WorkList {
     let mut queue: WorkList = Vec::new();
-    match resolved {
-        Some(Traced {
-            packages: traced,
-            locals: local,
-            ..
-        }) => {
-            // A sibling package in the same repository: the checker already
-            // named its source file, so there is nothing to recover and nothing
-            // to choose. Point at it.
-            for (specifier, file) in local {
-                paths.insert(specifier.clone(), vec![relative(project, file)]);
-                if !packages
-                    .iter()
-                    .any(|report: &PackageReport| report.name == *specifier)
-                {
-                    let version = package_version_at(file);
-                    packages.push(PackageReport {
-                        name: specifier.clone(),
-                        version,
-                        origin: Origin::Workspace,
-                        route: Route::ShippedTypeScript,
-                        depth: 0,
-                        imported: vec![specifier.clone()],
-                        mapped: vec![(specifier.clone(), file.clone())],
-                        files: 0,
-                        patterns: Vec::new(),
-                        complaints: Vec::new(),
-                    });
-                }
-            }
-            for (package, specifiers) in traced {
-                let Ok(manifest) = Manifest::read(&package.dir.join("package.json")) else {
-                    continue;
-                };
-                let depth = closure
-                    .packages
-                    .iter()
-                    .find(|known| known.name == package.name)
-                    .map_or(1, |known| known.depth);
-                queue.push((
-                    resolve::Installed {
-                        name: package.name.clone(),
-                        version: if package.version.is_empty() {
-                            manifest.version.clone()
-                        } else {
-                            package.version.clone()
-                        },
-                        dir: package.dir.clone(),
-                        depth,
-                        manifest,
-                    },
-                    Some(specifiers.clone()),
-                ));
+    let Traced {
+        packages: traced,
+        locals: local,
+        ..
+    } = resolved;
+    {
+        // A sibling package in the same repository: the checker already
+        // named its source file, so there is nothing to recover and nothing
+        // to choose. Point at it.
+        for (specifier, file) in local {
+            paths.insert(specifier.clone(), vec![relative(project, file)]);
+            if !packages
+                .iter()
+                .any(|report: &PackageReport| report.name == *specifier)
+            {
+                let version = package_version_at(file);
+                packages.push(PackageReport {
+                    name: specifier.clone(),
+                    version,
+                    origin: Origin::Workspace,
+                    route: Route::ShippedTypeScript,
+                    depth: 0,
+                    imported: vec![specifier.clone()],
+                    mapped: vec![(specifier.clone(), file.clone())],
+                    files: 0,
+                    patterns: Vec::new(),
+                    complaints: Vec::new(),
+                });
             }
         }
-        None => queue.extend(
-            closure
+        for (package, specifiers) in traced {
+            let Ok(manifest) = Manifest::read(&package.dir.join("package.json")) else {
+                continue;
+            };
+            let depth = closure
                 .packages
                 .iter()
-                .map(|installed| (installed.clone(), None)),
-        ),
+                .find(|known| known.name == package.name)
+                .map_or(1, |known| known.depth);
+            queue.push((
+                resolve::Installed {
+                    name: package.name.clone(),
+                    version: if package.version.is_empty() {
+                        manifest.version.clone()
+                    } else {
+                        package.version.clone()
+                    },
+                    dir: package.dir.clone(),
+                    depth,
+                    manifest,
+                },
+                specifiers.clone(),
+            ));
+        }
     }
 
     queue
@@ -535,72 +449,119 @@ fn record_complaints(workspace: &Utf8Path, acquisition: &Acquisition) -> Result<
 /// error code rather than listed, because forty instances of `Cannot find name
 /// 'process'` are one fact about a package's build environment and not forty
 /// facts.
-fn attribute(
-    acquisition: &mut Acquisition,
+fn complaints_by_package(
     diagnostics: &[resolution::Diagnostic],
     vendor_root: &Utf8Path,
-) {
-    // The vendor directory's own name, matched inside the path rather than as a
-    // prefix: tsgo reports a file relative to *its* working directory, so an
-    // absolute prefix does not match and every complaint was silently dropped.
-    let marker = format!(
-        "/{}/",
-        vendor_root
-            .file_name()
-            .map_or_else(|| ".nts/vendor".to_owned(), ToOwned::to_owned)
-    );
-
-    // Nothing is cleared unless this pass has something to say about the vendor
-    // tree. A settled run makes one checker pass, of the developer's own
-    // config, which never sees vendored source -- so it has diagnostics, none
-    // of them about packages, and taking that as "no complaints" wiped what the
-    // lock had just restored and reported every acquired package as arriving
-    // clean.
+) -> Option<BTreeMap<String, Vec<Complaint>>> {
+    let marker = format!("/{}/", vendor_root.file_name().unwrap_or("vendor"));
     if !diagnostics
         .iter()
         .any(|diagnostic| diagnostic.file.as_str().contains(&marker))
     {
-        return;
+        return None;
     }
-    for package in &mut acquisition.packages {
-        package.complaints.clear();
-    }
+    let mut grouped: BTreeMap<String, Vec<Complaint>> = BTreeMap::new();
     for diagnostic in diagnostics {
         let path = diagnostic.file.as_str();
         let Some(at) = path.rfind(&marker) else {
             continue;
         };
-        // `<name>@<version>/…`, the way `emit::package_dir` wrote it.
-        let Some(slug) = path[at + marker.len()..]
-            .split('/')
-            .next()
-            .map(ToOwned::to_owned)
-        else {
+        let Some(slug) = path[at + marker.len()..].split('/').next() else {
             continue;
         };
-        let Some(package) = acquisition.packages.iter_mut().find(|package| {
-            emit::package_dir(&format!("{}@{}", package.name, package.version)) == slug
-        }) else {
-            continue;
-        };
-        match package
-            .complaints
+        let complaints = grouped.entry(slug.to_owned()).or_default();
+        if let Some(complaint) = complaints
             .iter_mut()
             .find(|complaint| complaint.code == diagnostic.code)
         {
-            Some(complaint) => complaint.count += 1,
-            None => package.complaints.push(Complaint {
+            complaint.count += 1;
+        } else {
+            complaints.push(Complaint {
                 code: diagnostic.code.clone(),
                 count: 1,
                 example: diagnostic.message.clone(),
-            }),
+            });
         }
     }
-    for package in &mut acquisition.packages {
-        package
-            .complaints
-            .sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
+    for complaints in grouped.values_mut() {
+        complaints.sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
     }
+    Some(grouped)
+}
+
+fn attribute(
+    acquisition: &mut Acquisition,
+    diagnostics: &[resolution::Diagnostic],
+    vendor_root: &Utf8Path,
+) {
+    let Some(mut grouped) = complaints_by_package(diagnostics, vendor_root) else {
+        return;
+    };
+    for package in &mut acquisition.packages {
+        let slug = emit::package_dir(&format!("{}@{}", package.name, package.version));
+        package.complaints = grouped.remove(&slug).unwrap_or_default();
+    }
+}
+
+/// Attribute the ordinary compilation's diagnostics without running a second checker.
+///
+/// # Errors
+/// The dependency lock could not be updated.
+pub fn record_compilation(
+    tsconfig: &Utf8Path,
+    diagnostics: &[resolution::Diagnostic],
+) -> Result<(), Error> {
+    let project = tsconfig.parent().unwrap_or_else(|| Utf8Path::new("."));
+    let workspace = workspace::root(project);
+    let grouped =
+        complaints_by_package(diagnostics, &workspace.join(".nts/vendor")).unwrap_or_default();
+    let mut lock = emit::read_lock(&workspace);
+    let mut changed = false;
+    for (name, package) in &mut lock.packages {
+        let slug = emit::package_dir(&format!("{name}@{}", package.version));
+        let complaints = grouped
+            .get(&slug)
+            .into_iter()
+            .flatten()
+            .map(|complaint| {
+                (
+                    complaint.code.clone(),
+                    (complaint.count, complaint.example.clone()),
+                )
+            })
+            .collect();
+        if package.complaints != complaints {
+            package.complaints = complaints;
+            changed = true;
+        }
+    }
+    if changed {
+        emit::write_lock(&workspace, &lock)?;
+    }
+    Ok(())
+}
+
+/// Run the standalone dependency report's one complete check after resolution settles.
+///
+/// # Errors
+/// The project cannot be checked or its dependency lock cannot be updated.
+pub fn check_acquisition(
+    acquisition: &mut Acquisition,
+    original: &Utf8Path,
+    options: &Options,
+) -> Result<(), Error> {
+    let config = acquisition.tsconfig.as_deref().unwrap_or(original);
+    let memo = complaint_cache::path(&acquisition.workspace, config);
+    let diagnostics = resolution::check(config, options.checker_count, &memo, !options.dry_run)?.0;
+    let vendor_root = acquisition.workspace.join(".nts/vendor");
+    for package in &mut acquisition.packages {
+        package.complaints.clear();
+    }
+    attribute(acquisition, &diagnostics, &vendor_root);
+    if !options.dry_run {
+        record_complaints(&acquisition.workspace, acquisition)?;
+    }
+    Ok(())
 }
 
 /// Write what this package turned out to be into the lock, and map what it
@@ -617,20 +578,16 @@ fn record(
     recovery: &recover::Recovery,
     mapped: &[(String, Utf8PathBuf)],
     package_root: &Utf8Path,
-    traced: Option<&Vec<(String, Utf8PathBuf)>>,
+    traced: &[(String, Utf8PathBuf)],
     digest: String,
     lock: &mut Lock,
     paths: &mut BTreeMap<String, Vec<String>>,
     pass: &Pass<'_>,
 ) {
     let resolved: BTreeMap<String, String> = traced
-        .map(|specifiers| {
-            specifiers
-                .iter()
-                .map(|(specifier, at)| (specifier.clone(), at.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
+        .iter()
+        .map(|(specifier, at)| (specifier.clone(), at.to_string()))
+        .collect();
 
     if !recovery.any_recovered() {
         lock.packages.insert(
@@ -690,7 +647,7 @@ fn record(
 /// contract a lockfile already has.
 fn remembered(
     installed: &resolve::Installed,
-    traced: Option<&Vec<(String, Utf8PathBuf)>>,
+    traced: &[(String, Utf8PathBuf)],
     package_root: &Utf8Path,
     patterns: &[String],
     pass: &Pass<'_>,
@@ -726,9 +683,7 @@ fn remembered(
     let imported = if recovered {
         mapped.iter().map(|(name, _)| name.clone()).collect()
     } else {
-        traced
-            .map(|specifiers| specifiers.iter().map(|(name, _)| name.clone()).collect())
-            .unwrap_or_default()
+        traced.iter().map(|(name, _)| name.clone()).collect()
     };
 
     Some(PackageReport {
@@ -777,27 +732,12 @@ struct Pass<'a> {
 /// specifiers it publishes now resolve to.
 fn acquire_package(
     installed: &resolve::Installed,
-    traced: Option<&Vec<(String, Utf8PathBuf)>>,
+    traced: &[(String, Utf8PathBuf)],
     pass: &Pass<'_>,
     lock: &mut Lock,
     paths: &mut BTreeMap<String, Vec<String>>,
 ) -> Result<(PackageReport, usize), Error> {
-    let entry_points = installed.manifest.entry_points();
-    let patterns = if traced.is_some() {
-        // A pattern the checker expanded is not an unexpanded pattern.
-        Vec::new()
-    } else {
-        installed.manifest.export_patterns()
-    };
-
-    if traced.is_none()
-        && let Some(report) = as_workspace_package(installed, &entry_points, &patterns)
-    {
-        for (specifier, at) in &report.mapped {
-            paths.insert(specifier.clone(), vec![relative(pass.project, at)]);
-        }
-        return Ok((report, 0));
-    }
+    let patterns = Vec::new();
 
     // The version is in the directory name so two versions of one package can
     // coexist, and so that looking at the vendor tree answers "which version am
@@ -826,10 +766,7 @@ fn acquire_package(
         return Ok((report, 0));
     }
 
-    let recovery = match traced {
-        Some(specifiers) => recover::recover_resolved(installed, specifiers),
-        None => recover::recover(installed, &entry_points),
-    };
+    let recovery = recover::recover_resolved(installed, traced);
     let route = recovery.headline();
     let digest = emit::digest(&recovery.files);
 
@@ -876,9 +813,7 @@ fn acquire_package(
             origin: Origin::Registry,
             route,
             depth: installed.depth,
-            imported: traced
-                .map(|specifiers| specifiers.iter().map(|(name, _)| name.clone()).collect())
-                .unwrap_or_default(),
+            imported: traced.iter().map(|(name, _)| name.clone()).collect(),
             mapped,
             files: recovery.files.len(),
             patterns,
@@ -891,7 +826,7 @@ fn acquire_package(
 fn acquire_once(
     project: &Utf8Path,
     tsconfig: &Utf8Path,
-    resolved: Option<&Traced>,
+    resolved: &Traced,
     options: &Options,
 ) -> Result<Acquisition, Error> {
     let project = project
@@ -928,7 +863,7 @@ fn acquire_once(
     for (installed, traced) in &queue {
         let (report, written) = acquire_package(
             installed,
-            traced.as_ref(),
+            traced,
             &Pass {
                 project: &project,
                 vendor_root: &vendor_root,
@@ -958,6 +893,26 @@ fn acquire_once(
             finish(&project, tsconfig, &workspace, &vendor_root, &lock, &paths)?;
         pruned = removed;
         written_tsconfig = Some(config);
+    } else if !options.dry_run && !previous.packages.is_empty() {
+        // The last recovered import can disappear while its installation stays.
+        // Drop our stale paths and source without creating a new empty config.
+        let keep = lock
+            .packages
+            .iter()
+            .map(|(name, locked)| emit::package_dir(&format!("{name}@{}", locked.version)))
+            .collect::<Vec<_>>();
+        pruned = emit::prune(&vendor_root, &keep);
+        emit::write_lock(&workspace, &lock)?;
+        let generated = project.join("tsconfig.nts.json");
+        if let Err(source) = std::fs::remove_file(&generated)
+            && source.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(emit::EmitError::Write {
+                path: generated,
+                source,
+            }
+            .into());
+        }
     }
 
     Ok(Acquisition {
@@ -969,6 +924,7 @@ fn acquire_once(
         unchanged: files_written == 0 && lock_unchanged && pruned.is_empty(),
         files_written,
         pruned,
+        passes: 1,
     })
 }
 
@@ -1153,12 +1109,16 @@ fn strip_jsonc(text: &str) -> String {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("dependency source seed needs a UTF-8 path: {0}")]
+    SeedPath(String),
     #[error("acquisition made no pass at all, which cannot happen")]
     NoPass,
     #[error(transparent)]
     Manifest(#[from] manifest::ManifestError),
     #[error(transparent)]
     Emit(#[from] emit::EmitError),
+    #[error(transparent)]
+    Resolution(#[from] resolution::ResolutionError),
 }
 
 #[cfg(test)]

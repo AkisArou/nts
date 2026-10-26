@@ -54,7 +54,7 @@ import { fileURLToPath } from "node:url";
 
 import { BACKENDS, attempt, selfChecks } from "./attempt262.ts";
 import { pinCompiler, workspace } from "./project.ts";
-import { frontendFor } from "../conformance/pin.ts";
+
 import { serialRun } from "./worker-memory.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -97,24 +97,11 @@ serialRun({ memoryCapKb: Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_00
 // though `target/release/nts` is the path everyone builds into. `pinCompiler`
 // carries why.
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
+process.env.NTS_CHECKERS = "1";
 
-// Temporaries and the snapshot cache under the scratch rather than shared;
-// see `conformance262.ts`, which does the same and says why the cache is
-// named rather than left to follow `TMPDIR` (each case also runs with it off).
-// The frontend the compiler under test runs with: NTS_TSGO, else the one a
-// pin recorded beside the binary (pin.ts), else the tree's. Set on this
-// process so every attempt inherits it -- a pinned copy in the scratch has no
-// frontend beside it, and the control program then fails as a "frontend-crash".
-const FRONTEND = frontendFor(NTS, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-process.env.NTS_TSGO = FRONTEND.path;
+
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
-process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");
-mkdirSync(process.env.NTS_SNAPSHOT_CACHE, { recursive: true });
 
 // --- the selection --------------------------------------------------------
 

@@ -72,7 +72,7 @@ const run = spawnSync(compiler, [
   encoding: "utf8",
   maxBuffer: 128 * 1024 * 1024,
   timeout: 3_600_000,
-  env: { NTS_TSGO: join(ROOT, "target/tsgo"), ...process.env },
+  env: { NTS_CHECKERS: "1", ...process.env },
 });
 const text = `${run.stdout ?? ""}${run.stderr ?? ""}`;
 
@@ -80,14 +80,14 @@ const lines = text.split("\n");
 const primary = lines.filter((l) => l.includes("NTS1001"));
 const cascadeLines = lines.filter((l) => l.includes("NTS1003"));
 
-// A sweep that found nothing must not read as a clean sweep. An unset or wrong
-// `NTS_TSGO` fails the frontend before any lowering happens, and every count
+// A sweep that found nothing must not read as a clean sweep. A failed
+// frontend never reaches lowering, and every count
 // below is then zero for a reason that has nothing to do with the compiler.
 // Three ways to end up with no diagnostics, and they are not the same finding.
 // The first version of this printed "produced no diagnostics at all" for a run
 // that had been *killed by a timeout* -- `fs` emits 574KB of them and needs
 // longer than the caller allowed. Reporting a killed process as a silent one
-// sent me looking at `NTS_TSGO`, which was fine. Ask the process what happened
+// sent me looking at frontend initialization, which was fine. Ask what happened
 // before drawing any conclusion from its output.
 if (run.error !== undefined || run.signal !== null) {
   console.log(`INSTRUMENT FAILURE: the compiler did not finish for ${module_}.`);
@@ -116,7 +116,7 @@ if (primary.length === 0 && cascadeLines.length === 0) {
   }
   console.log(`INSTRUMENT FAILURE: ${module_} produced no diagnostics and no`);
   console.log(`  output, and the compiler exited ${run.status} rather than being`);
-  console.log("  killed. The frontend never ran -- check NTS_TSGO before");
+  console.log("  killed. Check the frontend stderr and selected compiler before");
   console.log("  believing a zero.");
   process.exit(2);
 }

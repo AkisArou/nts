@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use rustc_hash::FxHashMap;
-use tsrs_core::collections::{OrderedMap, OrderedMapExt};
+use tsrs_core::collections::OrderedMap;
 
 use crate::commandlineoption::CommandLineOption;
 use crate::declsbuild::BUILD_OPTS;
@@ -17,7 +17,7 @@ pub fn get_name_map_from_list(opt_decls: &[&'static CommandLineOption]) -> NameM
         OrderedMap::with_capacity_and_hasher(opt_decls.len(), rustc_hash::FxBuildHasher);
     let mut short_option_names = FxHashMap::default();
     for option in opt_decls {
-        options_names.set(option.name.to_lowercase(), *option);
+        options_names.insert(option.name.to_lowercase(), *option);
         if !option.short_name.is_empty() {
             short_option_names.insert(option.short_name.to_string(), option.name.to_string());
         }
@@ -31,7 +31,7 @@ pub struct NameMap {
 }
 
 impl NameMap {
-    pub fn get(&self, name: &str) -> Option<&'static CommandLineOption> {
+    pub(crate) fn get(&self, name: &str) -> Option<&'static CommandLineOption> {
         self.options_names.get(&name.to_lowercase()).copied()
     }
 
@@ -41,7 +41,7 @@ impl NameMap {
         self.get(name)
     }
 
-    pub fn get_option_declaration_from_name(
+    pub(crate) fn get_option_declaration_from_name(
         &self,
         option_name: &str,
         allow_short: bool,

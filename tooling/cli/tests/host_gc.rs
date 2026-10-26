@@ -10,11 +10,9 @@ fn jvm_declines_rc_before_frontend_acquisition() {
     let result = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["emit-jvm", "--rc", "--no-acquire"])
         .arg(project)
-        .env("NTS_TSGO", "/nonexistent/host-gc-test-tsgo")
         .output()
         .unwrap();
     assert!(!result.status.success());
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(stderr.contains("jvm declines --rc"), "{stderr}");
-    assert!(!stderr.contains("host-gc-test-tsgo"), "{stderr}");
 }

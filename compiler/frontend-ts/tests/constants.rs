@@ -1,26 +1,22 @@
 //! Compile-time constant folding.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::tsgo::types::syntax;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
+use nts_semantic_schema::syntax;
 use nts_semantic_schema::{ConstantValue, NodeKind, SemanticSnapshot};
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/classes/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/classes fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_constant_folding(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 /// The folded value of the enum member named `name`, if any.
@@ -31,10 +27,13 @@ fn member_value(snapshot: &SemanticSnapshot, name: &str) -> Option<ConstantValue
         .enumerate()
         .find(|(_, node)| {
             node.kind == NodeKind::Syntax(syntax::ENUM_MEMBER)
-                && node
-                    .children
-                    .iter()
-                    .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some(name))
+                && node.children.iter().any(|c| {
+                    snapshot.nodes[c.0 as usize]
+                        .text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                        == Some(name)
+                })
         })
         .and_then(|(index, _)| {
             snapshot
@@ -46,7 +45,7 @@ fn member_value(snapshot: &SemanticSnapshot, name: &str) -> Option<ConstantValue
 
 #[test]
 fn numeric_enum_members_fold_to_their_values() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     assert_eq!(
         member_value(&snapshot, "Red"),
         Some(ConstantValue::Number(1.0))
@@ -63,7 +62,7 @@ fn numeric_enum_members_fold_to_their_values() {
 
 #[test]
 fn string_enum_members_fold_to_their_values() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     assert_eq!(
         member_value(&snapshot, "Fast"),
         Some(ConstantValue::String("fast".into()))
@@ -72,7 +71,7 @@ fn string_enum_members_fold_to_their_values() {
 
 #[test]
 fn a_const_enum_read_folds_because_it_has_to() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `Mode` is a `const enum`: the object does not exist at runtime, so a backend
     // that emitted a property load would be reading a member of nothing. This is
     // the one folding case that is a correctness requirement rather than an
@@ -96,7 +95,7 @@ fn a_const_enum_read_folds_because_it_has_to() {
 
 #[test]
 fn a_regular_enum_read_is_not_folded_by_the_checker() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // Documents a real limit rather than a bug. `Color` is an ordinary enum, so it
     // has a runtime object and TypeScript deliberately emits a property access —
     // preserving reverse mapping (`Color[1] === "Red"`) and the object's identity.
@@ -111,20 +110,26 @@ fn a_regular_enum_read_is_not_folded_by_the_checker() {
         .enumerate()
         .filter(|(_, node)| {
             node.kind == NodeKind::Syntax(syntax::PROPERTY_ACCESS_EXPRESSION)
-                && node
-                    .children
-                    .iter()
-                    .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some("Color"))
+                && node.children.iter().any(|c| {
+                    snapshot.nodes[c.0 as usize]
+                        .text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                        == Some("Color")
+                })
         })
         .count();
     assert!(color_reads >= 2, "the fixture reads `Color` twice");
 
     assert!(
         !snapshot.constants.iter().any(|(node, _)| {
-            snapshot.nodes[node.0 as usize]
-                .children
-                .iter()
-                .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some("Color"))
+            snapshot.nodes[node.0 as usize].children.iter().any(|c| {
+                snapshot.nodes[c.0 as usize]
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+                    == Some("Color")
+            })
         }),
         "a regular enum read folded; the checker's behaviour changed",
     );
@@ -132,15 +137,18 @@ fn a_regular_enum_read_is_not_folded_by_the_checker() {
 
 #[test]
 fn an_ordinary_property_access_folds_to_nothing() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `this.radius` is not constant. Folding it would be a wrong immediate, which
     // is worse than a load.
     assert!(
         !snapshot.constants.iter().any(|(node, _)| {
-            snapshot.nodes[node.0 as usize]
-                .children
-                .iter()
-                .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some("radius"))
+            snapshot.nodes[node.0 as usize].children.iter().any(|c| {
+                snapshot.nodes[c.0 as usize]
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+                    == Some("radius")
+            })
         }),
         "a non-constant property access was folded",
     );

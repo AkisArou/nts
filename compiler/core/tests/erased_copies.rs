@@ -3,16 +3,14 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn closed_erased_calls_keep_every_root_and_independent_parameter_positions() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-closed-call-recovers-an-erased-parameter/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -88,12 +86,10 @@ fn closed_erased_calls_keep_every_root_and_independent_parameter_positions() {
 
 #[test]
 fn escape_mutation_unknown_edges_casts_and_spreads_do_not_prove_a_copy() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/erased-copies-boundaries/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -187,13 +183,11 @@ fn escape_mutation_unknown_edges_casts_and_spreads_do_not_prove_a_copy() {
 /// checker counts an abort as a declined case -- so this asserts the read.
 #[test]
 fn a_recovered_array_reads_past_its_end_as_nan() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
         "../../tests/programs/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json",
     );
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

@@ -998,7 +998,7 @@ impl SymbolMap {
 /// `Function`'s and `Object`'s) and testing it against a `NameFilter` without hashing it again for each.
 #[derive(Clone, Copy)]
 pub struct HashedName<'a> {
-    pub name: &'a str,
+    name: &'a str,
     hash: u32,
 }
 
@@ -1075,6 +1075,12 @@ impl SymbolTable {
     /// Go `maps.Clone(table)` for a non-nil table.
     pub fn clone_table(&self) -> P<SymbolTable> {
         P::new(SymbolTable(FrozenCell::new(self.0.borrow().clone())))
+    }
+
+    /// Empties the table and frees its heap buffers (an arena table no one reads again: arena objects are never
+    /// dropped, so its entry buffer and index would otherwise stay allocated).
+    pub fn clear_and_free(&self) {
+        drop(self.0.replace(SymbolMap::default()));
     }
 
     /// Go `table[name]`. On a `P<SymbolTable>` receiver `table.get(name)` resolves to `P::get`, so use

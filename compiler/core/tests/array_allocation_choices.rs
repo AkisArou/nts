@@ -4,31 +4,24 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP: set NTS_TSGO to run the array-choice guards");
-        return None;
-    };
+fn prepared(fixture: &str) -> hir::Prepared {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(fixture)
         .join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    Some(hir::prepare(&snapshot).expect("prepared HIR verifies"))
+    hir::prepare(&snapshot).expect("prepared HIR verifies")
 }
 
 #[test]
 fn allocating_through_a_choice_compiles_every_subject_and_control() {
-    let Some(prepared) =
-        prepared("tests/programs/an-array-allocation-keeps-its-type-past-a-choice")
-    else {
-        return;
-    };
+    let prepared = prepared("tests/programs/an-array-allocation-keeps-its-type-past-a-choice");
     assert!(
         prepared.diagnostics.is_empty(),
         "{:#?}",
@@ -66,9 +59,7 @@ fn a_choice_keeps_the_erased_width_and_nullable_holes_refusals() {
             "filledControl",
         ),
     ] {
-        let Some(prepared) = prepared(fixture) else {
-            return;
-        };
+        let prepared = prepared(fixture);
         assert!(
             prepared
                 .diagnostics

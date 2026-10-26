@@ -86,7 +86,7 @@ fi
 # construction, so including it would make the diff pass for a reason that has
 # nothing to do with the backends.
 for backend in c jvm; do
-  NTS_BACKEND=$backend NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} \
+  NTS_BACKEND=$backend NTS_CHECKERS=1 \
     "$nts" check "$config" > "$work/$backend.out" 2>&1 || true
   grep -E '^  nts ' "$work/$backend.out" | sed 's/^ *nts  *//' | sort > "$work/$backend.answers"
 done

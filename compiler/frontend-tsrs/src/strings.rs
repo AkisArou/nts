@@ -35,11 +35,18 @@ pub(crate) fn decode(bytes: &[u8]) -> Vec<u16> {
             "native JS string decoder must advance"
         );
         if rune <= 0xffff {
-            units.push(u16::try_from(rune).expect("native UTF-16 code unit"));
+            units.push(
+                u16::try_from(rune)
+                    .expect("the preceding branch bounded this decoded unit to 0xffff"),
+            );
         } else {
             let (high, low) = tsrs_core::stringutil::code_point_to_surrogate_pair(rune);
-            units.push(u16::try_from(high).expect("high surrogate"));
-            units.push(u16::try_from(low).expect("low surrogate"));
+            units.push(u16::try_from(high).expect(
+                "native surrogate conversion returns a unit within 0xffff even for invalid scalars",
+            ));
+            units.push(u16::try_from(low).expect(
+                "native surrogate conversion returns a unit within 0xffff even for invalid scalars",
+            ));
         }
         remaining = &remaining[length..];
     }

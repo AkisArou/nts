@@ -14,13 +14,12 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 /// A program whose binding is an ambient declaration file of its own, the way
 /// a real one is. See `native.rs`'s helper of the same name for why.
-fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -35,15 +34,16 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((
+    (
         dir,
         hir::prepare(&snapshot)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
-    ))
+    )
 }
 
 /// A binding with one class method and two instance methods. `{extra}` is
@@ -88,10 +88,7 @@ export function run(): bigint {
 
 #[test]
 fn a_message_is_a_typed_cast_of_objc_msg_send() {
-    let Some((dir, prepared)) = prepare("send", &binding("", ""), PROGRAM) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("send", &binding("", ""), PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -241,14 +238,11 @@ fn a_malformed_message_is_refused_by_name() {
              import type {{ c_ulong }} from \"@nts/scalars\";\n\
              export function run(): void {{\n  const a = stringWithUTF8String(\"a\");\n  {call}\n}}\n"
         );
-        let Some((_, prepared)) = prepare(
+        let (_, prepared) = prepare(
             &format!("refuse-{name}"),
             &binding(method, functions),
             &source,
-        ) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        );
         assert!(
             prepared
                 .diagnostics
@@ -293,10 +287,7 @@ export function run(): number {
   return seen;
 }
 "#;
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -311,7 +302,8 @@ export function run(): number {
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), program).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -388,10 +380,7 @@ declare module "c:elsewhere" {
 #[test]
 fn a_class_is_a_value_and_a_class_method_a_message_to_it() {
     let source = "import { NSWindow } from \"objc:AppKit\";\nexport function run(): void {\n  NSWindow.alloc();\n}\n";
-    let Some((_, prepared)) = prepare("class-value", CLASSES, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("class-value", CLASSES, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -444,10 +433,7 @@ fn a_class_value_is_declared_by_an_objc_module_with_a_class_name() {
         let source = format!(
             "import {{ {import} }} from \"{module}\";\nimport type {{ ObjcMeta }} from \"objc:types\";\nexport function run(): ObjcMeta<string> {{\n  return {import};\n}}\n"
         );
-        let Some((_, prepared)) = prepare(&format!("class-{name}"), CLASSES, &source) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare(&format!("class-{name}"), CLASSES, &source);
         assert!(
             prepared
                 .diagnostics
@@ -482,10 +468,7 @@ declare module "objc:AppKit" {
 fn a_property_reads_and_writes_by_message() {
     let source = "import type { NSString, NSWindow } from \"objc:AppKit\";\n\
                   export function run(w: NSWindow, s: NSString): boolean {\n  w.title = s;\n  w.visible = !w.visible;\n  return w.title === s;\n}\n";
-    let Some((_, prepared)) = prepare("properties", PROPERTIES, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("properties", PROPERTIES, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -539,10 +522,7 @@ declare module "objc:Foundation" {
 fn an_objective_c_class_is_a_typescript_class() {
     let source = "import { NSObject, Timer } from \"objc:Foundation\";\n\
                   export function run(): boolean {\n  const made = new Timer();\n  made.invalidate();\n  return Timer.current.isEqual(made) && made instanceof NSObject;\n}\n";
-    let Some((_, prepared)) = prepare("objc-classes", CLASSES_AS_CLASSES, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-classes", CLASSES_AS_CLASSES, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -607,10 +587,7 @@ declare module "objc:Foundation" {
                   export function first(): Float64 { return 1 as Float64; }\n\
                   export function second(): Float64 { return 2 as Float64; }\n\
                   export function run(view: NSView): void {\n  view.move(view, { y: second(), x: first() });\n}\n";
-    let Some((_, prepared)) = prepare("labels", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("labels", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -678,10 +655,7 @@ declare module "objc:Foundation" {
     let source = "import { NSView } from \"objc:Foundation\";\n\
                   import type { Float64 } from \"@nts/scalars\";\n\
                   export function run(view: NSView, at: { y: Float64; x: Float64 }): void {\n  view.move(at);\n}\n";
-    let Some((_, prepared)) = prepare("labels-variable", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("labels-variable", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -737,10 +711,7 @@ fn swift_numbers_take_plain_numbers_and_cross_as_c_types() {
     let source = "import { NSScaler } from \"objc:Foundation\";\n\
                   import type { c_int } from \"@nts/scalars\";\n\
                   export function run(s: NSScaler, n: c_int): number {\n  return s.scale(n + 1, { by: 1.5, at: 2 }) * 2;\n}\n";
-    let Some((_, prepared)) = prepare("swift-numbers", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("swift-numbers", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -775,10 +746,7 @@ fn a_string_crosses_a_message_as_an_nsstring() {
 "#;
     let source = "import { NSString } from \"objc:Foundation\";\n\
                   export function run(): string {\n  return new NSString(\"a\").appending(\"b\");\n}\n";
-    let Some((_, prepared)) = prepare("nsstring", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("nsstring", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -826,10 +794,7 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
     let source = "import { NSObject } from \"objc:Foundation\";\n\
                   class Counter extends NSObject {\n  bump(by: number): number { return this.twice(by) + 1; }\n  twice(n: number): number { return n * 2; }\n}\n\
                   export function run(): number {\n  return new Counter().bump(3);\n}\n";
-    let Some((_, prepared)) = prepare("objc-subclass-registered", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-subclass-registered", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -898,10 +863,7 @@ fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
                   let seen = 0;\n\
                   class Canvas extends Surface {\n  draw(dirtyRect: ByValue<Box>): void { seen = dirtyRect.size.width; super.draw(dirtyRect); }\n}\n\
                   export function run(): number {\n  const canvas = new Canvas();\n  canvas.parent?.parent;\n  return seen;\n}\n";
-    let Some((_, prepared)) = prepare("objc-override-record", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-override-record", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -941,10 +903,7 @@ fn a_handle_with_both_absences_is_one_null() {
     let loose = "import { NSObject } from \"objc:Foundation\";\n\
                  export function absent(o: NSObject | null): boolean { return o?.next == null; }\n\
                  export function either(o: NSObject | null, fallback: NSObject): NSObject { return o?.next ?? fallback; }\n";
-    let Some((_, prepared)) = prepare("objc-both-absences", binding, loose) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-both-absences", binding, loose);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -954,9 +913,7 @@ fn a_handle_with_both_absences_is_one_null() {
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let strict = "import { NSObject } from \"objc:Foundation\";\n\
                   export function which(o: NSObject | null): boolean { return o?.next === null; }\n";
-    let Some((_, prepared)) = prepare("objc-both-absences-strict", binding, strict) else {
-        return;
-    };
+    let (_, prepared) = prepare("objc-both-absences-strict", binding, strict);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -982,10 +939,7 @@ fn a_closure_in_an_objective_c_subclass_field_is_called() {
     let source = "import { NSObject } from \"objc:Foundation\";\n\
                   class Holder extends NSObject {\n  constructor(private readonly started: () => number) { super(); }\n  run(): number { return this.started() + 1; }\n}\n\
                   export function go(): number {\n  return new Holder(() => 7).run();\n}\n";
-    let Some((_, prepared)) = prepare("objc-field-closure", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-field-closure", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1023,10 +977,7 @@ fn a_selector_is_the_one_its_method_was_registered_under() {
                   class Controller extends NSObject {\n  pressed(sender: NSObject): void {}\n  tick(): void {}\n}\n\
                   export function pick(n: number): Selector {\n  \
                   return n === 0 ? selector(Controller, \"pressed\") : n === 1 ? selector(Controller, \"tick\") : n === 2 ? selector(Controller, \"isEqual\") : selector(NSObject, \"isEqual\");\n}\n";
-    let Some((_, prepared)) = prepare("objc-selector", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-selector", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1066,10 +1017,7 @@ fn the_fields_of_an_objective_c_subclass_live_in_its_state() {
     let source = "import { NSObject } from \"objc:Foundation\";\n\
                   class Held extends NSObject {\n  count = 1;\n  names: string[] = [];\n  tick(): number { this.count += 2; return this.count; }\n}\n\
                   export function run(): number {\n  const held = new Held();\n  held.count = 5;\n  return held.tick();\n}\n";
-    let Some((_, prepared)) = prepare("objc-subclass-fields", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-subclass-fields", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1110,10 +1058,7 @@ fn a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused
                   function start(): number { return 3; }\n\
                   export class Held extends NSObject {\n  count = start();\n  constructor() { const n = start(); super(); void n; }\n  tick(): void {}\n}\n\
                   export class Selfish extends NSObject {\n  me = this;\n}\n";
-    let Some((_, prepared)) = prepare("objc-subclass-refused", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-subclass-refused", binding, source);
     let messages: Vec<&str> = prepared
         .diagnostics
         .iter()
@@ -1161,10 +1106,7 @@ declare module "objc:Foundation" {
 fn a_constant_is_the_extern_variable_read() {
     let source = "import { NotificationCenter } from \"objc:Foundation\";\n\
                   export function run(): number {\n  const shared = NotificationCenter.shared;\n  return NotificationCenter.systemClockDidChange.length + (shared === NotificationCenter.shared ? 1 : 0);\n}\n";
-    let Some((_, prepared)) = prepare("objc-constants", CONSTANTS, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-constants", CONSTANTS, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1221,10 +1163,7 @@ declare module "objc:Foundation" {
                   let seen = \"\";\n\
                   class Reader extends NSObject {\n  read(text: string, more: string | null): void { seen = text + (more ?? \"\"); }\n  title(): string { return seen + \"!\"; }\n}\n\
                   export function run(): number {\n  return new Reader() === null ? 0 : seen.length;\n}\n";
-    let Some((_, prepared)) = prepare("objc-string-parameter", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-string-parameter", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1276,10 +1215,7 @@ declare module "objc:Foundation" {
     let source = "import { NSObject, type Watcher } from \"objc:Foundation\";\n\
                   class Keeper extends NSObject implements Watcher {\n  partner: NSObject | null = null;\n  readonly on: boolean = true;\n  own = 0;\n}\n\
                   export function run(): number {\n  const seen: Watcher = new Keeper();\n  return seen.partner == null && seen.on ? 1 : 0;\n}\n";
-    let Some((_, prepared)) = prepare("objc-property-requirement", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("objc-property-requirement", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

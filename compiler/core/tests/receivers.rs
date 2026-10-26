@@ -1,6 +1,5 @@
 //! What a program does with the fields of an interface-typed value.
 //!
-//! Runs the frontend, so it skips only when `tsgo` is not built.
 //!
 //! The fixture is deliberately two files. "Is this receiver's type an
 //! interface" goes through the symbol's declarations, and an import names an
@@ -16,18 +15,18 @@
 
 use camino::Utf8Path;
 use nts_core::receivers::{self, Access, Census, Form, Shape, Site};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn counted() -> Option<Census> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn counted() -> Census {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/receivers/tsconfig.json")
         .canonicalize_utf8()
         .expect("the receivers fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(receivers::classify(&snapshot))
+    receivers::classify(&snapshot)
 }
 
 /// Every access to a member of that name. Each member is used once in the
@@ -50,7 +49,7 @@ fn only<'a>(census: &'a Census, member: &str) -> &'a Site {
 /// other case is measured against.
 #[test]
 fn a_dotted_read_through_an_interface_is_one_access() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     let site = only(&census, "forDots");
     assert_eq!(site.shape, Shape::Interface);
     assert_eq!(site.access, Access::Read);
@@ -67,7 +66,7 @@ fn a_dotted_read_through_an_interface_is_one_access() {
 /// undercount by exactly the reads a literal key performs.
 #[test]
 fn a_literal_key_names_a_field() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     let site = only(&census, "forKeys");
     assert_eq!(site.shape, Shape::Interface);
     assert_eq!(site.form, Form::Keyed);
@@ -80,7 +79,7 @@ fn a_literal_key_names_a_field() {
 /// and, under it, the whole of `string_decoder`.
 #[test]
 fn a_computed_index_names_no_field() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert!(
         of(&census, "i").is_empty(),
         "a variable index is not a member name"
@@ -97,7 +96,7 @@ fn a_computed_index_names_no_field() {
 /// is most of what `runtime/node` does with an options object.
 #[test]
 fn destructuring_reads_one_field_per_named_element() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     for member in ["forOne", "forTwo"] {
         let site = only(&census, member);
         assert_eq!(site.form, Form::Destructured);
@@ -114,7 +113,7 @@ fn destructuring_reads_one_field_per_named_element() {
 /// likely to be quoted as making.
 #[test]
 fn a_spread_reads_every_stored_field() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(census.spread_sites.len(), 1);
     let spread = &census.spread_sites[0];
     assert_eq!(spread.fields, 7);
@@ -134,7 +133,7 @@ fn a_spread_reads_every_stored_field() {
 /// `describe: () => string` declare members of the same type.
 #[test]
 fn a_method_and_an_accessor_are_not_field_accesses() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert!(of(&census, "describe").is_empty());
     assert!(of(&census, "derived").is_empty());
     assert_eq!(census.excluded.not_stored, 2);
@@ -150,7 +149,7 @@ fn a_method_and_an_accessor_are_not_field_accesses() {
 /// rather than about its receiver's.
 #[test]
 fn a_read_through_a_string_is_not_a_field_access() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(only(&census, "forStrings").shape, Shape::Interface);
     assert!(of(&census, "length").is_empty());
     // Two: `v.forStrings.length` and `v.coveredTwice.length`, each a `.length`
@@ -166,7 +165,7 @@ fn a_read_through_a_string_is_not_a_field_access() {
 /// read plus a write would double one access.
 #[test]
 fn a_write_is_counted_and_a_compound_assignment_once() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(only(&census, "forWriting").access, Access::Write);
     assert_eq!(only(&census, "forCompound").access, Access::ReadModifyWrite);
 }
@@ -178,7 +177,7 @@ fn a_write_is_counted_and_a_compound_assignment_once() {
 /// a bracket rather than one number printed twice.
 #[test]
 fn the_two_inhabitability_proxies_disagree() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     // `Sayer implements Declared`, so the heritage clause finds it. Read
     // through the interface, not the constructor's write through `this`.
     let declared = of(&census, "declaredField")
@@ -218,7 +217,7 @@ fn the_two_inhabitability_proxies_disagree() {
 /// this assertion a check rather than a restatement of `through_interfaces`.
 #[test]
 fn the_sound_narrow_figure_is_between_zero_and_the_broad_one() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     let sound = census.through_possibly_inhabited();
     // 8 before the arm-count cases, plus the reads through `TwoCoverers` and
     // `OnlyOptional`, both of which a class can inhabit.
@@ -237,7 +236,7 @@ fn the_sound_narrow_figure_is_between_zero_and_the_broad_one() {
 /// A class receiver reads at a fixed offset today and would keep doing so.
 #[test]
 fn a_class_receiver_is_not_in_the_numerator() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(only(&census, "ownToItself").shape, Shape::ClassInstance);
 }
 
@@ -249,7 +248,7 @@ fn a_class_receiver_is_not_in_the_numerator() {
 /// the one percentage the census exists to produce.
 #[test]
 fn a_write_through_this_is_counted() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     // Two accesses to the one name: `Sayer`'s constructor writes it through
     // `this`, and `declared` reads it through the interface. The pair is what
     // makes this a check -- a census blind to `this` reports only the read.
@@ -270,7 +269,7 @@ fn a_write_through_this_is_counted() {
 /// The totals, so a change to any rule above moves a number here too.
 #[test]
 fn the_totals_are_what_the_cases_add_up_to() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     // 13 before the arm-count cases; `throughTwoCoverers` and
     // `throughOnlyOptional` add one interface read each, and nothing else -- the
     // three classes they need declare fields and access none, which is why the
@@ -291,7 +290,7 @@ fn the_totals_are_what_the_cases_add_up_to() {
 /// they are actually distinct rather than one number printed twice.
 #[test]
 fn the_library_bucket_gives_a_second_denominator() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(census.through(Shape::Library), 1);
     assert_eq!(census.generated_fields(), 14);
     assert!(census.generated_fields() < census.total_fields());
@@ -310,7 +309,7 @@ fn the_library_bucket_gives_a_second_denominator() {
 /// "never looked at".
 #[test]
 fn a_module_member_is_not_a_field_access() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(census.excluded.module_member, 1);
     assert!(of(&census, "LIMIT").is_empty());
     assert_eq!(census.total_fields(), 15);
@@ -327,7 +326,7 @@ fn a_module_member_is_not_a_field_access() {
 /// if the frontend ever narrowed what it resolves.
 #[test]
 fn every_receiver_carries_a_type() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(census.excluded.untyped_receiver, 0);
     assert_eq!(census.excluded.member_not_declared, 0);
 }
@@ -344,7 +343,7 @@ fn every_receiver_carries_a_type() {
 /// interface is built at that shape and at no class's.
 #[test]
 fn an_arm_count_is_the_layouts_a_chain_would_test() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(only(&census, "coveredTwice").arms, 3);
 }
 
@@ -356,7 +355,7 @@ fn an_arm_count_is_the_layouts_a_chain_would_test() {
 /// with no chain and no cost. That is 3,334 of the 4,174 in `runtime/node`.
 #[test]
 fn a_receiver_nothing_can_inhabit_is_one_arm() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     assert_eq!(only(&census, "nobodyHasThis").arms, 1);
 }
 
@@ -375,7 +374,7 @@ fn a_receiver_nothing_can_inhabit_is_one_arm() {
 /// soundness here is a superset and not an estimate.
 #[test]
 fn a_class_that_says_implements_is_an_arm_the_name_rule_misses() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     let site = only(&census, "perhaps");
     assert_eq!(site.arms, 2);
     // The name proxy genuinely does not see it, which is what makes this a test
@@ -392,7 +391,7 @@ fn a_class_that_says_implements_is_an_arm_the_name_rule_misses() {
 /// nothing but this assertion holds them to one population.
 #[test]
 fn the_arm_histogram_covers_exactly_the_sound_population() {
-    let Some(census) = counted() else { return };
+    let census = counted();
     let rows = census.arm_histogram();
     let total: u32 = rows.iter().map(|(_, fields)| *fields).sum();
     assert_eq!(total, census.through_possibly_inhabited());
@@ -413,14 +412,12 @@ fn the_arm_histogram_covers_exactly_the_sound_population() {
 /// different set from the one the cost was measured over.
 #[test]
 fn the_arm_list_and_the_arm_count_are_one_answer() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/receivers/tsconfig.json")
         .canonicalize_utf8()
         .expect("the receivers fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let census = receivers::classify(&snapshot);
@@ -431,7 +428,7 @@ fn the_arm_list_and_the_arm_count_are_one_answer() {
         snapshot
             .symbols
             .iter()
-            .filter(|record| record.name == want)
+            .filter(|record| record.name == want.into())
             .find_map(|record| {
                 record
                     .declarations

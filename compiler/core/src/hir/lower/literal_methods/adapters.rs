@@ -175,12 +175,12 @@ fn collect_requests(
             if !builder.hierarchy.literal_methods.contains(owner) {
                 continue;
             }
-            for ((root, member), &slot) in &builder.hierarchy.slots {
+            for ((root, member, raising), &slot) in &builder.hierarchy.slots {
                 if !builder.hierarchy.descends_from(owner, *root) {
                     continue;
                 }
                 let Some(target @ TableTarget::StoredLiteral { .. }) =
-                    target(builder, owner, *root, member, &layout.fields)
+                    target(builder, owner, *root, member, *raising, &layout.fields)
                 else {
                     continue;
                 };
@@ -193,25 +193,29 @@ fn collect_requests(
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep semantic text and key projection beside its existing dispatch"
+)]
 fn build(builder: &mut FuncBuilder, target: &TableTarget) -> Option<(Key, Func)> {
     let TableTarget::StoredLiteral {
         owner,
         root,
         field,
         member,
+        raising,
     } = target
     else {
         return None;
     };
-    let (plain, raising) = super::super::without_the_raising_suffix(member);
-    let property = interfaces::property(builder.snapshot, *root, plain)?;
+    let property = interfaces::property(builder.snapshot, *root, &member.key)?;
     let contract = interfaces::contract(builder, property)?;
     let at = property.declaration.unwrap_or(NodeId(0));
-    let uniform_slot = if raising.is_empty() {
-        builder.hierarchy.erased_call_slot?
-    } else {
+    let uniform_slot = if *raising {
         builder.raises = true;
         builder.hierarchy.raising_call_slot?
+    } else {
+        builder.hierarchy.erased_call_slot?
     };
     let field_ty = builder
         .layouts
@@ -270,10 +274,14 @@ fn build(builder: &mut FuncBuilder, target: &TableTarget) -> Option<(Key, Func)>
             &HirType::Erased,
         )
         .ok()?;
-    if !raising.is_empty() {
+    if *raising {
         builder.emit_the_raise_test(&origin);
     }
-    let face = format!("{}#{plain}", builder.hierarchy.name.get(root)?);
+    let face = format!(
+        "{}#{}",
+        builder.hierarchy.name.get(root)?,
+        member.emitted_name()
+    );
     let result = match &contract.returns {
         HirType::Void | HirType::Never => None,
         _ => Some(checked_result(
@@ -389,9 +397,12 @@ fn checked_result(
     });
     builder.switch_to(invalid);
     let message = builder.push(
-        OpKind::ConstString(format!(
-            "a literal method called through `{face}` returned a value of an unexpected kind"
-        )),
+        OpKind::ConstString(
+            format!(
+                "a literal method called through `{face}` returned a value of an unexpected kind"
+            )
+            .into(),
+        ),
         HirType::Managed(ManagedType::String),
         origin.clone(),
     );

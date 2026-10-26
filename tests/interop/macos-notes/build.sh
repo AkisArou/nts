@@ -58,9 +58,9 @@ mkdir -p "$out"
 log="$out/build.log"
 # For apple-binding.sh: what this build generates is newer.
 touch "$out/.started"
-# The binding check reads the config the frontend opened, so the frontend
-# must run: a snapshot the cache answers opens nothing.
-NTS_NO_SNAPSHOT_CACHE=1 NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
+# The native frontend opens the current config on each build, which the
+# binding check below verifies.
+NTS_APPLE_ROOT="$apple" NTS_APPLE_SDK="$sdk" "$nts" build "$source/tsconfig.json" --out "$out" >"$log" 2>&1 ||
   { cat "$log" >&2; exit 1; }
 if grep -qE "refused|NTS[0-9]{4}" "$log"; then
   cat "$log" >&2

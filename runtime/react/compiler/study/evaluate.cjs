@@ -17,7 +17,7 @@
 // usage: node evaluate.cjs <set-dir> <mode-list> [fixture-name-filter]
 //   <mode-list> is lines of "<infer|all> <file>", as for the other oracles.
 //   Run from the study workspace (NODE_PATH=$PWD/node_modules), with
-//   NTS_REACT and NTS_TSGO as oracles.sh sets them.
+//   NTS_REACT as oracles.sh sets it.
 //   EVALUATE_SHOW=1 prints what agreeing fixtures rendered, too.
 //   EVALUATE_CONTROL=1 flips every cache comparison in `ours` (`$[k] !== x`,
 //   or `$.sK !== x` in a typed cache, to `===`): a variant that memoizes
@@ -35,7 +35,6 @@ const esbuild = require(require.resolve("esbuild", { paths: [lane] }));
 const PLUGIN = process.env.HOME + "/.cache/nts-react/upstream/compiler/packages/babel-plugin-react-compiler-rust/dist";
 const plugin = require(PLUGIN).default;
 const ntsReact = process.env.NTS_REACT || process.env.HOME + "/.cache/nts-react/target/debug/nts-react";
-process.env.NTS_TSGO = process.env.NTS_TSGO || path.join(repo, "target/tsgo");
 
 const [setDir, modeList, only] = process.argv.slice(2);
 const study = process.cwd();

@@ -41,7 +41,7 @@ import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { frontendFor } from "./pin.ts";
+
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 
@@ -50,14 +50,8 @@ const ROOT = join(HERE, "../..");
 const KNOWN = join(HERE, "assembles.known");
 const SOURCE = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const LLVM_AS = process.env.NTS_LLVM_AS ?? "llvm-as";
-// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
-// here, before every project prints nothing and reads as clean.
-const FRONTEND = frontendFor(SOURCE, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-const env = { ...process.env, NTS_TSGO: FRONTEND.path };
+
+const env = { ...process.env, NTS_CHECKERS: "1" };
 const WORKERS = Number(process.env.NTS_ASSEMBLES_JOBS ?? 4);
 
 if (!existsSync(SOURCE)) {

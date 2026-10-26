@@ -27,7 +27,6 @@ impl Fixture {
             .arg(out)
             .args(flags)
             .arg(self.0.join("tsconfig.json"))
-            .env("NTS_SNAPSHOT_CACHE", self.0.join("snapshots"))
             .output()
             .unwrap()
     }
@@ -267,16 +266,11 @@ fn malformed_requests_fail_before_frontend_acquisition() {
             .arg(&out)
             .args(flags)
             .arg(&fixture.0)
-            .env("NTS_TSGO", "/nonexistent/multi-emit-must-not-spawn")
             .output()
             .unwrap();
         assert!(!result.status.success());
         let text = String::from_utf8(result.stderr).unwrap();
         assert!(text.contains(complaint), "{text}");
-        assert!(
-            !text.contains("multi-emit-must-not-spawn"),
-            "parsing cannot open the checker: {text}"
-        );
         assert!(!out.exists());
     }
 }

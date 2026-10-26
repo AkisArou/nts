@@ -9,26 +9,26 @@
 //! already is: one immortal object per class, the same one wherever the name is
 //! written, tagged `FUNCTION`, comparable by identity.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// Every type a `ClosureStatic` in this program is built at.
@@ -53,9 +53,7 @@ fn tokens(lowered: &hir::lower::Lowered) -> Vec<hir::ClassId> {
 /// and a fresh token per mention satisfies "different classes differ".
 #[test]
 fn a_class_has_one_identity_and_each_class_its_own() {
-    let Some(lowered) = lowered("class-values") else {
-        return;
-    };
+    let lowered = lowered("class-values");
     let used = tokens(&lowered);
     assert!(!used.is_empty(), "the example writes four class names");
 
@@ -97,9 +95,7 @@ fn a_class_has_one_identity_and_each_class_its_own() {
 /// shape with nothing in it cannot answer a nominal question.
 #[test]
 fn two_tokens_do_not_merge() {
-    let Some(lowered) = lowered("class-values") else {
-        return;
-    };
+    let lowered = lowered("class-values");
     let mut named: Vec<&str> = lowered
         .program
         .layouts
@@ -148,9 +144,7 @@ fn two_tokens_do_not_merge() {
 /// `tests/memory/class-value` is the other half of this.
 #[test]
 fn a_class_value_allocates_nothing() {
-    let Some(lowered) = lowered("class-values") else {
-        return;
-    };
+    let lowered = lowered("class-values");
     let allocated = lowered
         .program
         .funcs
@@ -172,9 +166,7 @@ fn a_class_value_allocates_nothing() {
 /// refused every such `instanceof`. Two of them are two identities.
 #[test]
 fn a_provided_error_class_has_an_identity_of_its_own() {
-    let Some(lowered) = lowered("a-closure-calling-an-imported-function-that-throws") else {
-        return;
-    };
+    let lowered = lowered("a-closure-calling-an-imported-function-that-throws");
     let named = |name: &str| {
         lowered
             .program

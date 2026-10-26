@@ -1,32 +1,31 @@
 //! What an `abstract` method lowers to.
 //!
 //! It has no body, so the question is why it is lowered at all rather than
-//! skipped: the *signature*. A call through `Shape#area` on a `Shape` receiver
 //! is an indirect call, and the backend takes the function-pointer type from
 //! the declaration — with the method refused, the C emitter said "no
 //! declaration for `Shape#area` to take a signature from" and declined the
 //! caller.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, Terminator};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn find<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -46,9 +45,7 @@ fn find<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
 /// not be emitted at all.
 #[test]
 fn an_abstract_method_is_a_signature_terminated_as_unreachable() {
-    let Some(lowered) = lowered("abstract-methods") else {
-        return;
-    };
+    let lowered = lowered("abstract-methods");
     let area = find(&lowered, "Shape#area");
 
     // The receiver, and nothing else: `area()` takes no arguments.
@@ -89,9 +86,7 @@ fn an_abstract_method_is_a_signature_terminated_as_unreachable() {
 /// dropped and the return type guessed.
 #[test]
 fn an_abstract_declaration_carries_its_whole_signature() {
-    let Some(lowered) = lowered("abstract-methods") else {
-        return;
-    };
+    let lowered = lowered("abstract-methods");
     // `abstract scale(by: number, plus: number): number` — receiver and two.
     let scale = find(&lowered, "Scaler#scale");
     assert_eq!(
@@ -117,9 +112,7 @@ fn an_abstract_declaration_carries_its_whole_signature() {
 /// implementation unreachable.
 #[test]
 fn the_overrides_have_bodies() {
-    let Some(lowered) = lowered("abstract-methods") else {
-        return;
-    };
+    let lowered = lowered("abstract-methods");
     for name in [
         "Circle#area",
         "Square#area",
@@ -158,9 +151,7 @@ fn the_overrides_have_bodies() {
 /// `tests/programs/overloads`; the test moved with it.
 #[test]
 fn a_bodiless_method_with_no_implementation_is_refused() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     let reasons: Vec<&str> = lowered
         .diagnostics
         .iter()

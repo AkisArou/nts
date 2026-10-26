@@ -20,7 +20,6 @@
 //!     needs an index, and every overrider fills it — with its own copy, or with
 //!     its ordinary entry where that override cannot raise;
 //!   - a **constructor** callee compiles, including an **overloaded** one, whose
-//!     first `constructor` child is a signature the lowering skips — so the copy
 //!     set has to be keyed on the implementation or it names a body nothing builds;
 //!   - an **overloaded** callee compiles, which took the checker's answer and the
 //!     lowering's agreeing about which declaration a copy is made of;
@@ -37,28 +36,28 @@
 //! `tests/programs/a-throw-that-stays-in-its-function` and each is asserted here by
 //! name.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const EXAMPLE: &str = "a-throw-that-stays-in-its-function";
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(EXAMPLE)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{EXAMPLE} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn compiled(lowered: &hir::lower::Lowered, name: &str) -> bool {
@@ -74,9 +73,7 @@ fn compiled(lowered: &hir::lower::Lowered, name: &str) -> bool {
 /// defect the refusal existed for.
 #[test]
 fn a_call_that_can_throw_compiles_through_a_raising_copy() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(compiled(&lowered, "crossing"), "`crossing` is emitted");
     assert!(
         compiled(&lowered, "raises@raises"),
@@ -91,9 +88,7 @@ fn a_call_that_can_throw_compiles_through_a_raising_copy() {
 /// one round and stops.
 #[test]
 fn a_chain_of_callees_compiles_through_copies_of_each() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     for name in ["crossingTwoFrames", "crossingThreeFrames"] {
         assert!(compiled(&lowered, name), "{name} is emitted");
     }
@@ -118,10 +113,7 @@ fn a_chain_of_callees_compiles_through_copies_of_each() {
 /// function to suffix at all.
 #[test]
 fn every_callee_this_try_reaches_now_has_a_raising_copy() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     // **Nothing refuses, and that is the raising row closed.** This asserted one refusal
     // per boundary as each was built -- a plain function, a method, an overridden member,
     // an accessor, a `sort` comparator, a constructor -- and each assertion went red
@@ -214,9 +206,7 @@ fn every_callee_this_try_reaches_now_has_a_raising_copy() {
 /// the first version of the refusal took it.
 #[test]
 fn a_throw_within_one_function_still_compiles() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(compiled(&lowered, "sameFunction"));
 }
 
@@ -225,9 +215,7 @@ fn a_throw_within_one_function_still_compiles() {
 /// to prevent.
 #[test]
 fn a_call_that_cannot_throw_still_compiles() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(compiled(&lowered, "callingSomethingPure"));
 }
 
@@ -236,9 +224,7 @@ fn a_call_that_cannot_throw_still_compiles() {
 /// admitting async callees to the `throwing` set refused all eight.
 #[test]
 fn awaiting_a_rejection_still_compiles() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(compiled(&lowered, "awaitingARejection"));
 }
 
@@ -259,10 +245,7 @@ fn awaiting_a_rejection_still_compiles() {
 /// declaration.
 #[test]
 fn an_overloaded_callee_names_the_implementations_copy() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     assert!(
         compiled(&lowered, "crossingAnOverloadedCallee"),
         "a `try` around a call to an overloaded function compiles"
@@ -298,10 +281,7 @@ fn an_overloaded_callee_names_the_implementations_copy() {
 /// IIFE *and* an assertion here until now.
 #[test]
 fn a_member_shaped_callee_is_not_a_function_held_as_a_value() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     assert!(
         compiled(&lowered, "crossingAMemberCallInAClosure"),
         "a `try` reaching `helper.same` through a closure compiles"
@@ -332,10 +312,7 @@ fn a_member_shaped_callee_is_not_a_function_held_as_a_value() {
 /// single arm would have passed on two compilers that were wrong.
 #[test]
 fn a_static_and_a_parameter_default_compile() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     for name in [
         "crossingAStaticMethod",
         "Statics.raises@raises",

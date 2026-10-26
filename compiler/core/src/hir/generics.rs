@@ -690,6 +690,11 @@ fn one_pass(snapshot: &SemanticSnapshot, templates: &Templates, found: &mut Gene
                 .filter_map(
                     |parameter| match &snapshot.types.get(parameter.0 as usize)?.kind {
                         TypeKind::TypeParameter { name, .. } => Some(name.clone()),
+                        #[expect(
+                            clippy::match_same_arms,
+                            reason = "keep audited semantic type variants explicit"
+                        )]
+                        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
                         _ => None,
                     },
                 )

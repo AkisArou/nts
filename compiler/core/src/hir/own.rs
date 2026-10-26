@@ -850,7 +850,7 @@ fn field_name<'a>(
     layout
         .fields
         .get(field as usize)
-        .map(|field| field.name.as_str())
+        .and_then(|field| field.name.public_name())
 }
 
 /// Whether a borrow of this load is good for the whole function.
@@ -4351,7 +4351,7 @@ mod tests {
                 types: vec![TypeId(1)],
                 name: "Receiver".to_owned(),
                 fields: vec![Field {
-                    name: "value".to_owned(),
+                    name: "value".to_owned().into(),
                     ty: string,
                     readonly: false,
                     declared_by: None,
@@ -4386,7 +4386,7 @@ mod tests {
             result_absent: Absent::Impossible,
             values: vec![
                 Op {
-                    kind: super::OpKind::ConstString("held".to_owned()),
+                    kind: super::OpKind::ConstString("held".into()),
                     ty: string.clone(),
                     origin: origin.clone(),
                 },
@@ -4533,7 +4533,7 @@ mod tests {
         use crate::hir::{Field, Layout, TypeId};
 
         let field = |name: &str, ty| Field {
-            name: name.to_owned(),
+            name: name.to_owned().into(),
             ty,
             readonly: false,
             declared_by: None,

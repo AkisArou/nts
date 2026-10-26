@@ -6,26 +6,26 @@
 //! `try { await failing() } catch { return -99 }` compiled, ran, and rejected.
 //! A wrong answer, refused by name, at 89 occurrences across 17 sites.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// Every `await` in one function, with the handler its rejection reaches.
@@ -52,9 +52,7 @@ fn awaits(lowered: &hir::lower::Lowered, name: &str) -> Vec<Option<hir::Rejectio
 /// jump — so by the time `suspend` runs there is no `try` left to find.
 #[test]
 fn an_await_inside_a_try_records_its_handler() {
-    let Some(lowered) = lowered("async-catch") else {
-        return;
-    };
+    let lowered = lowered("async-catch");
     for name in ["caught", "boundReason", "bothEdges", "nested"] {
         let found = awaits(&lowered, name);
         assert!(!found.is_empty(), "`{name}` awaits something");
@@ -83,9 +81,7 @@ fn an_await_inside_a_try_records_its_handler() {
 /// `failing` is an ordinary `async` function with no `try` in it at all.
 #[test]
 fn an_await_with_no_handler_records_none() {
-    let Some(lowered) = lowered("async") else {
-        return;
-    };
+    let lowered = lowered("async");
     let uncaught: Vec<&hir::Func> = lowered
         .program
         .funcs
@@ -121,9 +117,7 @@ fn an_await_with_no_handler_records_none() {
 /// `throw` path had left in `mark`.
 #[test]
 fn a_rejection_carries_the_handlers_parameters() {
-    let Some(lowered) = lowered("async-catch") else {
-        return;
-    };
+    let lowered = lowered("async-catch");
     let func = lowered
         .program
         .funcs
@@ -169,9 +163,7 @@ fn a_rejection_carries_the_handlers_parameters() {
 /// does for every other abrupt exit.
 #[test]
 fn a_finally_with_no_catch_still_receives_the_rejection() {
-    let Some(lowered) = lowered("async-finally") else {
-        return;
-    };
+    let lowered = lowered("async-finally");
     let found = awaits(&lowered, "cleanedOnly");
     assert_eq!(found.len(), 1, "one `await`: {found:?}");
     assert!(
@@ -189,9 +181,7 @@ fn a_finally_with_no_catch_still_receives_the_rejection() {
 /// synthesised handler because `run_finallys_to` already covers it.
 #[test]
 fn a_finally_around_nothing_that_rejects_synthesises_nothing() {
-    let Some(lowered) = lowered("async-finally") else {
-        return;
-    };
+    let lowered = lowered("async-finally");
     let func = lowered
         .program
         .funcs

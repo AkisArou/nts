@@ -6,7 +6,6 @@
 //! — the same shape that let the snapshot cache sit dead for six hours on
 //! 2026-09-17 with its own test green beside it.
 //!
-//! Found by sweeping: with `place_allocations` skipped, **nothing in `nts-core`
 //! failed**. `dce` was noticed by two tests that are about other things, and
 //! `simplify` and `signatures` by one each; frame placement and
 //! `dce::prune_parameters` were noticed by none.
@@ -16,23 +15,22 @@
 //! outlives the call — and would satisfy an assertion that only looked at the
 //! framed one.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::SemanticSource;
 
-fn prepared(name: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     // The options `nts hir --prepared` uses, which is the program a backend is
@@ -43,7 +41,7 @@ fn prepared(name: &str) -> Option<hir::Program> {
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };
-    Some(hir::prepare_unverified(&snapshot, &options).program)
+    hir::prepare_unverified(&snapshot, &options).program
 }
 
 /// Where each `ObjectNew` a named function still emits was placed.
@@ -69,9 +67,7 @@ fn placements(program: &hir::Program, export: &str) -> Vec<bool> {
 
 #[test]
 fn an_object_that_outlives_nothing_is_placed_in_the_frame() {
-    let Some(program) = prepared("an-allocation-that-does-not-escape") else {
-        return;
-    };
+    let program = prepared("an-allocation-that-does-not-escape");
     assert_eq!(
         placements(&program, "stays"),
         vec![true],
@@ -83,9 +79,7 @@ fn an_object_that_outlives_nothing_is_placed_in_the_frame() {
 /// assertion above is satisfied by a pass that frames everything.
 #[test]
 fn an_object_that_escapes_stays_on_the_heap() {
-    let Some(program) = prepared("an-allocation-that-does-not-escape") else {
-        return;
-    };
+    let program = prepared("an-allocation-that-does-not-escape");
     assert_eq!(
         placements(&program, "escapesToAGlobal"),
         vec![false],
@@ -97,9 +91,7 @@ fn an_object_that_escapes_stays_on_the_heap() {
 /// get wrong while passing the two above.
 #[test]
 fn two_allocations_in_one_function_are_placed_separately() {
-    let Some(program) = prepared("an-allocation-that-does-not-escape") else {
-        return;
-    };
+    let program = prepared("an-allocation-that-does-not-escape");
     assert_eq!(
         placements(&program, "bothInOne"),
         vec![true, false],

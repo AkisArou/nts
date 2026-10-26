@@ -109,6 +109,7 @@
 // at a lowering or backend refusal the checker had kept out of sight.
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
+import { checkerPin } from "./checker-pin.ts";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir, loadavg } from "node:os";
@@ -118,7 +119,7 @@ import { fileURLToPath } from "node:url";
 import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
 import { selectTypescript } from "./suites/typescript.ts";
-import { frontendFor, provenanceOf } from "../conformance/pin.ts";
+import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 
@@ -153,9 +154,8 @@ const jobs = Number(flag("--jobs", String(Math.min(8, availableParallelism()))))
 const sample = Number(flag("--sample", "0")) || 0;
 const rowsFile = flag("--rows", null);
 const resume = argv.includes("--resume");
-// `--fresh`: every case typechecked anew, from each worker's scratch, as every
-// run did before case roots. For telling a cache defect from a compiler one;
-// rows are the same either way, which the snapshot-cache landing measured.
+// `--fresh` uses mutable worker scratch instead of immutable case roots,
+// for isolating materialization differences. Native capture is fresh either way.
 const FRESH = argv.includes("--fresh");
 const jsonFile = flag("--json", null);
 const sites = Number(flag("--sites", "25"));
@@ -194,38 +194,11 @@ if (recordFile && !recordCommit()) {
 }
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
+process.env.NTS_CHECKERS = "1";
 
-// **Every temporary under the scratch, none under `/tmp`.** `cc`, tsgo and the
-// test programs all honour `TMPDIR`, and `/tmp` here is a tmpfs shared with
-// every lane that runs out of inodes before bytes. Set on this process so the
-// workers and everything they spawn inherit it, and removed with the scratch.
-//
-// **A case is served from the snapshot cache when its inputs are the same.**
-// Each attempt compiles from the case's own content-addressed root
-// (`caseRoot`, in `attempt`), and the cache's key is the question it was asked
-// -- the tsconfig, the frontend's own source, tsgo's identity -- validated
-// against a hash of every file the answer read. So a case is typechecked once
-// and answered from then on, across workers, backends and compiler builds that
-// leave the frontend alone, and a changed case or frontend is a new question.
-// Until case roots every case's tsconfig was one path in a worker's scratch,
-// so each attempt ran with the cache off; `--fresh` still does.
-//
-// Anything this process runs outside `environment()` gets a private cache by
-// name, which wins over any value the caller set.
-// The frontend the compiler under test runs with: NTS_TSGO, else the one a
-// pin recorded beside the binary (pin.ts), else the tree's. Set on this
-// process so every attempt inherits it -- a pinned copy in the scratch has no
-// frontend beside it, and the control program then fails as a "frontend-crash".
-const FRONTEND = frontendFor(NTS, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-process.env.NTS_TSGO = FRONTEND.path;
+
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
-process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");
-mkdirSync(process.env.NTS_SNAPSHOT_CACHE, { recursive: true });
 // Executed programs retain the address-space cap. Compiler processes use a
 // resident worker cap under the aggregate run slice; no compiler RLIMIT_AS.
 // Zero disables the program/individual cap, while the aggregate stays bounded.
@@ -579,8 +552,6 @@ function classify(row) {
         : `exceeded the ${MEMORY_CAP_KB / 1e6} GB address-space cap (${row.why})` };
     case "invalid-hir":
       return { outcome: "no-verdict", cause: `invalid HIR: ${row.first}` };
-    case "frontend-crash":
-      return { outcome: "no-verdict", cause: "frontend crash" };
     default:
       return { outcome: "no-verdict", cause: `${row.bucket}${row.why ? `: ${row.why}` : ""}` };
   }
@@ -625,8 +596,8 @@ const EVIDENCE_FILE = join(HERE, "test262-evidence-codes.json");
 // a named gap in the pinned tsgo's parser -- the file's header has the rules.
 const OVERRIDES_FILE = join(HERE, "test262-evidence-overrides.json");
 const OVERRIDES = existsSync(OVERRIDES_FILE) ? JSON.parse(readFileSync(OVERRIDES_FILE, "utf8")).overrides : [];
-/** The tsgo the compiler under test is pinned to, as `nts version` says. */
-const TSGO_PIN = /pinned tsgo (\S+)/.exec(execFileSync(PINNED, ["version"], { encoding: "utf8" }))?.[1] ?? "unknown";
+/** The complete native checker identity printed by the compiled binary. */
+const CHECKER_PIN = checkerPin(execFileSync(PINNED, ["version"], { encoding: "utf8" }));
 /** Codes whose override passed its audit this run; filled after the rows come back. */
 const overrideCodes = new Set();
 const overrideAudit = [];
@@ -647,7 +618,7 @@ function deriveValidJsCodes(rowsByPath) {
 let validJsCodes = null;
 
 function judgeNegative(row, negative) {
-  if (["timeout", "memory-cap", "frontend-crash", "infrastructure-error", "crash"].includes(row.bucket)) {
+  if (["timeout", "memory-cap", "infrastructure-error", "crash"].includes(row.bucket)) {
     return classify(row);
   }
   if (negative.phase === "runtime") {
@@ -737,8 +708,8 @@ if (derivesEvidence) {
 for (const entry of OVERRIDES) {
   const faults = [];
   if (!entry.reason) faults.push("no reason");
-  if (!entry.tsgo_pin) faults.push("no tsgo pin");
-  else if (entry.tsgo_pin !== TSGO_PIN) faults.push(`audited against tsgo ${entry.tsgo_pin}, the compiler is pinned to ${TSGO_PIN} -- re-audit it`);
+  if (!entry.checker_pin) faults.push("no checker pin");
+  else if (entry.checker_pin !== CHECKER_PIN) faults.push(`audited against checker ${entry.checker_pin}, the compiler is pinned to ${CHECKER_PIN} -- re-audit it`);
   const known = new Set(records.map((r) => r.path));
   const gone = (entry.positives ?? []).filter((p) => !known.has(p));
   if (under === "test/language" && gone.length > 0) faults.push(`names ${gone.length} positive(s) the suite does not have: ${gone.slice(0, 3).join(", ")}`);
@@ -883,7 +854,7 @@ if (recordFile) {
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
       `# tooling/census/conformance262.ts --record; compared by --check.\n` +
-      `# compiler ${FINGERPRINT}${recordCommit()}, backend ${BACKEND}, harness ${HARNESS_HASH}${FRONTEND.moved ? `, frontend moved since the pin (${FRONTEND.moved})` : ""}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
+      `# compiler ${FINGERPRINT}${recordCommit()}, backend ${BACKEND}, harness ${HARNESS_HASH}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
       ranRows.map(recordedRow).sort().join("\n") + "\n",
   );
 }
@@ -940,7 +911,6 @@ const say = (line = "") => out.push(line);
 
 say(`  pin ${pin}`);
 say(`  compiler ${NTS} (sha256:${FINGERPRINT}), harness sha256:${HARNESS_HASH}`);
-if (FRONTEND.moved) say(`  FRONTEND MOVED since this pin was built (${FRONTEND.moved}): ${FRONTEND.path} answered this run`);
 const machineAtEnd = machineState();
 say(`  machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)`);
 say(`  machine at end:   ${describeMachine(machineAtEnd)}`);
@@ -1024,7 +994,7 @@ say(`  negatives: ${evidenceNote}`);
 if (!partial) say(`  negatives accepted (a program that must not parse, compiled): ${negativesAccepted}`);
 say(
   `  negatives passing only by an evidence override: ${passedByOverride} ` +
-    `(${OVERRIDES.length} override(s) in test262-evidence-overrides.json, ${overrideCodes.size} applied, tsgo ${TSGO_PIN})`,
+    `(${OVERRIDES.length} override(s) in test262-evidence-overrides.json, ${overrideCodes.size} applied, checker ${CHECKER_PIN})`,
 );
 for (const a of overrideAudit.filter((x) => x.faults.length > 0)) say(`    OVERRIDE AUDIT FAILURE: ${a.code} -- ${a.faults.join("; ")}`);
 say();

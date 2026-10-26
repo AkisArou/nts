@@ -71,7 +71,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis } from "./compiled-axis-rows.mjs";
-import { armLines, oneChange, frontendFor } from "./pin.ts";
+import { armLines, oneChange } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -305,20 +305,6 @@ const arms = [["before", beforeBin], ["after", afterBin]].map(([name, source]) =
   chmodSync(nts, 0o755);
   return { name, source, dir, nts };
 });
-// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
-// here, before every project prints nothing and reads as clean.
-// Per arm: two arms are two binaries and may be two pins, and one shared
-// frontend would serve one arm the other's -- what the per-arm snapshot
-// caches exist to prevent. Asked of each *source*, where a pin's provenance
-// sits, not of the scratch copy.
-for (const arm of arms) {
-  arm.frontend = frontendFor(arm.source, ROOT);
-  if (!arm.frontend.exists) {
-    console.log(`  NOT MEASURED: no frontend for the ${arm.name} arm at ${arm.frontend.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-    process.exit(2);
-  }
-}
-
 const run = (cmd, args, env) =>
   new Promise((done) => {
     const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -333,8 +319,7 @@ const run = (cmd, args, env) =>
 /** One module under one arm, emitted the way build.sh emits an addon. */
 async function emit(arm, project) {
   const out = join(arm.dir, "out", project.replace(/\//g, "_"));
-  const env = { ...process.env, NTS_TSGO: arm.frontend.path, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots") };
-  delete env.NTS_NO_SNAPSHOT_CACHE;
+  const env = { ...process.env, NTS_CHECKERS: "1" };
   const r = await run(arm.nts, ["emit-c", join(project, "tsconfig.json"), "--out", out, "--napi", ...(RC ? ["--rc"] : [])], env);
   const program = join(out, "program.c");
   // "Wrote nothing" is also what a run that never happened looks like, so a
@@ -438,7 +423,7 @@ function axis(arm, modules) {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 1 << 26,
-    env: { ...process.env, NTS_BIN: arm.nts, NTS_TSGO: arm.frontend.path, NTS_ADDON_OUT: addons, NTS_SNAPSHOT_CACHE: join(arm.dir, "snapshots"), TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) },
+    env: { ...process.env, NTS_CHECKERS: "1", NTS_BIN: arm.nts, NTS_ADDON_OUT: addons, TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) },
   });
   const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   const rows = readAxis(text);

@@ -79,7 +79,7 @@ for case in ${CASES:-$(find $root/benchmarks/cases -name ref.java | sed "s|$root
   cat > "$out/tsconfig.json" <<JSON
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benchmarks/cases/$case"] }
 JSON
-  if NTS_TSGO=$root/target/tsgo "$nts" emit-jvm "$out/tsconfig.json" --out "$out/ours" \
+  if NTS_CHECKERS=1 "$nts" emit-jvm "$out/tsconfig.json" --out "$out/ours" \
        > "$out/emit.log" 2>&1; then
     cls=$(find "$out/ours" -name '*.class' | sed "s|$out/ours/||g;s|\.class||g;s|/|.|g")
     # shellcheck disable=SC2086

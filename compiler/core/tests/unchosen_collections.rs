@@ -9,28 +9,28 @@
 //! The program compares answers with node, which an erased table gives on C,
 //! LLVM and the JVM too, so the types are asserted here.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "an-unchosen-table-takes-its-type-from-where-it-goes";
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -71,9 +71,7 @@ fn string() -> HirType {
 
 #[test]
 fn where_the_table_goes_chooses_what_it_holds() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let counts = map(string(), HirType::NUMBER);
     for (name, wanted) in [
         ("returned", vec![counts.clone()]),
@@ -100,9 +98,7 @@ fn where_the_table_goes_chooses_what_it_holds() {
 /// is an erased table handed to a typed one.
 #[test]
 fn a_choice_over_the_allocation_is_the_same_table() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let erased = map(HirType::Erased, HirType::Erased);
     for name in ["make", "either", "nullish"] {
         let function = func(&lowered, name);
@@ -119,9 +115,7 @@ fn a_choice_over_the_allocation_is_the_same_table() {
 /// given by their tags.
 #[test]
 fn with_no_destination_the_table_stays_erased() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert_eq!(
         tables(func(&lowered, "noDestination")),
         vec![map(HirType::Erased, HirType::Erased)]

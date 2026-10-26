@@ -27,7 +27,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 const PROGRAM: &str = r#"
@@ -92,10 +92,6 @@ fn every_runtime_call_agrees_with_its_declaration() {
         "lint reported nothing for a call with the wrong arguments"
     );
 
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
     let dir = std::env::temp_dir().join(format!("nts-runtime-abi-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("src/main.ts"), PROGRAM).unwrap();
@@ -105,7 +101,10 @@ fn every_runtime_call_agrees_with_its_declaration() {
     )
     .unwrap();
     let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
@@ -196,10 +195,6 @@ fn every_runtime_call_agrees_with_its_declaration() {
 /// entry of C's shape (`arm64_exports_an_erased_value_through_a_c_entry`).
 #[test]
 fn arm64_passes_an_erased_value_as_two_words() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
     let dir = std::env::temp_dir().join(format!("nts-runtime-abi-arm64-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("src/main.ts"), PROGRAM).unwrap();
@@ -209,7 +204,10 @@ fn arm64_passes_an_erased_value_as_two_words() {
     )
     .unwrap();
     let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
@@ -271,10 +269,6 @@ fn arm64_passes_an_erased_value_as_two_words() {
 /// program's `doubled` and `described` reads `2^71` and `42`.
 #[test]
 fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
     let dir = std::env::temp_dir().join(format!("nts-runtime-abi-entry-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
@@ -290,7 +284,10 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
     )
     .unwrap();
     let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
@@ -333,10 +330,6 @@ fn win64_exports_a_sixteen_byte_value_through_a_c_entry() {
 /// for aarch64 Linux, reads `42` and `7`.
 #[test]
 fn arm64_exports_an_erased_value_through_a_c_entry() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
     let dir = std::env::temp_dir().join(format!(
         "nts-runtime-abi-arm64-entry-{}",
         std::process::id()
@@ -354,7 +347,10 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
     )
     .unwrap();
     let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(

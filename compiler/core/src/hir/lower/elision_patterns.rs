@@ -237,7 +237,10 @@ impl FuncBuilder<'_> {
             .copied()
             .filter(|ty| !self.hierarchy.faces.contains(ty))
             .chain(self.hierarchy.literal_methods.owners())
-            .filter(|ty| self.symbol_property_name(*ty, "iterator").is_some())
+            .filter(|ty| {
+                self.well_known_property_key(*ty, nts_semantic_schema::WellKnownSymbol::Iterator)
+                    .is_some()
+            })
             .collect();
         owners.sort_unstable_by_key(|ty| ty.0);
         owners.dedup();

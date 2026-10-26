@@ -6,26 +6,26 @@
 //! the rest check reads `DOT_DOT_DOT_TOKEN`, the default check calls
 //! `default_of` — and discarding them.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, ParamShape};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// The shapes of one function's parameters, receiver excluded.
@@ -51,9 +51,7 @@ fn shapes(lowered: &hir::lower::Lowered, name: &str) -> Vec<ParamShape> {
 /// reason this field exists.
 #[test]
 fn a_rest_parameter_is_told_from_an_array_parameter() {
-    let Some(lowered) = lowered("parameter-shapes") else {
-        return;
-    };
+    let lowered = lowered("parameter-shapes");
     let rests: usize = lowered
         .program
         .funcs
@@ -87,9 +85,7 @@ fn a_rest_parameter_is_told_from_an_array_parameter() {
 /// compiled call site can supply the first and cannot supply the second.
 #[test]
 fn optional_and_defaulted_are_not_one_case() {
-    let Some(defaults) = lowered("parameter-shapes") else {
-        return;
-    };
+    let defaults = lowered("parameter-shapes");
     let all: Vec<ParamShape> = defaults
         .program
         .funcs
@@ -118,9 +114,7 @@ fn optional_and_defaulted_are_not_one_case() {
 /// A receiver is not a declared parameter.
 #[test]
 fn a_receiver_is_ordinary() {
-    let Some(lowered) = lowered("parameter-shapes") else {
-        return;
-    };
+    let lowered = lowered("parameter-shapes");
     for func in &lowered.program.funcs {
         for param in func.params.iter().filter(|param| param.name == "this") {
             assert_eq!(

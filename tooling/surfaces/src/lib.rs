@@ -28,7 +28,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 /// What a package declares itself to be, in its `package.json` (`"nts": {
 /// "surface": "objc" }`): the family of the modules it declares, which the
 /// frontend reads it for. The same closed set the frontend accepts
-/// (`nts_frontend_ts::tsgo::SURFACES`), which a test compares.
+/// (`nts_frontend_ts::provided::SURFACES`), which a test compares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Surface {
     Objc,
@@ -428,7 +428,7 @@ mod tests {
             .iter()
             .map(|surface| surface.as_str())
             .collect();
-        assert_eq!(ours, nts_frontend_ts::tsgo::SURFACES);
+        assert_eq!(ours, nts_frontend_ts::provided::SURFACES);
     }
 
     /// Builds of one project at once each link its packages, and every one

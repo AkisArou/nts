@@ -31,7 +31,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 fn write(at: &Utf8Path, text: &str) {
     std::fs::create_dir_all(at.parent().unwrap()).unwrap();
@@ -84,18 +84,19 @@ fn fixture(name: &str) -> Utf8PathBuf {
 }
 
 /// Every refusal the program produced, as text.
-fn refusals(root: &Utf8Path) -> Option<Vec<String>> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn refusals(root: &Utf8Path) -> Vec<String> {
     let tsconfig = root.join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).ok()?;
-    let prepared = hir::prepare(&snapshot).ok()?;
-    Some(
-        prepared
-            .diagnostics
-            .iter()
-            .map(|diagnostic| diagnostic.message.clone())
-            .collect(),
-    )
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("the native frontend captures the imported-implementation fixture");
+    let prepared =
+        hir::prepare(&snapshot).expect("the imported-implementation fixture prepares successfully");
+    prepared
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.message.clone())
+        .collect()
 }
 
 /// The two cases produce two different sentences, and only one of them is
@@ -103,10 +104,7 @@ fn refusals(root: &Utf8Path) -> Option<Vec<String>> {
 #[test]
 fn an_imported_name_is_not_reported_as_a_missing_builtin() {
     let root = fixture("imported-implementation");
-    let Some(refusals) = refusals(&root) else {
-        // No tsgo built: the same skip every frontend-dependent test takes.
-        return;
-    };
+    let refusals = refusals(&root);
 
     let imported: Vec<&String> = refusals
         .iter()
@@ -148,9 +146,7 @@ fn an_imported_name_is_not_reported_as_a_missing_builtin() {
 #[test]
 fn a_library_global_is_still_reported_as_a_builtin() {
     let root = fixture("library-global");
-    let Some(refusals) = refusals(&root) else {
-        return;
-    };
+    let refusals = refusals(&root);
 
     let library: Vec<&String> = refusals
         .iter()
@@ -186,9 +182,7 @@ fn a_library_global_is_still_reported_as_a_builtin() {
 #[test]
 fn a_provided_class_called_without_new_says_so() {
     let root = fixture("provided-class-called");
-    let Some(refusals) = refusals(&root) else {
-        return;
-    };
+    let refusals = refusals(&root);
 
     let called: Vec<&String> = refusals
         .iter()

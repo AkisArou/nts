@@ -1,35 +1,31 @@
 //! The correctness gate: a program that does not typecheck is not compilable.
-//!
-//! Skips without `NTS_TSGO`; see `tsgo_transport.rs` for how to build the pinned
-//! binary.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_diagnostics::Severity;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 
-fn snapshot_of(fixture: &str) -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn frontend() -> Frontend {
+    Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN)
+}
+
+fn snapshot_of(fixture: &str) -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
-    Some(
-        TsgoApi::new(tsgo)
-            .snapshot(&tsconfig)
-            .expect("a snapshot is produced even for a broken program"),
-    )
+    frontend()
+        .snapshot(&tsconfig)
+        .expect("a snapshot is produced even for a broken program")
 }
 
 #[test]
 fn a_program_with_type_errors_is_reported_as_having_errors() {
-    let Some(snapshot) = snapshot_of("invalid") else {
-        return;
-    };
+    let snapshot = snapshot_of("invalid");
     assert!(
         snapshot.has_errors(),
         "the invalid fixture must not be reported as compilable",
@@ -44,9 +40,7 @@ fn a_program_with_type_errors_is_reported_as_having_errors() {
 
 #[test]
 fn diagnostics_keep_typescripts_own_codes() {
-    let Some(snapshot) = snapshot_of("invalid") else {
-        return;
-    };
+    let snapshot = snapshot_of("invalid");
     // `TS2322` stays greppable against TypeScript's own documentation. Renumbering
     // into a private scheme would make every error harder to look up.
     assert!(
@@ -64,9 +58,7 @@ fn diagnostics_keep_typescripts_own_codes() {
 
 #[test]
 fn a_diagnostic_points_at_a_real_source_and_span() {
-    let Some(snapshot) = snapshot_of("invalid") else {
-        return;
-    };
+    let snapshot = snapshot_of("invalid");
     for diagnostic in &snapshot.diagnostics {
         let source = snapshot
             .sources
@@ -81,9 +73,7 @@ fn a_diagnostic_points_at_a_real_source_and_span() {
 
 #[test]
 fn a_clean_program_reports_no_errors() {
-    let Some(snapshot) = snapshot_of("types") else {
-        return;
-    };
+    let snapshot = snapshot_of("types");
     assert!(
         !snapshot.has_errors(),
         "clean fixture reported errors: {:?}",
@@ -98,9 +88,6 @@ fn a_clean_program_reports_no_errors() {
 /// missing.
 #[test]
 fn a_type_error_in_any_of_the_programs_files_is_reported() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
         .join(format!("nts-diagnostics-own-{}", std::process::id()));
@@ -117,7 +104,7 @@ fn a_type_error_in_any_of_the_programs_files_is_reported() {
     )
     .unwrap();
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-    let snapshot = TsgoApi::new(tsgo)
+    let snapshot = frontend()
         .snapshot(&tsconfig)
         .expect("a snapshot is produced even for a broken program");
     let errors: Vec<(&str, &str)> = snapshot
@@ -143,41 +130,12 @@ fn a_type_error_in_any_of_the_programs_files_is_reported() {
     }
 }
 
-#[test]
-fn diagnostics_cost_two_exchanges_a_file() {
-    let Some(tsgo) = std::env::var("NTS_TSGO")
-        .ok()
-        .map(Utf8PathBuf::from)
-        .filter(|path| path.exists())
-    else {
-        return;
-    };
-    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/programs/types/tsconfig.json")
-        .canonicalize_utf8()
-        .unwrap();
-    let mut source = TsgoApi::new(tsgo);
-    source.snapshot(&tsconfig).unwrap();
-    let stats = source.stats();
-
-    // Three fixed exchanges for the session, five per file to read it, and
-    // two per file for its syntactic and semantic diagnostics. Asked of the
-    // whole program instead, the diagnostics were two exchanges and a check
-    // of the default library besides, whose diagnostics the frontend drops:
-    // the exchanges are nearly free (`docs/records/0345`), the check is not.
-    assert_eq!(stats.round_trips, 3 + 7 * u64::from(stats.files));
-}
-
 /// A plain-JS file's early errors beyond TypeScript's own `plainJSErrors` reach the
 /// snapshot: `f() = 1` is a `SyntaxError` in JavaScript and TS2364 to the checker,
-/// which drops it for a `.js` file with `checkJs` unset unless asked through the
-/// carried patch `typescript-go-plain-js-unfiltered`. This is the binary half of
-/// that patch's guard: a stale `target/tsgo` without it answers nothing here.
+/// which drops it for a `.js` file with `checkJs` unset. The adapter separates
+/// those facts so only the frontend's measured early-error allowlist adds them.
 #[test]
 fn a_plain_javascript_early_error_is_reported() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let dir = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("plain-js-early-error");
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
@@ -190,7 +148,7 @@ fn a_plain_javascript_early_error_is_reported() {
         "function f() { return 1; }\nf() = 1;\n",
     )
     .unwrap();
-    let snapshot = TsgoApi::new(tsgo)
+    let snapshot = frontend()
         .snapshot(&dir.join("tsconfig.json"))
         .expect("a snapshot is produced even for a broken program");
     assert!(
@@ -198,13 +156,45 @@ fn a_plain_javascript_early_error_is_reported() {
             .diagnostics
             .iter()
             .any(|d| d.code == "TS2364" && d.severity == Severity::Error),
-        "TS2364 is not reported for a plain-JS file: target/tsgo lacks the carried \
-         patch (run `sh tooling/bootstrap/bootstrap.sh`), or `EARLY_ERRORS` lost it. \
-         Got: {:?}",
+        "TS2364 must pass through the plain-JS early-error policy. Got: {:?}",
         snapshot
             .diagnostics
             .iter()
             .map(|d| d.code.as_str())
             .collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn unchecked_javascript_and_plain_javascript_keep_distinct_diagnostic_policies() {
+    let dir = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("js-checking-policy");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.js"),
+        "function f() { return 1; }\nf() = 1;\nconst distinct = 0n === 1n;\n",
+    )
+    .unwrap();
+    for (name, check, expected) in [
+        ("plain", "", vec!["TS2364"]),
+        ("unchecked", ", \"checkJs\": false", vec![]),
+        ("checked", ", \"checkJs\": true", vec!["TS2364", "TS2367"]),
+    ] {
+        let config = dir.join(format!("{name}.json"));
+        std::fs::write(
+            &config,
+            format!(
+                "{{\"compilerOptions\":{{\"allowJs\":true,\"target\":\"es2022\",\"noEmit\":true{check}}},\"files\":[\"main.js\"]}}"
+            ),
+        )
+        .unwrap();
+        let snapshot = frontend().snapshot(&config).unwrap();
+        let mut codes: Vec<_> = snapshot
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == Severity::Error)
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect();
+        codes.sort_unstable();
+        assert_eq!(codes, expected, "{name} checking policy");
+    }
 }

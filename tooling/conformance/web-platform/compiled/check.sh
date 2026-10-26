@@ -20,7 +20,7 @@ project=tooling/conformance/web-platform/compiled/tsconfig.json
 status=0
 for backend in jvm c llvm; do
   printf '%s: ' "$backend"
-  if NTS_TSGO="$root/target/tsgo" NTS_BACKEND="$backend" "$nts" check "$project"; then
+  if NTS_CHECKERS=1 NTS_BACKEND="$backend" "$nts" check "$project"; then
     :
   else
     status=1

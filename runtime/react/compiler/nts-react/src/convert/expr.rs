@@ -24,9 +24,6 @@ use react_compiler_ast::patterns::PatternLike;
 
 use super::{Converted, Converter, k};
 
-/// tsgo's `NodeFlags.OptionalChain`: a link of a chain rooted at a `?.`.
-const FLAG_OPTIONAL_CHAIN: u32 = 1 << 5;
-
 /// A second Babel node made from one tsgo node -- the value beside the key of
 /// `{ a }` -- gets the tsgo id with this bit set, so no two Babel nodes share an
 /// id and either still leads back to its tsgo node.
@@ -85,7 +82,7 @@ impl Converter<'_> {
     }
 
     fn in_optional_chain(&self, id: NodeId) -> bool {
-        self.flags(id) & FLAG_OPTIONAL_CHAIN != 0
+        self.flags(id) & nts_semantic_schema::syntax::NODE_FLAGS_OPTIONAL_CHAIN != 0
     }
 
     #[allow(clippy::too_many_lines)]

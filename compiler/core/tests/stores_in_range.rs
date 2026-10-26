@@ -9,17 +9,17 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(program: &str) -> Option<hir::Program> {
-    let frontend = nts_frontend_ts::tsgo::locate()?;
+fn prepared(program: &str) -> hir::Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(format!("tests/programs/{program}/tsconfig.json"));
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    Some(hir::prepare(&snapshot).expect("prepared HIR").program)
+    hir::prepare(&snapshot).expect("prepared HIR").program
 }
 
 fn checked_accesses(program: &hir::Program, name: &str) -> usize {
@@ -42,9 +42,7 @@ fn checked_accesses(program: &hir::Program, name: &str) -> usize {
 
 #[test]
 fn stores_proven_in_range_leave_no_array_able_to_grow() {
-    let Some(program) = prepared("stores-in-range") else {
-        return;
-    };
+    let program = prepared("stores-in-range");
     assert!(!hir::arrays_can_grow(&program));
     for func in program
         .funcs
@@ -57,9 +55,7 @@ fn stores_proven_in_range_leave_no_array_able_to_grow() {
 
 #[test]
 fn one_store_that_appends_keeps_every_array_able_to_grow() {
-    let Some(program) = prepared("stores-in-range-control") else {
-        return;
-    };
+    let program = prepared("stores-in-range-control");
     assert!(hir::arrays_can_grow(&program));
     assert!(
         program

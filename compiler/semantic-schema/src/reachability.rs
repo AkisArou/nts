@@ -315,10 +315,30 @@ pub fn from_roots(
 
         // A resolved call reaches its callee even when nothing else does — the
         // callee may be a private helper that no export names directly.
-        if let Some(target) = snapshot.call_targets.get(&node)
-            && let Some(callee) = target.callee
-        {
-            worklist.push(callee);
+        if let Some(target) = snapshot.call_targets.get(&node) {
+            // Instantiated contracts can name types no syntax node has:
+            // generic callback parameters, fixed rest tuples and composite
+            // return types. They are reachable facts of this call, through the
+            // same seed policy as its expression's own type.
+            if let Some(signature) = snapshot.signatures.get(target.signature.0 as usize) {
+                result
+                    .types
+                    .extend(signature.parameters.iter().map(|parameter| parameter.ty));
+                result.types.insert(signature.return_type);
+                result
+                    .types
+                    .extend(signature.type_parameters.iter().copied());
+                result.types.extend(signature.this_type);
+                result.types.extend(
+                    signature
+                        .type_predicate
+                        .as_ref()
+                        .and_then(|predicate| predicate.narrowed_to),
+                );
+            }
+            if let Some(callee) = target.callee {
+                worklist.push(callee);
+            }
         }
     }
 
@@ -357,7 +377,8 @@ mod tests {
 
     fn symbol(name: &str, declarations: Vec<NodeId>) -> SymbolRecord {
         SymbolRecord {
-            name: name.to_owned(),
+            builtin: None,
+            name: name.to_owned().into(),
             flags: SymbolFlags::default(),
             declarations,
             ty: None,

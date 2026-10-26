@@ -7,11 +7,16 @@ use tsrs_checker::{ObjectFlags, TypeData, TypeFlags};
 pub struct Reference<'p> {
     pub target: Type<'p>,
     pub arguments: Vec<Type<'p>>,
+    /// Outer plus local declared parameters, excluding the synthetic `this`
+    /// parameter. None means the native target is not an interface/class.
+    pub declared_parameter_count: Option<usize>,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct TypeParameter<'p> {
     pub name: JsString<'p>,
     pub constraint: Option<Type<'p>>,
+    /// True only for the native polymorphic receiver parameter.
+    pub is_this: bool,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct Conditional<'p> {
@@ -105,27 +110,35 @@ impl<'p> Type<'p> {
             {
                 return None;
             }
-            let data = self.native.try_as_type_reference()?;
-            let target = data
-                .target
-                .get()
-                .expect("native type reference has a target");
+            self.native.try_as_type_reference()?;
+            let target = self
+                .native
+                .target()
+                .expect("Reference constructors initialize the target before publishing the type");
+            let arguments = c
+                .get_type_arguments_exported(self.native)
+                .iter()
+                .map(|&native| self.view(native))
+                .collect();
+            let declared_parameter_count = target
+                .try_as_interface_type()
+                .map(|interface| interface.type_parameters().len());
             Some(Reference {
                 target: self.view(target),
-                arguments: c
-                    .get_type_arguments_exported(self.native)
-                    .iter()
-                    .map(|&native| self.view(native))
-                    .collect(),
+                arguments,
+                declared_parameter_count,
             })
         })
     }
     #[must_use]
     pub fn type_parameter(self) -> Option<TypeParameter<'p>> {
-        let (name, constraint) = self.file.with_checker(|c| {
+        let (name, constraint, is_this) = self.file.with_checker(|c| {
             if !self.native.flags.get().intersects(TypeFlags::TypeParameter) {
                 return None;
             }
+            let TypeData::TypeParameter(parameter) = self.native.data() else {
+                return None;
+            };
             // Native synthetic `this` parameters need not have a symbol. Ask
             // the checker for their spelling instead of inventing a name.
             let name = self.native.symbol().map_or_else(
@@ -142,11 +155,13 @@ impl<'p> Type<'p> {
             Some((
                 name,
                 c.get_constraint_of_type_parameter_exported(self.native),
+                parameter.is_this_type(),
             ))
         })?;
         Some(TypeParameter {
             name: self.file.intern_string(name.as_bytes()),
             constraint: constraint.map(|native| self.view(native)),
+            is_this,
         })
     }
     #[must_use]
@@ -165,11 +180,12 @@ impl<'p> Type<'p> {
                 return None;
             };
             Some(Conditional {
-                check: self.view(data.check_type().expect("native conditional check type")),
-                extends: self.view(
-                    data.extends_type()
-                        .expect("native conditional extends type"),
-                ),
+                check: self.view(data.check_type().expect(
+                    "Conditional constructor initializes its check type before publication",
+                )),
+                extends: self.view(data.extends_type().expect(
+                    "Conditional constructor initializes its extends type before publication",
+                )),
                 true_type: self.view(c.get_true_type_of_conditional_type(self.native)),
                 false_type: self.view(c.get_false_type_of_conditional_type(self.native)),
             })
@@ -182,8 +198,12 @@ impl<'p> Type<'p> {
                 return None;
             };
             Some(IndexedAccess {
-                object: self.view(data.object_type().expect("native indexed object")),
-                index: self.view(data.index_type().expect("native indexed key")),
+                object: self.view(data.object_type().expect(
+                    "IndexedAccess constructor initializes its object type before publication",
+                )),
+                index: self.view(data.index_type().expect(
+                    "IndexedAccess constructor initializes its index type before publication",
+                )),
             })
         })
     }
@@ -193,7 +213,7 @@ impl<'p> Type<'p> {
             let TypeData::TemplateLiteral(data) = self.native.data() else {
                 return None;
             };
-            Some((data.texts(), data.types()))
+            Some((data.texts(), self.native.types()))
         })?;
         Some(Template {
             texts: texts
@@ -210,11 +230,12 @@ impl<'p> Type<'p> {
                 return None;
             };
             Some(Substitution {
-                base: self.view(data.base_type().expect("native substitution base")),
-                constraint: self.view(
-                    data.subst_constraint()
-                        .expect("native substitution constraint"),
-                ),
+                base: self.view(data.base_type().expect(
+                    "Substitution constructor initializes its base type before publication",
+                )),
+                constraint: self.view(data.subst_constraint().expect(
+                    "Substitution constructor initializes its constraint before publication",
+                )),
             })
         })
     }

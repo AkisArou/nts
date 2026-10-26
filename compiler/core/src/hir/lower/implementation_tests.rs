@@ -35,7 +35,14 @@ fn old_scan(probe: &FuncBuilder<'_>, callee: NodeId) -> NodeId {
             .children(node)
             .into_iter()
             .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| probe.node(child).text.clone())
+            .and_then(|child| {
+                probe
+                    .node(child)
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+                    .map(str::to_owned)
+            })
     };
     let (Some(parent), Some(name)) = (probe.syntactic_parent(callee), named(callee)) else {
         return callee;
@@ -92,7 +99,7 @@ fn declaration(
     let id = node(snapshot, NodeKind::Syntax(kind), Some(parent));
     if let Some(name) = name {
         let ident = node(snapshot, NodeKind::Syntax(syntax::IDENTIFIER), Some(id));
-        snapshot.nodes[ident.0 as usize].text = Some(name.to_owned());
+        snapshot.nodes[ident.0 as usize].text = Some(name.into());
     }
     if body {
         node(snapshot, NodeKind::Syntax(syntax::BLOCK), Some(id));
@@ -165,7 +172,7 @@ fn implementation_answers_keep_sibling_order_and_native_controls() {
         NodeKind::Syntax(syntax::IDENTIFIER),
         Some(unnamed),
     );
-    snapshot.nodes[later.0 as usize].text = Some("pick".to_owned());
+    snapshot.nodes[later.0 as usize].text = Some("pick".into());
     let nested = node(&mut snapshot, NodeKind::List, Some(members));
     let nested_signature = declaration(
         &mut snapshot,
@@ -251,18 +258,18 @@ fn every_native_sibling_without_a_body_is_its_own_implementation() {
 /// native-sibling tsconfigs and a Gtk-4.0 tsconfig listing the generated files.
 /// It deliberately fails if the requested inputs or the Gtk surface are absent.
 #[test]
-#[ignore = "full GIR surface: supply NTS_IMPLEMENTATION_PROJECTS and NTS_TSGO"]
+#[ignore = "full GIR surface: supply NTS_IMPLEMENTATION_PROJECTS"]
 fn measured_native_and_gtk_declarations_match_the_old_scan() {
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
 
     let configs = std::env::var_os("NTS_IMPLEMENTATION_PROJECTS")
         .expect("NTS_IMPLEMENTATION_PROJECTS must name the measured projects");
-    let tsgo = nts_frontend_ts::tsgo::locate().expect("the frontend must be built");
     let mut projects = 0;
     let mut gtk_declarations = 0;
     for config in std::env::split_paths(&configs) {
         let config = camino::Utf8PathBuf::from_path_buf(config).expect("UTF-8 tsconfig path");
-        let snapshot = TsgoApi::for_compilation(tsgo.clone())
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .expect("snapshot must succeed");
         assert!(!snapshot.has_errors(), "{config} must typecheck");

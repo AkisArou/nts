@@ -286,7 +286,9 @@ impl FuncBuilder<'_> {
                 .node(object)
                 .symbol
                 .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-                .is_some_and(|record| record.name == "JSON" && record.library == Some(Library::Es))
+                .is_some_and(|record| {
+                    record.name.is_name("JSON") && record.library == Some(Library::Es)
+                })
     }
 
     /// `JSON.stringify(value)`: the value's writer, appending onto `""`.
@@ -318,7 +320,7 @@ impl FuncBuilder<'_> {
             })
             .map_err(|why| self.unsupported(id, &format!("`JSON.stringify` of {why}")))?;
         let origin = self.origin(id);
-        let empty = self.push(OpKind::ConstString(String::new()), STRING, origin.clone());
+        let empty = self.push(OpKind::ConstString("".into()), STRING, origin.clone());
         Ok(self.json_write_held(empty, value, &plan, Undefined::WritesNull, &origin))
     }
 
@@ -569,12 +571,22 @@ impl FuncBuilder<'_> {
         layout: &Layout,
         open: &mut Vec<TypeId>,
     ) -> Result<Vec<Member>, String> {
-        if super::interfaces::property(self.snapshot, object, "toJSON").is_some() {
+        if super::interfaces::property(
+            self.snapshot,
+            object,
+            &nts_semantic_schema::PropertyKey::Name("toJSON".to_owned()),
+        )
+        .is_some()
+        {
             return Err(
                 "an object with a `toJSON` member, which `JSON.stringify` calls".to_owned(),
             );
         }
-        let mut names: Vec<String> = layout.fields.iter().map(|f| f.name.clone()).collect();
+        let mut names: Vec<String> = layout
+            .fields
+            .iter()
+            .filter_map(|f| f.name.public_name().map(str::to_owned))
+            .collect();
         names.sort();
         if self.written_order.disputed.contains(&names) {
             return Err(format!(
@@ -601,7 +613,11 @@ impl FuncBuilder<'_> {
                     ));
                 }
             };
-            let Some(property) = super::interfaces::property(self.snapshot, object, name) else {
+            let Some(property) = super::interfaces::property(
+                self.snapshot,
+                object,
+                &nts_semantic_schema::PropertyKey::Name(name.clone()),
+            ) else {
                 return Err(format!("the member `{name}`, which has no property type"));
             };
             if property.kind != MemberKind::Field {
@@ -667,7 +683,12 @@ impl FuncBuilder<'_> {
     /// every literal in the program: a literal of another type with the same
     /// names counts too, which refuses more than it must and never less.
     fn json_literal_orders(&self, layout: &Layout) -> Result<(), String> {
-        let position = |name: &str| layout.fields.iter().position(|field| field.name == name);
+        let position = |name: &str| {
+            layout
+                .fields
+                .iter()
+                .position(|field| field.name.is_name(name))
+        };
         let within = |names: &[String]| names.iter().all(|name| position(name).is_some());
         if let Some(disputed) = self
             .written_order
@@ -1014,7 +1035,11 @@ impl FuncBuilder<'_> {
     }
 
     fn json_text(&mut self, out: ValueId, text: &str, origin: &Origin) -> ValueId {
-        let text = self.push(OpKind::ConstString(text.to_owned()), STRING, origin.clone());
+        let text = self.push(
+            OpKind::ConstString(text.to_owned().into()),
+            STRING,
+            origin.clone(),
+        );
         self.json_concat(out, text, origin)
     }
 
@@ -1142,7 +1167,8 @@ impl FuncBuilder<'_> {
         let what = self.push(
             OpKind::ConstString(
                 "`JSON.stringify` of an object whose layout none of its type's writers is for"
-                    .to_owned(),
+                    .to_owned()
+                    .into(),
             ),
             STRING,
             origin.clone(),
@@ -1252,7 +1278,7 @@ impl FuncBuilder<'_> {
             origin.clone(),
         );
         let function = self.push(
-            OpKind::ConstString("function".to_owned()),
+            OpKind::ConstString("function".into()),
             STRING,
             origin.clone(),
         );
@@ -1279,7 +1305,11 @@ impl FuncBuilder<'_> {
         let opened = self.json_text(out, "\"", origin);
         let length = self.push(OpKind::Length(string), HirType::NUMBER, origin.clone());
         let zero = self.json_number(0.0, origin);
-        let table = self.push(OpKind::ConstString(ascii_escapes()), STRING, origin.clone());
+        let table = self.push(
+            OpKind::ConstString(ascii_escapes().into()),
+            STRING,
+            origin.clone(),
+        );
         let block = |this: &mut Self, count: usize| {
             let block = this.new_block();
             let mut params = vec![this.push_block_param(block, STRING, origin.clone())];

@@ -25,8 +25,6 @@
 //!
 //! Grepping `lib.rs` for `access::PUBLIC` would check the edit against itself,
 //! and would miss any future path to a field that does not spell it that way.
-//! Shelling to `javap` would make the test skip wherever no JDK is installed --
-//! and a guard that skips on the machine where somebody changes the thing is
 //! not a guard.
 //!
 //! It reads them with [`nts_jvm_emitter::read`]. **This file used to carry its
@@ -38,7 +36,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
 
@@ -62,15 +60,6 @@ const EXAMPLES: &[&str] = &[
 
 #[test]
 fn no_generated_field_is_public() {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP field_visibility: NTS_TSGO is not set");
-        return;
-    };
-    if !tsgo.exists() {
-        eprintln!("SKIP field_visibility: no tsgo at {tsgo}");
-        return;
-    }
-
     let mut seen = 0usize;
     let mut presence = 0usize;
     let mut statics = 0usize;
@@ -87,7 +76,8 @@ fn no_generated_field_is_public() {
         )
         .expect("a UTF-8 path");
 
-        let snapshot = TsgoApi::for_compilation(tsgo.clone())
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&tsconfig)
             .expect("snapshot");
         assert!(!snapshot.has_errors(), "{example} should typecheck");

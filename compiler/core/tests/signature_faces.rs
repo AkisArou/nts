@@ -8,24 +8,24 @@
 //! and six weeks passed before a full gate ran `interop`. This is the fact it
 //! needs, kept where nothing that decides a representation reads it.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/signature-faces/tsconfig.json")
         .canonicalize_utf8()
         .expect("the fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// Each face by the name the hierarchy gave its layout, with each position
@@ -63,9 +63,7 @@ fn faces(lowered: &hir::lower::Lowered) -> Vec<(String, String)> {
 /// to stop. So the first thing checked is that the pass ran at all.
 #[test]
 fn the_fixture_lowered_and_the_map_is_not_empty() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(
         !lowered.program.funcs.is_empty(),
         "the fixture lowered nothing, so nothing below is a test"
@@ -79,9 +77,7 @@ fn the_fixture_lowered_and_the_map_is_not_empty() {
 
 #[test]
 fn a_written_signature_has_every_position_typed() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let rows = faces(&lowered);
     let weigh = lowered.program.signature_faces.values().find(|face| {
         face.params.len() == 2
@@ -99,9 +95,7 @@ fn a_written_signature_has_every_position_typed() {
 /// for that one parameter and keep the typed face for the others.
 #[test]
 fn a_position_with_no_representation_is_none_in_place() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     let rows = faces(&lowered);
     let mixed = lowered
         .program
@@ -131,9 +125,7 @@ fn a_position_with_no_representation_is_none_in_place() {
 /// input, which is no check at all.
 #[test]
 fn no_optional_or_rest_is_invented() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(
         !lowered.program.signature_faces.is_empty(),
         "nothing to check, which would make this pass vacuously"

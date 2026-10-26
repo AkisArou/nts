@@ -2,12 +2,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use nts_core::hir::{self, Options, PreparationOptions, Provider, RawProgram, native, reachable};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_unchanged() {
-    let tsgo =
-        nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -18,7 +16,10 @@ fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_uncha
     std::fs::write(root.join("main.ts"), "class Box { constructor(public value: number) {} }\nexport function make(n: number): Box { return new Box(n); }\nexport function kept(n: number): number { const box = new Box(n | 0); const step = () => { box.value++; }; step(); return box.value; }\nexport function unused(n: number): number { return n * 1.5; }\nconsole.log(kept(2));\n").unwrap();
     let config = root.join("tsconfig.json");
     std::fs::write(&config, r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","strict":true,"types":[]},"files":["main.ts"]}"#).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let entry = nts_frontend_ts::entry_uris(&config, &snapshot);
     let foreign = hir::runtime::ForeignTable::default();

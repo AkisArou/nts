@@ -8,25 +8,22 @@
 //! never reaches it. Behind a base and not merely declared in another order,
 //! because layout may reorder a class's own fields to match a face it meets.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::SemanticSource;
 use nts_semantic_schema::TypeId;
 
 #[test]
 fn a_face_lists_the_owners_that_reach_it_as_a_prefix() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/prefix-receivers/tsconfig.json")
         .canonicalize_utf8()
         .expect("the fixture is checked in");
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = hir::Options {

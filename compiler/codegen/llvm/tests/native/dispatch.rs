@@ -36,9 +36,7 @@ export function readThrough(value: Base): number {
     return value.read();
 }
 ";
-    let Some((_, mut prepared)) = prepare("dispatch-sabotage", source) else {
-        return;
-    };
+    let (_, mut prepared) = prepare("dispatch-sabotage", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -48,7 +46,7 @@ export function readThrough(value: Base): number {
         |program: &hir::Program| nts_codegen_c::emit(program, hir::native::NativeAbi::LP64);
     let first = emit_c(&prepared.program);
     assert!(first.is_complete(), "{:?}", first.diagnostics);
-    let (_, again) = prepare("dispatch-sabotage", source).expect("same frontend");
+    let (_, again) = prepare("dispatch-sabotage", source);
     assert_eq!(first.writer.text(), emit_c(&again.program).writer.text());
     let slot = prepared
         .program
@@ -108,9 +106,7 @@ export function schedule(n: number): number {{
 export function observed(): number {{ return total; }}
 "
     );
-    let Some((_, prepared)) = prepare("dispatch-callback-readers", &source) else {
-        return;
-    };
+    let (_, prepared) = prepare("dispatch-callback-readers", &source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -164,11 +160,8 @@ int main(void) {
 }
 "#;
     for provider in [Provider::NoGc, Provider::ReferenceCounting] {
-        let Some((_, outputs)) =
-            run_on_both_backends("dispatch-callbacks", &source, provider, &library, caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("dispatch-callbacks", &source, provider, &library, caller);
         for output in outputs {
             assert_eq!(output, "35400");
         }
@@ -192,9 +185,7 @@ export function run(n: c_int): number {{
 }}
 "#
     );
-    let Some((_, prepared)) = prepare("dispatch-context-reader", &source) else {
-        return;
-    };
+    let (_, prepared) = prepare("dispatch-context-reader", &source);
     require_moved_closure(&prepared.program);
     assert!(
         prepared
@@ -227,11 +218,8 @@ export function run(n: c_int): number {{
         "int apply(int (*f)(int, void *), void *context, int n) { return f(n, context); }";
     for provider in [Provider::NoGc, Provider::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f %.0f", run(4), run(5));"#, "run(4); run(5);");
-        let Some((_, outputs)) =
-            run_on_both_backends("dispatch-context", &source, provider, library, &caller)
-        else {
-            return;
-        };
+        let (_, outputs) =
+            run_on_both_backends("dispatch-context", &source, provider, library, &caller);
         for output in outputs {
             assert_eq!(output, expect("7 12", provider));
         }

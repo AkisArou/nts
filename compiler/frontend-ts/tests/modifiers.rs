@@ -4,28 +4,25 @@
 //! clause is a child node. They are extracted anyway because every backend needs
 //! them and each would otherwise re-derive the traversal slightly differently.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::tsgo::types::syntax;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
+use nts_semantic_schema::syntax;
 use nts_semantic_schema::{
     DeclarationModifiers as M, HeritageKind, NodeKind, SemanticSnapshot, VariableKind,
 };
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/classes/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/classes fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 /// Modifiers on the declaration that names `name`.
@@ -35,10 +32,13 @@ fn modifiers_of(snapshot: &SemanticSnapshot, name: &str) -> M {
         .iter()
         .find(|node| {
             !node.modifiers.is_empty()
-                && node
-                    .children
-                    .iter()
-                    .any(|c| snapshot.nodes[c.0 as usize].text.as_deref() == Some(name))
+                && node.children.iter().any(|c| {
+                    snapshot.nodes[c.0 as usize]
+                        .text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                        == Some(name)
+                })
         })
         .unwrap_or_else(|| panic!("no declaration named {name:?} carries modifiers"))
         .modifiers
@@ -46,7 +46,7 @@ fn modifiers_of(snapshot: &SemanticSnapshot, name: &str) -> M {
 
 #[test]
 fn modifiers_land_on_the_declaration_not_the_modifier_list() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // The bug this guards: modifiers are grandchildren, sitting inside a NodeList.
     // A one-level scan attributes every modifier to the list, leaving every
     // declaration bare — and a list is not a declaration, so it must not claim
@@ -63,7 +63,7 @@ fn modifiers_land_on_the_declaration_not_the_modifier_list() {
 
 #[test]
 fn class_and_member_modifiers_are_recovered() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
 
     let shape = modifiers_of(&snapshot, "Shape");
     assert!(shape.contains(M::EXPORT) && shape.contains(M::ABSTRACT));
@@ -82,7 +82,7 @@ fn class_and_member_modifiers_are_recovered() {
 
 #[test]
 fn ambient_and_default_declarations_are_marked() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `declare` means no body is emitted; `default` changes the export name.
     assert!(modifiers_of(&snapshot, "ambient").contains(M::DECLARE));
     assert!(modifiers_of(&snapshot, "Widget").contains(M::DEFAULT));
@@ -90,7 +90,7 @@ fn ambient_and_default_declarations_are_marked() {
 
 #[test]
 fn extends_and_implements_are_distinguishable() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let clauses: Vec<HeritageKind> = snapshot
         .nodes
         .iter()
@@ -107,7 +107,7 @@ fn extends_and_implements_are_distinguishable() {
 
 #[test]
 fn variable_declarations_report_let_against_const() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let kinds: Vec<VariableKind> = snapshot
         .nodes
         .iter()

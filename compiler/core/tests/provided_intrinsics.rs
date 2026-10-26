@@ -9,36 +9,34 @@
 //! control, `nts_no_such_helper`, is called by neither, and no `typeof` of an
 //! intrinsic survives preparation in either.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind, Options, features::Provided};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "an-intrinsic-guarded-by-its-typeof";
 
-fn prepared(provided: Provided) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(provided: Provided) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
         provided,
         ..Options::default()
     };
-    Some(
-        hir::prepare_with(&snapshot, &options)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &options)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 /// How many calls the program makes to the runtime helper `helper`.
@@ -69,10 +67,8 @@ fn unanswered(program: &hir::Program) -> usize {
 
 #[test]
 fn an_intrinsic_is_called_only_where_the_backend_provides_it() {
-    let Some(provides) = prepared(Provided::By(|helper| helper == "nts_str_concat_number")) else {
-        return;
-    };
-    let lacks = prepared(Provided::Nothing).expect("tsgo was found once");
+    let provides = prepared(Provided::By(|helper| helper == "nts_str_concat_number"));
+    let lacks = prepared(Provided::Nothing);
     assert!(
         calls(&provides, "nts_str_concat_number") > 0,
         "the provided helper is not called"

@@ -20,12 +20,11 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 /// A program whose binding is an ambient declaration file of its own.
-fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -40,11 +39,12 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, hir::prepare(&snapshot).unwrap()))
+    (dir, hir::prepare(&snapshot).unwrap())
 }
 
 const GEOMETRY: &str = r#"
@@ -101,10 +101,7 @@ export function run(): number {
 
 #[test]
 fn a_record_crosses_by_value_in_c() {
-    let Some((dir, prepared)) = prepare("emit", GEOMETRY, PROGRAM) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("emit", GEOMETRY, PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -171,10 +168,7 @@ export function run(): bigint {
   return valueWithRect(local<CGRect>()).hash() as bigint;
 }
 "#;
-    let Some((_, prepared)) = prepare("no-stret", GEOMETRY, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("no-stret", GEOMETRY, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -377,11 +371,7 @@ fn the_llvm_declarations_are_clangs_on_win64() {
 }
 
 fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u32) {
-    let Some((dir, prepared)) = prepare(&format!("shapes-{triple}"), SHAPES_TS, SHAPES_PROGRAM)
-    else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare(&format!("shapes-{triple}"), SHAPES_TS, SHAPES_PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -467,10 +457,7 @@ fn compare_with_clang(platform: nts_codegen_llvm::Platform, triple: &str, big: u
 /// same union crosses, because there the rule is its size alone.
 #[test]
 fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
-    let Some((_, prepared)) = prepare("llvm-arm64", GEOMETRY, PROGRAM) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("llvm-arm64", GEOMETRY, PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -512,9 +499,7 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
 }
 "#;
     let source = "import { take, type Either } from \"c:u\";\nimport { local } from \"c:memory\";\nexport function run(): void {\n  take(local<Either>());\n}\n";
-    let Some((_, prepared)) = prepare("llvm-union", binding, source) else {
-        return;
-    };
+    let (_, prepared) = prepare("llvm-union", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -616,10 +601,7 @@ export function run(): number {
 /// each name to what this backend spells it as.
 #[test]
 fn the_llvm_declarations_are_clangs_on_arm64() {
-    let Some((dir, prepared)) = prepare("shapes-arm64", ARM64_TS, ARM64_PROGRAM) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("shapes-arm64", ARM64_TS, ARM64_PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -724,10 +706,7 @@ declare module "objc:Foundation" {
 }
 "#;
     let source = "import { scaled } from \"c:scalars\";\nimport { make } from \"objc:Foundation\";\nimport type { Float64, c_int } from \"@nts/scalars\";\nexport function run(): number {\n  return scaled(2 as c_int, 1.5 as Float64) + Number(make().hash());\n}\n";
-    let Some((_, prepared)) = prepare("arm64-scalars", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("arm64-scalars", binding, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -807,10 +786,7 @@ fn a_local_stored_in_a_global_is_refused() {
                   import type { Ptr } from \"c:types\";\n\
                   let held: Ptr<Pair> | null = null;\n\
                   export function run(): void {\n  held = local<Pair>();\n}\n";
-    let Some((_, prepared)) = prepare("held-local", binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare("held-local", binding, source);
     assert!(
         prepared
             .diagnostics
@@ -827,9 +803,7 @@ fn a_local_stored_in_a_global_is_refused() {
             "import { malloc } from \"c:stdlib\";",
         )
         .replace("local<Pair>()", "malloc<Pair>(16)");
-    let Some((_, prepared)) = prepare("held-heap", binding, &heap) else {
-        return;
-    };
+    let (_, prepared) = prepare("held-heap", binding, &heap);
     assert!(
         prepared.diagnostics.is_empty(),
         "a heap pointer is refused as a global: {:?}",
@@ -910,10 +884,7 @@ fn a_record_that_cannot_cross_by_value_is_refused_by_name() {
              import type {{ Ptr }} from \"c:types\"; import type {{ Float64 }} from \"@nts/scalars\";\n\
              export function run(): {returns} {{\n  {body}\n}}\n"
         );
-        let Some((_, prepared)) = prepare(&format!("refuse-{name}"), &binding, &source) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare(&format!("refuse-{name}"), &binding, &source);
         assert!(
             prepared
                 .diagnostics

@@ -23,7 +23,7 @@ pub enum FileLike {
 }
 
 impl FileLike {
-    pub fn file_name(&self) -> &str {
+    fn file_name(&self) -> &str {
         match self {
             FileLike::SourceFile(file) => file.get().file_name(),
             FileLike::Renamed { file_name, .. } => file_name,
@@ -59,7 +59,7 @@ impl SourceFileLike for FileLike {
 }
 
 // diagnosticwriter.go:58 (ASTDiagnostic).File
-pub fn diagnostic_file(d: P<Diagnostic>) -> Option<FileLike> {
+fn diagnostic_file(d: P<Diagnostic>) -> Option<FileLike> {
     d.loc()?;
     let file = d.file()?;
     let mut file_name = file.get().file_name();
@@ -79,7 +79,7 @@ pub fn diagnostic_file(d: P<Diagnostic>) -> Option<FileLike> {
 }
 
 // diagnosticwriter.go:83
-pub fn diagnostic_pos(d: P<Diagnostic>) -> u32 {
+fn diagnostic_pos(d: P<Diagnostic>) -> u32 {
     resolve(d).loc.pos().expect_source("rendered diagnostics have source positions")
 }
 
@@ -89,7 +89,7 @@ pub fn diagnostic_end(d: P<Diagnostic>) -> u32 {
 }
 
 // diagnosticwriter.go:85
-pub fn diagnostic_len(d: P<Diagnostic>) -> u32 {
+fn diagnostic_len(d: P<Diagnostic>) -> u32 {
     resolve(d).loc.len().expect("rendered diagnostics have source positions")
 }
 
@@ -140,7 +140,7 @@ fn new_original_text_file(file: P<SourceFile>, file_name: &'static str) -> Origi
 }
 
 // diagnosticwriter.go:144 (ASTDiagnostic).MessageChain
-pub fn diagnostic_message_chain(d: P<Diagnostic>) -> Vec<P<Diagnostic>> {
+fn diagnostic_message_chain(d: P<Diagnostic>) -> Vec<P<Diagnostic>> {
     let chain = d.message_chain();
     let mut result = Vec::with_capacity(chain.len() + 1);
     result.extend_from_slice(chain);
@@ -432,7 +432,7 @@ fn get_category_format(category: Category) -> &'static str {
     }
 }
 
-pub type FormattedWriter = dyn Fn(&mut dyn Write, &str, &str);
+type FormattedWriter = dyn Fn(&mut dyn Write, &str, &str);
 
 fn write_with_style_and_reset(output: &mut dyn Write, text: &str, format_style: &str) {
     w!(output, "{}", format_style);
@@ -440,7 +440,7 @@ fn write_with_style_and_reset(output: &mut dyn Write, text: &str, format_style: 
     w!(output, "{}", RESET_ESCAPE_SEQUENCE);
 }
 
-pub fn write_location(
+fn write_location(
     output: &mut dyn Write,
     file: &FileLike,
     pos: u32,
@@ -653,6 +653,52 @@ pub fn write_format_diagnostic(
     );
     write_flattened_diagnostic_message(output, diagnostic, &format_opts.new_line);
     w!(output, "{}", format_opts.new_line);
+}
+
+/// Fewer diagnostics than this are formatted on the calling thread (`format_diagnostics_in_order`).
+const PARALLEL_FORMAT_MIN: usize = 256;
+/// Diagnostics formatted per parallel round: bounds the formatted text held before it is written.
+const PARALLEL_FORMAT_CHUNK: usize = 2048;
+
+/// tsrs-only: `format` of each diagnostic passed to `write` in order, as a loop calling both would.
+///
+/// Many diagnostics are formatted on the worker pool, a chunk at a time, and written in order after each chunk;
+/// `single_threaded` keeps the loop. The CLI reports after the parallel check, so formatting thousands of diagnostics
+/// (line maps, relative file names, messages) one at a time on the main thread was the serial tail of the run.
+/// `format` only reads the diagnostics and their files (a line map is built once, under its file's region lock).
+pub fn format_diagnostics_in_order(
+    diagnostics: &[P<Diagnostic>],
+    single_threaded: bool,
+    format: &(dyn Fn(&mut Vec<u8>, P<Diagnostic>) + Sync),
+    write: &mut dyn FnMut(&[u8]),
+) {
+    use rayon::prelude::*;
+
+    if single_threaded || diagnostics.len() < PARALLEL_FORMAT_MIN {
+        let mut out = Vec::new();
+        for &diagnostic in diagnostics {
+            out.clear();
+            format(&mut out, diagnostic);
+            write(&out);
+        }
+        return;
+    }
+    let pool = crate::program::worker_pool();
+    for chunk in diagnostics.chunks(PARALLEL_FORMAT_CHUNK) {
+        let formatted: Vec<Vec<u8>> = pool.install(|| {
+            chunk
+                .par_iter()
+                .map(|&diagnostic| {
+                    let mut out = Vec::new();
+                    format(&mut out, diagnostic);
+                    out
+                })
+                .collect()
+        });
+        for out in &formatted {
+            write(out);
+        }
+    }
 }
 
 pub fn format_diagnostic_to_string(

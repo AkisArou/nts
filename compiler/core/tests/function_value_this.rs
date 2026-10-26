@@ -8,24 +8,24 @@
 //! can show whether it arrives; what is asserted here is *what each call
 //! passes*, which is the fact step 2 rests on.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/function-value-this/tsconfig.json")
         .canonicalize_utf8()
         .expect("the function-value-this program is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// What the one call through a function value in `name` passes as its `this`:
@@ -65,10 +65,7 @@ fn this_passed(program: &hir::Program, name: &str) -> OpKind {
 
 #[test]
 fn each_call_through_a_function_value_passes_the_this_javascript_gives_it() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP function_value_this: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     let program = &lowered.program;
     // `f(1)`, and `f.call(undefined, 4)`, which says so.
     assert_eq!(this_passed(program, "plain"), OpKind::ConstUndefined);
@@ -85,10 +82,7 @@ fn each_call_through_a_function_value_passes_the_this_javascript_gives_it() {
 
 #[test]
 fn every_uniform_entry_takes_an_erased_this_before_its_arguments() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP function_value_this: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     let program = &lowered.program;
     let width = program
         .funcs

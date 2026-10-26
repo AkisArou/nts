@@ -314,7 +314,7 @@ fn open_element(
     )?;
     b.load(value)?;
     b.load(at)?;
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.load(null_slot)?;
     b.call(target);
     output(b, result, &HirType::Erased)
@@ -434,7 +434,7 @@ pub(crate) fn open_length(
         open_length_body,
     )?;
     b.load(value)?;
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.call(target);
     numeric::convert(b, &U32, &b.ty(result).clone())
 }

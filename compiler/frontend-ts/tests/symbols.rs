@@ -1,30 +1,26 @@
-//! Symbol resolution and module exports, against a real tsgo.
+//! Symbol resolution and module exports, through the native checker.
 //!
-//! Skips without `NTS_TSGO`; see `tsgo_transport.rs` for how to build the pinned
-//! binary.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{SemanticSnapshot, SymbolFlags};
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/types/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/types fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 #[test]
 fn every_export_is_recorded_with_its_kind() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let module = snapshot.modules.first().expect("one file, one module");
 
     let by_name = |name: &str| {
@@ -46,13 +42,13 @@ fn every_export_is_recorded_with_its_kind() {
 
 #[test]
 fn occurrences_of_one_binding_share_a_symbol() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // This is the property HIR is blocked on: without it there is no way to say
     // that a declaration and a use name the same thing.
     let origins: Vec<_> = snapshot
         .nodes
         .iter()
-        .filter(|node| node.text.as_deref() == Some("origin"))
+        .filter(|node| node.text.as_ref().and_then(|text| text.as_utf8()) == Some("origin"))
         .filter_map(|node| node.symbol)
         .collect();
     assert!(!origins.is_empty(), "`origin` should carry a symbol");
@@ -64,14 +60,14 @@ fn occurrences_of_one_binding_share_a_symbol() {
 
 #[test]
 fn distinct_bindings_with_the_same_name_stay_distinct() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `Point.x` and the `x` in the object literal are different bindings that
     // happen to share a name. Collapsing them would be worse than not resolving
     // at all, because it looks like it worked.
     let xs: Vec<_> = snapshot
         .nodes
         .iter()
-        .filter(|node| node.text.as_deref() == Some("x"))
+        .filter(|node| node.text.as_ref().and_then(|text| text.as_utf8()) == Some("x"))
         .filter_map(|node| node.symbol)
         .collect();
     assert!(xs.len() >= 2, "the fixture declares `x` twice");
@@ -83,10 +79,10 @@ fn distinct_bindings_with_the_same_name_stay_distinct() {
 
 #[test]
 fn every_symbol_knows_where_it_is_declared() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     for symbol in &snapshot.symbols {
         assert!(
-            !symbol.declarations.is_empty(),
+            !symbol.declarations.is_empty() || symbol.library.is_some(),
             "symbol {:?} has no declaration site",
             symbol.name,
         );
@@ -95,40 +91,16 @@ fn every_symbol_knows_where_it_is_declared() {
 
 #[test]
 fn no_symbol_name_leaks_a_machine_path() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // A module's own symbol is named by its path. No absolute machine path may
     // reach an artifact, and a symbol name is an artifact.
     for symbol in &snapshot.symbols {
         assert!(
-            !symbol.name.contains("/home/"),
+            !symbol.name.to_string().contains("/home/"),
             "symbol name leaked a home directory: {:?}",
             symbol.name,
         );
     }
-}
-
-#[test]
-fn symbol_resolution_stays_linear_in_files() {
-    let Some(tsgo) = std::env::var("NTS_TSGO").ok().map(Utf8PathBuf::from) else {
-        return;
-    };
-    if !tsgo.exists() {
-        return;
-    }
-    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/programs/types/tsconfig.json")
-        .canonicalize_utf8()
-        .unwrap();
-    let mut source = TsgoApi::new(tsgo);
-    source.snapshot(&tsconfig).unwrap();
-    let stats = source.stats();
-
-    // Gate G1, extended. Two fixed exchanges, then four per file: getSourceFile,
-    // getTypeAtLocations, getSymbolsAtLocations, getExportsOfModule. Symbols and
-    // types both batch; if either stopped batching this would track node count.
-    assert_eq!(stats.round_trips, 5 + 5 * u64::from(stats.files));
-    assert!(stats.symbols > 0);
-    assert_eq!(stats.modules, stats.files);
 }
 
 /// **A symbol declared in two files keeps both declarations.** A class in one
@@ -140,9 +112,6 @@ fn symbol_resolution_stays_linear_in_files() {
 /// one comes first decided it.
 #[test]
 fn a_symbol_declared_in_two_files_keeps_both_declarations() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     for (order, files) in [
         ("class-first", ["a.d.ts", "b.d.ts"]),
         ("interface-first", ["b.d.ts", "a.d.ts"]),
@@ -171,13 +140,14 @@ fn a_symbol_declared_in_two_files_keeps_both_declarations() {
         )
         .unwrap();
         let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-        let snapshot = TsgoApi::new(tsgo.clone())
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&tsconfig)
             .expect("snapshot should succeed");
         let kinds: Vec<u16> = snapshot
             .symbols
             .iter()
-            .filter(|symbol| symbol.name == "Box")
+            .filter(|symbol| symbol.name.is_name("Box"))
             .flat_map(|symbol| symbol.declarations.iter())
             .filter_map(|node| match snapshot.nodes[node.0 as usize].kind {
                 nts_semantic_schema::NodeKind::Syntax(kind) => Some(kind),

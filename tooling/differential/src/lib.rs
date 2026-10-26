@@ -39,7 +39,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use nts_codegen_common::Backend;
 use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
-use nts_frontend_ts::TsgoApi;
+use nts_frontend_ts::Frontend;
 
 mod objects;
 
@@ -407,31 +407,15 @@ fn c_type(ty: &HirType) -> String {
 
 /// Compile a program, run it, run the same source on node, and compare.
 ///
-/// `configure` is how the *project's* frontend is asked for: this crate locates
-/// `tsgo` and stamps it, and the caller adds whatever the project compiles with.
-/// The CLI passes `for_project`, which installs a platform's generated bindings
-/// and React's transform.
-///
-/// **It is a parameter because this made its own frontend and therefore compiled
-/// a different program.** `nts check tests/interop/macos-spm` answered
-/// `Cannot find module 'objc:Blink'` and then "the program does not typecheck",
-/// for a project `nts build` builds green: the bindings are *generated*, so a
-/// frontend with no generator cannot see them. Every `objc:` and `c:` project
-/// was unusable with the one command the fixtures are driven by, and the failure
-/// reads as the program's rather than the instrument's. The same defect was
-/// fixed for `nts frontend` in `c974b9851`, and `for_project`'s own doc says
-/// every command that reads a project goes through it -- which was true of the
-/// build and `nts frontend` and never of this.
+/// The caller supplies the project's configured frontend, including its
+/// generated bindings and source transforms.
 ///
 /// # Errors
 ///
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-pub fn check(
-    tsconfig: &Utf8Path,
-    configure: impl FnOnce(TsgoApi) -> Result<TsgoApi>,
-) -> Result<Report> {
+pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     let backend = Backend::from_environment()?;
     let provider =
         match backend {
@@ -447,41 +431,7 @@ pub fn check(
             Backend::Wasm => nts_codegen_common::provider::host_gc("wasm", counting())
                 .map_err(anyhow::Error::msg)?,
         };
-    // `NTS_TSGO`, then the frontend this repository builds, and only then the
-    // bare name through `PATH`.
-    //
-    // The bare name was the whole of it, and it is the worst of the three: on a
-    // machine with an asdf shim it fails, and on one with *some* other `tsgo`
-    // installed it **succeeds** against an unpinned frontend, which is quietly
-    // wrong rather than loudly broken. `tsgo::locate` exists to answer exactly
-    // this and its own doc says why -- a run with the variable unset "is green
-    // whatever it would have found".
-    //
-    // Every gate script exports the variable, so the gate never saw it. What
-    // did was `cargo test --workspace` outside the gate: `jvm_sabotage` failed
-    // with "`tests/programs/bitwise` has to agree with node *before* the sabotage",
-    // which reads as a compiler regression and is the frontend never starting.
-    let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
-        nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |at| at.to_string())
-    });
-    // The tool's identity, so a rebuilt frontend does not read entries the old
-    // one wrote. Size and modified time rather than a hash of the binary: it is
-    // eighty megabytes and this runs once per check.
-    let stamp = std::fs::metadata(&tsgo).ok().map_or_else(
-        || tsgo.clone(),
-        |data| {
-            format!(
-                "{tsgo}:{}:{:?}",
-                data.len(),
-                data.modified().ok().map(|at| at
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs())
-            )
-        },
-    );
-    let mut source = configure(TsgoApi::for_compilation(tsgo))?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, &stamp)?;
+    let snapshot = source.snapshot(tsconfig)?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
             eprintln!(
@@ -2007,6 +1957,20 @@ fn collect_restarting(
     })
 }
 
+/// Write the already-validated JVM classes and runtime in their existing order.
+fn write_jvm_artifacts(dir: &Utf8Path, emitted: &nts_codegen_jvm::Emitted) -> Result<Utf8PathBuf> {
+    for class in &emitted.classes {
+        let path = dir.join(class.path());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, &class.bytes)?;
+    }
+    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
+    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())?;
+    Ok(jar)
+}
+
 /// The JVM lane: classes, a jar, and `java`.
 ///
 /// Everything upstream of this is shared -- the same HIR, the same testable
@@ -2042,15 +2006,7 @@ fn run_jvm(
             emitted.diagnostics.len()
         );
     }
-    for class in &emitted.classes {
-        let path = dir.join(class.path());
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&path, &class.bytes)?;
-    }
-    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
-    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())?;
+    let jar = write_jvm_artifacts(dir, &emitted)?;
 
     // The cases, as data. Generating and compiling a driver per case set would
     // put `javac` in this loop -- some 300ms against nine hundred cases -- to
@@ -2093,10 +2049,16 @@ fn run_jvm(
         // descriptor cannot say: `Ljava/lang/String;` is both `string | null`
         // and `string | undefined`, and node prints the two differently. C's
         // harness is told the same at `nts_check_show_string`.
+        // Reflection needs the emitted name; comparison needs the source
+        // identity from results(testable). Sharing one name made escaped JVM
+        // names report zero reached cases despite executing the right methods.
+        // The v2 marker also makes an older Check reject this header rather
+        // than interpret the added identity as a parameter.
         let _ = write!(
             cases,
-            "{} {at} {returns} {} {}",
+            "nts-check v2 {} {} {at} {returns} {} {}",
             nts_codegen_jvm::body::method_name(&one.name),
+            one.name,
             if one.result_absent == nts_core::hir::Absent::Null {
                 "null"
             } else {
@@ -2906,10 +2868,6 @@ mod structural_cast_array_stop {
 
     #[test]
     fn a_cast_stop_uses_cores_reason_on_every_backend() {
-        if std::env::var_os("NTS_TSGO").is_none() {
-            eprintln!("SKIP structural cast stop: set NTS_TSGO");
-            return;
-        }
         if std::env::var_os("NTS_CAST_STOP_ARM").is_none() {
             // Each runner reads its backend from the environment. Child test
             // processes keep that choice isolated from concurrent tests.
@@ -2974,7 +2932,8 @@ mod structural_cast_array_stop {
             serde_json::json!({"extends": base, "include": ["src/main.ts"]}).to_string(),
         )
         .unwrap();
-        let control = check(&config, Ok).unwrap();
+        let mut frontend = Frontend::new(&scratch.path).with_checkers(std::num::NonZeroU16::MIN);
+        let control = check(&config, &mut frontend).unwrap();
         assert_eq!((control.functions, control.checked), (1, 29));
         assert!(control.agreed(), "{control:?}");
         std::fs::write(
@@ -2982,7 +2941,7 @@ mod structural_cast_array_stop {
             source.replace("function zStopped", "export function zStopped"),
         )
         .unwrap();
-        let report = check(&config, Ok).unwrap();
+        let report = check(&config, &mut frontend).unwrap();
         assert_eq!(report.functions, 2);
         assert_eq!(report.disagreements, Vec::<(String, String)>::new());
         assert!(
@@ -3074,7 +3033,7 @@ mod wasm_compiler_stop_guard {
             result_absent: Absent::Impossible,
             values: vec![
                 op(
-                    OpKind::ConstString(REASON.to_owned()),
+                    OpKind::ConstString(REASON.into()),
                     HirType::Managed(hir::ManagedType::String),
                 ),
                 op(

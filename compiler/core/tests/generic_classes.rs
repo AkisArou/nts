@@ -21,26 +21,25 @@
 //! - **which** member of the group is the declaration
 //! - a `static` member is one function, not one per copy
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType};
-use nts_frontend_ts::SemanticSource;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn names(lowered: &hir::lower::Lowered) -> Vec<&str> {
@@ -59,9 +58,7 @@ fn names(lowered: &hir::lower::Lowered) -> Vec<&str> {
 /// been decomposed before it may join its own group.
 #[test]
 fn a_generic_class_is_lowered_once_per_instantiation() {
-    let Some(lowered) = lowered("generic-classes") else {
-        return;
-    };
+    let lowered = lowered("generic-classes");
     assert_eq!(
         lowered.diagnostics,
         [],
@@ -129,9 +126,7 @@ fn a_generic_class_is_lowered_once_per_instantiation() {
 /// all-arguments-are-parameters search.
 #[test]
 fn the_declaration_is_the_class_declarations_own_type() {
-    let Some(lowered) = lowered("generic-classes") else {
-        return;
-    };
+    let lowered = lowered("generic-classes");
     let constructor = lowered
         .program
         .funcs
@@ -172,9 +167,7 @@ fn the_declaration_is_the_class_declarations_own_type() {
 /// to reach, and emitting it per copy defines it twice.
 #[test]
 fn a_static_member_of_a_generic_class_is_emitted_once() {
-    let Some(lowered) = lowered("generic-classes") else {
-        return;
-    };
+    let lowered = lowered("generic-classes");
     let names = names(&lowered);
     let statics: Vec<&&str> = names.iter().filter(|name| name.contains(".of")).collect();
     assert_eq!(
@@ -203,9 +196,7 @@ fn a_static_member_of_a_generic_class_is_emitted_once() {
 /// method.
 #[test]
 fn a_generic_class_with_no_copy_to_make_is_refused() {
-    let Some(lowered) = lowered("generic-classes-unsupported") else {
-        return;
-    };
+    let lowered = lowered("generic-classes-unsupported");
     // The member that cannot be copied. The exported function calling it
     // survives this stage and is dropped by `drop_callers_of_refused`
     // afterwards, which is a later question than the one here: what matters is

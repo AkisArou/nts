@@ -1,32 +1,30 @@
 //! What survives a walk from the exports.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(fixture: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("prepared HIR should verify"))
+    hir::prepare(&snapshot).expect("prepared HIR should verify")
 }
 
 #[test]
 fn a_function_no_export_reaches_is_dropped() {
-    let Some(prepared) = prepared("interprocedural") else {
-        return;
-    };
+    let prepared = prepared("interprocedural");
     let names: Vec<&str> = prepared
         .program
         .funcs
@@ -51,9 +49,7 @@ fn a_function_no_export_reaches_is_dropped() {
 
 #[test]
 fn pruning_happens_before_the_analysis_pays_for_it() {
-    let Some(prepared) = prepared("interprocedural") else {
-        return;
-    };
+    let prepared = prepared("interprocedural");
     // The point is not only a smaller output. Everything that survives is
     // analyzed interprocedurally, specialized, proven and emitted -- so a
     // function nothing can call must be gone before any of that, not after.
@@ -72,9 +68,7 @@ fn pruning_happens_before_the_analysis_pays_for_it() {
 
 #[test]
 fn an_executable_keeps_less_than_a_library() {
-    let Some(prepared) = prepared("interprocedural") else {
-        return;
-    };
+    let prepared = prepared("interprocedural");
     // The default is the library answer: every export is a root, because a
     // caller this compilation cannot see may call any of them.
     let library: Vec<&str> = prepared
@@ -107,9 +101,7 @@ fn an_executable_keeps_less_than_a_library() {
 
 #[test]
 fn a_declared_surface_is_checked_against_the_source() {
-    let Some(prepared) = prepared("interprocedural") else {
-        return;
-    };
+    let prepared = prepared("interprocedural");
     // This is what `exports: [...]` in nts.config.ts is for: naming fewer than
     // the source exports shrinks the ABI *and* the binary. Naming something the
     // source does not export is a mistake in the manifest, and the worst way to
@@ -129,9 +121,7 @@ fn a_declared_surface_is_checked_against_the_source() {
 
 #[test]
 fn a_specialized_closure_does_not_keep_its_unallocated_template() {
-    let Some(prepared) = prepared("a-structural-function-carrying-a-throw") else {
-        return;
-    };
+    let prepared = prepared("a-structural-function-carrying-a-throw");
     let program = &prepared.program;
     let allocated: std::collections::HashSet<_> = program
         .funcs
@@ -178,12 +168,12 @@ fn a_specialized_closure_does_not_keep_its_unallocated_template() {
 
 #[test]
 fn reached_factories_public_callbacks_and_nested_runtime_reactions_keep_their_bodies() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/reachable-closure-controls/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     let prepared = hir::prepare(&snapshot).expect("the closure controls verify");
     assert!(
         prepared.diagnostics.is_empty(),

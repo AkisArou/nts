@@ -2,8 +2,8 @@
 
 ```sh
 cargo build --release -p nts-bench
-NTS_TSGO=$PWD/target/tsgo ./target/release/nts-bench          # everything
-NTS_TSGO=$PWD/target/tsgo ./target/release/nts-bench fib      # one case
+./target/release/nts-bench          # everything
+./target/release/nts-bench fib      # one case
 ```
 
 Needs `clang` and `node` on `PATH`.

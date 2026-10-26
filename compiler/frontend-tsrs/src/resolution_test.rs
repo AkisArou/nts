@@ -153,7 +153,7 @@ fn native_resolutions_preserve_order_paths_versions_and_unresolved_inputs_in_bot
                     .as_str()
                     .ends_with("node_modules/outer/node_modules/nested/index.d.ts")
             );
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             let project = finished.projects().next().expect("finished program");
             let after = records(
                 project

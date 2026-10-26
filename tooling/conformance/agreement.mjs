@@ -89,7 +89,7 @@ for (const name of names) {
 
   const out = mkdtempSync(join(RUN_ROOT, "emit-"));
   const emit = spawnSync(compiler, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--napi"], {
-    encoding: "utf8", env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
+    encoding: "utf8", env: { ...process.env, NTS_CHECKERS: "1" },
   });
   // **The refusal messages, so a refused case says why rather than only which.**
   // The name of a case tells a reader nothing on its own: `toFixedRounding`

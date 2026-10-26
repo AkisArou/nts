@@ -21,26 +21,26 @@
 //! declares nothing for`. Two backends agreeing is not evidence when the thing
 //! they agree about is one they never look at.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// A signature only a container mentions gets a layout.
@@ -59,9 +59,7 @@ fn lowered(name: &str) -> Option<hir::lower::Lowered> {
 /// written against it passes with the walk removed. This one was, and it did.
 #[test]
 fn a_signature_only_a_container_mentions_gets_a_layout() {
-    let Some(lowered) = lowered("keyed-closures") else {
-        return;
-    };
+    let lowered = lowered("keyed-closures");
     let named: Vec<&str> = lowered
         .program
         .layouts
@@ -96,9 +94,7 @@ fn a_signature_only_a_container_mentions_gets_a_layout() {
 /// and a `Set`'s element type named them -- and they are the case this asserts.
 #[test]
 fn a_signature_with_no_closure_still_declares_its_call() {
-    let Some(lowered) = lowered("keyed-closures") else {
-        return;
-    };
+    let lowered = lowered("keyed-closures");
     let signatures: Vec<&hir::Layout> = lowered
         .program
         .layouts
@@ -149,9 +145,7 @@ fn a_signature_with_no_closure_still_declares_its_call() {
 /// reason, and this is the arm that fails if one side is edited alone.
 #[test]
 fn the_declaration_and_the_entries_that_override_it_are_one_shape() {
-    let Some(lowered) = lowered("keyed-closures") else {
-        return;
-    };
+    let lowered = lowered("keyed-closures");
     let (layout, declared) = lowered
         .program
         .layouts

@@ -132,8 +132,7 @@ test("body, harness, include and fixture diagnostics keep their classification",
     assert.equal(rows[0].where, where);
     if (where === "body") assert.equal(rows[0].line, 2);
   }
-  assert.equal(environment().NTS_NO_SNAPSHOT_CACHE, "1");
-  assert.equal(environment({ snapshotCache: true }).NTS_NO_SNAPSHOT_CACHE, "0");
+  assert.equal(environment().NTS_CHECKERS, "1");
 });
 
 test("a backend decline is one root entry, placed nowhere", () => {

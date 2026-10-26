@@ -21,9 +21,8 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 
 [ -x "${NTS_BIN:-target/release/nts}" ] || { echo "build first: cargo build --release"; exit 1; }
-[ -e "${NTS_TSGO:-$root/target/tsgo}" ] || { echo "no tsgo: tooling/bootstrap/bootstrap.sh"; exit 1; }
-NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
-export NTS_TSGO
+NTS_CHECKERS=1
+export NTS_CHECKERS
 
 # One example, named on the command line: run it plainly so its output is the
 # point rather than a tally.

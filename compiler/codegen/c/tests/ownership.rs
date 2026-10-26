@@ -16,11 +16,10 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// The C for `source`, compiled for reference counting.
-fn counted(name: &str, source: &str) -> Option<String> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn counted(name: &str, source: &str) -> String {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -34,7 +33,8 @@ fn counted(name: &str, source: &str) -> Option<String> {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
@@ -50,7 +50,7 @@ fn counted(name: &str, source: &str) -> Option<String> {
     );
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    Some(emitted.writer.text().to_owned())
+    emitted.writer.text().to_owned()
 }
 
 /// One function's **definition** out of the emitted C, by name.
@@ -91,7 +91,7 @@ fn body(text: &str, name: &str) -> String {
 /// of -- its one retain is then the store's, which is right but not this test.
 #[test]
 fn a_method_returning_its_receiver_is_owned_when_a_table_holds_it() {
-    let Some(text) = counted(
+    let text = counted(
         "ownership-hands-back",
         r"
 class Holder { child: Leaf | null = null; }
@@ -116,10 +116,7 @@ export function run(n: number): number {
   return holder.child === null ? -1 : holder.child.label.length;
 }
 ",
-    ) else {
-        eprintln!("SKIP ownership: tsgo is required");
-        return;
-    };
+    );
 
     // The callee owes the reference now, because one of its callers cannot.
     assert!(
@@ -154,7 +151,7 @@ export function run(n: number): number {
 /// at every return, which leaks one reference per call.
 #[test]
 fn a_method_returning_a_fresh_object_still_owes_nothing_extra() {
-    let Some(text) = counted(
+    let text = counted(
         "ownership-fresh",
         r"
 class Leaf { label = 'leaf'; }
@@ -166,10 +163,7 @@ export function run(n: number): number {
   return base.make().label.length;
 }
 ",
-    ) else {
-        eprintln!("SKIP ownership: tsgo is required");
-        return;
-    };
+    );
 
     assert!(
         !body(&text, "One__make").contains("nts_retain"),
@@ -190,7 +184,7 @@ export function run(n: number): number {
 /// `ntsRowsDestroy` in the Chromium lane.
 #[test]
 fn an_export_gives_back_what_it_overwrites_in_a_parameter() {
-    let Some(text) = counted(
+    let text = counted(
         "ownership-export-overwrite",
         r"
 interface Row { id: number }
@@ -202,10 +196,7 @@ export function make(count: number): App {
 }
 export function reset(app: App): void { app.rows = []; }
 ",
-    ) else {
-        eprintln!("SKIP ownership: tsgo is required");
-        return;
-    };
+    );
     let reset = body(&text, "reset");
     assert!(
         reset.contains("= v0->rows;") && reset.contains("nts_release"),

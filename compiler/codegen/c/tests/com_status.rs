@@ -7,7 +7,7 @@
 mod scratch;
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use scratch::ScratchDir;
 use std::process::Command;
 
@@ -17,10 +17,6 @@ use std::process::Command;
     reason = "Complete provider/target matrix and one-difference compile control"
 )]
 fn recorded_gap_direct_hresult_status_long_is_rejected_on_llp64() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
     if !Command::new("zig")
         .arg("version")
         .output()
@@ -60,7 +56,8 @@ declare module "c:StatusFixture" {
         )
         .unwrap();
         std::fs::write(dir.join("tsconfig.json"),format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#)).unwrap();
-        let snapshot = TsgoApi::for_compilation(tsgo.clone())
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&dir.join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

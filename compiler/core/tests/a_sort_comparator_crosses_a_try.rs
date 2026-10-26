@@ -6,19 +6,19 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const EXAMPLE: &str = "a-throwing-sort-comparator-inside-a-try";
 
-fn programs() -> Option<(hir::lower::Lowered, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn programs() -> (hir::lower::Lowered, hir::Prepared) {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(EXAMPLE)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{EXAMPLE} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let lowered = hir::lower::lower(&snapshot);
@@ -28,7 +28,7 @@ fn programs() -> Option<(hir::lower::Lowered, hir::Prepared)> {
         "{:?}",
         prepared.diagnostics
     );
-    Some((lowered, prepared))
+    (lowered, prepared)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -96,10 +96,7 @@ fn selected_entry(raw: &hir::Program, prepared: &hir::Program, name: &str) -> St
 
 #[test]
 fn a_guarded_comparator_keeps_its_raising_entry_and_the_control_recovers_its_body() {
-    let Some((lowered, prepared)) = programs() else {
-        eprintln!("SKIP: tsgo is not built");
-        return;
-    };
+    let (lowered, prepared) = programs();
     let raw = &lowered.program;
     let raising = raw.raising_call_slot.expect("raising entry");
     let ordinary = raw.erased_call_slot.expect("ordinary entry");

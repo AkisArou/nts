@@ -9,12 +9,24 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 fn write(at: &Utf8Path, text: &str) {
     std::fs::create_dir_all(at.parent().unwrap()).unwrap();
     std::fs::write(at, text).unwrap();
+}
+
+fn imports(root: &Utf8Path, names: &[&str]) {
+    let source = names.iter().fold(String::new(), |mut source, name| {
+        let _ = writeln!(source, "import {name:?};");
+        source
+    });
+    write(
+        &root.join("packages/app/src/main.ts"),
+        &format!("{source}export const x = 1;\n"),
+    );
 }
 
 /// A workspace with two packages and four dependencies.
@@ -51,11 +63,11 @@ fn fixture(name: &str) -> Utf8PathBuf {
     );
     write(
         &root.join("packages/app/tsconfig.json"),
-        r#"{"include":["src"]}"#,
+        r#"{"compilerOptions":{"target":"esnext","module":"esnext","moduleResolution":"bundler","types":[],"noEmit":true},"include":["src"]}"#,
     );
     write(
         &root.join("packages/app/src/main.ts"),
-        "export const x = 1;\n",
+        "import '@ws/lib'; import 'shipped'; import 'mapped'; import 'opaque'; import 'legacy'; export const x = 1;\n",
     );
 
     let modules = root.join("packages/app/node_modules");
@@ -126,8 +138,17 @@ fn fixture(name: &str) -> Utf8PathBuf {
 fn acquire(root: &Utf8Path) -> nts_deps::Acquisition {
     let project = root.join("packages/app");
     let tsconfig = project.join("tsconfig.json");
-    nts_deps::acquire(&project, &tsconfig, &nts_deps::Options::default())
-        .expect("acquisition succeeds")
+    {
+        let options = nts_deps::Options {
+            checker_count: Some(std::num::NonZeroU16::MIN),
+            ..nts_deps::Options::default()
+        };
+        let mut acquisition =
+            nts_deps::acquire(&project, &tsconfig, &options).expect("acquisition succeeds");
+        nts_deps::check_acquisition(&mut acquisition, &tsconfig, &options)
+            .expect("the standalone dependency check");
+        acquisition
+    }
 }
 
 fn route_of<'a>(
@@ -293,6 +314,7 @@ fn a_removed_dependency_is_pruned() {
     let root = fixture("prune");
     acquire(&root);
     assert!(root.join(".nts/vendor/mapped@2.0.0").is_dir());
+    imports(&root, &["shipped"]);
 
     std::fs::write(
         root.join("packages/app/package.json"),
@@ -306,10 +328,32 @@ fn a_removed_dependency_is_pruned() {
     assert!(root.join(".nts/vendor/shipped@1.0.0").is_dir());
 }
 
+#[test]
+fn removing_the_last_import_drops_an_installed_package_and_its_paths() {
+    let root = fixture("last-import-removed");
+    imports(&root, &["mapped"]);
+    assert_eq!(acquire(&root).acquired(), 1);
+    let installed = root.join("packages/app/node_modules/mapped");
+    assert!(installed.is_dir());
+    imports(&root, &[]);
+    let after = acquire(&root);
+    assert!(
+        installed.is_dir(),
+        "installation and manifest stay unchanged"
+    );
+    assert!(after.packages.is_empty());
+    assert!(after.pruned.contains(&"mapped@2.0.0".into()));
+    assert!(!root.join(".nts/vendor/mapped@2.0.0").exists());
+    assert!(!root.join("packages/app/tsconfig.nts.json").exists());
+    assert!(after.tsconfig.is_none());
+    assert!(acquire(&root).unchanged);
+}
+
 /// A declared dependency nobody installed is reported, not fatal.
 #[test]
 fn a_missing_dependency_is_named() {
     let root = fixture("missing");
+    imports(&root, &["absent"]);
     std::fs::write(
         root.join("packages/app/package.json"),
         r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"absent":"1.0.0"}}"#,
@@ -340,6 +384,7 @@ fn the_nearest_workspace_declaration_wins() {
 #[test]
 fn nothing_to_map_writes_nothing() {
     let root = fixture("empty");
+    imports(&root, &["legacy"]);
     std::fs::write(
         root.join("packages/app/package.json"),
         r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"legacy":"1.0.0"}}"#,
@@ -411,6 +456,7 @@ fn the_generated_config_is_not_a_composite_project() {
 #[test]
 fn a_multi_module_package_recovers_its_whole_graph() {
     let root = fixture("graph");
+    imports(&root, &["split"]);
     let modules = root.join("packages/app/node_modules");
 
     // Three modules, three maps, the way `tsc` emits them.
@@ -492,6 +538,7 @@ fn a_multi_module_package_recovers_its_whole_graph() {
 #[test]
 fn source_that_cannot_build_is_refused_by_name() {
     let root = fixture("unbuildable");
+    imports(&root, &["aliased"]);
     let modules = root.join("packages/app/node_modules");
     write(
         &modules.join("aliased/package.json"),
@@ -541,6 +588,7 @@ fn source_that_cannot_build_is_refused_by_name() {
 #[test]
 fn an_installed_dependency_and_a_builtin_are_not_unbuildable() {
     let root = fixture("buildable");
+    imports(&root, &["uses-deps"]);
     let modules = root.join("packages/app/node_modules");
     write(
         &modules.join("uses-deps/package.json"),
@@ -632,13 +680,9 @@ fn a_missing_vendor_tree_is_recovered_again() {
     );
 }
 
-/// A settled run asks the checker once. It used to ask four times, walking the
-/// fixpoint from scratch to rediscover a graph the lock already described — a
-/// dependency's own dependencies are invisible until its source is in the
-/// program, so every pass learned one layer that the previous run had already
-/// learned and written down.
+/// A settled run reuses recovery while resolution revalidates its current graph.
 #[test]
-fn a_settled_run_does_not_rewalk_the_fixpoint() {
+fn a_settled_run_reuses_recovery_without_shrinking_the_current_graph() {
     let root = fixture("seeded");
     let first = acquire(&root);
     assert!(first.files_written > 0);
@@ -658,6 +702,7 @@ fn a_settled_run_does_not_rewalk_the_fixpoint() {
 #[test]
 fn a_new_dependency_is_still_found_after_a_settled_run() {
     let root = fixture("seed-then-add");
+    imports(&root, &["shipped"]);
     std::fs::write(
         root.join("packages/app/package.json"),
         r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"shipped":"1.0.0"}}"#,
@@ -666,6 +711,7 @@ fn a_new_dependency_is_still_found_after_a_settled_run() {
     let settled = acquire(&root);
     assert!(acquire(&root).unchanged, "settled first");
     assert!(settled.packages.iter().all(|p| p.name != "mapped"));
+    imports(&root, &["shipped", "mapped"]);
 
     std::fs::write(
         root.join("packages/app/package.json"),
@@ -697,6 +743,7 @@ fn a_new_dependency_is_still_found_after_a_settled_run() {
 #[test]
 fn what_a_package_needs_survives_a_settled_run() {
     let root = fixture("complaints");
+    imports(&root, &["ambient"]);
     let modules = root.join("packages/app/node_modules");
     // Recovered source that reads an ambient its own build supplied.
     write(
@@ -717,9 +764,14 @@ fn what_a_package_needs_survives_a_settled_run() {
     )
     .unwrap();
 
-    // Without tsgo there are no diagnostics at all, so this asserts the
-    // *mechanism*: whatever a run records, the next run reproduces.
     let first = acquire(&root);
+    assert!(first.packages.iter().any(|package| {
+        package.name == "ambient"
+            && package
+                .complaints
+                .iter()
+                .any(|complaint| complaint.code == "TS2591" && complaint.count > 0)
+    }));
     let before: Vec<(String, Vec<String>)> = first
         .packages
         .iter()
@@ -807,17 +859,7 @@ fn source_maps_keep_package_ownership_and_the_declared_exports() {
         &root.join("packages/app/package.json"),
         r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"publisher":"1.0.0","embedded":"1.0.0"}}"#,
     );
-    let options = nts_deps::Options {
-        tsgo: Some(
-            std::env::var("NTS_TSGO")
-                .expect("the gate prepares the real checker")
-                .into(),
-        ),
-        ..nts_deps::Options::default()
-    };
-    let project = root.join("packages/app");
-    let config = project.join("tsconfig.json");
-    let cold = nts_deps::acquire(&project, &config, &options).unwrap();
+    let cold = acquire(&root);
     assert_eq!(cold.acquired(), 2);
     for (name, export) in [("publisher", "published"), ("embedded", "embedded")] {
         let entry = root.join(format!(".nts/vendor/{name}@1.0.0/src/index.ts"));
@@ -841,7 +883,86 @@ fn source_maps_keep_package_ownership_and_the_declared_exports() {
             report.complaints
         );
     }
-    let warm = nts_deps::acquire(&project, &config, &options).unwrap();
+    let warm = acquire(&root);
     assert_eq!(warm.acquired(), 2);
     assert!(warm.unchanged);
+}
+
+fn mapped_layer(root: &Utf8Path, name: &str, dependency: Option<&str>) {
+    // Hoisted like the survey closure: recovered source outside app still
+    // resolves its own imports through the workspace's node_modules.
+    let package = root.join("node_modules").join(name);
+    let dependencies = dependency
+        .map(|name| (name, "1.0.0"))
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    write(
+        &package.join("package.json"),
+        &serde_json::json!({
+            "name":name,"version":"1.0.0","main":"./dist/index.js",
+            "types":"./dist/index.d.ts","dependencies":dependencies
+        })
+        .to_string(),
+    );
+    write(
+        &package.join("dist/index.d.ts"),
+        "export declare const value: number;\n",
+    );
+    write(
+        &package.join("dist/index.js"),
+        "export const value=1;\n//# sourceMappingURL=index.js.map\n",
+    );
+    let source = dependency.map_or_else(
+        || "export const value: number = 1;\n".to_owned(),
+        |name| format!("import {{value as parent}} from {name:?}; export const value: number = parent + 1;\n"),
+    );
+    write(
+        &package.join("dist/index.js.map"),
+        &serde_json::json!({
+            "version":3,"sources":["../src/index.ts"],"sourcesContent":[source],"mappings":""
+        })
+        .to_string(),
+    );
+}
+
+#[test]
+fn a_settled_multilayer_source_seed_takes_one_pass_and_never_admits_a_removed_root() {
+    let root = fixture("multilayer-seed");
+    imports(&root, &["layer-a"]);
+    write(
+        &root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"layer-a":"2.0.0"}}"#,
+    );
+    mapped_layer(&root, "layer-a", Some("layer-b"));
+    mapped_layer(&root, "layer-b", Some("layer-c"));
+    mapped_layer(&root, "layer-c", None);
+    // The primary package and its peer deliberately have different versions.
+    // Reading the peer's @version would invalidate this seed on every run.
+    let manifest = root.join("node_modules/layer-a/package.json");
+    let mut package: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest).unwrap()).unwrap();
+    package["version"] = "2.0.0".into();
+    package["peerDependencies"] = serde_json::json!({"layer-b":"1.0.0"});
+    write(&manifest, &package.to_string());
+    let options = nts_deps::Options {
+        checker_count: Some(std::num::NonZeroU16::MIN),
+        ..nts_deps::Options::default()
+    };
+    let project = root.join("packages/app");
+    let config = project.join("tsconfig.json");
+    let first = nts_deps::acquire(&project, &config, &options).unwrap();
+    assert_eq!(first.acquired(), 3, "all hidden source imports are found");
+    assert!(first.passes >= 3);
+    let settled = nts_deps::acquire(&project, &config, &options).unwrap();
+    assert_eq!(settled.acquired(), 3);
+    assert!(settled.unchanged);
+    assert_eq!(settled.passes, 1);
+    imports(&root, &[]);
+    let removed = nts_deps::acquire(&project, &config, &options).unwrap();
+    assert!(
+        removed.packages.is_empty(),
+        "the lock cannot admit an unreachable chain"
+    );
+    assert_eq!(removed.passes, 1);
+    assert!(!project.join("tsconfig.nts.json").exists());
 }

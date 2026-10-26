@@ -7,7 +7,6 @@
 //! what `ToInt32` makes of `false` and `true`. With `optional-chain`'s
 //! accumulator an integer, that round trip was what the loop waited on.
 //!
-//! Skips without the frontend.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 #[path = "../../../test-support/scratch.rs"]
@@ -16,7 +15,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// `optional-chain`'s shape: an optional function field, called optionally,
 /// with a default for its absence.
@@ -44,10 +43,6 @@ export function run(rounds: number): number {
 
 #[test]
 fn an_or_of_two_booleans_converts_neither() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP bitwise: tsgo is required");
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -59,7 +54,8 @@ fn an_or_of_two_booleans_converts_neither() {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");

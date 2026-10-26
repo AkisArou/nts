@@ -23,9 +23,6 @@ fi
 for tool in gjs Xvfb pkg-config; do
   command -v "$tool" >/dev/null 2>&1 || { echo "SKIP gjs-corpus: no $tool"; exit 0; }
 done
-# A snapshot cache of the run's own: a shared one makes what compiles depend
-# on what other sessions built.
-export NTS_SNAPSHOT_CACHE="${NTS_SNAPSHOT_CACHE:-$out/snapshot-cache}"
 export GSK_RENDERER=cairo
 mkdir -p "$out"
 # The ports' configs import `@nts/config`, which is this repository's: linked

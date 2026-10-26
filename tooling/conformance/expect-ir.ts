@@ -43,12 +43,10 @@ if (!existsSync(NTS)) {
 mkdirSync(SCRATCH, { recursive: true });
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
 
-// `NTS_TSGO` from the caller when it names one, for the reason outcomes-check.ts
-// gives: a pinned gate runs in a tree with no `target/` of its own.
+// The compiler is self-contained; bound each isolated process to one checker.
 const env = {
   ...process.env,
-  NTS_NO_SNAPSHOT_CACHE: "1",
-  NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"),
+  NTS_CHECKERS: "1",
 };
 
 type Case = { name: string; tsconfig: string };

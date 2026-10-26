@@ -1,26 +1,21 @@
 //! Call-target resolution: which function a call site actually reaches.
 //!
-//! Skips without `NTS_TSGO`; see `tsgo_transport.rs` for how to build the pinned
-//! binary.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{NodeId, SemanticSnapshot, TypeKind};
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/calls/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/calls fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_call_resolution(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 /// The name a call site is calling, read off its first child.
@@ -28,13 +23,19 @@ fn callee_name(snapshot: &SemanticSnapshot, site: NodeId) -> String {
     snapshot.nodes[site.0 as usize]
         .children
         .first()
-        .and_then(|c| snapshot.nodes[c.0 as usize].text.clone())
+        .and_then(|c| {
+            snapshot.nodes[c.0 as usize]
+                .text
+                .as_ref()
+                .and_then(|text| text.as_utf8())
+                .map(str::to_owned)
+        })
         .unwrap_or_default()
 }
 
 #[test]
 fn every_call_site_resolves_to_a_target() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     assert_eq!(
         snapshot.call_targets.len(),
         3,
@@ -50,7 +51,7 @@ fn every_call_site_resolves_to_a_target() {
 
 #[test]
 fn overloads_resolve_to_different_signatures_per_call_site() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // The property that makes a static call possible. `widen(1)` and `widen("s")`
     // share a name; a backend that could not tell them apart would have to box
     // the argument and dispatch, losing the exact call at both sites.
@@ -76,7 +77,7 @@ fn overloads_resolve_to_different_signatures_per_call_site() {
 
 #[test]
 fn each_overload_points_at_its_own_declaration() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let declarations: Vec<_> = snapshot
         .call_targets
         .iter()
@@ -96,7 +97,7 @@ fn each_overload_points_at_its_own_declaration() {
 
 #[test]
 fn a_direct_call_names_the_function_it_reaches() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let (_, target) = snapshot
         .call_targets
         .iter()
@@ -107,9 +108,7 @@ fn a_direct_call_names_the_function_it_reaches() {
     let declaration = &snapshot.nodes[callee.0 as usize];
     assert_eq!(
         declaration.kind,
-        nts_semantic_schema::NodeKind::Syntax(
-            nts_frontend_ts::tsgo::types::syntax::FUNCTION_DECLARATION
-        ),
+        nts_semantic_schema::NodeKind::Syntax(nts_semantic_schema::syntax::FUNCTION_DECLARATION),
     );
 
     let signature = &snapshot.signatures[target.signature.0 as usize];
@@ -124,12 +123,10 @@ fn a_direct_call_names_the_function_it_reaches() {
 fn tagged_templates_resolve_through_the_same_call_target_table() {
     use nts_semantic_schema::{NodeKind::Syntax, syntax};
 
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-tagged-template/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
     let sites: Vec<_> = snapshot
@@ -156,10 +153,10 @@ fn tagged_templates_resolve_through_the_same_call_target_table() {
 
 #[test]
 fn syntax_kinds_still_match_the_pinned_tsgo() {
-    use nts_frontend_ts::tsgo::types::syntax;
     use nts_semantic_schema::NodeKind::Syntax;
+    use nts_semantic_schema::syntax;
 
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
 
     // The kind numbers were read off a real encoded program rather than
     // transcribed. A tsgo bump that renumbers them should fail here rather than
@@ -180,21 +177,17 @@ fn syntax_kinds_still_match_the_pinned_tsgo() {
 /// asserted against a real encoded program rather than assumed.
 #[test]
 fn dynamic_import_calls_the_import_keyword() {
-    use nts_frontend_ts::tsgo::types::syntax;
     use nts_semantic_schema::NodeKind::Syntax;
+    use nts_semantic_schema::syntax;
 
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-dynamic-import/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/a-dynamic-import fixture is checked in");
     // Decomposed and call-resolved, as a build takes it: a bare snapshot leaves
     // the promise's type arguments out, and lowering never sees that one.
-    let snapshot = TsgoApi::new(tsgo)
-        .with_decomposition(Budget::DEFAULT)
-        .with_call_resolution(Budget::DEFAULT)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
 

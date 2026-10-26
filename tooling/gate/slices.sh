@@ -69,7 +69,7 @@ case $profile in
             test262-builtins-cases test262-rest-cases test262
             outcomes integrity blockers definitions example-refusals records
             clippy tests corpus assembles types primitives
-            jvm-verifies benches snapshot-cache config react-sources
+            jvm-verifies benches config react-sources frontend-tsrs
             format reformat" ;;
   *)
     echo "usage: $0 [lowering|conformance|backend|most]" >&2; exit 2 ;;

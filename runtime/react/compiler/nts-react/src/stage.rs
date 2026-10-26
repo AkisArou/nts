@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use crate::convert::text::SourceText;
 use crate::convert::{self, Unsupported};
 use crate::print::{self, PrintOptions, TypeOracle};
-use crate::tsgo::Nodes;
+use crate::syntax::Nodes;
 
 /// The compiler's options for a build: what the Babel plugin resolves by
 /// default, with function outlining off -- an outlined function is a new

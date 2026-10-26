@@ -10,13 +10,11 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
-import { frontendPath, frontendPin } from "./tsgo.ts";
 
 const LAND = new URL("./land.ts", import.meta.url).pathname;
 
@@ -32,8 +30,8 @@ if [ -n "\${LAND_TEST_AFFINITY:-}" ]; then
   awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status > "$LAND_TEST_AFFINITY"
   sh -c 'awk "/^Cpus_allowed_list:/ {print \\$2}" /proc/self/status' >> "$LAND_TEST_AFFINITY"
 fi
-if [ -n "\${LAND_TEST_FRONTEND:-}" ]; then
-  test "$NTS_TSGO" = "$NTS_GATE_TREE/target/tsgo"
+if [ -n "\${LAND_TEST_CHECKERS:-}" ]; then
+  test "$NTS_CHECKERS" = "1"
 fi
 echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
@@ -189,56 +187,23 @@ async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
 const gates = (s: Scratch) => (existsSync(s.gates) ? readFileSync(s.gates, "utf8").trim().split("\n").length : 0);
 const onMain = (s: Scratch, path: string) => spawnSync("git", ["cat-file", "-e", `main:${path}`], { cwd: s.root, env: s.env }).status === 0;
 
-test("inputs link each commit's frontend key and refuse its missing build by name", () => {
+test("native inputs link the upstream TypeScript corpus without an external compiler", () => {
   const s = scratch();
-  const upstream = join(s.root, "third_party/typescript-go");
-  mkdirSync(upstream, { recursive: true });
-  run(s, upstream, ["init", "-q"]);
-  writeFileSync(join(upstream, "source.txt"), "upstream\n");
-  run(s, upstream, ["add", "source.txt"]);
-  run(s, upstream, ["commit", "-q", "-m", "upstream"]);
-  const old = run(s, upstream, ["rev-parse", "HEAD"]);
-  run(s, s.root, ["update-index", "--add", "--cacheinfo", `160000,${old},third_party/typescript-go`]);
-  writeFileSync(join(s.root, "pnpm-lock.yaml"), "importers: {}\n");
-  run(s, s.root, ["add", "pnpm-lock.yaml"]);
-  run(s, s.root, ["commit", "-q", "-m", "pin frontend"]);
-  const a = lane(s, "old-frontend", { "a.txt": "a" });
-  writeFileSync(join(upstream, "source.txt"), "new upstream\n");
-  run(s, upstream, ["commit", "-q", "-am", "new frontend"]);
-  const next = run(s, upstream, ["rev-parse", "HEAD"]);
-  const b = lane(s, "new-frontend", { "b.txt": "b" });
-  run(s, b, ["update-index", "--cacheinfo", `160000,${next},third_party/typescript-go`]);
-  run(s, b, ["commit", "-q", "-m", "bump frontend"]);
-  const publish = (tree: string): string => {
-    const pin = frontendPin(tree);
-    const binary = frontendPath(s.root, pin);
-    mkdirSync(dirname(binary), { recursive: true });
-    writeFileSync(binary, `#!/bin/sh\necho ${pin.gitlink}\n`);
-    chmodSync(binary, 0o755);
-    writeFileSync(join(dirname(binary), "build.json"), JSON.stringify({ key: pin.key, sha256: createHash("sha256").update(readFileSync(binary)).digest("hex") }));
-    return binary;
-  };
-  const prepare = (tree: string, mode: string) => spawnSync("sh", [new URL("./inputs.sh", import.meta.url).pathname, mode, s.root, tree], { env: s.env, encoding: "utf8" });
-  const oldBinary = publish(a);
-  const oldReady = prepare(a, "lane");
-  assert.equal(oldReady.status, 0, oldReady.stderr);
-  const missing = prepare(b, "gate");
-  assert.notEqual(missing.status, 0);
-  assert.ok(missing.stderr.includes(`missing tsgo build ${frontendPin(b).key}`), missing.stderr);
-  assert.ok(!existsSync(join(b, "target/tsgo")), "a missing key cannot fall back to main's frontend");
-  const newBinary = publish(b);
-  const newReady = prepare(b, "gate");
-  assert.equal(newReady.status, 0, newReady.stderr);
-  assert.equal(realpathSync(join(a, "target/tsgo")), oldBinary);
-  assert.equal(realpathSync(join(b, "target/tsgo")), newBinary);
-  assert.equal(run(s, join(a, "third_party/typescript-go"), ["rev-parse", "HEAD"]), old);
-  assert.equal(run(s, join(b, "third_party/typescript-go"), ["rev-parse", "HEAD"]), next);
+  const corpus = join(s.root, "third_party/typescript");
+  mkdirSync(corpus, { recursive: true });
+  writeFileSync(join(corpus, "marker"), "upstream corpus\n");
+  const a = lane(s, "native-inputs", { "pnpm-lock.yaml": "importers: {}\n" });
+  for (const mode of ["lane", "gate"]) {
+    const prepared = spawnSync("sh", [new URL("./inputs.sh", import.meta.url).pathname, mode, s.root, a], { env: s.env, encoding: "utf8" });
+    assert.equal(prepared.status, 0, prepared.stderr);
+    assert.equal(realpathSync(join(a, "third_party/typescript")), corpus);
+  }
 });
 
-test("landing passes the gate tree's frontend instead of a caller override", async () => {
+test("landing gives batch processes one checker instead of a caller override", async () => {
   const s = scratch();
-  s.env.LAND_TEST_FRONTEND = "1";
-  s.env.NTS_TSGO = "/wrong/frontend";
+  s.env.LAND_TEST_CHECKERS = "1";
+  s.env.NTS_CHECKERS = "8";
   const a = lane(s, "frontend", { "a.txt": "a" });
   const result = await land(s, a).done;
   assert.equal(result.status, 0, result.out);

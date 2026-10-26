@@ -17,12 +17,10 @@ pub struct Utf16Span {
 }
 
 #[derive(Debug)]
-#[cfg(any(feature = "tsrs", test))]
 pub(crate) struct Utf16Index {
     positions: Box<[u32]>,
 }
 
-#[cfg(any(feature = "tsrs", test))]
 impl Utf16Index {
     pub(crate) fn new(text: &str) -> Self {
         let mut positions = Vec::with_capacity(text.len() + 1);

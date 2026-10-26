@@ -2,9 +2,12 @@
 //! it must not fall back to managed-object layout or guessed member offsets.
 use super::{Field, Pointee, Record, RecordKind, TypePath, scalar};
 use nts_semantic_schema::{
-    LiteralValue, MemberKind, NodeId, NodeKind, PropertyRecord, SemanticSnapshot, SymbolId, TypeId,
-    TypeKind, syntax,
+    LiteralValue, MemberKind, NodeId, NodeKind, PropertyKey, PropertyRecord, SemanticSnapshot,
+    SymbolId, TypeId, TypeKind, syntax,
 };
+
+#[cfg(test)]
+mod property_tests;
 
 /// A member of `ty` by name, through an intersection's parts.
 pub(crate) fn property<'a>(
@@ -12,21 +15,46 @@ pub(crate) fn property<'a>(
     ty: TypeId,
     name: &str,
 ) -> Option<&'a PropertyRecord> {
-    property_within(snapshot, ty, name, &mut TypePath::default())
+    property_within(
+        snapshot,
+        ty,
+        |key| key.is_name(name),
+        &mut TypePath::default(),
+    )
+}
+
+/// An exact member identity, through the same intersection walk as native
+/// marker names. Getter contracts must survive a `Class<Tag> & Methods` face.
+pub(crate) fn property_key<'a>(
+    snapshot: &'a SemanticSnapshot,
+    ty: TypeId,
+    key: &PropertyKey,
+) -> Option<&'a PropertyRecord> {
+    property_within(
+        snapshot,
+        ty,
+        |candidate| candidate == key,
+        &mut TypePath::default(),
+    )
 }
 
 fn property_within<'a>(
     snapshot: &'a SemanticSnapshot,
     ty: TypeId,
-    name: &str,
+    matches: impl Fn(&PropertyKey) -> bool + Copy,
     visiting: &mut TypePath,
 ) -> Option<&'a PropertyRecord> {
     visiting.within(ty, |visiting| {
         match &snapshot.types.get(ty.0 as usize)?.kind {
-            TypeKind::Object { properties } => properties.iter().find(|p| p.name == name),
+            TypeKind::Object { properties } => properties.iter().find(|p| matches(&p.name)),
             TypeKind::Intersection(parts) => parts
                 .iter()
-                .find_map(|part| property_within(snapshot, *part, name, visiting)),
+                .find_map(|part| property_within(snapshot, *part, matches, visiting)),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
             _ => None,
         }
     })
@@ -40,6 +68,11 @@ pub(crate) fn properties(snapshot: &SemanticSnapshot, ty: TypeId) -> Vec<&Proper
             .iter()
             .flat_map(|part| properties(snapshot, *part))
             .collect(),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => Vec::new(),
         _ => Vec::new(),
     }
 }
@@ -54,7 +87,7 @@ fn marker(snapshot: &SemanticSnapshot, ty: TypeId, name: &str) -> Option<TypeId>
 fn interface_tag(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Object { properties } => properties.iter().find_map(|p| {
-            let tag = p.name.strip_prefix("__c_interface")?;
+            let tag = p.name.public_name()?.strip_prefix("__c_interface")?;
             (!tag.is_empty() && p.readonly && p.optional && p.kind == MemberKind::Field)
                 .then(|| tag.to_owned())
         }),
@@ -69,13 +102,23 @@ fn interface_tag(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
 fn optional_text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Union(parts) => parts.iter().find_map(|part| text(snapshot, *part)),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => text(snapshot, ty),
         _ => text(snapshot, ty),
     }
 }
 
 fn text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
-        TypeKind::Literal(LiteralValue::String(name)) => Some(name),
+        TypeKind::Literal(LiteralValue::String(name)) => name.as_utf8(),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     }
 }
@@ -103,6 +146,11 @@ pub(crate) fn stored(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
             [a, b] if fields(*a) && !fields(*b) => *b,
             _ => ty,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => ty,
         _ => ty,
     }
 }
@@ -188,6 +236,11 @@ pub(crate) fn erased_handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<P
             [a, b] if matches!(snapshot.types[b.0 as usize].kind, TypeKind::Null) => *a,
             _ => return None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => ty,
         _ => ty,
     };
     property(snapshot, ty, "__c_erased").filter(|p| p.optional && p.readonly)?;
@@ -211,6 +264,11 @@ pub(crate) fn boxed(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<BoxedReco
             [a, b] if matches!(snapshot.types[b.0 as usize].kind, TypeKind::Null) => *a,
             _ => return None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => ty,
         _ => ty,
     };
     let get_type = property(snapshot, ty, "__c_boxed").filter(|p| p.optional && p.readonly)?;
@@ -235,6 +293,11 @@ fn optional_number(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<u64> {
     };
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Union(parts) => parts.iter().find_map(|part| number(*part)),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => number(ty),
         _ => number(ty),
     }
 }
@@ -275,6 +338,11 @@ pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::syn
             .iter()
             .copied()
             .find(|part| is_layout(snapshot, *part))?,
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => marker.ty,
         _ => marker.ty,
     };
     structure(snapshot, record, &mut TypePath::default(), false, true).map(std::sync::Arc::new)
@@ -459,7 +527,12 @@ pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> O
             .find_map(|child| {
                 let node = node(child)?;
                 matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER))
-                    .then(|| node.text.clone())
+                    .then(|| {
+                        node.text
+                            .as_ref()
+                            .and_then(|text| text.as_utf8())
+                            .map(str::to_owned)
+                    })
                     .flatten()
             })?;
         return Some(format!("{PROGRAM_GTYPE}{name}"));
@@ -502,7 +575,12 @@ pub(crate) fn objc_name(snapshot: &SemanticSnapshot, declaration: NodeId) -> Opt
         .find_map(|child| {
             let node = snapshot.nodes.get(child.0 as usize)?;
             matches!(node.kind, NodeKind::Syntax(syntax::IDENTIFIER))
-                .then(|| node.text.clone())
+                .then(|| {
+                    node.text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                        .map(str::to_owned)
+                })
                 .flatten()
         })
 }
@@ -1021,7 +1099,7 @@ fn structure(
         // The name as the header wrote it: a C member `__pad` arrives as
         // `__pad`, which the frontend unescapes for every name (`written_name`),
         // so the local unescaping that stood here is gone.
-        let name = property.name.clone();
+        let name = property.name.public_name()?.to_owned();
         fields.push(Field { name, ty });
     }
     let name = if foreign {

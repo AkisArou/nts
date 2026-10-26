@@ -159,7 +159,7 @@ export function shapedInbound(p: { a: number }): number { return p.a; }
 export function dateInbound(d: Date): number { return d.getTime(); }
 EOF
 
-NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
+NTS_CHECKERS=1 "$compiler" \
   emit-c "$work/tsconfig.json" --out "$work/out" --napi >"$work/emit.log" 2>&1
 if [ ! -f "$work/out/addon.c" ]; then
   echo "  INSTRUMENT FAILURE: nothing emitted"; sed -n '1,10p' "$work/emit.log"; exit 3

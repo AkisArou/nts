@@ -10,13 +10,12 @@
 //! translation unit is a compiler bug, not a style preference: nothing here is
 //! hand-written, so there is no one to disagree with.
 //!
-//! Skips without `NTS_TSGO` or without `clang`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// Compile an example to C, link it with a harness, run it.
 ///
@@ -302,23 +301,14 @@ fn build_and_run_transformed(
     host_kind: Host,
     transform: impl FnOnce(&mut hir::Program),
 ) -> Option<std::process::Output> {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        // Announced, because a skip that prints nothing is indistinguishable
-        // from a pass — and this is the test whose passing means the most.
-        eprintln!("SKIP {example}: NTS_TSGO is not set");
-        return None;
-    };
-    if !tsgo.exists() {
-        eprintln!("SKIP {example}: no tsgo at {tsgo}");
-        return None;
-    }
     if which_clang().is_none() {
         eprintln!("SKIP {example}: clang is not on PATH");
         return None;
     }
 
     let tsconfig = fixture_config(example);
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "{example} should typecheck");

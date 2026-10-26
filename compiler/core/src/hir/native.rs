@@ -791,17 +791,22 @@ pub(crate) fn labels_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Vec<(
     // Not a marker: `Opaque<T>`, `Class<...>`, a closure's or a brand's are
     // anonymous object types too, made of readonly `__`-named properties, and
     // each is already a type of its own here. A label is an ordinary name.
-    if properties
-        .iter()
-        .any(|p| p.readonly || p.name.starts_with("__"))
-        || pointer(snapshot, ty).is_some()
+    if properties.iter().any(|p| {
+        p.readonly
+            || p.name
+                .public_name()
+                .is_some_and(|name| name.starts_with("__"))
+    }) || pointer(snapshot, ty).is_some()
         || is_layout(snapshot, ty)
     {
         return None;
     }
     properties
         .iter()
-        .map(|p| (p.kind == MemberKind::Field && !p.optional).then(|| (p.name.clone(), p.ty)))
+        .map(|p| {
+            let name = p.name.public_name()?;
+            (p.kind == MemberKind::Field && !p.optional).then(|| (name.to_owned(), p.ty))
+        })
         .collect()
 }
 
@@ -2515,6 +2520,9 @@ fn callback_slots_within(
                 }
             }
             _ if parameter.rest => return None,
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => {
+                one(&mut parameters, &mut bridging, parameter.ty)?;
+            }
             _ => one(&mut parameters, &mut bridging, parameter.ty)?,
         }
     }
@@ -2954,6 +2962,11 @@ fn callback_signature(
             .signatures
             .get(id.0 as usize)
             .filter(|signature| is_c_string(snapshot, signature.return_type)),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     };
     let Some(signature) = owned else {
@@ -3256,16 +3269,26 @@ pub(crate) fn event_slots(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(St
         let TypeKind::Object { properties } = kind_of(*part)? else {
             return None;
         };
-        let event = properties.iter().find(|p| p.name == "__c_event")?;
+        let event = properties.iter().find(|p| p.name.is_name("__c_event"))?;
         let defined = match kind_of(event.ty)? {
             TypeKind::Union(members) => members
                 .iter()
                 .copied()
                 .find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined)))?,
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => event.ty,
             _ => event.ty,
         };
         match kind_of(defined)? {
-            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+            TypeKind::Literal(LiteralValue::String(text)) => text.as_utf8().map(str::to_owned),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
             _ => None,
         }
     })?;
@@ -3298,6 +3321,11 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
                 .iter()
                 .copied()
                 .find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined))),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => Some(id),
             _ => Some(id),
         }
     };
@@ -3312,23 +3340,23 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
         match kind_of(*part)? {
             TypeKind::Function(_) => function = Some(*part),
             TypeKind::Object { properties } => {
-                let closure = properties.iter().find(|p| p.name == "__c_closure")?;
+                let closure = properties.iter().find(|p| p.name.is_name("__c_closure"))?;
                 let TypeKind::Literal(LiteralValue::String(kind)) = kind_of(defined(closure.ty)?)?
                 else {
                     return None;
                 };
-                marker = Some(kind.clone());
+                marker = Some(kind.as_utf8()?);
                 notify = properties
                     .iter()
-                    .find(|p| p.name == "__c_notify")
+                    .find(|p| p.name.is_name("__c_notify"))
                     .and_then(|p| defined(p.ty));
                 iid = properties
                     .iter()
-                    .find(|p| p.name == "__c_iid")
+                    .find(|p| p.name.is_name("__c_iid"))
                     .and_then(|p| defined(p.ty))
                     .and_then(|id| match kind_of(id)? {
                         TypeKind::Literal(LiteralValue::String(iid)) => {
-                            Some(std::sync::Arc::<str>::from(iid.as_str()))
+                            Some(std::sync::Arc::<str>::from(iid.as_utf8()?))
                         }
                         _ => None,
                     });
@@ -3336,7 +3364,7 @@ fn closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(TypeId, ClosureKi
             _ => return None,
         }
     }
-    let kind = match marker?.as_str() {
+    let kind = match marker? {
         "scoped" => ClosureKind::Scoped,
         "once" => ClosureKind::Once,
         "retained" => ClosureKind::Retained,
@@ -3412,11 +3440,21 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
                 .iter()
                 .copied()
                 .find(|member| !matches!(kind_of(*member), Some(TypeKind::Undefined))),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => Some(id),
             _ => Some(id),
         }
     };
     let text = |id: TypeId| match kind_of(defined(id)?)? {
-        TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+        TypeKind::Literal(LiteralValue::String(text)) => text.as_utf8().map(str::to_owned),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     };
     let (ty, nullable) = match kind_of(ty)? {
@@ -3429,6 +3467,12 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             match (kind_of(*a)?, kind_of(*b)?) {
                 (TypeKind::Null | TypeKind::Undefined, _) => (*b, true),
                 (_, TypeKind::Null | TypeKind::Undefined) => (*a, true),
+                #[expect(
+                    clippy::match_same_arms,
+                    reason = "keep audited semantic type variants explicit"
+                )]
+                (TypeKind::NonPrimitive | TypeKind::UniqueSymbol, _)
+                | (_, TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => return None,
                 _ => return None,
             }
         }
@@ -3451,7 +3495,11 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
         let markers = match kind_of(*part)? {
             TypeKind::Object { properties }
                 if !properties.is_empty()
-                    && properties.iter().all(|p| p.name.starts_with("__c_")) =>
+                    && properties.iter().all(|p| {
+                        p.name
+                            .public_name()
+                            .is_some_and(|name| name.starts_with("__c_"))
+                    }) =>
             {
                 properties
             }
@@ -3463,7 +3511,7 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
             }
         };
         for property in markers {
-            match property.name.as_str() {
+            match property.name.public_name()? {
                 "__c_strings" => strings = Some(text(property.ty)?),
                 "__c_bytes" => bytes = Some(text(property.ty)?),
                 "__c_elements" => elements = Some(text(property.ty)?),
@@ -3857,6 +3905,11 @@ fn returned_closure(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
             [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
             _ => return None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => ty,
         _ => ty,
     };
     let (_, ClosureKind::Retained) = closure(snapshot, closure_part)? else {
@@ -4165,8 +4218,13 @@ fn written_slot(
 /// `None` for any other type: what a received array is copied as.
 fn received_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Scalar, u32)> {
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
-    let element =
-        super::builtin::typed_array_element(&snapshot.symbols.get(symbol.0 as usize)?.name)?;
+    let element = super::builtin::typed_array_element(
+        snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .name
+            .public_name()?,
+    )?;
     let scalar = match element {
         HirType::Int {
             bits: 8,
@@ -4340,6 +4398,11 @@ fn branded(snapshot: &SemanticSnapshot, ty: TypeId, property: &str) -> bool {
             [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
             _ => return false,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => ty,
         _ => ty,
     };
     let Some(TypeKind::Intersection(parts)) = kind(ty) else {
@@ -4347,7 +4410,7 @@ fn branded(snapshot: &SemanticSnapshot, ty: TypeId, property: &str) -> bool {
     };
     parts.iter().any(|part| {
         matches!(kind(*part), Some(TypeKind::Object { properties })
-            if matches!(properties.as_slice(), [p] if p.name == property && p.optional && p.readonly))
+            if matches!(properties.as_slice(), [p] if p.name.is_name(property.as_ref()) && p.optional && p.readonly))
     })
 }
 
@@ -4428,6 +4491,11 @@ fn declared_result(
             [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
             _ => return Ok(None),
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => ty,
         _ => ty,
     };
     let Some(TypeKind::Intersection(parts)) = kind(ty) else {
@@ -4436,12 +4504,19 @@ fn declared_result(
     let declared = parts.iter().find_map(|part| match kind(*part) {
         Some(TypeKind::Object { properties }) => match properties.as_slice() {
             [property]
-                if property.name == "__c_declared" && property.optional && property.readonly =>
+                if property.name.is_name("__c_declared")
+                    && property.optional
+                    && property.readonly =>
             {
                 Some(property.ty)
             }
             _ => None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => None,
         _ => None,
     });
     let Some(declared) = declared else {
@@ -4452,6 +4527,11 @@ fn declared_result(
             .iter()
             .copied()
             .find(|m| !matches!(kind(*m), Some(TypeKind::Undefined))),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => Some(declared),
         _ => Some(declared),
     };
     let handle = |pointee: Option<Pointee>| match pointee {
@@ -4490,6 +4570,11 @@ fn defaulted(
     let kind = |ty: TypeId| snapshot.types.get(ty.0 as usize).map(|record| &record.kind);
     let members = match kind(parameter.ty) {
         Some(TypeKind::Union(parts)) => parts.clone(),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => vec![parameter.ty],
         _ => vec![parameter.ty],
     };
     let members: Vec<TypeId> = members
@@ -4569,6 +4654,11 @@ fn error_slot(
         .map(|record| &record.kind)
     {
         Some(TypeKind::Union(parts)) => parts.clone(),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => vec![parameter.ty],
         _ => vec![parameter.ty],
     };
     let Some(ty) = members
@@ -4784,11 +4874,20 @@ fn bridged_set(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
             [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
             _ => return None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => ty,
         _ => ty,
     };
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
     if !matches!(
-        snapshot.symbols.get(symbol.0 as usize)?.name.as_str(),
+        snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .name
+            .public_name()?,
         "Set" | "ReadonlySet"
     ) {
         return None;
@@ -4816,11 +4915,20 @@ fn bridged_dictionary(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged
             [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
             _ => return None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => ty,
         _ => ty,
     };
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
     if !matches!(
-        snapshot.symbols.get(symbol.0 as usize)?.name.as_str(),
+        snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .name
+            .public_name()?,
         "Map" | "ReadonlyMap"
     ) {
         return None;
@@ -4855,6 +4963,11 @@ fn bridged_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Bridged> {
             [a, b] if matches!(kind(*b), Some(TypeKind::Null)) => *a,
             _ => return None,
         },
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => ty,
         _ => ty,
     };
     let TypeKind::Array(element) = *kind(ty)? else {
@@ -4901,7 +5014,7 @@ pub(crate) fn is_branded_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
                 |id: TypeId| matches!(kind(id), Some(TypeKind::Literal(LiteralValue::Boolean(_))));
             let brand = |id: TypeId| {
                 matches!(kind(id), Some(TypeKind::Object { properties })
-                    if matches!(properties.as_slice(), [p] if p.name == "__c_bool" && p.optional && p.readonly
+                    if matches!(properties.as_slice(), [p] if p.name.is_name("__c_bool") && p.optional && p.readonly
                         && declared_in(snapshot, p, TYPES_MODULE)))
             };
             (literal(*a) && brand(*b)) || (literal(*b) && brand(*a))
@@ -4949,24 +5062,32 @@ pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option
             };
             match properties.as_slice() {
                 [property]
-                    if property.name == "__c_utf16" && property.optional && property.readonly =>
+                    if property.name.is_name("__c_utf16")
+                        && property.optional
+                        && property.readonly =>
                 {
                     Some(Encoding::Utf16)
                 }
                 [property]
-                    if property.name == "__c_hstring" && property.optional && property.readonly =>
+                    if property.name.is_name("__c_hstring")
+                        && property.optional
+                        && property.readonly =>
                 {
                     Some(Encoding::HString)
                 }
                 [property]
-                    if property.name == "__c_view" && property.optional && property.readonly =>
+                    if property.name.is_name("__c_view")
+                        && property.optional
+                        && property.readonly =>
                 {
                     Some(Encoding::View)
                 }
                 // `CString`: UTF-8 said out loud, where a plain `string` would
                 // be an `NSString` -- in an Objective-C message.
                 [property]
-                    if property.name == "__c_utf8" && property.optional && property.readonly =>
+                    if property.name.is_name("__c_utf8")
+                        && property.optional
+                        && property.readonly =>
                 {
                     Some(Encoding::Utf8)
                 }
@@ -4974,7 +5095,7 @@ pub(crate) fn string_encoding(snapshot: &SemanticSnapshot, ty: TypeId) -> Option
                 // the call bridges (`bridge_strings`); read here as the text
                 // it is.
                 [property]
-                    if property.name == "__objc_nsstring"
+                    if property.name.is_name("__objc_nsstring")
                         && property.optional
                         && property.readonly =>
                 {
@@ -5019,6 +5140,11 @@ fn is_string_literal(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
                 Some(TypeKind::Literal(LiteralValue::String(_)) | TypeKind::TemplateLiteral { .. })
             )
         }),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => false,
         _ => false,
     }
 }
@@ -5648,7 +5774,7 @@ fn slot_of(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
                 let [property] = properties.as_slice() else {
                     return None;
                 };
-                if property.name != "__c_of" || !property.readonly || !property.optional {
+                if !property.name.is_name("__c_of") || !property.readonly || !property.optional {
                     return None;
                 }
                 of = Some(present_scalar(snapshot, property.ty)?);
@@ -5687,7 +5813,7 @@ fn labelled(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
                 {
                     continue;
                 }
-                let found = match property.name.as_str() {
+                let found = match property.name.public_name()? {
                     // `AsNumber<C>`: a C kind wider than a number holds exactly,
                     // carried as one.
                     "__AsNumber" => {
@@ -5744,7 +5870,7 @@ fn declared_in(
                 .filter_map(|child| snapshot.nodes.get(child.0 as usize))
                 .any(|child| {
                     child.kind == NodeKind::Syntax(nts_semantic_schema::syntax::STRING_LITERAL)
-                        && child.text.as_deref() == Some(module)
+                        && child.text.as_ref().and_then(|text| text.as_utf8()) == Some(module)
                 });
         }
         at = node.parent;
@@ -5763,6 +5889,11 @@ fn enum_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Union(parts) => enum_members_scalar(snapshot, parts),
         TypeKind::Intersection(_) => enum_members_scalar(snapshot, &[ty]),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     }
 }
@@ -5817,6 +5948,11 @@ fn enum_members_scalar(snapshot: &SemanticSnapshot, members: &[TypeId]) -> Optio
 pub fn int_bool(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
     match &snapshot.types.get(ty.0 as usize)?.kind {
         TypeKind::Union(parts) => int_bool_members(snapshot, parts),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     }
 }
@@ -5869,7 +6005,7 @@ fn branded_members(
     // `c:types`' own label, as a scalar kind is `@nts/scalars'`: the integer a
     // `CEnum` or a `CBool` crosses as is a kind the strict check holds a value
     // to, so a property a program wrote under the same name is not one.
-    if property.name != brand_name
+    if !property.name.is_name(brand_name.as_ref())
         || !property.readonly
         || !property.optional
         || property.kind != MemberKind::Field
@@ -5883,6 +6019,11 @@ fn branded_members(
             .copied()
             .filter(|p| !matches!(kind(*p), Some(TypeKind::Undefined)))
             .collect(),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => vec![property.ty],
         _ => vec![property.ty],
     };
     let [given] = given.as_slice() else {
@@ -6067,14 +6208,13 @@ mod js_name_tests {
 
 /// Whether a declared parameter is TypeScript's `object`, or `object | null`.
 ///
-/// `TypeFlags.NonPrimitive`, which the schema carries as a structured type.
+/// The schema's explicit nonprimitive category.
 /// The same test `FuncBuilder::is_the_object_type` makes in lowering; kept here
 /// rather than shared because the two crates' copies should become one, and
 /// that is a change to lowering for another day.
 pub(crate) fn is_object_pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
-    const NON_PRIMITIVE: u32 = 0x0002_0000;
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
-    let object = |id: TypeId| matches!(kind(id), Some(TypeKind::Structured { flags }) if *flags == NON_PRIMITIVE);
+    let object = |id: TypeId| matches!(kind(id), Some(TypeKind::NonPrimitive));
     match kind(ty) {
         Some(TypeKind::Union(parts)) => {
             let [a, b] = parts.as_slice() else {

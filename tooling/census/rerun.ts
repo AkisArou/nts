@@ -9,7 +9,7 @@
 // -- and --root <class>, a named class of lowering root (rows.ts's
 // ROOT_CLASSES: `any`).
 // `--paths` keeps only the rows whose path is a line of <file>: a selection
-// computed elsewhere (any-arrivals' classes, a hand-picked list) that no one
+// computed elsewhere (a hand-picked list or another census) that no one
 // regular expression says. `--out` writes one line per file -- path, verdict,
 // and each arm's row -- for a join the summary cannot do.
 //

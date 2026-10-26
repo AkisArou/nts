@@ -103,7 +103,7 @@ writeFileSync(
 const run = spawnSync(
   compiler,
   ["emit-c", join(work, "tsconfig.json"), "--out", join(work, "out"), "--napi"],
-  { encoding: "utf8", env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") } },
+  { encoding: "utf8", env: { ...process.env, NTS_CHECKERS: "1" } },
 );
 if (run.status !== 0 && !existsSync(join(work, "out/addon.c"))) {
   console.error(`the control program did not emit: ${(run.stdout ?? "") + (run.stderr ?? "")}`.slice(0, 400));

@@ -153,7 +153,7 @@ seed=$(grep -oE "^export const seed = [^;]+" "$dir/case.ts" 2>/dev/null \
 cat > "$work/tsconfig.json" <<JSON
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$dir"] }
 JSON
-NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$work/tsconfig.json" \
+NTS_CHECKERS=1 "$nts" emit-jvm "$work/tsconfig.json" \
   --out "$work/nts-classes" --entry "${entry:-module#init}" --entry "module#init" \
   > "$work/emit.log" 2>&1 || { echo "the backend declined $case" >&2; exit 1; }
 

@@ -144,7 +144,7 @@ export function compileAndRun(dir, source) {
   const emit = spawnSync(
     NTS,
     ["emit-c", join(dir, "tsconfig.json"), "--out", join(dir, "out"), "--main"],
-    { encoding: "utf8", env: { ...process.env, NTS_NO_SNAPSHOT_CACHE: "1" } },
+    { encoding: "utf8", env: { ...process.env } },
   );
   const err = `${emit.stderr ?? ""}`;
   if (/^thread '.*panicked at/m.test(err)) {

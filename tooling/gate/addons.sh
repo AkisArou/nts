@@ -24,8 +24,8 @@ cd "$root"
 
 NTS_COMPILER=${NTS_BIN:-$root/target/release/nts}
 export NTS_COMPILER
-NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
-export NTS_TSGO
+NTS_CHECKERS=1
+export NTS_CHECKERS
 
 bash tooling/conformance/build-floor.sh
 bash tooling/conformance/loads.sh

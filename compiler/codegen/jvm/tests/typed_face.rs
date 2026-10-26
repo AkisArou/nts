@@ -25,7 +25,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 mod common;
@@ -70,10 +70,6 @@ public class Drive { public static void main(String[] a) {
 
 #[test]
 fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP typed_face: NTS_TSGO is not set");
-        return;
-    };
     let (Some(javac), Some(java)) = (common::tool("javac"), common::tool("java")) else {
         eprintln!("SKIP typed_face: no JDK");
         return;
@@ -88,7 +84,8 @@ fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
     )
     .unwrap();
     let config = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

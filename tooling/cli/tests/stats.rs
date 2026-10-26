@@ -8,7 +8,7 @@
 //! called through their signature take its typed entry, and nothing calls the
 //! erased one.
 //!
-//! Skips when the frontend is absent.
+//! Native capture failures fail the test.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -68,10 +68,6 @@ const KEYS: [&str; 25] = [
     "typed_signatures",
 ];
 
-fn frontend_available() -> bool {
-    std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some()
-}
-
 fn fixture(name: &str) -> PathBuf {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     let src = root.join("src");
@@ -92,7 +88,6 @@ fn stats(root: &Path, extra: &[&str]) -> Vec<(String, u64)> {
         .arg(root.join("tsconfig.json"))
         .args(["--backend", "c"])
         .args(extra)
-        .env("NTS_NO_SNAPSHOT_CACHE", "1")
         .output()
         .expect("running nts stats");
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -125,9 +120,6 @@ fn value(rows: &[(String, u64)], key: &str) -> u64 {
 
 #[test]
 fn every_key_is_printed_once_in_order_and_names_what_it_counts() {
-    if !frontend_available() {
-        return;
-    }
     let rows = stats(&fixture("stats-plain"), &[]);
     let keys: Vec<&str> = rows.iter().map(|(key, _)| key.as_str()).collect();
     assert_eq!(keys, KEYS, "the printed keys and their order");
@@ -142,9 +134,6 @@ fn every_key_is_printed_once_in_order_and_names_what_it_counts() {
 
 #[test]
 fn counting_is_printed_only_where_the_provider_counts() {
-    if !frontend_available() {
-        return;
-    }
     let root = fixture("stats-rc");
     let plain = stats(&root, &[]);
     assert!(plain.iter().all(|(key, _)| !key.starts_with("rc.")));

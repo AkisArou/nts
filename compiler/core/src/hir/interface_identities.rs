@@ -45,7 +45,7 @@ pub(super) fn collect(
             .entry(symbol)
             .or_insert_with(|| InterfaceIdentity {
                 symbol,
-                name: snapshot.symbols[symbol as usize].name.clone(),
+                name: snapshot.symbols[symbol as usize].name.to_string(),
                 types: Vec::new(),
                 names: BTreeMap::new(),
                 parents: BTreeMap::new(),
@@ -197,7 +197,8 @@ mod tests {
             ("number", SymbolFlags::default()),
         ] {
             snapshot.symbols.push(SymbolRecord {
-                name: name.to_string(),
+                builtin: None,
+                name: name.to_string().into(),
                 flags,
                 declarations: Vec::new(),
                 ty: None,
@@ -221,12 +222,13 @@ mod tests {
         snapshot.types = vec![
             object(0),
             TypeRecord {
-                kind: TypeKind::Structured { flags: 0 },
+                kind: TypeKind::Structured,
                 symbol: Some(SymbolId(1)),
             },
             TypeRecord {
                 kind: TypeKind::TypeParameter {
                     name: "T".to_string(),
+                    is_this: false,
                     constraint: None,
                 },
                 symbol: None,

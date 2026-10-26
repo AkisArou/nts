@@ -5,26 +5,26 @@
 //! the program — so the relation is spelled where the layout is built, the same
 //! way `lower_instanceof` spells it through `provided_errors_under`.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Layout};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn error_layouts(lowered: &hir::lower::Lowered) -> Vec<&Layout> {
@@ -44,9 +44,7 @@ fn error_layouts(lowered: &hir::lower::Lowered) -> Vec<&Layout> {
 /// A derived error names `Error` as its base, and `Error` names nothing.
 #[test]
 fn a_provided_error_extends_error() {
-    let Some(lowered) = lowered("errors") else {
-        return;
-    };
+    let lowered = lowered("errors");
     let layouts = error_layouts(&lowered);
     assert!(layouts.len() >= 2, "at least two of the four are used here");
 
@@ -82,9 +80,7 @@ fn a_provided_error_extends_error() {
 /// so what keeps them apart has to be nominal — and `collect_layouts` says so.
 #[test]
 fn the_four_do_not_merge() {
-    let Some(lowered) = lowered("errors") else {
-        return;
-    };
+    let lowered = lowered("errors");
     let mut names: Vec<&str> = error_layouts(&lowered)
         .iter()
         .map(|layout| layout.name.as_str())

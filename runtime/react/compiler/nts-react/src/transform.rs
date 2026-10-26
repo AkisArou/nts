@@ -13,15 +13,15 @@ use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_diagnostics::Severity;
-use nts_frontend_ts::tsgo::ast::EncodedSourceFile;
-use nts_frontend_ts::tsgo::transform::{NodeTypes, Reported, SourceTransform, TransformInput};
+use nts_frontend_ts::SyntaxTree;
+use nts_frontend_ts::transform::{NodeTypes, Reported, SourceTransform, TransformInput};
 use nts_semantic_schema::NodeId;
 use rustc_hash::FxHashMap;
 use serde_json::Value;
 
 use crate::print::{PrintOptions, TypeOracle};
 use crate::stage::{self, Function, FunctionState};
-use crate::tsgo::Nodes;
+use crate::syntax::Nodes;
 
 /// The React Compiler revision this stage runs: third_party/react-compiler.
 pub const COMPILER_PIN: &str = "1d34f91dfde6bba84d08b683aaba164c7194dacb";
@@ -52,7 +52,7 @@ pub struct ReactTransform {
 #[derive(Debug)]
 struct FileState {
     code: String,
-    tree: EncodedSourceFile,
+    tree: SyntaxTree,
     /// The checker's answers, by node, as the first print asked them.
     types: FxHashMap<u32, Option<String>>,
     print: PrintOptions,
@@ -118,7 +118,7 @@ impl ReactTransform {
 
 /// The checker's answers, remembered as they are given.
 struct Remembering<'a> {
-    types: &'a mut dyn NodeTypes,
+    types: &'a NodeTypes<'a>,
     answers: &'a mut FxHashMap<u32, Option<String>>,
 }
 
@@ -165,11 +165,7 @@ impl SourceTransform for ReactTransform {
         )
     }
 
-    fn transform(
-        &mut self,
-        file: &TransformInput<'_>,
-        types: &mut dyn NodeTypes,
-    ) -> Option<String> {
+    fn transform(&mut self, file: &TransformInput<'_>, types: &NodeTypes<'_>) -> Option<String> {
         let mut state = FileState {
             code: file.text.to_owned(),
             tree: file.tree.clone(),

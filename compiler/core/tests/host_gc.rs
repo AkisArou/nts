@@ -1,16 +1,17 @@
-//! Host-managed memory keeps semantic preparation and skips native placement.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
 use nts_core::hir::{self, OpKind, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 #[test]
 fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
-    let tsgo = std::env::var("NTS_TSGO").expect("NTS_TSGO required for provider acceptance");
     let config = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/objects/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     assert!(!snapshot.has_errors());
     let native = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
     let managed = hir::prepare_with(
@@ -53,11 +54,13 @@ fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
 
 #[test]
 fn async_frames_only_have_lifetime_markers_for_native_providers() {
-    let tsgo = std::env::var("NTS_TSGO").expect("NTS_TSGO required for provider acceptance");
     for example in ["async", "a-var-holding-a-closure", "an-async-generator"] {
         let config = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(format!("../../tests/programs/{example}/tsconfig.json"));
-        let snapshot = TsgoApi::for_compilation(&tsgo).snapshot(&config).unwrap();
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .unwrap();
         assert!(!snapshot.has_errors());
         for provider in [
             Provider::NoGc,

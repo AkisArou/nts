@@ -70,8 +70,6 @@ fn skip(needs: &str) {
 }
 
 fn available() -> bool {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tool = |name: &str, arg: &str| {
         Command::new(name)
             .arg(arg)
@@ -82,7 +80,7 @@ fn available() -> bool {
         &std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned()),
         "--version",
     );
-    frontend && node && tool("clang", "--version") && tool("nm", "--version")
+    node && tool("clang", "--version") && tool("nm", "--version")
 }
 
 fn fixture(name: &str, config: &str) -> PathBuf {
@@ -193,7 +191,7 @@ export default defineConfig({
 #[test]
 fn a_shared_library_publishes_its_entry_and_nothing_else() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture("build-shared", SHARED);
@@ -232,7 +230,7 @@ fn a_shared_library_publishes_its_entry_and_nothing_else() {
 #[test]
 fn an_llvm_product_builds_and_runs_as_its_c_build_does() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture(
@@ -297,7 +295,7 @@ export default defineConfig({
 #[test]
 fn a_builtin_this_compiler_does_not_provide_stops_the_build() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let config = r#"
@@ -355,7 +353,7 @@ export default defineConfig({
 #[test]
 fn an_llvm_static_library_evaluates_its_module_when_linked() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture(
@@ -415,7 +413,7 @@ export default defineConfig({
 #[test]
 fn every_product_is_built_unless_one_is_named() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture("build-two", TWO_PRODUCTS);
@@ -479,7 +477,7 @@ export default defineConfig({
 #[test]
 fn a_library_initialises_itself_on_load() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture("build-init", SHARED);
@@ -540,7 +538,7 @@ int main(void) { printf("%s\n", label ? "initialised" : "NULL"); return label ? 
 #[test]
 fn an_executable_links_its_host_and_terminates() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture(
@@ -594,7 +592,7 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
 #[test]
 fn a_bigint_in_an_erased_slot_at_the_top_level_builds() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture(
@@ -633,7 +631,7 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
 #[test]
 fn a_build_that_drops_functions_says_how_many() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     // **Not named after what it tests.** The directory was `build-refused`, and
@@ -695,7 +693,7 @@ fn a_build_that_drops_functions_says_how_many() {
 #[test]
 fn a_published_class_is_named_as_crossing_no_symbol() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture("build-classless-abi", SHARED);
@@ -752,7 +750,7 @@ fn a_published_class_is_named_as_crossing_no_symbol() {
 #[test]
 fn an_addon_loads_in_node() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
@@ -810,7 +808,7 @@ export default defineConfig({
 #[test]
 fn a_written_parameter_is_checked_where_javascript_calls_it() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
@@ -898,7 +896,7 @@ export default defineConfig({
 #[test]
 fn a_jar_is_packaged_in_the_package_its_config_names() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let jdk = Command::new("jar")
@@ -996,7 +994,7 @@ export default defineConfig({{
 #[test]
 fn a_kind_with_no_packaging_is_refused_before_it_writes() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     // An XCFramework rather than an AAR: AARs are packaged now, and the kind
@@ -1049,7 +1047,7 @@ export default defineConfig({
 #[test]
 fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     // Canonical, because the path lands inside a generated `tsconfig.json` and
@@ -1205,7 +1203,7 @@ fn native_fixture(name: &str) -> PathBuf {
 #[test]
 fn a_c_import_is_bound_and_the_package_c_is_linked_in() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1303,7 +1301,7 @@ int main(void) { return (uint32_t)digestOf(7) == expected(7) ? 0 : 1; }
 #[test]
 fn an_aar_carries_its_manifest_and_rules() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     if !Command::new("jar")
@@ -1392,7 +1390,7 @@ export default defineConfig({
 #[test]
 fn objects_are_reused_but_never_when_a_header_changed() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = native_fixture("build-cache");
@@ -1473,7 +1471,7 @@ fn objects_are_reused_but_never_when_a_header_changed() {
 #[test]
 fn a_project_with_no_config_says_so() {
     if !available() {
-        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        eprintln!("skipping: needs node, clang and nm");
         return;
     }
     let project = fixture("build-no-config", SHARED);
@@ -1536,16 +1534,10 @@ export default defineConfig({
 /// which wrote an APK with no `classes.dex` in it at all.
 #[test]
 fn an_android_application_is_a_signed_installable_apk() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let Some((tools, _)) = android_sdk() else {
         skip("an Android SDK with build-tools and platform 36");
         return;
     };
-    if !frontend {
-        skip("the tsgo frontend");
-        return;
-    }
     let project = fixture("build-apk", ANDROID_APP);
     let run = build(&project, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
@@ -1625,10 +1617,8 @@ fn an_android_application_is_a_signed_installable_apk() {
 /// field that was missing nor the file to add it to.
 #[test]
 fn an_apk_without_an_application_id_is_refused_by_name() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend || android_sdk().is_none() {
-        skip("the tsgo frontend and an Android SDK");
+    if android_sdk().is_none() {
+        skip("an Android SDK");
         return;
     }
     let project = fixture(
@@ -1675,12 +1665,6 @@ export default defineConfig({
 /// `HOME` is still intact, and handed to the build as `NTS_NODE`.
 #[test]
 fn an_apk_with_no_android_sdk_names_the_variable() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend {
-        skip("the tsgo frontend");
-        return;
-    }
     let node = std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned());
     let Some(node) = Command::new(&node)
         .args(["-p", "process.execPath"])
@@ -1742,16 +1726,14 @@ export default defineConfig({
 /// starting up".
 #[test]
 fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tool = |name: &str| {
         Command::new(name)
             .arg("-version")
             .output()
             .is_ok_and(|o| o.status.success())
     };
-    if !frontend || !tool("javac") || !tool("java") {
-        skip("the tsgo frontend and a JDK");
+    if !tool("javac") || !tool("java") {
+        skip("a JDK");
         return;
     }
 
@@ -1833,14 +1815,12 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
 /// without it. Everything on disk looked right.
 #[test]
 fn java_a_package_contributes_is_compiled_into_the_jar() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let javac = Command::new("javac")
         .arg("-version")
         .output()
         .is_ok_and(|o| o.status.success());
-    if !frontend || !javac {
-        skip("the tsgo frontend and javac");
+    if !javac {
+        skip("javac");
         return;
     }
     let project = fixture(
@@ -1903,12 +1883,6 @@ export default defineConfig({
 /// nowhere -- the same silence twice.
 #[test]
 fn a_jvm_native_root_with_no_java_is_refused() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend {
-        skip("the tsgo frontend");
-        return;
-    }
     let project = fixture(
         "build-java-empty-root",
         r#"
@@ -1945,10 +1919,8 @@ export default defineConfig({
 /// then.
 #[test]
 fn an_apk_refuses_to_silently_drop_a_package_fragment() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend || android_sdk().is_none() {
-        skip("the tsgo frontend and an Android SDK");
+    if android_sdk().is_none() {
+        skip("an Android SDK");
         return;
     }
     let project = fixture("build-apk-fragment", ANDROID_APP);
@@ -2058,12 +2030,6 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
 /// was TypeScript's bare `Cannot find module` until it said so too.
 #[test]
 fn the_scalar_brand_module_is_not_bound_from_a_header() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend {
-        skip("the tsgo frontend");
-        return;
-    }
     for (name, module, entry) in [
         (
             "build-c-scalars",
@@ -2124,12 +2090,6 @@ export default defineConfig({
 /// decides) fits, and the build goes on.
 #[test]
 fn a_store_must_fit_every_target_of_the_product() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend {
-        skip("the tsgo frontend");
-        return;
-    }
     let libc = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/native/libc.d.ts");
     let libc = libc.canonicalize().expect("runtime/native/libc.d.ts");
     for (name, targets, fits) in [
@@ -2212,16 +2172,14 @@ export default defineConfig({
 /// wrong platform: the C compiles, the objects link, and the artifact exists.
 #[test]
 fn a_windows_target_produces_a_windows_dll() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let zig = Command::new("zig")
         .arg("version")
         .output()
         .is_ok_and(|o| o.status.success());
     // On a Windows host this is not a cross build and the toolchain question is
     // a different one; the assertions below are about the cross path.
-    if !frontend || !zig || cfg!(target_os = "windows") {
-        skip("the tsgo frontend and zig, on a non-Windows host");
+    if !zig || cfg!(target_os = "windows") {
+        skip("zig, on a non-Windows host");
         return;
     }
     let project = fixture("build-win-cross", WINDOWS_LIB);
@@ -2281,13 +2239,11 @@ fn a_windows_target_produces_a_windows_dll() {
 /// export list from an ignored one.
 #[test]
 fn a_windows_dll_publishes_its_entry_and_nothing_else() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tools = ["zig", "llvm-objdump"]
         .iter()
         .all(|tool| Command::new(tool).arg("--version").output().is_ok());
-    if !frontend || !tools || cfg!(target_os = "windows") {
-        skip("the tsgo frontend, zig and llvm-objdump, on a non-Windows host");
+    if !tools || cfg!(target_os = "windows") {
+        skip("zig and llvm-objdump, on a non-Windows host");
         return;
     }
     let project = fixture("build-win-exports", WINDOWS_LIB);
@@ -2340,10 +2296,8 @@ fn a_windows_dll_publishes_its_entry_and_nothing_else() {
 /// target that still needs it rather than deleted with the one that stopped.
 #[test]
 fn cross_compiling_to_ios_is_refused_by_name() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    if !frontend || cfg!(target_os = "macos") {
-        skip("the tsgo frontend, on a non-Apple host");
+    if cfg!(target_os = "macos") {
+        skip("on a non-Apple host");
         return;
     }
     let project = fixture(
@@ -2492,7 +2446,7 @@ fn a_macos_target_produces_a_mach_o_dylib() {
 #[test]
 fn a_macos_target_without_a_sysroot_names_the_script() {
     if !available() || cfg!(target_os = "macos") {
-        skip("a non-Apple host with the tsgo frontend and clang");
+        skip("a non-Apple host with clang");
         return;
     }
     let project = fixture("build-macos-no-sysroot", MACOS_DYLIB);
@@ -2517,7 +2471,7 @@ fn a_macos_target_without_a_sysroot_names_the_script() {
 #[test]
 fn a_macos_application_without_an_id_is_refused_before_writing() {
     if !available() || cfg!(target_os = "macos") {
-        skip("a non-Apple host with the tsgo frontend and clang");
+        skip("a non-Apple host with clang");
         return;
     }
     let project = fixture(
@@ -2561,7 +2515,7 @@ export default defineConfig({
 #[test]
 fn a_project_can_be_named_by_directory_config_or_tsconfig() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let project = fixture("build-naming", SHARED);
@@ -2638,7 +2592,7 @@ fn a_cmake_consumer(project: &Path, hook: &Path) -> PathBuf {
 #[test]
 fn the_cmake_hook_builds_a_consumer_and_declares_its_inputs() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let cmake = Command::new("cmake")
@@ -2758,7 +2712,7 @@ export default defineConfig({
 #[test]
 fn an_integration_with_no_adapter_is_refused_by_name() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let project = fixture(
@@ -2796,7 +2750,7 @@ export default defineConfig({
 #[test]
 fn the_npm_hook_runs_and_builds_for_the_host() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let project = fixture(
@@ -2870,7 +2824,7 @@ export default defineConfig({
 #[test]
 fn the_workspace_fixture_still_builds() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let apps = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/workspace/apps");
@@ -2978,16 +2932,14 @@ fn the_workspace_fixture_still_builds() {
 #[test]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_java_package_moves_the_classes_and_they_still_link() {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
     let tool = |n: &str| {
         Command::new(n)
             .arg("-version")
             .output()
             .is_ok_and(|o| o.status.success())
     };
-    if !frontend || !tool("javac") || !tool("java") {
-        skip("the tsgo frontend and a JDK");
+    if !tool("javac") || !tool("java") {
+        skip("a JDK");
         return;
     }
     let project = fixture(
@@ -3122,7 +3074,7 @@ export default defineConfig({
 #[test]
 fn a_package_claim_that_excludes_the_target_is_refused() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let project = fixture(
@@ -3210,7 +3162,7 @@ export default defineConfig({
 #[test]
 fn the_config_names_the_program_unless_a_file_is_named() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let project = fixture(
@@ -3328,7 +3280,7 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
         .status()
         .is_ok_and(|status| status.success());
     if !available() || !has {
-        skip("clang, the tsgo frontend and zlib's pkg-config entry");
+        skip("clang, zlib's pkg-config entry");
         return;
     }
     let needed = |artifact: &Path| {
@@ -3420,7 +3372,7 @@ fn a_binding_modules_package_reaches_the_link() {
         .status()
         .is_ok_and(|status| status.success());
     if !available() || !has {
-        skip("clang, the tsgo frontend and zlib's pkg-config entry");
+        skip("clang, zlib's pkg-config entry");
         return;
     }
     let needed = |project: &Path| {
@@ -3508,7 +3460,7 @@ export default defineConfig({
 #[test]
 fn an_unresolvable_package_refuses_by_name_before_the_build_starts() {
     if !available() {
-        skip("node, the tsgo frontend and clang");
+        skip("node, clang");
         return;
     }
     let project = fixture("build-pkgconfig-missing", MISSING_PACKAGE);
@@ -3557,7 +3509,7 @@ export default defineConfig({
 #[test]
 fn a_resolver_this_build_cannot_read_refuses_and_names_it() {
     if !available() {
-        skip("node, the tsgo frontend and clang");
+        skip("node, clang");
         return;
     }
     let project = fixture("build-unreadable-resolver", UNREADABLE_DEPENDENCY);
@@ -3658,9 +3610,7 @@ fn jdk() -> bool {
             .output()
             .is_ok_and(|o| o.status.success())
     };
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    frontend && tool("javac", "-version") && tool("jar", "--version")
+    tool("javac", "-version") && tool("jar", "--version")
 }
 
 /// A pinned jar ends up inside the executable, and its absence leaves it out.
@@ -3672,7 +3622,7 @@ fn jdk() -> bool {
 #[test]
 fn a_pinned_jar_ships_inside_the_executable() {
     if !jdk() {
-        skip("the tsgo frontend and a JDK");
+        skip("a JDK");
         return;
     }
     let project = fixture("build-jar-dependency", JVM_WITH_DEPENDENCY);
@@ -3738,7 +3688,7 @@ fn a_pinned_jar_ships_inside_the_executable() {
 #[test]
 fn a_jar_that_does_not_hash_to_its_pin_is_refused() {
     if !jdk() {
-        skip("the tsgo frontend and a JDK");
+        skip("a JDK");
         return;
     }
     let project = fixture("build-jar-wrong-digest", JVM_WITH_DEPENDENCY);
@@ -3777,7 +3727,7 @@ fn a_jar_that_does_not_hash_to_its_pin_is_refused() {
 #[test]
 fn a_runnable_jar_builds_from_the_project_directory_with_no_argument() {
     if !jdk() {
-        skip("the tsgo frontend and a JDK");
+        skip("a JDK");
         return;
     }
     let project = fixture("build-jar-relative", JVM_EXECUTABLE);
@@ -3828,7 +3778,7 @@ fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler()
         .output()
         .is_ok_and(|o| o.status.success());
     if !available() || !zig {
-        skip("the tsgo frontend, clang and zig");
+        skip("clang and zig");
         return;
     }
     let project = fixture("build-windows-libuv", WINDOWS_EXECUTABLE);
@@ -3885,7 +3835,7 @@ fn a_windows_executable_links_the_lane_libuv_and_only_system_dlls() {
         .iter()
         .all(|tool| Command::new(tool).arg("--version").output().is_ok());
     if !available() || !tools || !root.join("x86_64/lib/libuv.a").is_file() {
-        skip("the tsgo frontend, zig, llvm-objdump, and tooling/windows/build-libuv.sh's libuv");
+        skip("zig, llvm-objdump, and tooling/windows/build-libuv.sh's libuv");
         return;
     }
     let project = fixture("build-windows-exe", WINDOWS_EXECUTABLE);
@@ -3964,7 +3914,7 @@ export default defineConfig({
 #[test]
 fn two_projects_built_from_their_own_directories_do_not_share_a_snapshot() {
     if !available() {
-        skip("node, the tsgo frontend and clang");
+        skip("node, clang");
         return;
     }
     let build_there = |project: &Path| {
@@ -4039,7 +3989,7 @@ export default defineConfig({
 #[test]
 fn a_missing_toolchain_is_reported_before_a_dependency_it_would_never_reach() {
     if !available() || host_is_apple() {
-        skip("a non-Apple host with the tsgo frontend and clang");
+        skip("a non-Apple host with clang");
         return;
     }
     let project = fixture("build-apple-before-deps", APPLE_WITH_UNREADABLE_DEPENDENCY);
@@ -4090,7 +4040,7 @@ fn the_libuv_probe_sees_a_header_that_only_a_dependency_claim_names() {
         .output()
         .is_ok_and(|o| o.status.success());
     if !available() || !zig {
-        skip("the tsgo frontend, clang and zig");
+        skip("clang and zig");
         return;
     }
     let project = fixture("build-libuv-reachable", WINDOWS_EXECUTABLE_WITH_UV);
@@ -4175,7 +4125,7 @@ export default defineConfig({
 #[test]
 fn a_pin_is_found_in_a_gradle_cache_and_not_only_beside_the_lockfile() {
     if !jdk() {
-        skip("the tsgo frontend and a JDK");
+        skip("a JDK");
         return;
     }
     let project = fixture("build-gradle-cache", JVM_GRADLE_DEPENDENCY);
@@ -4246,8 +4196,8 @@ fn the_usage_names_every_command_and_no_others() {
     let source = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs"))
         .expect("reading main.rs");
     let dispatch = source
-        .split_once("fn main() -> Result<()> {")
-        .expect("main's dispatch")
+        .split_once("fn run_command() -> Result<()> {")
+        .expect("the compiler-stack thread's command dispatch")
         .1;
     let body = dispatch
         .split_once("\n}\n")
@@ -4274,7 +4224,11 @@ fn the_usage_names_every_command_and_no_others() {
         .output()
         .expect("running nts help");
     let text = String::from_utf8_lossy(&shown.stdout);
-    let listed: BTreeSet<String> = text
+    let (commands, settings) = text
+        .split_once("\nCHECKER\n")
+        .expect("help separates commands from checker settings");
+    assert!(settings.contains("--checkers <n>") && settings.contains("NTS_CHECKERS"));
+    let listed: BTreeSet<String> = commands
         .lines()
         .filter_map(|line| {
             // A command row is two spaces, the name, then the *column gap* and
@@ -4349,92 +4303,6 @@ fn the_bare_command_and_the_usual_help_spellings_all_print_usage() {
     );
 }
 
-/// The snapshot cache hits on a second run, which nothing checked.
-///
-/// **A cache that never hits is invisible.** The tests around this asserted
-/// *correctness* -- that two projects do not share an entry -- and nothing
-/// asserted *effect*. So when the canonicalisation that fixed the key left the
-/// entry's `configs` field derived from the un-canonicalised path, the stored
-/// chain was `["tsconfig.json"]` and the compared chain was the absolute one:
-/// never equal, the entry rewritten on every run, and the whole cache dead. Every
-/// test still passed, because a build that recomputes everything is a correct
-/// build.
-///
-/// It was found by measuring -- cache and no-cache came back at 0.445s against
-/// 0.442s, which is what a cache that never hits looks like from outside.
-///
-/// Asserted by *writes*, not by timing: an entry rewritten is a miss, and a
-/// timing assertion on a half-second build would be a flake.
-#[test]
-fn a_second_build_hits_the_snapshot_cache_rather_than_rewriting_it() {
-    if !available() {
-        skip("node, the tsgo frontend and clang");
-        return;
-    }
-    let project = fixture("build-snapshot-hit", SHARED);
-    let cache = project.join("snapshots");
-    drop(std::fs::remove_dir_all(&cache));
-    // **Invoked with a relative path, from the project directory.** The first
-    // version of this test passed an absolute one and *passed the sabotage* --
-    // with an absolute path the two derivations of the config chain agree, so
-    // the bug it was written for cannot reproduce. That is the same blind spot,
-    // in the same session, in a test written for exactly that blind spot: every
-    // fixture path is absolute unless someone deliberately reaches for the
-    // other case.
-    let build_once = || {
-        Command::new(env!("CARGO_BIN_EXE_nts"))
-            .args(["build", "tsconfig.json"])
-            .current_dir(&project)
-            .env("NTS_SNAPSHOT_CACHE", &cache)
-            .output()
-            .expect("running nts build")
-    };
-    let stamps = || -> BTreeMap<PathBuf, std::time::SystemTime> {
-        std::fs::read_dir(&cache)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|entry| {
-                let at = entry.metadata().ok()?.modified().ok()?;
-                Some((entry.path(), at))
-            })
-            .collect()
-    };
-
-    let first = build_once();
-    assert!(
-        first.status.success(),
-        "{}",
-        String::from_utf8_lossy(&first.stderr)
-    );
-    let after_first = stamps();
-    assert!(
-        !after_first.is_empty(),
-        "the first build wrote no cache entry at all"
-    );
-
-    // A second apart, so a rewrite is visible in the timestamp.
-    std::thread::sleep(std::time::Duration::from_millis(1100));
-    let second = build_once();
-    assert!(
-        second.status.success(),
-        "{}",
-        String::from_utf8_lossy(&second.stderr)
-    );
-    let after_second = stamps();
-
-    let rewritten: Vec<&PathBuf> = after_second
-        .iter()
-        .filter(|(path, at)| after_first.get(*path).is_none_or(|was| was != *at))
-        .map(|(path, _)| path)
-        .collect();
-    assert!(
-        rewritten.is_empty(),
-        "the second build rewrote {} entr(ies), so the cache did not hit: {rewritten:?}",
-        rewritten.len()
-    );
-}
-
 const ADDON: &str = r#"
 import { defineConfig, library } from "@nts/config";
 export default defineConfig({
@@ -4468,7 +4336,7 @@ export default defineConfig({
 #[test]
 fn an_addon_finds_its_headers_without_being_told_where_they_are() {
     if !available() {
-        skip("node, the tsgo frontend, clang and nm");
+        skip("node, clang and nm");
         return;
     }
     let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
@@ -4543,7 +4411,7 @@ export default defineConfig({
 #[test]
 fn an_aar_carries_its_pinned_jars_in_libs() {
     if !jdk() {
-        skip("the tsgo frontend and a JDK");
+        skip("a JDK");
         return;
     }
     let project = fixture("build-aar-dependency", AAR_WITH_DEPENDENCY);
@@ -4623,7 +4491,7 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
         return;
     };
     if !jdk() {
-        skip("the tsgo frontend and a JDK");
+        skip("a JDK");
         return;
     }
     let project = fixture("build-apk-dependency", APK_WITH_DEPENDENCY);
@@ -4725,7 +4593,7 @@ export default defineConfig({
 #[test]
 fn a_kind_belonging_to_the_other_backend_says_which_backend() {
     if !available() {
-        skip("node, the tsgo frontend and clang");
+        skip("node, clang");
         return;
     }
     let project = fixture("build-kind-crossed", AAR_ON_A_NATIVE_TARGET);
@@ -4768,7 +4636,7 @@ fn a_kind_belonging_to_the_other_backend_says_which_backend() {
 #[test]
 fn the_config_is_evaluated_once_however_often_it_is_asked() {
     if !available() {
-        skip("node, the tsgo frontend and clang");
+        skip("node, clang");
         return;
     }
     let project = fixture("build-config-once", SHARED);
@@ -4821,7 +4689,7 @@ fn the_config_is_evaluated_once_however_often_it_is_asked() {
 fn the_witness_sees_a_header_that_only_a_dependency_claim_names() {
     let pkg_config = Command::new("pkg-config").arg("--version").output();
     if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
-        skip("node, the tsgo frontend, clang, nm and pkg-config");
+        skip("node, clang, nm and pkg-config");
         return;
     }
     let project = native_fixture("build-witness-cflags");
@@ -4883,7 +4751,7 @@ fn a_program_that_links_glib_is_driven_by_glib() {
         .args(["--exists", "glib-2.0"])
         .status();
     if !available() || !glib.is_ok_and(|status| status.success()) {
-        skip("node, the tsgo frontend, clang, nm and glib-2.0's pkg-config entry");
+        skip("node, clang, nm and glib-2.0's pkg-config entry");
         return;
     }
     let with = |name: &str, dependencies: &str| {
@@ -5161,7 +5029,7 @@ fn gir_library(root: &Path, flag_signed: bool) {
 fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     let pkg_config = Command::new("pkg-config").arg("--version").output();
     if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
-        skip("node, the tsgo frontend, clang, nm and pkg-config");
+        skip("node, clang, nm and pkg-config");
         return;
     }
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("bind-gir-demo");
@@ -5306,7 +5174,7 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
 fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     let pkg_config = Command::new("pkg-config").arg("--version").output();
     if !available() || !pkg_config.is_ok_and(|o| o.status.success()) {
-        skip("node, the tsgo frontend, clang, nm and pkg-config");
+        skip("node, clang, nm and pkg-config");
         return;
     }
     let project = fixture(
@@ -5426,6 +5294,7 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
         String::from_utf8_lossy(&frontend.stdout),
         String::from_utf8_lossy(&frontend.stderr)
     );
+    assert_eq!(frontend.status.code(), Some(0), "{said}");
     assert!(
         !said.contains("Cannot find module"),
         "nts frontend read a program without its generated binding:\n{said}"

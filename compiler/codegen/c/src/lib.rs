@@ -30,5 +30,6 @@ pub use emit::{
     UNICODE_SOURCE_NAME, UV_HOST_HEADER, UV_HOST_HEADER_NAME, UV_HOST_SOURCE, UV_HOST_SOURCE_NAME,
     WINRT_SOURCE, WINRT_SOURCE_NAME, ZMIJ_HEADER, ZMIJ_HEADER_NAME, ZMIJ_SOURCE, ZMIJ_SOURCE_NAME,
     c_global, c_identifier, c_member, class_instance_name, emit, leaves_the_program_inconsistent,
-    main_for, object_type_name, standalone_main, standalone_main_in_glib, support_files,
+    main_for, object_field_name, object_type_name, standalone_main, standalone_main_in_glib,
+    support_files,
 };

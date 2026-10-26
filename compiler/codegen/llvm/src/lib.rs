@@ -63,6 +63,7 @@ pub mod signatures_arm64_linux;
 pub mod signatures_arm64_windows;
 pub mod signatures_win64;
 
+use nts_core::hir::JsText;
 use std::fmt::Write as _;
 
 use nts_core::hir::native::{NativeAbi, PlatformConvention};
@@ -759,12 +760,12 @@ fn literals(program: &Program) -> String {
 }
 
 /// The literals a program holds, numbered the way the C backend numbers them.
-fn literal_table(program: &Program) -> Vec<String> {
-    let mut table: Vec<String> = Vec::new();
+fn literal_table(program: &Program) -> Vec<JsText> {
+    let mut table: Vec<JsText> = Vec::new();
     for func in program.native_funcs() {
         for block in &func.blocks {
             for value in &block.ops {
-                let texts: &[String] = match &func.values[value.0 as usize].kind {
+                let texts: &[JsText] = match &func.values[value.0 as usize].kind {
                     OpKind::ConstString(text) => std::slice::from_ref(text),
                     OpKind::ConstTemplate { cooked, .. } => cooked,
                     _ => &[],
@@ -780,10 +781,11 @@ fn literal_table(program: &Program) -> Vec<String> {
     // And what each function is called (`Program::function_names`), which its
     // descriptor points at -- after the program's own, as the C backend does.
     for name in program.function_names.values() {
-        if let FunctionName::Is(text) = name
-            && !table.contains(text)
-        {
-            table.push(text.clone());
+        if let FunctionName::Is(text) = name {
+            let text = JsText::from(text.clone());
+            if !table.contains(&text) {
+                table.push(text);
+            }
         }
     }
     table
@@ -1337,7 +1339,7 @@ fn suspension(
             let at = layout
                 .fields
                 .iter()
-                .position(|field| field.name == "ready")
+                .position(|field| field.name.is_name("ready"))
                 .and_then(|at| placed.offsets.get(at).copied())
                 .ok_or_else(|| refuse(func, "a cell with no `ready` field"))?;
             let text = format!(
@@ -3116,6 +3118,44 @@ fn symbol(raw: &str) -> String {
 /// with every other byte as `\XX`. The name that links is the same bytes either
 /// way, so a symbol C spells `сложить` is `@"\D1\81..."` here and links as one.
 fn global(name: &str) -> String {
+    let identifier = global_spelling(name);
+    assert!(
+        valid_global_spelling(&identifier),
+        "invalid emitted LLVM identifier {identifier:?} from {name:?}"
+    );
+    identifier
+}
+
+fn valid_global_spelling(name: &str) -> bool {
+    let Some(name) = name.strip_prefix('@') else {
+        return false;
+    };
+    let bare = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'$' | b'.' | b'_');
+    if let Some(quoted) = name
+        .strip_prefix('"')
+        .and_then(|name| name.strip_suffix('"'))
+    {
+        let mut bytes = quoted.bytes();
+        while let Some(byte) = bytes.next() {
+            if byte == b'\\' {
+                if !bytes.next().is_some_and(|b| b.is_ascii_hexdigit())
+                    || !bytes.next().is_some_and(|b| b.is_ascii_hexdigit())
+                {
+                    return false;
+                }
+            } else if !bare(byte) {
+                return false;
+            }
+        }
+        true
+    } else {
+        !name.is_empty()
+            && !name.starts_with(|c: char| c.is_ascii_digit())
+            && name.bytes().all(bare)
+    }
+}
+
+fn global_spelling(name: &str) -> String {
     let bare = |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'$' | b'.' | b'_');
     if name.bytes().all(bare) && !name.starts_with(|c: char| c.is_ascii_digit()) && !name.is_empty()
     {
@@ -3995,7 +4035,7 @@ mod frame_tests {
             ]
             .into_iter()
             .map(|(name, ty)| Field {
-                name: name.to_owned(),
+                name: name.to_owned().into(),
                 ty,
                 written: None,
                 declared_by: None,
@@ -6343,7 +6383,7 @@ fn open_chain_body(
         let placed = nts_core::hir::layout::place(&layout.fields)?;
         let offset = *placed.offsets.get(arm.field as usize)?;
         if at == 0 {
-            member.clone_from(&layout.fields.get(arm.field as usize)?.name);
+            member = layout.fields.get(arm.field as usize)?.name.to_string();
         }
         let next = if at + 1 == arms.len() {
             "miss".to_owned()
@@ -6425,4 +6465,16 @@ fn counting_declarations(program: &Program) -> String {
         );
     }
     text
+}
+
+#[cfg(test)]
+mod emitted_name_guards {
+    #[test]
+    fn quoted_names_allow_escaped_display_characters_but_never_raw_delimiters() {
+        for name in ["normal", "anonymous class", "a\"b", "сложить", "a\\b"] {
+            assert!(super::valid_global_spelling(&super::global(name)));
+        }
+        assert!(!super::valid_global_spelling("@anonymous class"));
+        assert!(!super::valid_global_spelling("@\"a\\Q0\""));
+    }
 }

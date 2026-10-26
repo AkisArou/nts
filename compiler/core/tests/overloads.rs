@@ -10,26 +10,26 @@
 //! Four questions, four sites, and each of the first three broke on its own
 //! before it was asked of the right list.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, Func, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a Func {
@@ -75,9 +75,7 @@ fn calls(lowered: &hir::lower::Lowered) -> Vec<(String, usize)> {
 /// backend would crash on, at the point the arity is decided.
 #[test]
 fn a_call_matching_an_overload_reaches_the_implementation() {
-    let Some(lowered) = lowered("overloads") else {
-        return;
-    };
+    let lowered = lowered("overloads");
     if let Err(problems) = hir::verify::verify(&lowered.program) {
         panic!("overloads lowered to invalid HIR: {problems:#?}");
     }
@@ -120,9 +118,7 @@ fn a_call_matching_an_overload_reaches_the_implementation() {
 /// the fix counting arguments cannot see.
 #[test]
 fn an_argument_is_coerced_to_the_implementation_s_parameter() {
-    let Some(lowered) = lowered("overloads") else {
-        return;
-    };
+    let lowered = lowered("overloads");
     let pick = func(&lowered, "Picker#pick");
     let optional = pick
         .params
@@ -171,9 +167,7 @@ fn an_argument_is_coerced_to_the_implementation_s_parameter() {
 /// disagreed about the same construct.
 #[test]
 fn one_implementation_is_lowered_per_overload_set() {
-    let Some(lowered) = lowered("overloads") else {
-        return;
-    };
+    let lowered = lowered("overloads");
     for name in ["pick", "span", "scaled"] {
         let found: Vec<&str> = lowered
             .program
@@ -212,9 +206,7 @@ fn one_implementation_is_lowered_per_overload_set() {
 /// this passes on a lowering that calls everything direct.
 #[test]
 fn an_overloaded_function_is_defined() {
-    let Some(lowered) = lowered("overloads") else {
-        return;
-    };
+    let lowered = lowered("overloads");
     let external: Vec<String> = lowered
         .program
         .funcs
@@ -255,9 +247,7 @@ fn an_overloaded_function_is_defined() {
 /// is wanted`.
 #[test]
 fn a_rest_is_gathered_against_the_implementation() {
-    let Some(lowered) = lowered("overloads") else {
-        return;
-    };
+    let lowered = lowered("overloads");
     let totals: Vec<usize> = calls(&lowered)
         .into_iter()
         .filter(|(name, _)| name == "total")
@@ -296,9 +286,7 @@ fn a_rest_is_gathered_against_the_implementation() {
 /// and the one that survives points at a refusal that does not exist.
 #[test]
 fn an_ambient_overload_is_not_skipped() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     let bodiless = lowered
         .diagnostics
         .iter()

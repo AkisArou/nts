@@ -16,43 +16,40 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, reachable::Roots};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/entry-surface")
         .join("tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/entry-surface is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(snapshot)
+    snapshot
 }
 
-fn lowered() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/entry-surface")
         .join("tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/entry-surface is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::lower::lower(&snapshot).program)
+    hir::lower::lower(&snapshot).program
 }
 
 #[test]
 fn a_published_class_keeps_its_members_and_a_hidden_one_does_not() {
-    let Some(mut program) = lowered() else {
-        eprintln!("SKIP entry surface: tsgo is required");
-        return;
-    };
+    let mut program = lowered();
     hir::reachable::prune(&mut program, Roots::EntrySurface);
     let names: Vec<&str> = program.funcs.iter().map(|f| f.name.as_str()).collect();
 
@@ -84,10 +81,7 @@ fn a_published_class_keeps_its_members_and_a_hidden_one_does_not() {
 /// not a wrong answer, so no differential would have caught it.
 #[test]
 fn the_entry_surface_pipeline_produces_valid_hir() {
-    let Some(snapshot) = snapshot() else {
-        eprintln!("SKIP entry surface: tsgo is required");
-        return;
-    };
+    let snapshot = snapshot();
     let options = hir::Options {
         roots: Roots::EntrySurface,
         ..hir::Options::default()

@@ -1,21 +1,15 @@
-//! Source transforms: text tsgo reads in place of a file's, and the driver
+//! Source transforms: text the checker reads in place of a file's, and the driver
 //! that offers files, checks the rewrite and has the transform back off.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::transform::{NodeTypes, SourceTransform, TransformInput};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
+use nts_frontend_ts::transform::{NodeTypes, SourceTransform, TransformInput};
 use nts_semantic_schema::SemanticSnapshot;
-
-fn tsgo() -> Option<Utf8PathBuf> {
-    let path = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    path.exists().then_some(path)
-}
 
 fn example(name: &str) -> Utf8PathBuf {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -68,7 +62,7 @@ impl SourceTransform for Replace {
         format!("replace {} with {}", self.from, self.to)
     }
 
-    fn transform(&mut self, file: &TransformInput<'_>, _: &mut dyn NodeTypes) -> Option<String> {
+    fn transform(&mut self, file: &TransformInput<'_>, _: &NodeTypes<'_>) -> Option<String> {
         self.asked
             .lock()
             .unwrap()
@@ -110,16 +104,19 @@ fn replacing(
 }
 
 /// The whole safety argument for projects without a transform, and for
-/// files a transform leaves alone: tsgo reading through the client, with
+/// files a transform leaves alone: the native checker reading source overlays, with
 /// nothing overlaid, is today's snapshot bit for bit.
 #[test]
 fn a_transform_that_rewrites_nothing_leaves_the_snapshot_as_it_was() {
-    let Some(tsgo) = tsgo() else { return };
     for name in ["jsx", "classes"] {
         let tsconfig = example(name);
-        let today = TsgoApi::for_compilation(&tsgo).snapshot(&tsconfig).unwrap();
+        let today = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&tsconfig)
+            .unwrap();
         let (transform, asked) = replacing("\u{0}never present\u{0}", "", false);
-        let through = TsgoApi::for_compilation(&tsgo)
+        let through = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .with_transform(transform)
             .snapshot(&tsconfig)
             .unwrap();
@@ -137,21 +134,24 @@ fn a_transform_that_rewrites_nothing_leaves_the_snapshot_as_it_was() {
 
 #[test]
 fn a_rewrite_is_what_nts_reads() {
-    let Some(tsgo) = tsgo() else { return };
     let tsconfig = project("rewrite", "export const answer: number = 1;\n");
-    let as_written = TsgoApi::new(&tsgo).snapshot(&tsconfig).unwrap();
+    let as_written = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .unwrap();
     assert!(
         !has_error(&as_written, "TS2322"),
         "the control: the file as written typechecks"
     );
     let (transform, asked) = replacing("= 1", "= \"one\"", false);
-    let rewritten = TsgoApi::new(&tsgo)
+    let rewritten = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .with_transform(transform)
         .snapshot(&tsconfig)
         .unwrap();
     assert!(
         has_error(&rewritten, "TS2322"),
-        "tsgo checked the rewrite, not the disk"
+        "the checker checked the rewrite, not the disk"
     );
     assert_eq!(
         asked.lock().unwrap().revisions.len(),
@@ -187,7 +187,7 @@ impl SourceTransform for Restless {
         "restless".to_owned()
     }
 
-    fn transform(&mut self, file: &TransformInput<'_>, _: &mut dyn NodeTypes) -> Option<String> {
+    fn transform(&mut self, file: &TransformInput<'_>, _: &NodeTypes<'_>) -> Option<String> {
         Some(format!(
             "{}\nexport const wrong0: number = \"0\";\n",
             file.text
@@ -205,9 +205,9 @@ impl SourceTransform for Restless {
 
 #[test]
 fn a_transform_that_never_settles_is_stopped_by_the_cap_and_says_so() {
-    let Some(tsgo) = tsgo() else { return };
     let tsconfig = project("restless", "export const answer: number = 1;\n");
-    let error = TsgoApi::new(&tsgo)
+    let error = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .with_transform(Box::new(Restless { round: 0 }))
         .snapshot(&tsconfig)
         .unwrap_err()
@@ -222,11 +222,11 @@ fn a_transform_that_never_settles_is_stopped_by_the_cap_and_says_so() {
 
 #[test]
 fn a_rewrite_that_does_not_typecheck_is_revised_away() {
-    let Some(tsgo) = tsgo() else { return };
     let main = "export const answer: number = 1;\n";
     let tsconfig = project("revise", main);
     let (transform, asked) = replacing("= 1", "= \"one\"", true);
-    let snapshot = TsgoApi::new(&tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .with_transform(transform)
         .snapshot(&tsconfig)
         .unwrap();

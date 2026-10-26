@@ -7,39 +7,35 @@
 //! be marked, and the loop counter bounded by `i < 10` cannot overflow, so it
 //! is.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, BinOp, OpKind, UnOp};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-wrapping-add-compared-with-its-operand";
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{PROGRAM} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(
-        hir::prepare(&snapshot)
-            .expect("prepared HIR verifies")
-            .program,
-    )
+    hir::prepare(&snapshot)
+        .expect("prepared HIR verifies")
+        .program
 }
 
 #[test]
 fn a_wrapping_add_is_not_exact_and_a_bounded_counter_is() {
-    let Some(program) = prepared() else {
-        return;
-    };
+    let program = prepared();
     let func = program
         .funcs
         .iter()

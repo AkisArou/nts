@@ -6,17 +6,16 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::SemanticSource;
 
-fn report(name: &str) -> Option<hir::regions::Report> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn report(name: &str) -> hir::regions::Report {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = hir::Options {
@@ -24,18 +23,18 @@ fn report(name: &str) -> Option<hir::regions::Report> {
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };
-    Some(hir::prepare_unverified(&snapshot, &options).regions)
+    hir::prepare_unverified(&snapshot, &options).regions
 }
 
-fn prepared(name: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = hir::Options {
@@ -43,7 +42,7 @@ fn prepared(name: &str) -> Option<hir::Program> {
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };
-    Some(hir::prepare_unverified(&snapshot, &options).program)
+    hir::prepare_unverified(&snapshot, &options).program
 }
 
 /// The verdict of the one candidate from `from` to `to`.
@@ -64,9 +63,7 @@ fn verdict(report: &hir::regions::Report, from: &str, to: &str) -> Result<(), St
 
 #[test]
 fn a_call_whose_result_is_read_and_dropped_is_a_site() {
-    let Some(report) = report("calls-a-region-could-serve") else {
-        return;
-    };
+    let report = report("calls-a-region-could-serve");
     assert_eq!(verdict(&report, "readsAList", "build"), Ok(()));
     // A temporary it only reads, dying at the call.
     assert_eq!(
@@ -79,9 +76,7 @@ fn a_call_whose_result_is_read_and_dropped_is_a_site() {
 
 #[test]
 fn a_result_kept_past_the_call_is_not() {
-    let Some(report) = report("calls-a-region-could-serve") else {
-        return;
-    };
+    let report = report("calls-a-region-could-serve");
     assert_eq!(
         verdict(&report, "keepsAList", "build"),
         Err("stores part of the result".to_owned())
@@ -94,9 +89,7 @@ fn a_result_kept_past_the_call_is_not() {
 
 #[test]
 fn a_callee_that_writes_outside_what_it_made_is_not() {
-    let Some(report) = report("calls-a-region-could-serve") else {
-        return;
-    };
+    let report = report("calls-a-region-could-serve");
     assert_eq!(
         verdict(&report, "countsWhileBuilding", "buildCounting"),
         Err("writes a global".to_owned())
@@ -111,9 +104,7 @@ fn a_callee_that_writes_outside_what_it_made_is_not() {
 
 #[test]
 fn an_argument_may_be_kept_and_a_field_of_one_may_not() {
-    let Some(report) = report("calls-a-region-could-serve") else {
-        return;
-    };
+    let report = report("calls-a-region-could-serve");
     assert_eq!(verdict(&report, "prependsToAnArgument", "prepend"), Ok(()));
     // Stored straight into a field: what ownership calls taking it over.
     assert_eq!(verdict(&report, "wrapsAnArgument", "wrap"), Ok(()));
@@ -125,9 +116,7 @@ fn an_argument_may_be_kept_and_a_field_of_one_may_not() {
 
 #[test]
 fn a_call_that_allocates_once_is_not_worth_a_region() {
-    let Some(report) = report("calls-a-region-could-serve") else {
-        return;
-    };
+    let report = report("calls-a-region-could-serve");
     assert_eq!(
         verdict(&report, "readsOneCell", "single"),
         Err("allocates too little for a region to pay for itself".to_owned())
@@ -139,9 +128,7 @@ fn a_call_that_allocates_once_is_not_worth_a_region() {
 /// about, and `-Werror` refused three JSON rows for it.
 #[test]
 fn a_function_only_regions_call_is_left_as_its_clone() {
-    let Some(program) = prepared("calls-a-region-could-serve") else {
-        return;
-    };
+    let program = prepared("calls-a-region-could-serve");
     let names: Vec<&str> = program
         .funcs
         .iter()
@@ -158,9 +145,7 @@ fn a_function_only_regions_call_is_left_as_its_clone() {
 
 #[test]
 fn the_counts_add_up() {
-    let Some(report) = report("calls-a-region-could-serve") else {
-        return;
-    };
+    let report = report("calls-a-region-could-serve");
     let refused: usize = report.refused.values().sum();
     assert_eq!(report.sites + refused, report.candidates);
     assert_eq!(report.calls.len(), report.candidates);

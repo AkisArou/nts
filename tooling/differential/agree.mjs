@@ -51,11 +51,8 @@
 // arguments with the same hash are refused: that comparison can only say
 // "nothing changed", whatever the change was.
 //
-// Each pinned binary keeps its own snapshot cache beside it. The frontend's
-// cache holds one entry per project, stamped with the compiler that wrote it,
-// so two binaries sharing one cache evict each other on every example: the
-// first two-binary run took 532 s where one binary took 115. A binary's
-// directory is pruned after a day unused, beyond the newest six.
+// A pinned executable directory is pruned after a day unused, beyond the
+// newest six. The native producer captures each requested program anew.
 //
 // # A difference is confirmed before it is attributed
 //
@@ -319,7 +316,7 @@ function selfTest() {
   if (every.outcome !== Outcome.ALL_DECLINED) return `every case declined read as ${every.outcome}`;
   // Exit 0 without the verdict line is a run that stopped early, not agreement.
   if (classify(0, "checked 3 cases across 1 function(s)\n").outcome !== Outcome.NOT_MEASURED) return "a run with no verdict line read as measured";
-  if (classify(1, "Error: failed to start tsgo: No such file or directory\n").outcome !== Outcome.NOT_MEASURED) return "a frontend that never started read as a verdict";
+  if (classify(1, "Error: failed to load the requested project: Permission denied\n").outcome !== Outcome.NOT_MEASURED) return "a frontend that never started read as a verdict";
   const regressed = attribute(agreed, { ...agreed, outcome: Outcome.PARTIAL, checked: 257, declined: 4 });
   if (regressed !== "REGRESSED") return `four new declines under an agreement attributed as ${regressed}`;
   const traded = attribute({ ...partial, outcome: Outcome.PARTIAL }, wrong);
@@ -355,7 +352,7 @@ if (args.includes("--self-test")) {
 const verdictsFile = args.find((a) => a.startsWith("--verdicts="))?.slice("--verdicts=".length);
 const only = args.find((a) => a.startsWith("--only="))?.slice("--only=".length).split(",").filter(Boolean);
 const binaries = args.filter((a) => !a.startsWith("--"));
-if (binaries.length < 1 || binaries.length > 2 || (verdictsFile && binaries.length !== 1)) {
+if (binaries.length < 1 || binaries.length > 2) {
   console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>] [--one-change]");
   process.exit(2);
 }
@@ -409,7 +406,7 @@ function pin(path) {
   // Marked used, for `prune`.
   const now = new Date();
   utimesSync(dir, now, now);
-  return { source: shown(source), hash, built: stamp(mtimeMs), pinned, snapshots: join(dir, "snapshots") };
+  return { source: shown(source), hash, built: stamp(mtimeMs), pinned };
 }
 
 /**
@@ -444,12 +441,6 @@ if (pins.length === 2 && pins[0].hash === pins[1].hash) {
   process.exit(2);
 }
 
-const tsgo = process.env.NTS_TSGO ?? join(ROOT, "target/tsgo");
-if (!existsSync(tsgo)) {
-  console.log(`  NOT MEASURED: no frontend at ${tsgo}; set NTS_TSGO`);
-  process.exit(2);
-}
-
 const examples = readdirSync(join(ROOT, "tests/programs"), { withFileTypes: true })
   .filter((e) => e.isDirectory() && existsSync(join(ROOT, "tests/programs", e.name, "tsconfig.json")))
   .map((e) => e.name)
@@ -470,7 +461,7 @@ if (examples.length === 0) {
 // that fills, and runs out of inodes before it runs out of bytes.
 mkdirSync(join(CACHE, "tmp"), { recursive: true });
 const scratch = mkdtempSync(join(CACHE, "tmp", "run-"));
-const env = { ...process.env, NTS_TSGO: tsgo, TMPDIR: scratch };
+const env = { ...process.env, NTS_CHECKERS: "1", TMPDIR: scratch };
 process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
 
@@ -484,7 +475,7 @@ const check = (pinned, example) =>
   new Promise((done) => {
     const child = spawn(pinned.pinned, ["check", join("tests/programs", example, "tsconfig.json")], {
       cwd: ROOT,
-      env: { ...env, NTS_SNAPSHOT_CACHE: pinned.snapshots },
+      env,
     });
     let out = "";
     child.stdout.on("data", (chunk) => (out += chunk));
@@ -515,7 +506,7 @@ pins.forEach((p, at) => {
   console.log(`  ${role} ${p.source}  sha256 ${p.hash.slice(0, 16)}  built ${p.built}`);
 });
 if (pins.length === 2) for (const line of armLines(pins[0].source, pins[1].source)) console.log(`  ${line}`);
-console.log(`  tsgo   ${shown(resolve(tsgo))}  sha256 ${sha256(tsgo).slice(0, 16)}`);
+console.log("  frontend compiled into each binary");
 console.log(`  ${examples.length} example(s), ${JOBS} at a time, ${configuration}`);
 if (untracked.length > 0) console.log(`  untracked, in this tree only: ${untracked.join(" ")}`);
 
@@ -526,8 +517,7 @@ let next = 0;
 await Promise.all(Array.from({ length: Math.min(JOBS, examples.length) }, async () => {
   while (next < examples.length) {
     const example = examples[next++];
-    // Both binaries in one worker, one after the other: the frontend's
-    // snapshot cache is keyed by project and tsgo, which the two share.
+    // Both binaries run the same example consecutively in one worker.
     const records = [];
     // One of the gate's tokens per check (tokens.mjs).
     for (const p of pins) records.push(await withToken(() => check(p, example)));
@@ -556,8 +546,9 @@ function summarise(records) {
 
 const seconds = () => Math.round((Date.now() - started) / 1000);
 
+if (verdictsFile) writeFileSync(verdictsFile, examples.map((e) => `${verdict(e, runs.get(e).at(-1))}\n`).join(""));
+
 if (pins.length === 1) {
-  if (verdictsFile) writeFileSync(verdictsFile, examples.map((e) => `${verdict(e, runs.get(e)[0])}\n`).join(""));
   const all = examples.map((e) => [e, runs.get(e)[0]]);
   for (const [example, r] of all) {
     if (WRONG.has(r.outcome)) {

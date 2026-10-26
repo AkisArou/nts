@@ -368,6 +368,7 @@ dependencies = [
  "nts-diagnostics",
  "nts-differential",
  "nts-frontend-ts",
+ "nts-frontend-tsrs",
  "nts-jvm-emitter",
  "nts-react",
  "nts-semantic-schema",
@@ -478,6 +479,7 @@ name = "nts-deps"
 version = "0.0.0"
 dependencies = [
  "camino",
+ "nts-frontend-tsrs",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -519,12 +521,12 @@ version = "0.0.0"
 dependencies = [
  "camino",
  "nts-diagnostics",
+ "nts-frontend-tsrs",
  "nts-semantic-schema",
  "postcard",
  "rustc-hash",
  "serde",
  "serde_json",
- "thiserror",
  "xxhash-rust",
 ]
 
@@ -599,6 +601,7 @@ dependencies = [
  "nts-core",
  "nts-differential",
  "nts-frontend-ts",
+ "nts-frontend-tsrs",
  "rustc-hash",
  "serde",
  "serde_json",

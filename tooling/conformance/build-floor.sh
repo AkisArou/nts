@@ -329,7 +329,7 @@ shaped_names() {
 #
 # `child_process` and `cluster` were in that state from 2026-09-13, when
 # `cluster` arrived as "the 26th module", until 2026-09-27: `profile` emitted
-# their C and counted it and `snapshot-cache` diffed it, and neither ever
+# their C and counted it and the pre-switch cache check diffed it; neither ever
 # compiled. The comment on `FLOOR` says a stale floor "does not just miss a
 # regression, it manufactures progress"; a floor that does not cover the
 # directory does the same thing one level up, and reads as 24 of 24 while the

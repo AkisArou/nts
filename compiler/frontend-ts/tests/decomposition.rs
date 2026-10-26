@@ -1,26 +1,20 @@
-//! Decomposition of structured types, against a real tsgo.
+//! Decomposition of structured types, through the native checker.
 //!
-//! Skips without `NTS_TSGO`; see `tsgo_transport.rs` for how to build the pinned
-//! binary.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{LiteralValue, SemanticSnapshot, TypeKind};
 
-fn decomposed_types() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?.to_string();
-    let tsgo = Utf8PathBuf::from(tsgo);
-    if !tsgo.exists() {
-        return None;
-    }
+fn decomposed_types() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/types/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/types fixture is checked in");
-    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
-    Some(source.snapshot(&tsconfig).expect("snapshot should succeed"))
+    let mut source =
+        Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
+    source.snapshot(&tsconfig).expect("snapshot should succeed")
 }
 
 /// Find the one object type carrying exactly `names` as its properties.
@@ -34,7 +28,11 @@ fn object_with<'a>(snapshot: &'a SemanticSnapshot, names: &[&str]) -> &'a TypeKi
                 properties.len() == names.len()
                     && properties
                         .iter()
-                        .map(|p| p.name.as_str())
+                        .map(|p| {
+                            p.name
+                                .public_name()
+                                .expect("this fixture uses public names")
+                        })
                         .eq(names.iter().copied())
             }
             _ => false,
@@ -44,15 +42,13 @@ fn object_with<'a>(snapshot: &'a SemanticSnapshot, names: &[&str]) -> &'a TypeKi
 
 #[test]
 fn an_interface_decomposes_into_its_properties() {
-    let Some(snapshot) = decomposed_types() else {
-        return;
-    };
+    let snapshot = decomposed_types();
     let TypeKind::Object { properties } = object_with(&snapshot, &["x", "y", "label"]) else {
         unreachable!("object_with only returns objects")
     };
 
     let kind_of = |name: &str| {
-        let property = properties.iter().find(|p| p.name == name).unwrap();
+        let property = properties.iter().find(|p| p.name.is_name(name)).unwrap();
         &snapshot.types[property.ty.0 as usize].kind
     };
     assert_eq!(kind_of("x"), &TypeKind::Number);
@@ -61,16 +57,14 @@ fn an_interface_decomposes_into_its_properties() {
 
     // `x` and `y` are both `number`; one record must serve both, or the arena
     // grows with property count rather than with distinct types.
-    let x = properties.iter().find(|p| p.name == "x").unwrap().ty;
-    let y = properties.iter().find(|p| p.name == "y").unwrap().ty;
+    let x = properties.iter().find(|p| p.name.is_name("x")).unwrap().ty;
+    let y = properties.iter().find(|p| p.name.is_name("y")).unwrap().ty;
     assert_eq!(x, y, "identical property types share a record");
 }
 
 #[test]
 fn a_string_literal_union_decomposes_into_its_members() {
-    let Some(snapshot) = decomposed_types() else {
-        return;
-    };
+    let snapshot = decomposed_types();
     let members = snapshot
         .types
         .iter()
@@ -83,7 +77,10 @@ fn a_string_literal_union_decomposes_into_its_members() {
     let mut literals: Vec<String> = members
         .iter()
         .map(|id| match &snapshot.types[id.0 as usize].kind {
-            TypeKind::Literal(LiteralValue::String(s)) => s.clone(),
+            TypeKind::Literal(LiteralValue::String(s)) => s
+                .as_utf8()
+                .expect("fixture literals are Unicode")
+                .to_owned(),
             other => panic!("union member was {other:?}, not a string literal"),
         })
         .collect();
@@ -94,9 +91,7 @@ fn a_string_literal_union_decomposes_into_its_members() {
 
 #[test]
 fn an_array_decomposes_to_its_element_type_not_its_prototype() {
-    let Some(snapshot) = decomposed_types() else {
-        return;
-    };
+    let snapshot = decomposed_types();
     let element = snapshot
         .types
         .iter()
@@ -112,7 +107,7 @@ fn an_array_decomposes_to_its_element_type_not_its_prototype() {
     assert!(
         !snapshot.types.iter().any(|record| matches!(
             &record.kind,
-            TypeKind::Object { properties } if properties.iter().any(|p| p.name == "push")
+            TypeKind::Object { properties } if properties.iter().any(|p| p.name.is_name("push"))
         )),
         "an array was decomposed as an ordinary object",
     );
@@ -120,9 +115,7 @@ fn an_array_decomposes_to_its_element_type_not_its_prototype() {
 
 #[test]
 fn a_mixed_union_keeps_both_primitives() {
-    let Some(snapshot) = decomposed_types() else {
-        return;
-    };
+    let snapshot = decomposed_types();
     let found = snapshot.types.iter().any(|record| match &record.kind {
         TypeKind::Union(members) if members.len() == 2 => {
             let mut kinds: Vec<&TypeKind> = members
@@ -139,9 +132,7 @@ fn a_mixed_union_keeps_both_primitives() {
 
 #[test]
 fn every_shape_something_references_is_opened() {
-    let Some(snapshot) = decomposed_types() else {
-        return;
-    };
+    let snapshot = decomposed_types();
     // Objects, unions and arrays are all modelled, so a `Structured` left in
     // this fixture would ordinarily mean a shape silently skipped. Two are
     // left deliberately, and the invariant worth asserting is not "none" but
@@ -192,7 +183,7 @@ fn every_shape_something_references_is_opened() {
         .types
         .iter()
         .enumerate()
-        .filter(|(_, record)| matches!(record.kind, TypeKind::Structured { .. }))
+        .filter(|(_, record)| matches!(record.kind, TypeKind::Structured))
         .map(|(at, _)| u32::try_from(at).expect("type index fits"))
         .collect();
 
@@ -215,7 +206,7 @@ fn every_shape_something_references_is_opened() {
         let name = snapshot.types[id as usize]
             .symbol
             .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
-            .map(|record| record.name.clone())
+            .map(|record| record.name.to_string())
             .unwrap_or_default();
         assert!(
             name.contains("/src/"),
@@ -224,18 +215,15 @@ fn every_shape_something_references_is_opened() {
     }
 }
 
-fn decomposed_signatures() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn decomposed_signatures() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/signatures/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/signatures fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_decomposition(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 /// Find the signature whose parameter names are exactly `names`.
@@ -257,9 +245,7 @@ fn signature_with<'a>(
 
 #[test]
 fn an_annotated_function_resolves_its_whole_signature() {
-    let Some(snapshot) = decomposed_signatures() else {
-        return;
-    };
+    let snapshot = decomposed_signatures();
     let sig = signature_with(&snapshot, &["a", "b"]);
     let kind = |id: nts_semantic_schema::TypeId| &snapshot.types[id.0 as usize].kind;
 
@@ -270,9 +256,7 @@ fn an_annotated_function_resolves_its_whole_signature() {
 
 #[test]
 fn an_inferred_return_type_is_recovered() {
-    let Some(snapshot) = decomposed_signatures() else {
-        return;
-    };
+    let snapshot = decomposed_signatures();
     // The case that justifies calling the API at all. `export function
     // inferred(a: number) { return a * 2; }` writes its return type nowhere, so
     // there is no AST node carrying it — walking children cannot find it, and
@@ -286,9 +270,7 @@ fn an_inferred_return_type_is_recovered() {
 
 #[test]
 fn a_rest_parameter_is_flagged_only_on_the_last_position() {
-    let Some(snapshot) = decomposed_signatures() else {
-        return;
-    };
+    let snapshot = decomposed_signatures();
     let sig = signature_with(&snapshot, &["first", "others"]);
     assert!(!sig.parameters[0].rest, "`first` is not a rest parameter");
     assert!(sig.parameters[1].rest, "`others` is a rest parameter");
@@ -302,9 +284,7 @@ fn a_rest_parameter_is_flagged_only_on_the_last_position() {
 
 #[test]
 fn a_function_type_points_at_its_signature() {
-    let Some(snapshot) = decomposed_signatures() else {
-        return;
-    };
+    let snapshot = decomposed_signatures();
     let functions: Vec<_> = snapshot
         .types
         .iter()
@@ -324,32 +304,27 @@ fn a_function_type_points_at_its_signature() {
 
 #[test]
 fn a_function_is_not_decomposed_as_an_object() {
-    let Some(snapshot) = decomposed_signatures() else {
-        return;
-    };
+    let snapshot = decomposed_signatures();
     // A function type *is* an object type. Reaching properties first would record
     // `call`, `apply`, `bind` and lose the signature entirely.
     assert!(
         !snapshot.types.iter().any(|record| matches!(
             &record.kind,
-            TypeKind::Object { properties } if properties.iter().any(|p| p.name == "apply")
+            TypeKind::Object { properties } if properties.iter().any(|p| p.name.is_name("apply"))
         )),
         "a function was decomposed as an ordinary object",
     );
 }
 
-fn classes_snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn classes_snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/classes/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/classes fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_decomposition(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 /// The instance type named `name`, identified by its declaring symbol.
@@ -366,10 +341,10 @@ fn named_object(
             let named = record
                 .symbol
                 .and_then(|s| snapshot.symbols.get(s.0 as usize))
-                .is_some_and(|s| s.name == name);
+                .is_some_and(|s| s.name.is_name(name));
             let has_member = matches!(
                 &record.kind,
-                TypeKind::Object { properties } if properties.iter().any(|p| p.name == member)
+                TypeKind::Object { properties } if properties.iter().any(|p| p.name.is_name(member))
             );
             named && has_member
         })
@@ -381,14 +356,18 @@ fn named_object(
 
 #[test]
 fn inherited_members_are_distinguished_from_own_ones() {
-    let Some(snapshot) = classes_snapshot() else {
-        return;
-    };
+    let snapshot = classes_snapshot();
     let circle = named_object(&snapshot, "Circle", "radius");
     let TypeKind::Object { properties } = &snapshot.types[circle.0 as usize].kind else {
         unreachable!()
     };
-    let own = |name: &str| properties.iter().find(|p| p.name == name).unwrap().own;
+    let own = |name: &str| {
+        properties
+            .iter()
+            .find(|p| p.name.is_name(name))
+            .unwrap()
+            .own
+    };
 
     // The checker's member list is flattened. Without this split a backend emits
     // `id` into Circle's own storage as well as Shape's.
@@ -401,9 +380,7 @@ fn inherited_members_are_distinguished_from_own_ones() {
 
 #[test]
 fn a_class_records_its_base_class() {
-    let Some(snapshot) = classes_snapshot() else {
-        return;
-    };
+    let snapshot = classes_snapshot();
     let circle = named_object(&snapshot, "Circle", "radius");
     let bases = snapshot
         .base_types
@@ -414,15 +391,18 @@ fn a_class_records_its_base_class() {
     let base_name = snapshot.types[bases[0].0 as usize]
         .symbol
         .and_then(|s| snapshot.symbols.get(s.0 as usize))
-        .map(|s| s.name.clone());
+        .map(|s| {
+            s.name
+                .public_name()
+                .expect("a named source type")
+                .to_owned()
+        });
     assert_eq!(base_name.as_deref(), Some("Shape"));
 }
 
 #[test]
 fn implements_clauses_are_not_reported_as_base_types() {
-    let Some(snapshot) = classes_snapshot() else {
-        return;
-    };
+    let snapshot = classes_snapshot();
     // `class Circle extends Shape implements Drawable` — `getBaseTypes` answers
     // the base *class* only. The interface list is not in it, so a JVM backend
     // filling the `interfaces` table from this would emit nothing. That comes from
@@ -433,7 +413,12 @@ fn implements_clauses_are_not_reported_as_base_types() {
         .iter()
         .filter_map(|b| snapshot.types[b.0 as usize].symbol)
         .filter_map(|s| snapshot.symbols.get(s.0 as usize))
-        .map(|s| s.name.clone())
+        .map(|s| {
+            s.name
+                .public_name()
+                .expect("a named source type")
+                .to_owned()
+        })
         .collect();
     assert!(
         !names.iter().any(|n| n == "Drawable"),
@@ -443,9 +428,7 @@ fn implements_clauses_are_not_reported_as_base_types() {
 
 #[test]
 fn a_root_class_has_no_base_types() {
-    let Some(snapshot) = classes_snapshot() else {
-        return;
-    };
+    let snapshot = classes_snapshot();
     let shape = named_object(&snapshot, "Shape", "id");
     assert!(
         snapshot.base_types.get(&shape).is_none_or(Vec::is_empty),
@@ -455,8 +438,7 @@ fn a_root_class_has_no_base_types() {
 
 /// A snapshot of `main` against a two-class `objc:` binding: `KitWindow`,
 /// whose `screen` is a `KitScreen`.
-fn over_a_foreign_binding(main: &str) -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn over_a_foreign_binding(main: &str) -> SemanticSnapshot {
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
         .join(format!(
@@ -477,8 +459,9 @@ fn over_a_foreign_binding(main: &str) -> Option<SemanticSnapshot> {
     )
     .unwrap();
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
-    Some(source.snapshot(&tsconfig).expect("snapshot should succeed"))
+    let mut source =
+        Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
+    source.snapshot(&tsconfig).expect("snapshot should succeed")
 }
 
 /// The kind of the type the class named `name` declares.
@@ -489,10 +472,10 @@ fn class_kind<'a>(snapshot: &'a SemanticSnapshot, name: &str) -> &'a TypeKind {
         .filter(|record| {
             record
                 .symbol
-                .is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == name)
+                .is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name.is_name(name))
         })
         .map(|record| &record.kind)
-        .find(|kind| matches!(kind, TypeKind::Object { .. } | TypeKind::Structured { .. }))
+        .find(|kind| matches!(kind, TypeKind::Object { .. } | TypeKind::Structured))
         .unwrap_or_else(|| panic!("no type declared by `{name}`"))
 }
 
@@ -503,11 +486,9 @@ fn class_kind<'a>(snapshot: &'a SemanticSnapshot, name: &str) -> &'a TypeKind {
 /// placeholder; once the program reads it, it is decomposed.
 #[test]
 fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
-    let Some(snapshot) = over_a_foreign_binding(
+    let snapshot = over_a_foreign_binding(
         "import { KitWindow } from \"objc:Kit\";\nexport function titled(window: KitWindow): string {\n  return window.title;\n}\n",
-    ) else {
-        return;
-    };
+    );
     let TypeKind::Object { properties } = class_kind(&snapshot, "KitWindow") else {
         panic!(
             "`KitWindow` was not decomposed: {:?}",
@@ -516,23 +497,23 @@ fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
     };
     let names: Vec<&str> = properties
         .iter()
-        .map(|property| property.name.as_str())
+        .map(|property| {
+            property
+                .name
+                .public_name()
+                .expect("this fixture uses public names")
+        })
         .collect();
     assert_eq!(names, ["title", "screen"], "its members are all recorded");
     assert!(
-        matches!(
-            class_kind(&snapshot, "KitScreen"),
-            TypeKind::Structured { .. }
-        ),
+        matches!(class_kind(&snapshot, "KitScreen"), TypeKind::Structured),
         "a class only a member names was decomposed: {:?}",
         class_kind(&snapshot, "KitScreen")
     );
 
-    let Some(reached) = over_a_foreign_binding(
+    let reached = over_a_foreign_binding(
         "import { KitWindow } from \"objc:Kit\";\nexport function depth(window: KitWindow): number {\n  return window.screen.depth;\n}\n",
-    ) else {
-        return;
-    };
+    );
     assert!(
         matches!(class_kind(&reached, "KitScreen"), TypeKind::Object { .. }),
         "a class the program reads was left a placeholder: {:?}",
@@ -548,9 +529,6 @@ fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
 /// generic instance still has its arguments and nothing goes unanswered.
 #[test]
 fn type_arguments_are_asked_of_references_only() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
         .join(format!("nts-decompose-arguments-{}", std::process::id()));
@@ -566,11 +544,11 @@ fn type_arguments_are_asked_of_references_only() {
     )
     .unwrap();
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
+    let mut source =
+        Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
     let snapshot = source.snapshot(&tsconfig).expect("snapshot should succeed");
-    assert_eq!(
-        source.stats().types_unanswered,
-        0,
+    assert!(
+        snapshot.diagnostics.is_empty(),
         "{:?}",
         snapshot.diagnostics
     );
@@ -579,7 +557,7 @@ fn type_arguments_are_asked_of_references_only() {
     let instance = snapshot.type_arguments.iter().find(|(ty, arguments)| {
         snapshot.types[ty.0 as usize]
             .symbol
-            .is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name == "Box")
+            .is_some_and(|symbol| snapshot.symbols[symbol.0 as usize].name.is_name("Box"))
             && arguments
                 .iter()
                 .map(|argument| &snapshot.types[argument.0 as usize].kind)

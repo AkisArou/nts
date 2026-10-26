@@ -127,7 +127,14 @@ fn contextual(probe: &FuncBuilder, function: NodeId) -> Written {
     let initializes = children.last() == Some(&child);
     let identifier = |node: NodeId| {
         (probe.kind_of(node) == Some(syntax::IDENTIFIER))
-            .then(|| probe.node(node).text.clone())
+            .then(|| {
+                probe
+                    .node(node)
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+                    .map(str::to_owned)
+            })
             .flatten()
     };
     match probe.kind_of(parent) {
@@ -213,7 +220,12 @@ fn key(probe: &FuncBuilder, member: NodeId) -> Written {
         return Written::Computed;
     };
     let text = match probe.kind_of(node) {
-        Some(syntax::IDENTIFIER | syntax::PRIVATE_IDENTIFIER) => probe.node(node).text.clone(),
+        Some(syntax::IDENTIFIER | syntax::PRIVATE_IDENTIFIER) => probe
+            .node(node)
+            .text
+            .as_ref()
+            .and_then(|text| text.as_utf8())
+            .map(str::to_owned),
         Some(syntax::COMPUTED_PROPERTY_NAME) => probe
             .children(node)
             .first()
@@ -222,7 +234,7 @@ fn key(probe: &FuncBuilder, member: NodeId) -> Written {
             .node(node)
             .symbol
             .and_then(|symbol| probe.snapshot.symbols.get(symbol.0 as usize))
-            .map(|record| record.name.clone()),
+            .and_then(|record| record.name.public_name().map(str::to_owned)),
     };
     text.map_or(Written::Computed, Written::Is)
 }
@@ -236,8 +248,17 @@ fn computed(probe: &FuncBuilder, expression: NodeId) -> Option<String> {
     // spelling.
     if probe.kind_of(expression) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
         && let [object, member] = probe.children(expression).as_slice()
-        && probe.node(*object).text.as_deref() == Some("Symbol")
-        && let Some(member) = probe.node(*member).text.as_deref()
+        && probe
+            .node(*object)
+            .text
+            .as_ref()
+            .and_then(|text| text.as_utf8())
+            == Some("Symbol")
+        && let Some(member) = probe
+            .node(*member)
+            .text
+            .as_ref()
+            .and_then(|text| text.as_utf8())
     {
         return Some(format!("[Symbol.{member}]"));
     }
@@ -248,8 +269,13 @@ fn computed(probe: &FuncBuilder, expression: NodeId) -> Option<String> {
 fn literal(probe: &FuncBuilder, node: NodeId) -> Option<String> {
     let ty = probe.snapshot.node_types.get(&node)?;
     match &probe.snapshot.types.get(ty.0 as usize)?.kind {
-        TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+        TypeKind::Literal(LiteralValue::String(text)) => text.as_utf8().map(str::to_owned),
         TypeKind::Literal(LiteralValue::Number(value)) => Some(crate::number::to_js_string(*value)),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     }
 }
@@ -300,7 +326,12 @@ fn token_name(
     let symbol = tokens
         .iter()
         .find_map(|(symbol, at)| (*at == index).then_some(*symbol))?;
-    Some(snapshot.symbols.get(symbol as usize)?.name.clone())
+    snapshot
+        .symbols
+        .get(symbol as usize)?
+        .name
+        .public_name()
+        .map(str::to_owned)
 }
 
 /// What a closure class is called: the source's name, or for a bound function
@@ -360,7 +391,11 @@ impl FuncBuilder<'_> {
             .flatten();
         match closure.map(|closure| written(self, closure)) {
             Some(Written::Is(text)) => {
-                return Ok(Some(self.push(OpKind::ConstString(text), string, origin)));
+                return Ok(Some(self.push(
+                    OpKind::ConstString(text.into()),
+                    string,
+                    origin,
+                )));
             }
             Some(Written::Computed) => {
                 return Err(self.unsupported(
@@ -372,7 +407,11 @@ impl FuncBuilder<'_> {
             Some(Written::Bound) => {}
             None => {
                 if let Some(text) = token_name(self.snapshot, &self.class_tokens, type_id) {
-                    return Ok(Some(self.push(OpKind::ConstString(text), string, origin)));
+                    return Ok(Some(self.push(
+                        OpKind::ConstString(text.into()),
+                        string,
+                        origin,
+                    )));
                 }
                 let is_a_function = self
                     .snapshot

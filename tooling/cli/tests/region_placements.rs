@@ -4,10 +4,6 @@ use std::process::Command;
 
 #[test]
 fn regions_explains_unanalysed_storage_at_its_source() {
-    if std::env::var_os("NTS_TSGO").is_none() {
-        eprintln!("SKIP regions placement report: set NTS_TSGO");
-        return;
-    }
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .current_dir(root)

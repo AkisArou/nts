@@ -5,8 +5,8 @@
 //! No TypeScript compiler object may escape the frontend. In the proof of
 //! concept that rule was a discipline, because the compiler was itself written
 //! in TypeScript and could reach a `ts.Type` at any point. Here it is
-//! structural: the checker runs in another process, in another language, and
-//! the only thing that crosses is [`SemanticSnapshot`].
+//! structural: the frontend owns every checker object, and downstream crates
+//! consume only the owned data in [`SemanticSnapshot`].
 //!
 //! # This crate has no I/O
 //!
@@ -22,12 +22,14 @@
 //! is gone.
 
 pub mod binding;
+pub mod children;
 pub mod keys;
 pub mod origin;
 pub mod protocol;
 pub mod reachability;
 pub mod schema;
 pub mod syntax;
+pub mod text;
 /// Navigating a snapshot's nodes -- pure queries several passes want the same
 /// answers to, and two of them had their own copy before this.
 pub mod walk;
@@ -36,9 +38,11 @@ pub use keys::WellKnownSymbol;
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use protocol::{ITERATION, is_an_iteration_protocol, iteration_protocol_of};
 pub use schema::{
-    Accessor, CallTarget, ConstantValue, DeclarationModifiers, HeritageKind, IndexSignature,
-    JvmAttributes, Library, LiteralValue, MemberKind, ModuleId, ModuleRecord, NativeAttributes,
-    NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord, PropertyRecord, SCHEMA_VERSION,
-    SemanticSnapshot, SignatureId, SignatureRecord, SnapshotError, SymbolFlags, SymbolId,
-    SymbolRecord, TypeId, TypeKind, TypePredicate, TypeRecord, VariableKind,
+    Accessor, BuiltinBinding, CallTarget, ConstantValue, DeclarationModifiers, HeritageKind,
+    ImportPhase, IndexSignature, JvmAttributes, Library, LiteralValue, MemberKind, ModuleId,
+    ModuleRecord, NativeAttributes, NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord,
+    PropertyKey, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId, SignatureRecord,
+    SnapshotError, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypePredicate,
+    TypeRecord, VariableKind,
 };
+pub use text::JsText;

@@ -61,6 +61,75 @@ fn hash(value: impl Hash) -> u64 {
     hash.finish()
 }
 
+fn heritage_reference(owner: Node<'_>) -> Reference<'_> {
+    owner
+        .list(ListRole::ClassDeclarationHeritageClauses)
+        .expect("heritage clauses")
+        .iter()
+        .next()
+        .expect("implements")
+        .list(ListRole::HeritageClauseTypes)
+        .expect("heritage types")
+        .iter()
+        .next()
+        .expect("heritage reference")
+        .ty()
+        .reference()
+        .expect("receiver-bound reference")
+}
+
+#[test]
+fn reference_arity_separates_declared_this_arguments_and_receiver_bindings() {
+    let text = "interface Pair<T, U> { left: T; right: U; self: this; }\n\
+class PairOwner implements Pair<number, PairOwner> {\n\
+left = 1; right: PairOwner = this; self: this = this; pair!: Pair<number, this>;\n\
+}\n\
+interface Zero { self: this; }\n\
+class ZeroOwner implements Zero { self: this = this; }\n";
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session.open(spec(text)).expect("reference arity fixture");
+            // Match by the public name role, not native kind ordinals.
+            let class = |name: &str| {
+                statements(source(&checked))
+                    .into_iter()
+                    .find(|node| {
+                        node.child(ChildRole::ClassDeclarationName)
+                            .is_some_and(|name_node| name_node.name_text() == Some(name))
+                    })
+                    .expect("class declaration")
+            };
+            let owner = class("PairOwner");
+            let bound = heritage_reference(owner);
+            assert_eq!(bound.declared_parameter_count, Some(2));
+            assert_eq!(bound.arguments.len(), 3);
+            let pair = owner
+                .list(ListRole::ClassDeclarationMembers)
+                .expect("members")
+                .iter()
+                .find(|node| {
+                    node.child(ChildRole::PropertyDeclarationName)
+                        .is_some_and(|name| name.name_text() == Some("pair"))
+                })
+                .expect("pair field")
+                .ty()
+                .reference()
+                .expect("declared prefix reference");
+            assert_eq!(pair.declared_parameter_count, Some(2));
+            assert_eq!(pair.arguments.len(), 2);
+            assert_eq!(
+                pair.arguments[1].kind(),
+                TypeKind::TypeParameter,
+                "a declared argument may itself be polymorphic this"
+            );
+            let zero = heritage_reference(class("ZeroOwner"));
+            assert_eq!(zero.declared_parameter_count, Some(0));
+            assert_eq!(zero.arguments.len(), 1);
+            assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
+        });
+    }
+}
+
 #[test]
 fn function_smoke_keeps_semantic_identity_and_owned_facts_at_one_and_four_checkers() {
     fn capture(count: u16) -> (String, TypeKind, Vec<String>, Vec<Diagnostic>) {
@@ -104,7 +173,7 @@ fn function_smoke_keeps_semantic_identity_and_owned_facts_at_one_and_four_checke
                     .into_iter()
                     .map(|e| plain(e.name).to_owned())
                     .collect(),
-                checked.finish().diagnostics(),
+                checked.diagnose_fixture_files().finish().diagnostics(),
             )
         })
     }
@@ -168,6 +237,115 @@ export interface Shape { valid(): this is Shape; }
 }
 
 #[test]
+fn erroneous_predicate_subjects_keep_checker_diagnostics_before_and_after_capture() {
+    for count in [1, 4] {
+        for (subject, expected_errors) in [("condition", 1), ("_condition", 0)] {
+            let source_text = format!(
+                "export function assertCondition(_condition: boolean): asserts {subject} {{ \
+                 if (!_condition) throw new Error('Condition failed'); }} \
+                 export function test() {{ assertCondition(false); }}"
+            );
+            let without_capture = run(options(count), |session| {
+                session
+                    .open(spec(&source_text))
+                    .expect("predicate project")
+                    .diagnose_fixture_files()
+                    .finish()
+                    .diagnostics()
+            });
+            assert_eq!(
+                without_capture.iter().filter(|d| d.code == 1225).count(),
+                expected_errors
+            );
+            let after_capture = run(options(count), |session| {
+                let checked = session.open(spec(&source_text)).expect("predicate project");
+                let declaration = statements(source(&checked))[0];
+                let signature = declaration
+                    .child(ChildRole::FunctionDeclarationName)
+                    .expect("assertion function name")
+                    .ty()
+                    .signatures(SignatureKind::Call)[0];
+                // This semantic question precedes diagnostic finalization, as
+                // it does in the builder. Erroneous source is not an invariant.
+                let predicate = signature.predicate().expect("written predicate");
+                assert!(predicate.asserts);
+                assert!(predicate.narrowed_type.is_none());
+                if expected_errors == 0 {
+                    assert!(matches!(predicate.subject,
+                        PredicateSubject::Parameter { name, index: 0 }
+                        if name.utf8() == Some("_condition")));
+                } else {
+                    assert!(matches!(predicate.subject,
+                        PredicateSubject::UnresolvedIdentifier { name }
+                        if name.utf8() == Some("condition")));
+                }
+                checked.diagnose_fixture_files().finish().diagnostics()
+            });
+            assert_eq!(after_capture, without_capture);
+        }
+    }
+}
+
+#[test]
+fn erroneous_declarations_keep_registered_sources_and_complete_type_payloads() {
+    const CASES: &[&str] = &[
+        "export interface Broken<T> extends Missing { value: T; }",
+        "export type Conditional<T> = T extends Missing ? T : never;",
+        "export type Indexed<T> = T[Missing];",
+        "export class Broken<T> extends Missing<T> { value!: T; }",
+        "export function broken(value: Missing): Missing { return value; }",
+        "export type Incomplete<T = > = [T, Missing];",
+    ];
+    for count in [1, 4] {
+        for &text in CASES {
+            let baseline = run(options(count), |session| {
+                session
+                    .open(spec(text))
+                    .expect("erroneous project")
+                    .diagnose_fixture_files()
+                    .finish()
+                    .diagnostics()
+            });
+            assert!(
+                baseline
+                    .iter()
+                    .any(|d| d.category == DiagnosticCategory::Error)
+            );
+            let captured = run(options(count), |session| {
+                let checked = session.open(spec(text)).expect("erroneous project");
+                let file = source(&checked);
+                for export in file.module_symbol().expect("exporting module").exports() {
+                    let symbol = export.symbol;
+                    for declaration in symbol.declarations() {
+                        assert_eq!(declaration.source_file().path(), file.path());
+                    }
+                    let ty = symbol.declared_type().unwrap_or_else(|| symbol.ty());
+                    let _ = (
+                        ty.reference(),
+                        ty.conditional(),
+                        ty.indexed_access(),
+                        ty.substitution(),
+                    );
+                    for signature in ty.signatures(SignatureKind::Call) {
+                        if let Some(declaration) = signature.declaration() {
+                            assert_eq!(declaration.source_file().path(), file.path());
+                        }
+                        let _ = signature.predicate();
+                        for parameter in signature.parameters() {
+                            for declaration in parameter.declarations {
+                                assert_eq!(declaration.source_file().path(), file.path());
+                            }
+                        }
+                    }
+                }
+                checked.diagnose_fixture_files().finish().diagnostics()
+            });
+            assert_eq!(captured, baseline, "{text}");
+        }
+    }
+}
+
+#[test]
 fn parameters_keep_defaults_rest_this_and_generic_types() {
     run(options(4), |session| {
         let checked = session.open(spec("export function args<T extends string>(this: Date, first: T, defaulted = 1, optional?: number, ...rest: string[]): T { return first; }")).expect("project");
@@ -184,7 +362,7 @@ fn parameters_keep_defaults_rest_this_and_generic_types() {
         );
         assert!(!parameters[0].optional);
         assert!(parameters[1].has_initializer);
-        assert!(parameters[1].optional);
+        assert!(!parameters[1].optional);
         assert!(parameters[2].optional);
         assert!(!parameters[2].has_initializer);
         assert!(parameters[3].rest);
@@ -329,7 +507,7 @@ export type Nothing = {};
                 ))
                 .expect("project");
             test(&checked);
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             assert!(
                 finished.diagnostics().is_empty(),
                 "{:?}",
@@ -494,7 +672,7 @@ fn finishing_preserves_syntax_metadata_and_finishes_diagnostics() {
             .expect("project");
         let digest = source(&checked).content_digest();
         let before = descendants(source(&checked).root()).len();
-        let finished = checked.finish();
+        let finished = checked.diagnose_fixture_files().finish();
         assert!(
             finished.diagnostics().is_empty(),
             "{:?}",
@@ -545,7 +723,7 @@ fn pristine_capture_and_private_fixture_facts_do_not_depend_on_checker_count() {
                     })
                     .collect()
             };
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             (facts, finished.diagnostics())
         })
     }
@@ -582,7 +760,7 @@ fn builtin_bindings_use_checker_identity_and_ignore_legal_local_shadows() {
                     .filter_map(Node::symbol)
                     .all(|symbol| symbol.builtin_binding().is_none())
             );
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             assert!(
                 finished.diagnostics().is_empty(),
                 "{:?}",
@@ -615,6 +793,7 @@ fn a_parameter_named_arguments_is_not_the_checker_builtin() {
         // local binding must not be mistaken for the checker's builtin.
         assert!(
             checked
+                .diagnose_fixture_files()
                 .finish()
                 .diagnostics()
                 .iter()
@@ -651,7 +830,7 @@ fn tagged_template_calls_have_a_native_selected_signature() {
                 .find(|node| node.native.kind() == tsrs_ast::Kind::NumericLiteral)
                 .expect("substitution");
             assert!(literal.resolved_signature().is_none());
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             assert!(
                 finished.diagnostics().is_empty(),
                 "{:?}",
@@ -763,7 +942,7 @@ fn unrepresentable_module_paths_never_become_public_invalid_utf8() {
                     "import {{ value }} from './{escaped}'; export {{ value }};"
                 )))
                 .expect("project");
-            let finished = checked.finish();
+            let finished = checked.diagnose_fixture_files().finish();
             assert!(finished.diagnostics().iter().any(|d| d.code == 2307));
             finished.inputs()
         })
@@ -1111,7 +1290,88 @@ fn well_known_keys_require_the_default_library_property_identity() {
             }
             assert_eq!(library_keys, expected.len());
             assert_eq!(user_names, 2);
-            assert_eq!(checked.finish().diagnostics(), []);
+            assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
         });
+    }
+}
+
+#[test]
+fn rest_tail_is_not_an_ordinary_optional_parameter() {
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session
+                .open(spec(include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../tests/programs/parameters-are-rest-optional-or-initialized/src/main.ts"
+                ))))
+                .expect("parameter controls");
+            let declarations = statements(source(&checked));
+            let parameters: Vec<_> = declarations
+                .iter()
+                .take(5)
+                .map(|declaration| {
+                    declaration
+                        .child(ChildRole::FunctionDeclarationName)
+                        .expect("name")
+                        .ty()
+                        .signatures(SignatureKind::Call)[0]
+                        .parameters()
+                })
+                .collect();
+            assert!(!parameters[0][1].rest && !parameters[0][1].optional);
+            assert!(parameters[1][1].rest);
+            assert!(
+                !parameters[1][1].optional,
+                "a zero-length rest tail is not a question-optional argument"
+            );
+            assert!(!parameters[2][1].rest && parameters[2][1].optional);
+            assert!(!parameters[3][1].rest && !parameters[3][1].optional);
+            assert!(parameters[3][1].has_initializer);
+            assert!(!parameters[4][0].optional && parameters[4][0].has_initializer);
+            assert!(!parameters[4][1].optional && !parameters[4][1].has_initializer);
+            assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
+        });
+    }
+}
+
+#[test]
+fn polymorphic_this_is_independent_of_display_names_and_ordinary_constraints() {
+    let text = r"
+export class Named { value = 1; self(): this { return this; } }
+export class Derived extends Named { override self(): this { return this; } }
+export const Anonymous = class { self(): this { return this; } };
+export function bounded<T extends Named>(value: T): T { return value; }
+export function shadow<Named extends Derived>(value: Named): Named { return value; }
+";
+    let mut previous = None;
+    for count in [1, 4] {
+        let facts = run(options(count), |session| {
+            let checked = session.open(spec(text)).expect("this parameter fixture");
+            let all = descendants(source(&checked).root());
+            let mut receivers = 0;
+            let mut ordinary = 0;
+            let mut facts = Vec::new();
+            for node in all {
+                let receiver = node.native.kind() == tsrs_ast::Kind::ThisType;
+                let parameter = node.native.kind() == tsrs_ast::Kind::TypeParameter;
+                if !receiver && !parameter {
+                    continue;
+                }
+                let fact = node.ty().type_parameter().expect("native type parameter");
+                assert_eq!(fact.is_this, receiver);
+                assert!(fact.constraint.is_some());
+                receivers += usize::from(receiver);
+                ordinary += usize::from(parameter);
+                facts.push((fact.name.utf8().expect("name").to_owned(), fact.is_this));
+            }
+            assert_eq!(receivers, 3, "named, derived and anonymous receivers");
+            assert_eq!(ordinary, 2, "ordinary constrained T and a shadowing name");
+            assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
+            facts
+        });
+        if let Some(previous) = previous {
+            assert_eq!(previous, facts);
+        }
+        previous = Some(facts);
     }
 }

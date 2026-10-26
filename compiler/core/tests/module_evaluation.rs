@@ -24,18 +24,18 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared() -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/module-evaluation/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/module-evaluation is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("prepared HIR should verify"))
+    hir::prepare(&snapshot).expect("prepared HIR should verify")
 }
 
 fn has(prepared: &hir::Prepared, name: &str) -> bool {
@@ -46,9 +46,7 @@ fn has(prepared: &hir::Prepared, name: &str) -> bool {
 /// exports that read them are still compiled.
 #[test]
 fn a_refused_statement_costs_only_what_depends_on_it() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     for name in [
         "readDoubled",
         "readLabel",
@@ -77,9 +75,7 @@ fn a_refused_statement_costs_only_what_depends_on_it() {
 /// the old behaviour was a missing one.
 #[test]
 fn the_export_that_reads_the_excised_binding_is_dropped() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     assert!(
         !has(&prepared, "readPattern"),
         "`readPattern` reads a binding whose initializer was excised, so it \
@@ -96,9 +92,7 @@ fn the_export_that_reads_the_excised_binding_is_dropped() {
 /// fallback exists and is deliberate: `runtime/node/http` takes it.
 #[test]
 fn the_initializer_writes_every_binding_that_survived() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     let Some(init) = prepared
         .program
         .funcs
@@ -152,9 +146,7 @@ fn the_initializer_writes_every_binding_that_survived() {
 /// agreeing says nothing about whether the name is in the artifact.
 #[test]
 fn an_exported_literal_constant_is_a_global() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     for name in ["literalConst", "computedConst"] {
         let global = prepared
             .program

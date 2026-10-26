@@ -13,25 +13,24 @@
 //! with node either way** — a phantom slot is wrong without being observable —
 //! which is why this reads the layout rather than running the program.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::SemanticSource;
 
-fn prepared() -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/two-private-names-that-collide")
         .join("tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/two-private-names-that-collide is checked in");
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("prepared HIR should verify"))
+    hir::prepare(&snapshot).expect("prepared HIR should verify")
 }
 
 fn layout<'a>(prepared: &'a hir::Prepared, class: &str) -> &'a hir::Layout {
@@ -47,15 +46,13 @@ fn counts(layout: &hir::Layout) -> Vec<&hir::Field> {
     layout
         .fields
         .iter()
-        .filter(|field| field.name == "#count")
+        .filter(|field| field.name == nts_semantic_schema::PropertyKey::Private("#count".into()))
         .collect()
 }
 
 #[test]
 fn a_shadowed_private_name_is_two_slots() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     let derived = counts(layout(&prepared, "Derived"));
     assert_eq!(
         derived.len(),
@@ -75,9 +72,7 @@ fn a_shadowed_private_name_is_two_slots() {
 
 #[test]
 fn the_bases_slot_leads() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     let base = layout(&prepared, "Base").fields[0].declared_by;
     for class in ["Derived", "Deeper", "Separate", "Inheritor"] {
         assert_eq!(
@@ -90,9 +85,7 @@ fn the_bases_slot_leads() {
 
 #[test]
 fn an_inherited_private_name_is_one_slot() {
-    let Some(prepared) = prepared() else {
-        return;
-    };
+    let prepared = prepared();
     // The control. `Inheritor` does not write `#count`, so the flattened
     // property list is the only place a second one could come from.
     assert_eq!(

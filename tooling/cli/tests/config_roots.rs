@@ -56,13 +56,10 @@ const NAMES: [&str; 5] = [
 ];
 
 fn available() -> bool {
-    let frontend =
-        std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some();
-    let node = Command::new(std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned()))
+    Command::new(std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned()))
         .arg("--version")
         .output()
-        .is_ok_and(|out| out.status.success());
-    frontend && node
+        .is_ok_and(|out| out.status.success())
 }
 
 /// A project with `@nts/config` resolvable, which is what a real one has.
@@ -152,7 +149,7 @@ export default defineConfig({
 #[test]
 fn a_config_narrows_what_is_emitted() {
     if !available() {
-        eprintln!("skipping: needs node and the tsgo frontend");
+        eprintln!("skipping: needs node and the native frontend");
         return;
     }
     let project = fixture("config-narrows", Some(ONE_PRODUCT));
@@ -180,7 +177,7 @@ fn a_config_narrows_what_is_emitted() {
 #[test]
 fn without_the_config_every_export_is_a_root() {
     if !available() {
-        eprintln!("skipping: needs node and the tsgo frontend");
+        eprintln!("skipping: needs node and the native frontend");
         return;
     }
     let project = fixture("config-absent", Some(ONE_PRODUCT));
@@ -195,7 +192,7 @@ fn without_the_config_every_export_is_a_root() {
 #[test]
 fn a_flag_beats_the_file() {
     if !available() {
-        eprintln!("skipping: needs node and the tsgo frontend");
+        eprintln!("skipping: needs node and the native frontend");
         return;
     }
     let project = fixture("config-flag-wins", Some(ONE_PRODUCT));
@@ -212,7 +209,7 @@ fn a_flag_beats_the_file() {
 #[test]
 fn several_products_refuse_to_be_guessed() {
     if !available() {
-        eprintln!("skipping: needs node and the tsgo frontend");
+        eprintln!("skipping: needs node and the native frontend");
         return;
     }
     let project = fixture(
@@ -270,7 +267,7 @@ export default defineConfig({
 #[test]
 fn a_broken_config_stops_the_build() {
     if !available() {
-        eprintln!("skipping: needs node and the tsgo frontend");
+        eprintln!("skipping: needs node and the native frontend");
         return;
     }
     let project = fixture(

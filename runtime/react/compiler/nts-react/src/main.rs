@@ -87,14 +87,17 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
         .with_context(|| format!("no {tsconfig}"))?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
-    let mut session = nts_react::project::Session::open(&tsconfig)?;
+    let frontend = frontend(&tsconfig)?;
+    let directory = tsconfig.parent().context("a config directory")?;
     let (mut converted, mut unsupported) = (0, 0);
-    for path in session.own_sources()? {
-        let tree = session.file(&path)?;
-        let code = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
-        let text = nts_react::convert::text::SourceText::new(&code);
+    frontend.inspect(&tsconfig, |file, _types| -> Result<()> {
+        if !own_source(file.path, directory) {
+            return Ok(());
+        }
+        let (path, tree, code) = (file.path, file.tree, file.text);
+        let text = nts_react::convert::text::SourceText::new(code);
         let name = path.file_name().unwrap_or("source");
-        let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
+        let nodes = nts_react::syntax::Nodes::new(&tree.nodes);
         match nts_react::convert::convert_file(nodes, nts_semantic_schema::NodeId(0), &text) {
             Ok(file) => {
                 let scope = nts_react::scope::build(&file);
@@ -116,7 +119,8 @@ fn convert(tsconfig: &str, out: &str) -> Result<()> {
                 unsupported += 1;
             }
         }
-    }
+        Ok(())
+    })?;
     eprintln!("converted {converted}, unsupported {unsupported}");
     Ok(())
 }
@@ -138,26 +142,19 @@ fn compile(
         .with_context(|| format!("no {tsconfig}"))?;
     let out = camino::Utf8PathBuf::from(out);
     std::fs::create_dir_all(&out).with_context(|| format!("cannot create {out}"))?;
-    let mut session = nts_react::project::Session::open(&tsconfig)?;
+    let frontend = frontend(&tsconfig)?;
+    let directory = tsconfig.parent().context("a config directory")?;
     let (mut compiled, mut unsupported) = (0, 0);
-    for path in session.own_sources()? {
-        let tree = session.file(&path)?;
-        let code = std::fs::read_to_string(&path).with_context(|| format!("cannot read {path}"))?;
+    frontend.inspect(&tsconfig, |file, types| -> Result<()> {
+        if !own_source(file.path, directory) {
+            return Ok(());
+        }
+        let (path, tree, code) = (file.path, file.tree, file.text);
         let name = path.file_name().unwrap_or("source");
-        let nodes = nts_react::tsgo::Nodes::new(&tree.nodes);
-        let mut types = SessionTypes {
-            session: &mut session,
-            path: &path,
-            tree: &tree,
-        };
-        match nts_react::stage::compile_file(
-            &code,
-            nodes,
-            path.as_str(),
-            options,
-            &mut types,
-            print,
-        ) {
+        let nodes = nts_react::syntax::Nodes::new(&tree.nodes);
+        let mut types = DirectTypes(types);
+        match nts_react::stage::compile_file(code, nodes, path.as_str(), options, &mut types, print)
+        {
             Ok(outcome) => {
                 std::fs::write(
                     out.join(format!("{name}.result.json")),
@@ -171,21 +168,29 @@ fn compile(
             }
             Err(nts_react::stage::Refused::Unsupported(_)) => unsupported += 1,
         }
-    }
+        Ok(())
+    })?;
     eprintln!("compiled {compiled}, unsupported {unsupported}");
     Ok(())
 }
 
-/// The checker's types, from the session that checked the file being printed.
-struct SessionTypes<'s> {
-    session: &'s mut nts_react::project::Session,
-    path: &'s camino::Utf8Path,
-    tree: &'s nts_frontend_ts::tsgo::ast::EncodedSourceFile,
+fn frontend(tsconfig: &camino::Utf8Path) -> Result<nts_frontend_ts::Frontend> {
+    let directory = tsconfig
+        .parent()
+        .context("a tsconfig path has a directory")?;
+    Ok(nts_frontend_ts::Frontend::new(directory))
 }
 
-impl nts_react::print::TypeOracle for SessionTypes<'_> {
+fn own_source(path: &camino::Utf8Path, directory: &camino::Utf8Path) -> bool {
+    path.starts_with(directory)
+        && !path.as_str().contains("/node_modules/")
+        && !nts_semantic_schema::reachability::is_declaration_file(path.as_str())
+        && matches!(path.extension(), Some("ts" | "tsx"))
+}
+
+struct DirectTypes<'a>(&'a nts_frontend_ts::transform::NodeTypes<'a>);
+impl nts_react::print::TypeOracle for DirectTypes<'_> {
     fn type_at(&mut self, node: u32) -> Option<String> {
-        self.session
-            .type_text(self.path, self.tree, nts_semantic_schema::NodeId(node))
+        self.0.type_at(nts_semantic_schema::NodeId(node))
     }
 }

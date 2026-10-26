@@ -3,34 +3,28 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(relative: &str) -> Option<hir::Program> {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP structural_adapters: NTS_TSGO is not set");
-        return None;
-    };
+fn prepared(relative: &str) -> hir::Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .expect("fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(
         !snapshot.has_errors(),
         "the checker accepts these method relations"
     );
-    Some(hir::prepare(&snapshot).expect("valid prepared HIR").program)
+    hir::prepare(&snapshot).expect("valid prepared HIR").program
 }
 
 #[test]
 fn class_and_interface_return_bridges_share_the_conversion_plan() {
-    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
-    else {
-        return;
-    };
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
     let child = program
         .layouts
         .iter()
@@ -93,10 +87,7 @@ fn class_and_interface_return_bridges_share_the_conversion_plan() {
 
 #[test]
 fn a_shared_projection_keeps_only_guarantees_from_both_faces() {
-    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
-    else {
-        return;
-    };
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
     let reader = program
         .layouts
         .iter()
@@ -123,9 +114,7 @@ fn a_shared_projection_keeps_only_guarantees_from_both_faces() {
 
 #[test]
 fn a_covariant_return_does_not_hide_the_class_parameters_erasure_mismatch() {
-    let Some(program) = prepared("tests/programs/structural-bridge-absence") else {
-        return;
-    };
+    let program = prepared("tests/programs/structural-bridge-absence");
     assert!(
         program
             .uncompiled
@@ -138,10 +127,7 @@ fn a_covariant_return_does_not_hide_the_class_parameters_erasure_mismatch() {
 
 #[test]
 fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() {
-    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
-    else {
-        return;
-    };
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
     assert!(
         program
             .funcs
@@ -173,10 +159,7 @@ fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() 
 
 #[test]
 fn the_interface_declares_its_own_signature_and_the_table_adapts_to_it() {
-    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
-    else {
-        return;
-    };
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
     let sink = program
         .funcs
         .iter()
@@ -242,10 +225,7 @@ fn the_interface_declares_its_own_signature_and_the_table_adapts_to_it() {
 
 #[test]
 fn equivalent_callable_faces_share_the_adapter() {
-    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
-    else {
-        return;
-    };
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
     let listener = program
         .layouts
         .iter()
@@ -268,10 +248,7 @@ fn equivalent_callable_faces_share_the_adapter() {
 
 #[test]
 fn specialization_narrows_the_body_and_preserves_the_table_signature() {
-    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
-    else {
-        return;
-    };
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
     let body = program
         .funcs
         .iter()
@@ -300,9 +277,7 @@ fn specialization_narrows_the_body_and_preserves_the_table_signature() {
 
 #[test]
 fn a_narrowed_input_a_defaulted_optional_and_an_interface_cast_block_inference() {
-    let Some(program) = prepared("tests/programs/structural-incompatible") else {
-        return;
-    };
+    let program = prepared("tests/programs/structural-incompatible");
     for class in ["Exact", "Literal", "Defaulted", "WantsInterface"] {
         let layout = program
             .layouts
@@ -332,9 +307,7 @@ fn a_narrowed_input_a_defaulted_optional_and_an_interface_cast_block_inference()
 
 #[test]
 fn equal_machine_signatures_keep_distinct_absence_conversions() {
-    let Some(program) = prepared("tests/programs/structural-absence") else {
-        return;
-    };
+    let program = prepared("tests/programs/structural-absence");
     let adapters: Vec<_> = program
         .funcs
         .iter()
@@ -354,9 +327,7 @@ fn equal_machine_signatures_keep_distinct_absence_conversions() {
 
 #[test]
 fn a_named_literal_fills_the_row_and_allows_class_edges() {
-    let Some(program) = prepared("tests/programs/structural-literal-gap") else {
-        return;
-    };
+    let program = prepared("tests/programs/structural-literal-gap");
     assert!(
         !program
             .uncompiled

@@ -341,7 +341,7 @@ impl<'b, 'p> Body<'b, 'p> {
             let OpKind::ConstString(text) = &self.func.value(value).kind else {
                 continue;
             };
-            crate::strings::constant(self, &text.clone());
+            crate::strings::constant(self, text.clone());
             let local = self
                 .local(value)
                 .map_err(|failure| failure.at(&self.func.name, &self.func.value(value).origin))?;

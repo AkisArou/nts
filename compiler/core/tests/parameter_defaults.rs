@@ -12,26 +12,26 @@
 //! that reads a *later* parameter itself (TS2372), so the only direction that
 //! reaches here is the one that works.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -61,9 +61,7 @@ fn calls_to<'a>(func: &'a hir::Func, callee: &str) -> Vec<&'a Vec<hir::ValueId>>
 /// Nothing in the fixture is refused, which is the whole claim.
 #[test]
 fn a_default_may_read_the_parameters_before_it() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     assert_eq!(
         lowered
             .diagnostics
@@ -83,9 +81,7 @@ fn a_default_may_read_the_parameters_before_it() {
 /// differential.
 #[test]
 fn every_call_is_filled_to_the_signature() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     let calls = calls_to(func(&lowered, "everyArity"), "twoBack");
     assert_eq!(calls.len(), 3, "three call sites, at three arities");
     for args in calls {
@@ -102,9 +98,7 @@ fn every_call_is_filled_to_the_signature() {
 /// this is what says which.
 #[test]
 fn the_default_reads_the_argument_the_call_passed() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     let caller = func(&lowered, "everyArity");
     let calls = calls_to(caller, "twoBack");
     let one_argument = calls
@@ -139,9 +133,7 @@ fn the_default_reads_the_argument_the_call_passed() {
 /// needed there; what this pins is that the *outer* call's binding was undone.
 #[test]
 fn a_recursive_call_restores_the_binding_it_shadowed() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     let counter = func(&lowered, "count");
     for args in calls_to(counter, "count") {
         assert_eq!(args.len(), 2, "the recursive call supplies both");
@@ -190,9 +182,7 @@ fn a_recursive_call_restores_the_binding_it_shadowed() {
 /// this file**; only the differential noticed, on 26 cases.
 #[test]
 fn the_second_default_reads_the_second_argument() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     let caller = func(&lowered, "everyArity");
     // The call site that wrote two arguments: its third is the only default.
     // Found by looking for the one whose second argument is not derived from
@@ -226,9 +216,7 @@ fn the_second_default_reads_the_second_argument() {
 /// and both defaults read its result.
 #[test]
 fn the_argument_is_evaluated_once_however_many_defaults_read_it() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     let caller = func(&lowered, "theArgumentIsEvaluatedOnce");
     assert_eq!(
         calls_to(caller, "bump").len(),
@@ -248,9 +236,7 @@ fn the_argument_is_evaluated_once_however_many_defaults_read_it() {
 /// is an object where a number belongs.
 #[test]
 fn a_methods_receiver_does_not_shift_the_binding() {
-    let Some(lowered) = lowered("parameter-defaults") else {
-        return;
-    };
+    let lowered = lowered("parameter-defaults");
     let caller = func(&lowered, "throughAMethod");
     let calls = calls_to(caller, "Span#widen");
     assert_eq!(calls.len(), 2, "two call sites");

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Link into a worktree what no commit carries: the third-party clones, the
-# tsgo binary and the workspace's node_modules.
+# native checker's upstream corpora and the workspace's node_modules.
 #
 #   sh tooling/lanes/inputs.sh gate <shared checkout> <tree>   what pinned.sh gates in
 #   sh tooling/lanes/inputs.sh lane <shared checkout> <tree>   what `lane start` gives a lane
@@ -10,22 +10,18 @@
 # without node_modules builds nothing a config file names. Run it again after
 # any checkout; every link is re-made, never trusted.
 #
-# Both modes get a real, patched source worktree and the binary for this
-# tree's gitlink plus ordered patches. The shared checkout may be at another
-# frontend pin. Never follow its mutable target/tsgo or source checkout.
 set -eu
 
 mode=$1
 root=$2
 tree=$3
 case $mode in
-  gate|lane) linked="third_party/test262 third_party/are-we-fast-yet third_party/node third_party/deno" ;;
+  gate|lane) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/node third_party/deno" ;;
   *) echo "inputs.sh: mode is gate or lane, not $mode" >&2; exit 2 ;;
 esac
-node "$(dirname -- "$0")/tsgo.ts" prepare "$root" "$tree"
 
 # The gitignored third-party clones are inputs rather than sources -- test262,
-# Are We Fast Yet, node's `lib/`, and the tsgo binary. They are not in any
+# Are We Fast Yet, TypeScript's tests and node's `lib/`. They are not in any
 # commit, so a fresh worktree has none of them; symlinked rather than copied
 # because they are read-only here and total about two gigabytes.
 for shared in $linked; do
@@ -38,6 +34,7 @@ for shared in $linked; do
     # A real directory left (a checked-out submodule) is kept: `ln` would put
     # the link inside it.
     if [ -L "$tree/$shared" ] || [ ! -e "$tree/$shared" ]; then
+      mkdir -p "$(dirname "$tree/$shared")"
       ln -sfn "$root/$shared" "$tree/$shared"
     fi
   fi

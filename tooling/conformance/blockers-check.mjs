@@ -24,11 +24,12 @@
 // quickly: the annotated-const write was fixed twice today, the second time
 // because the first fix broke `instanceof`.
 
-import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+import { childSucceeded, completedJvmClasses, recordChild } from "./blockers-child.mjs";
 
 /* Every emitted tree under one root, removed when the run ends.
  *
@@ -46,8 +47,10 @@ import { tmpdir } from "node:os";
  * hand will want. */
 const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-blockers-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+let retainRun = false;
+let childSequence = 0;
 process.on("exit", () => {
-  if (process.env.NTS_KEEP_TEMP === undefined) {
+  if (process.env.NTS_KEEP_TEMP === undefined && !retainRun) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
   } else {
     console.log(`  kept ${RUN_ROOT}`);
@@ -173,9 +176,23 @@ function run(args) {
   const result = spawnSync(compiler, args, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    env: { NTS_TSGO: join(ROOT, "target/tsgo"), ...process.env },
+    env: { NTS_CHECKERS: "1", ...process.env },
   });
-  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const child = recordChild(compiler, args, result);
+  const stem = join(RUN_ROOT, `child-${childSequence++}`);
+  // Before any verdict: failed or interrupted children cannot turn partial
+  // diagnostics, an old file, or a completion phrase into a fixture result.
+  const previousRetention = retainRun;
+  retainRun = true; // Also preserve already-written artifacts if metadata I/O fails.
+  writeFileSync(`${stem}.stdout`, child.stdout);
+  writeFileSync(`${stem}.stderr`, child.stderr);
+  writeFileSync(`${stem}.json`, JSON.stringify(child, null, 2) + "\n");
+  retainRun = previousRetention || !childSucceeded(child);
+  if (!childSucceeded(child)) {
+    throw new Error(`compiler child failed: status=${child.status} signal=${child.signal} ` +
+      `error=${JSON.stringify(child.error)}; full result at ${stem}.json`);
+  }
+  return child;
 }
 
 // The fixtures git tracks, as interop counts its projects. A gate tree reused
@@ -241,11 +258,14 @@ for (const name of names) {
   // refused", and a construct that regressed into a cascade would have kept the
   // guard green. `cascade-with-no-root` itself escaped only because it carries
   // the `emit-c --napi ->` prefix and never took this path.
-  const output = viaJvm
-    ? run(["emit-jvm", tsconfig, "--out", workspace("fixture-")])
+  const jvmOut = viaJvm ? workspace("fixture-") : null;
+  const child = viaJvm
+    ? run(["emit-jvm", tsconfig, "--out", jvmOut])
     : viaEmit
     ? run(["emit-c", tsconfig, "--out", workspace("fixture-"), "--napi", ...extraFlags])
     : run(["hir", "--prepared", tsconfig]);
+  const output = `${child.stdout}\n${child.stderr}`;
+  const jvmClasses = viaJvm ? completedJvmClasses(child, jvmOut) : null;
 
   // Two ways for a fixture to say "this works now". `nothing refused` is the
   // lowering's, and `publishes X` is the wrapper's -- `emit-c` prints no such
@@ -259,6 +279,7 @@ for (const name of names) {
     ? new RegExp(`napi_set_named_property\\(env, exports, "${publishes[1]}"`).test(
       readEmitted(output),
     ) && !/no wrapper/.test(output)
+    : viaJvm ? jvmClasses !== null
     : /nothing refused/.test(output) && !/no wrapper/.test(output);
 
   // The expectation minus its prose: the diagnostic text itself. The command
@@ -415,6 +436,7 @@ for (const name of names) {
   // absent file is not evidence about its contents in either direction.
   if (fileForm && program.length === 0) {
     unexpected++;
+    retainRun = true;
     console.log(`  NO OUTPUT   ${name}: emit-c wrote no program.c, so the expectation could not be`);
     console.log(`                evaluated either way. Expected: ${expected}`);
     continue;
@@ -423,6 +445,7 @@ for (const name of names) {
   const declared = interfaceForm === null ? null : emittedInterfaces(output, interfaceForm[1]);
   if (typeof declared === "string") {
     unexpected++;
+    retainRun = true;
     console.log(`  NO OUTPUT   ${name}: ${declared}, so the expectation could not be evaluated`);
     console.log(`                either way. Expected: ${expected}`);
     continue;
@@ -544,7 +567,8 @@ for (const name of names) {
   let controlErrors = null;
   if (failsToCompile !== null && extraFlags.length > 0) {
     const dir = workspace("ctl-");
-    const plain = run(["emit-c", tsconfig, "--out", dir, "--napi"]);
+    const control = run(["emit-c", tsconfig, "--out", dir, "--napi"]);
+    const plain = `${control.stdout}\n${control.stderr}`;
     const emitted = /wrote .* to (\S+)/.exec(plain);
     controlErrors = emitted === null ? ["control build emitted nothing"] : compileEmitted(emitted[1]);
   }
@@ -683,6 +707,7 @@ for (const name of names) {
     const own = carrying.filter((l) => l.includes(`refusals/${name}/src`));
     if (carrying.length > 0 && own.length === 0) {
       unexpected++;
+    retainRun = true;
       console.log(`  NOT ITS OWN ${name}: the expected text appears ${carrying.length} time(s),`);
       console.log("                none of them in this fixture's own source. It is holding");
       console.log("                on another file's diagnostic.");
@@ -699,6 +724,7 @@ for (const name of names) {
   // separately this week.
   if (calls !== null && callResult?.stage !== "ran") {
     unexpected++;
+    retainRun = true;
     const stage = callResult?.stage ?? "unknown";
     if (stage === "emitted-nothing") {
       console.log(`  NOTHING EMITTED ${name}: the compiler wrote no C, so the call was never made.`);
@@ -718,6 +744,7 @@ for (const name of names) {
   }
   if (calls !== null && !(callResult.control.ok && callResult.control.value === true)) {
     unexpected++;
+    retainRun = true;
     console.log(`  CONTROL FAILED  ${name}: the control expression did not hold, so the`);
     console.log("                  expectation says nothing either way.");
     console.log(`                  control: ${controlLine === null ? "(none declared)" : controlLine[1].slice(0, 70)}`);
@@ -729,6 +756,7 @@ for (const name of names) {
     continue;
   }
   unexpected++;
+  retainRun = true;
   // A guard that stops holding is a **regression**, and every branch below used
   // to call it `FIXED` -- the reassuring word, for the one outcome that needs a
   // person fastest. `isGuard` was computed and then consulted only on the
@@ -783,6 +811,8 @@ for (const name of names) {
     console.log(`  ${verdict}  ${name}: no longer emits it. Expected:`);
   } else if (expectsClean) {
     console.log(`  REGRESSED   ${name}: expected no refusal, got:`);
+  } else if (viaJvm && jvmClasses !== null) {
+    console.log(`  ${verdict}  ${name}: expected refusal vanished; emitted ${jvmClasses} JVM classes. Runtime agreement not checked. Expected:`);
   } else if (isClean) {
     console.log(`  ${verdict}  ${name}: no longer refuses. Expected:`);
   } else {

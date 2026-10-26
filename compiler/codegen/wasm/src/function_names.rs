@@ -39,7 +39,7 @@ pub(crate) fn call(b: &mut Body<'_, '_>, result: ValueId, args: &[ValueId]) -> R
     }
     let target = callee(b.m)?;
     b.load(function)?;
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.call(target);
     objects::adapt(
         b,

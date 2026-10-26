@@ -191,16 +191,14 @@ fn identity(func: &Func, mut value: ValueId) -> ValueId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
 
     #[test]
     fn removing_the_class_test_removes_the_direct_storage_permission() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/accessor-layout-proof/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
         let mut program = crate::hir::lower::lower(&snapshot).program;
@@ -233,12 +231,10 @@ mod tests {
     /// arrives there, and the read must stay dispatched.
     #[test]
     fn the_join_after_a_class_test_is_not_one_of_its_arms() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/accessor-layout-proof/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
         let program = crate::hir::lower::lower(&snapshot).program;

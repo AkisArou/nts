@@ -7,26 +7,26 @@
 //! cases would agree with node and be slower for no reason; one that folded the
 //! mixed case to a constant would be silently wrong.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// The ops of one exported function, by name.
@@ -75,7 +75,18 @@ fn tested_layouts(lowered: &hir::lower::Lowered, func: &hir::Func) -> Vec<Vec<Ve
                             .iter()
                             .find(|layout| layout.types.contains(class))
                     })
-                    .map(|layout| layout.fields.iter().map(|f| f.name.clone()).collect())
+                    .map(|layout| {
+                        layout
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                f.name
+                                    .public_name()
+                                    .expect("the fixture declares public fields")
+                                    .to_owned()
+                            })
+                            .collect()
+                    })
                     .collect(),
             ),
             _ => None,
@@ -97,9 +108,7 @@ fn tested_layouts(lowered: &hir::lower::Lowered, func: &hir::Func) -> Vec<Vec<Ve
 /// literals laid out as it.
 #[test]
 fn a_mixed_union_becomes_a_test_against_the_types_that_declare_it() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     for (name, keys) in [
         ("narrows", &["radius"][..]),
         ("chained", &["duplex", "read"][..]),
@@ -137,9 +146,7 @@ fn a_mixed_union_becomes_a_test_against_the_types_that_declare_it() {
 /// about a hierarchy specifically.
 #[test]
 fn the_candidates_include_the_subclasses_of_every_arm() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     // `Base | Unrelated`, and only `Derived` declares `extra`. Neither arm
     // does, so an arms-only lowering emits no test at all.
     let tests = class_tests(func(&lowered, "aSubclassHasMore"));
@@ -159,9 +166,7 @@ fn the_candidates_include_the_subclasses_of_every_arm() {
 /// test is emitted.
 #[test]
 fn a_decided_answer_is_a_constant_and_not_a_test() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     for (name, want) in [("everyArmHasIt", true), ("noArmHasIt", false)] {
         let function = func(&lowered, name);
         assert!(
@@ -184,9 +189,7 @@ fn a_decided_answer_is_a_constant_and_not_a_test() {
 /// here, and `tests/programs/in-operator` compares the count against node.
 #[test]
 fn a_constant_answer_still_evaluates_its_operand() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     let function = func(&lowered, "evaluatesItsOperand");
     let calls = function
         .values
@@ -215,9 +218,7 @@ fn a_constant_answer_still_evaluates_its_operand() {
 /// statically and an optional one is answered from a bit, on the same object.
 #[test]
 fn in_on_an_optional_property_reads_a_presence_bit() {
-    let Some(lowered) = lowered("an-optional-property") else {
-        return;
-    };
+    let lowered = lowered("an-optional-property");
     assert!(
         lowered.is_complete(),
         "nothing in the fixture refuses: {:?}",
@@ -272,9 +273,7 @@ fn in_on_an_optional_property_reads_a_presence_bit() {
 /// An `in` whose key the program computes is refused, and separately.
 #[test]
 fn in_with_a_computed_key_is_refused() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     let reasons: Vec<&str> = lowered
         .diagnostics
         .iter()
@@ -300,9 +299,7 @@ fn in_with_a_computed_key_is_refused() {
 /// unguarded `unknown` is still refused, because the type says so.
 #[test]
 fn an_object_becomes_a_test_against_every_class_declaring_it() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     // The helpers are not exported, so they are found among all functions
     // rather than by an export's name.
     let sets: Vec<usize> = lowered
@@ -327,9 +324,7 @@ fn an_object_becomes_a_test_against_every_class_declaring_it() {
 /// exactly this and nothing else.
 #[test]
 fn an_object_literals_type_is_a_candidate() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     // `Labelled` is an interface: nothing constructs it with `new`, and the
     // only value of it in the program is a literal. So the class test in
     // `hasLabel` names a type the hierarchy does not have, and a set built from
@@ -367,9 +362,7 @@ fn an_object_literals_type_is_a_candidate() {
 /// narrowing buys exactly nothing in exchange for the lie.
 #[test]
 fn an_unknown_is_not_narrowed_to_the_empty_object_type() {
-    let Some(lowered) = lowered("in-operator") else {
-        return;
-    };
+    let lowered = lowered("in-operator");
     for name in ["hasLabel", "hasMessage"] {
         let Some(helper) = lowered.program.funcs.iter().find(|func| func.name == name) else {
             continue;
@@ -403,9 +396,7 @@ fn an_unknown_is_not_narrowed_to_the_empty_object_type() {
 /// for the type it should have named, which is what the refusal was avoiding.
 #[test]
 fn a_key_a_native_type_answers_for_reaches_that_type_s_test() {
-    let Some(lowered) = lowered("in-on-an-object-a-native-answers-for") else {
-        return;
-    };
+    let lowered = lowered("in-on-an-object-a-native-answers-for");
     for (name, wanted) in [
         // A `Promise` and nothing else. 27 of the 50 sites in `runtime/node`.
         ("thenable", &["nts_is_promise"][..]),
@@ -457,9 +448,7 @@ fn a_key_a_native_type_answers_for_reaches_that_type_s_test() {
 /// `TagOf` and the other has none.
 #[test]
 fn a_function_is_answered_by_its_tag_and_a_class_is_not() {
-    let Some(lowered) = lowered("in-on-an-object-a-native-answers-for") else {
-        return;
-    };
+    let lowered = lowered("in-on-an-object-a-native-answers-for");
     let tags = |name: &str| {
         func(&lowered, name)
             .values

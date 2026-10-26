@@ -57,9 +57,8 @@
 // is the gate's own command and not one resembling it, and a misspelt name
 // fails there rather than selecting nothing. `build` goes first: most steps
 // drive this tree's `target/release/nts`. The environment passes through, and
-// a worktree's missing inputs are the gate's to name, not this script's: a
-// fresh one stops at "no frontend at <tree>/target/tsgo", and `NTS_TSGO=` the
-// main tree's, as `pinned.sh` passes it, is the answer.
+// a worktree's missing corpus inputs are the gate's to name, not this script's.
+// The native frontend is part of the pinned compiler binary.
 //
 // **Everything else** is printed and left to the author: a comparison of two
 // binaries, a sabotage, an announcement. The gate is a floor, not a
@@ -160,7 +159,6 @@ export const ASKS = {
   definitions: ["whether", "did the runtime's reach go down, per module"],
   assembles: ["valid", "is the runtime's LLVM valid IR"],
   "c-compiles": ["valid", "does every runtime project's emitted C compile, including web-platform"],
-  "snapshot-cache": ["valid", "is a cached snapshot the same program as a fresh one"],
   types: ["valid", "is the snapshot's type table consistent"],
   "bench-agree": ["answers", "does every backend build and agree on the benchmarks"],
   memory: ["answers", "does counting leak or free twice, measured by live objects"],
@@ -183,13 +181,13 @@ export const ASKS = {
   interop: ["answers", "does every interop project build the way its README says and run"],
   divergence: ["valid", "do node's divergence instruments still hold"],
   sweep: ["answers", "does the value-kind cross-product agree on C"],
-  corpus: ["valid", "invalid HIR 0, uncompilable C 0, unverifiable class 0 over the suite"],
+  corpus: ["valid", "does the recorded core population finish without frontend, HIR, compiler or backend failures"],
   "on-device": ["answers", "do the bench cases agree on java and dalvikvm, on a device"],
   test262: ["valid", "is the test262 pin reachable, the inventory and the features audit current"],
   config: ["valid", "are the nts.config.ts files coherent"],
   "react-sources": ["valid", "do the vendored React sources match their manifest"],
   "licenses": ["valid", "do full compiler dependency notices match the locked closure"],
-  "frontend-tsrs": ["valid", "do native sources, attributions, feature-on Clippy and adapter tests pass"],
+  "frontend-tsrs": ["valid", "do native sources, adapter tests and every program's reachable capture graph pass"],
   primitives: ["valid", "does every name docs/primitives.md cites exist"],
   records: ["hygiene", "is every record number used once"],
   "old-paths": ["hygiene", "does anything sit or point where the corpora used to be"],
@@ -220,7 +218,7 @@ export const RULES = [
   },
   {
     name: "the native TypeScript frontend",
-    when: (p) => /^(third_party\/tsrs|compiler\/frontend-tsrs)\//.test(p),
+    when: (p) => /^(third_party\/tsrs|compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema)\//.test(p),
     steps: ["frontend-tsrs"],
     arms: [],
   },
@@ -304,7 +302,7 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    steps: ["examples", "rc", "outcomes", "snapshot-cache", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "typescript-cases", "benches"],
+    steps: ["examples", "rc", "outcomes", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "typescript-cases", "benches"],
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
@@ -343,7 +341,7 @@ export const RULES = [
   {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
-    steps: ["snapshot-cache", "types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
+    steps: ["types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
     arms: [
       { kind: "hygiene", asks: "does a cache written by the old schema get rejected", run: "bump SCHEMA_VERSION if a semantic-schema struct changed" },
       { kind: "valid", asks: "the examples' type tables too, not only the runtime's", run: "NTS_BIN=<after> node tooling/conformance/types-check.mjs --examples" },
@@ -834,11 +832,11 @@ export function dependents(dir) {
 // `member` decides membership by the path alone, so a deleted or renamed
 // program still owes its corpus: the tree no longer has it to list.
 const CORPORA = [
-  { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "expect-ir", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
+  { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "expect-ir", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity", "example-refusals", "dex"] },
   { name: "the interop projects", wide: true, member: /^tests\/interop\/[^/]+\//, dirs: () => kids("tests/interop"), steps: ["interop"] },
   { name: "the blockers", member: /^tests\/refusals\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tests\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
-  { name: "the runtime modules", wide: true, member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
+  { name: "the runtime modules", wide: true, member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "types", "jvm-verifies", "divergence"] },
   { name: "the bench cases", wide: true, member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex", "expect-ir"] },
   { name: "the memory cases", wide: true, member: /^tests\/memory\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
 ];

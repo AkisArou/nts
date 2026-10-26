@@ -27,7 +27,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::path::PathBuf;
 
 mod common;
@@ -44,9 +44,6 @@ fn declined() -> Vec<(String, String)> {
     // ran it: on 2026-09-30 a signature spelled `Erased-Callable` refused four
     // callbacks here while six landings in a row read the suite as green. A
     // check that passes by not running is the failure it exists to prevent.
-    let tsgo = nts_frontend_ts::tsgo::locate().unwrap_or_else(|| {
-        panic!("no tsgo: set NTS_TSGO or build target/tsgo (tooling/bootstrap/bootstrap.sh)")
-    });
     let tsconfig = Utf8PathBuf::from_path_buf(
         repository()
             .join("compiler/codegen/jvm/tests/refusals/tsconfig.json")
@@ -55,7 +52,8 @@ fn declined() -> Vec<(String, String)> {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     // **The fixture must typecheck.** Every shape in it is legal TypeScript that

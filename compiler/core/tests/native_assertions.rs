@@ -4,22 +4,22 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn snapshot() -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let frontend = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> nts_semantic_schema::SemanticSnapshot {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/a-native-assertion-checks-its-representation/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some(snapshot)
+    snapshot
 }
 
 #[test]
 fn every_assertion_witness_root_survives_preparation() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let prepared = hir::prepare(&snapshot).expect("valid assertion HIR");
     assert!(
         prepared.diagnostics.is_empty(),
@@ -57,7 +57,7 @@ fn every_assertion_witness_root_survives_preparation() {
 
 #[test]
 fn synthesized_assertion_errors_reach_the_callers_handler() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     for (caller, callee) in [
@@ -93,7 +93,7 @@ fn synthesized_assertion_errors_reach_the_callers_handler() {
 
 #[test]
 fn proven_identity_and_satisfies_controls_have_no_assertion_cost() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let prepared = hir::prepare(&snapshot).expect("valid assertion HIR");
     for name in ["identityControl", "satisfiesControl"] {
         let func = prepared
@@ -130,13 +130,11 @@ fn proven_identity_and_satisfies_controls_have_no_assertion_cost() {
 
 #[test]
 fn a_provided_error_upcast_keeps_the_existing_representation() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
         "../../tests/programs/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json",
     );
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

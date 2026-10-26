@@ -30,12 +30,15 @@ pub struct Entry {
 #[derive(Debug, Clone)]
 pub struct Family {
     pub face: TypeId,
-    pub member: String,
+    pub member: nts_semantic_schema::PropertyKey,
     pub field: Option<u32>,
     pub getter: Entry,
     pub setter: Option<Entry>,
     pub raising: Vec<Entry>,
     pub owners: Vec<TypeId>,
+    /// Source-mode authority retained independently of `stored_dispatch`:
+    /// eager families require dispatch even when their storage happens to fit.
+    pub eager: bool,
     /// Pure storage reads wait until concrete source copies have been made.
     pub pending: bool,
     /// The source family needs dispatch for its stored operations. This fact
@@ -307,6 +310,9 @@ impl Plan {
         targets
     }
 }
+
+mod read_contracts;
+pub use read_contracts::{ReadContract, read_contracts};
 
 /// Run after source shaping, before numeric storage and signature decisions.
 pub(super) fn materialize(program: &mut Program) -> usize {

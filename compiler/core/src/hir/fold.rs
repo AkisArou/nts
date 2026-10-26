@@ -86,41 +86,15 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
 /// is where it was.
 const JOINED_MAX: usize = 1 << 16;
 
-/// Two string constants as one, where joining their bytes is joining their
-/// UTF-16 units.
-///
-/// `json-scan` builds its input as four literals joined on every call, and the
-/// Wasm backend then scanned a string the engine kept as a chain of pieces: the
-/// scan ran at 0.58 of its time once the input was one literal, with the
-/// scanner's own code unchanged. A constant is a constant on every backend.
-///
-/// Bytes are units except at one junction. A lone surrogate held in its
-/// three-byte generalized UTF-8 form, as a high one ending a constant followed
-/// by a low one starting the next, would join into the two halves' bytes where
-/// JavaScript sees one character, whose bytes are the pair's four. That
-/// junction is left to run time rather than taught a second encoding here.
-/// Today it cannot arise: a lone surrogate in a literal reaches this program as
-/// three U+FFFD (tests/outcomes/lone-surrogates-compare-as-one-character), and
-/// the fix recorded there reads the literal's own bytes -- this form.
-fn joined_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<String> {
+/// Concatenation joins UTF-16 units, including a high/low pair at the join.
+fn joined_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<super::JsText> {
     let (OpKind::ConstString(left), OpKind::ConstString(right)) = (
         &func.values[lhs.0 as usize].kind,
         &func.values[rhs.0 as usize].kind,
     ) else {
         return None;
     };
-    if left.len() + right.len() > JOINED_MAX {
-        return None;
-    }
-    let (head, tail) = (left.as_bytes(), right.as_bytes());
-    let ends_high = head.len() >= 3
-        && head[head.len() - 3] == 0xED
-        && (0xA0..=0xAF).contains(&head[head.len() - 2]);
-    let starts_low = tail.len() >= 3 && tail[0] == 0xED && (0xB0..=0xBF).contains(&tail[1]);
-    if ends_high && starts_low {
-        return None;
-    }
-    Some(format!("{left}{right}"))
+    (left.utf16_len().saturating_add(right.utf16_len()) <= JOINED_MAX).then(|| left.concat(right))
 }
 
 /// Whether a set is one value that can be written as a literal.

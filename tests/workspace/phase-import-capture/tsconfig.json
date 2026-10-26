@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "types": [],
+    "skipLibCheck": true
+  },
+  "files": ["src/main.ts"]
+}

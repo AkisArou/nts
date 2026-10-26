@@ -4,23 +4,21 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, Program};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::TypeId;
 
-fn prepared() -> Option<Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/interface-identities/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
-    Some(
-        hir::prepare_with(&snapshot, &hir::Options::default())
-            .expect("valid prepared HIR")
-            .program,
-    )
+    hir::prepare_with(&snapshot, &hir::Options::default())
+        .expect("valid prepared HIR")
+        .program
 }
 
 fn returns(program: &Program, name: &str) -> TypeId {
@@ -33,7 +31,7 @@ fn returns(program: &Program, name: &str) -> TypeId {
 
 #[test]
 fn empty_interfaces_share_storage_and_keep_distinct_declarations() {
-    let Some(program) = prepared() else { return };
+    let program = prepared();
     let left = returns(&program, "left");
     let right = returns(&program, "right");
     assert_ne!(left, right);
@@ -77,7 +75,7 @@ fn empty_interfaces_share_storage_and_keep_distinct_declarations() {
 
 #[test]
 fn generic_instantiations_keep_their_storage_under_one_declaration() {
-    let Some(program) = prepared() else { return };
+    let program = prepared();
     let numeric = returns(&program, "numeric");
     let textual = returns(&program, "textual");
     assert_ne!(numeric, textual);
@@ -105,7 +103,7 @@ fn generic_instantiations_keep_their_storage_under_one_declaration() {
 
 #[test]
 fn equal_storage_does_not_merge_nullable_and_optional_contracts() {
-    let Some(program) = prepared() else { return };
+    let program = prepared();
     let nullable = returns(&program, "nullable");
     let optional = returns(&program, "optional");
     assert_ne!(nullable, optional);

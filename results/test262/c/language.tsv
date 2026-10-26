@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler ed12bc7156294402, commit d5469510bc08147f816e31114362e54d81953365, backend c, harness d6442dbc09f91ad0; machine at start: 24.6 GB available, swap 2.4/31.5 GB, load 4.3/5.9 (1m/5m), 16 cores; 4 worker(s)
+# compiler 6768eb8d0734aa63, commit 07b52742d0686dea30f111f5ac465af1defd8651, backend c, harness d6442dbc09f91ad0; machine at start: 24 GB available, swap 4.9/31.5 GB, load 0/0.1 (1m/5m), 16 cores; 4 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -2612,7 +2612,7 @@ test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttarget
 test/language/expressions/dynamic-import/syntax/invalid/invalid-assignmenttargettype-syntax-error-9-lhs-assignment-operator-assignment-expression.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-defer-no-new-call-expression.js	pass	
@@ -2620,7 +2620,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-no-rest-param.js	pass	
@@ -2628,7 +2628,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-typeof-import-call-source-property.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-assignment-expression-typeof-import.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-defer-no-new-call-expression.js	pass	
@@ -2636,7 +2636,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-defe
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-no-rest-param.js	pass	
@@ -2645,7 +2645,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-typeof-impo
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-arrow-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-defer-no-new-call-expression.js	pass	
@@ -2653,7 +2653,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-funct
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-no-rest-param.js	pass	
@@ -2662,7 +2662,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-funct
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-await-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-defer-no-new-call-expression.js	pass	
@@ -2670,7 +2670,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-funct
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-no-rest-param.js	pass	
@@ -2680,7 +2680,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-funct
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-arrow-function-return-await-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-defer-no-new-call-expression.js	pass	
@@ -2688,7 +2688,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-aw
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-no-rest-param.js	pass	
@@ -2696,7 +2696,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-aw
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-typeof-import-call-source-property.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-await-typeof-import.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-defer-no-new-call-expression.js	pass	
@@ -2704,13 +2704,13 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-im
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-not-extensible-args.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-defer-no-new-call-expression.js	pass	
@@ -2718,7 +2718,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-re
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-return-await-no-rest-param.js	pass	
@@ -2730,7 +2730,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-ty
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-function-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-defer-no-new-call-expression.js	pass	
@@ -2738,7 +2738,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-i
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-no-rest-param.js	pass	
@@ -2747,7 +2747,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-t
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-async-gen-await-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-defer-no-new-call-expression.js	pass	
@@ -2755,9 +2755,9 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-defe
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-block-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-defer-no-new-call-expression.js	pass	
@@ -2765,7 +2765,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-imp
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-labeled-no-rest-param.js	pass	
@@ -2781,7 +2781,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-block-typeof-impo
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-block-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-defer-no-new-call-expression.js	pass	
@@ -2789,7 +2789,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-d
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-no-rest-param.js	pass	
@@ -2799,7 +2799,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-typeof-i
 test/language/expressions/dynamic-import/syntax/invalid/nested-do-while-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-defer-no-new-call-expression.js	pass	
@@ -2807,7 +2807,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-im
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-no-rest-param.js	pass	
@@ -2815,7 +2815,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-no
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-typeof-import-call-source-property.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-braceless-typeof-import.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-defer-no-new-call-expression.js	pass	
@@ -2823,7 +2823,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-defer
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-else-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-no-rest-param.js	pass	
@@ -2832,7 +2832,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-else-typeof-impor
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-else-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-defer-no-new-call-expression.js	pass	
@@ -2840,13 +2840,13 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-d
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-function-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-not-extensible-args.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-defer-no-new-call-expression.js	pass	
@@ -2854,7 +2854,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-i
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-return-no-rest-param.js	pass	
@@ -2867,7 +2867,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-function-typeof-i
 test/language/expressions/dynamic-import/syntax/invalid/nested-function-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-defer-no-new-call-expression.js	pass	
@@ -2875,7 +2875,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-impo
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-no-rest-param.js	pass	
@@ -2883,7 +2883,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-not-
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-typeof-import-call-source-property.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-braceless-typeof-import.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-defer-no-new-call-expression.js	pass	
@@ -2891,7 +2891,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-defer-n
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-if-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-no-rest-param.js	pass	
@@ -2900,7 +2900,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-if-typeof-import-
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-if-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-defer-no-new-call-expression.js	pass	
@@ -2908,7 +2908,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-defe
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/nested-while-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-no-rest-param.js	pass	
@@ -2917,7 +2917,7 @@ test/language/expressions/dynamic-import/syntax/invalid/nested-while-typeof-impo
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-typeof-import-source.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/nested-while-typeof-import.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
-test/language/expressions/dynamic-import/syntax/invalid/top-level-import-call-unknown.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/top-level-import-call-unknown.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-import-defer-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/top-level-import-defer-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-import-defer-no-new-call-expression.js	pass	
@@ -2925,7 +2925,7 @@ test/language/expressions/dynamic-import/syntax/invalid/top-level-import-defer-n
 test/language/expressions/dynamic-import/syntax/invalid/top-level-import-source-assignment-expr-not-optional.js	fail	accepted: was refused later (lowering)
 test/language/expressions/dynamic-import/syntax/invalid/top-level-import-source-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-import-source-no-new-call-expression.js	pass	
-test/language/expressions/dynamic-import/syntax/invalid/top-level-import-source-no-rest-param.js	fail	accepted: was refused later (lowering)
+test/language/expressions/dynamic-import/syntax/invalid/top-level-import-source-no-rest-param.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-no-new-call-expression-prop-access.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-no-new-call-expression.js	pass	
 test/language/expressions/dynamic-import/syntax/invalid/top-level-no-rest-param.js	pass	
@@ -3324,7 +3324,7 @@ test/language/expressions/greater-than/S11.8.2_A2.4_T2.js	pass
 test/language/expressions/greater-than/S11.8.2_A4.1.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.10.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.11.js	pass	
-test/language/expressions/greater-than/S11.8.2_A4.12_T1.js	fail	nts: uncaught Test262Error: #9: ("\uDC00" > "\uD800") === true
+test/language/expressions/greater-than/S11.8.2_A4.12_T1.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.12_T2.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.2.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.3.js	pass	
@@ -3403,7 +3403,7 @@ test/language/expressions/less-than/S11.8.1_A2.4_T2.js	pass
 test/language/expressions/less-than/S11.8.1_A4.1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.10.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.11.js	pass	
-test/language/expressions/less-than/S11.8.1_A4.12_T1.js	fail	nts: uncaught Test262Error: #9: ("\uD800" < "\uDC00") === true
+test/language/expressions/less-than/S11.8.1_A4.12_T1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.12_T2.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.2.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.3.js	pass	
@@ -5084,7 +5084,7 @@ test/language/module-code/early-dup-top-function-async.js	fail	accepted: was ref
 test/language/module-code/early-dup-top-function-generator.js	fail	accepted: was refused later (lowering)
 test/language/module-code/early-dup-top-function.js	fail	accepted: was refused later (lowering)
 test/language/module-code/early-export-global.js	pass	
-test/language/module-code/early-export-ill-formed-string.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/early-export-ill-formed-string.js	fail	accepted: was refused later (emit)
 test/language/module-code/early-export-unresolvable.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/early-import-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/early-import-as-arguments.js	fail	accepted: ran and threw Test262Error
@@ -5114,12 +5114,12 @@ test/language/module-code/export-default-asyncfunction-declaration-binding-exist
 test/language/module-code/export-default-asyncgenerator-declaration-binding-exists.js	pass	
 test/language/module-code/export-default-function-declaration-binding-exists.js	pass	
 test/language/module-code/export-default-generator-declaration-binding-exists.js	pass	
-test/language/module-code/export-expname-from-as-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-expname-from-as-unpaired-surrogate.js	fail	accepted: was refused later (emit)
 test/language/module-code/export-expname-from-star-unpaired-surrogate.js	pass	
-test/language/module-code/export-expname-from-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
+test/language/module-code/export-expname-from-unpaired-surrogate.js	fail	accepted: was refused later (emit)
 test/language/module-code/export-expname-import-unpaired-surrogate.js	fail	accepted: was refused later (lowering)
 test/language/module-code/export-expname-string-binding.js	fail	accepted: ran and threw Test262Error
-test/language/module-code/export-expname-unpaired-surrogate.js	fail	accepted: ran and threw Test262Error
+test/language/module-code/export-expname-unpaired-surrogate.js	fail	accepted: was refused later (emit)
 test/language/module-code/import-attributes/early-dup-attribute-key-export.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/import-attributes/early-dup-attribute-key-import-nobinding.js	fail	accepted: ran and threw Test262Error
 test/language/module-code/import-attributes/early-dup-attribute-key-import-withbinding.js	fail	accepted: ran and threw Test262Error
@@ -7440,7 +7440,7 @@ test/language/statements/for-of/return-from-try.js	pass
 test/language/statements/for-of/return.js	pass	
 test/language/statements/for-of/set-contract.js	pass	
 test/language/statements/for-of/set-expand-contract.js	pass	
-test/language/statements/for-of/string-astral-truncated.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/for-of/string-astral-truncated.js	pass	
 test/language/statements/for-of/string-astral.js	pass	
 test/language/statements/for-of/string-bmp.js	pass	
 test/language/statements/for-of/yield-star-from-catch.js	pass	

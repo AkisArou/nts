@@ -166,7 +166,7 @@ pub(crate) enum FuncKey {
 /// Every global the module can contain, named by what it means.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum GlobalKey {
-    Literal(String),
+    Literal(nts_semantic_schema::JsText),
     Host(&'static str),
     Singleton(crate::erased::Singleton),
     Descriptor(u32),
@@ -292,6 +292,7 @@ pub(crate) struct Builder<'p> {
     hir_funcs: FxHashMap<&'p str, &'p HirFunc>,
     globals: Vec<GlobalEntry>,
     global_keys: BTreeMap<GlobalKey, Global>,
+    literal_values: BTreeMap<u32, nts_semantic_schema::JsText>,
     /// Globals whose initializers are being built: a request for one of them
     /// is a dependency cycle, which no constant expression can express.
     building: BTreeSet<GlobalKey>,
@@ -332,6 +333,7 @@ impl<'p> Builder<'p> {
             hir_funcs: program.funcs.iter().map(|f| (f.name.as_str(), f)).collect(),
             globals: Vec::new(),
             global_keys: BTreeMap::new(),
+            literal_values: BTreeMap::new(),
             building: BTreeSet::new(),
             tags: Vec::new(),
             exports: Vec::new(),
@@ -634,7 +636,26 @@ impl<'p> Builder<'p> {
     /// An immutable string literal: an imported string constant, which the
     /// engine supplies at compile time, so reading one makes no call.
     pub(crate) fn literal(&mut self, text: &str) -> Global {
-        self.imported_global(GlobalKey::Literal(text.to_owned()), "'", text, true)
+        self.literal_text(&text.into())
+    }
+
+    pub(crate) fn literal_text(&mut self, text: &nts_semantic_schema::JsText) -> Global {
+        let key = GlobalKey::Literal(text.clone());
+        if let Some(global) = self.global_keys.get(&key) {
+            return *global;
+        }
+        if let Some(text) = text.as_utf8() {
+            self.imported_global(key, "'", text, true)
+        } else {
+            let ordinal = index(self.literal_values.len());
+            self.literal_values.insert(ordinal, text.clone());
+            self.imported_global(
+                key,
+                crate::UTF16_LITERAL_MODULE,
+                &ordinal.to_string(),
+                false,
+            )
+        }
     }
 
     /// A JS value the host supplies as an immutable `externref` global.
@@ -693,7 +714,8 @@ impl<'p> Builder<'p> {
     }
 
     pub(crate) fn export_func(&mut self, name: &str, func: Func) {
-        self.exports.push((name.to_owned(), Export::Func(func)));
+        self.exports
+            .push((checked_name(name).to_owned(), Export::Func(func)));
         self.host_entries.insert(func);
     }
 
@@ -703,8 +725,17 @@ impl<'p> Builder<'p> {
     }
 
     pub(crate) fn export_global(&mut self, name: &str, global: Global) {
-        self.exports.push((name.to_owned(), Export::Global(global)));
+        self.exports
+            .push((checked_name(name).to_owned(), Export::Global(global)));
     }
+}
+
+fn checked_name(name: &str) -> &str {
+    assert!(
+        u32::try_from(name.len()).is_ok(),
+        "an emitted Wasm name exceeds the binary byte-length bound"
+    );
+    name
 }
 
 pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
@@ -754,6 +785,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     crate::locals::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;
+    manifest.literal_constants = m.literal_values.clone();
     manifest.builtins = assembled.builtins;
     manifest.features = assembled.features;
     manifest.functions = routes;
@@ -994,6 +1026,7 @@ fn manifest(
         globals,
         init,
         imports: Vec::new(),
+        literal_constants: BTreeMap::new(),
         builtins: Vec::new(),
         features: Vec::new(),
         functions: Vec::new(),
@@ -1298,7 +1331,7 @@ fn code(m: &Builder<'_>, at: &Indices) -> Result<Encoded, EmitError> {
                 });
             }
         };
-        out.names.append(index, &entry.name);
+        out.names.append(index, checked_name(&entry.name));
         out.functions.function(entry.ty);
         let mut encoded = wasm_encoder::Function::new_with_locals_types(body.locals.clone());
         let mut marks = body.code.marks.iter().peekable();
@@ -1538,5 +1571,17 @@ mod tests {
         assert!(manifest.imports.is_empty());
         // One builtin import, one defined function, no global, no GC type.
         assert_eq!(sections(&emitted.bytes)[..3], [1, 1, 0]);
+    }
+}
+
+#[cfg(test)]
+mod emitted_name_guards {
+    #[test]
+    fn binary_names_are_utf8_strings_including_spaces_and_nuls() {
+        assert_eq!(
+            super::checked_name("anonymous class\0🌍"),
+            "anonymous class\0🌍"
+        );
+        assert_eq!(super::checked_name(""), "");
     }
 }

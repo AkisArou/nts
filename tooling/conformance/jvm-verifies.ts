@@ -98,12 +98,12 @@
 
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-project.ts";
-import { describe, provenanceOf, frontendFor } from "./pin.ts";
+import { describe, provenanceOf } from "./pin.ts";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 
@@ -146,7 +146,8 @@ mkdirSync(base, { recursive: true });
 // as an expired jvm-verifies.known module does: a fix must not turn the gate
 // red. A record that is missing, is for another compiler, or came from a run
 // that could not measure every project fails, because then nothing was judged.
-const FINGERPRINT = createHash("sha256").update(readFileSync(SOURCE)).digest("hex").slice(0, 16);
+const COMPILER_SHA256 = createHash("sha256").update(readFileSync(SOURCE)).digest("hex");
+const FINGERPRINT = COMPILER_SHA256.slice(0, 16);
 const seenRecord = (corpus) => join(base, `seen-${FINGERPRINT}-${corpus}.json`);
 if (process.argv.includes("--stale")) {
   const records = ["runtime", "outcomes"].map((corpus) => {
@@ -172,15 +173,8 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exi
 const NTS = join(scratch, "nts");
 copyFileSync(SOURCE, NTS);
 chmodSync(NTS, 0o755);
-// The frontend follows the pin (pin.ts `frontendFor`); none stops the run
-// here, before every project prints nothing and reads as clean.
-const FRONTEND = frontendFor(SOURCE, ROOT);
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-const env = { ...process.env, NTS_TSGO: FRONTEND.path, NTS_SNAPSHOT_CACHE: join(scratch, "snapshots") };
-delete env.NTS_NO_SNAPSHOT_CACHE;
+
+const env = { ...process.env, NTS_CHECKERS: "1" };
 
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 /**
@@ -216,13 +210,69 @@ try {
 const run = (cmd, args) =>
   new Promise((done) => {
     const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (out += d));
+    let out = "", stdout = "", stderr = "";
+    child.stdout.on("data", (d) => { stdout += d; out += d; });
+    child.stderr.on("data", (d) => { stderr += d; out += d; });
+    const result = () => ({ command: cmd, args, pid: child.pid, stdout, stderr, out });
     const timer = setTimeout(() => child.kill("SIGKILL"), 900_000);
-    child.on("error", (error) => { clearTimeout(timer); done({ error, out }); });
-    child.on("close", (status, signal) => { clearTimeout(timer); done({ status, signal, out }); });
+    child.on("error", (error) => { clearTimeout(timer); done({ ...result(), error }); });
+    child.on("close", (status, signal) => { clearTimeout(timer); done({ ...result(), status, signal }); });
   });
+
+/** f7d's invalid-HIR Err reaches Result<ExitCode>'s failure status 1.
+ * Only that completed outcome is exempt; errors, signals and other nonzero
+ * statuses cannot turn partial diagnostic text into a measured exception.
+ */
+function emissionState(result) {
+  if (result.error || result.signal) return "failed";
+  if (result.status === 0) return "emitted";
+  if (result.status === 1 && /^(?:Error: )?refusing to emit code from invalid HIR\r?$/m.test(result.out)) return "invalid-hir";
+  return "failed";
+}
+
+/** A complete summary cannot turn a failed or killed verifier into a measurement. */
+function verifierFailure(result, summary) {
+  if (result.error) return result.error.message;
+  if (result.signal) return `signal ${result.signal}`;
+  if (result.status !== 0) return `exit ${result.status}`;
+  return summary ? null : "no summary";
+}
+
+// Out directories are worker-local and reused by the next project. Move a
+// failed one only after both children have ended; retain it outside scratch,
+// whose normal exit cleanup remains unchanged. No compiler or JDK is rerun.
+let retained;
+function retainFailure(project, out, emit, verify, reason) {
+  retained ??= mkdtempSync(join(base, `failed-${FINGERPRINT}-`));
+  const key = createHash("sha256").update(project).digest("hex");
+  const entry = mkdtempSync(join(retained, `${key}-`));
+  if (existsSync(out)) renameSync(out, join(entry, "classes"));
+  console.log(`  failure evidence ${project}: ${entry}`);
+  const recorded = (result) => result && ({
+    command: result.command, args: result.args, pid: result.pid,
+    status: result.status ?? null, signal: result.signal ?? null,
+    error: result.error?.message ?? null,
+  });
+  const metadata = {
+    project, config: where.get(project) ?? project, reason,
+    cwd: ROOT, compiler: SOURCE, compiler_sha256: COMPILER_SHA256,
+    emit: recorded(emit), verify: recorded(verify),
+    checkers: env.NTS_CHECKERS,
+  };
+  writeFileSync(join(entry, "result.json"), JSON.stringify(metadata, null, 2) + "\n");
+  for (const [name, result] of [["emit", emit], ["verify", verify]]) {
+    if (!result) continue;
+    writeFileSync(join(entry, `${name}.stdout`), result.stdout);
+    writeFileSync(join(entry, `${name}.stderr`), result.stderr);
+    writeFileSync(join(entry, `${name}.combined`), result.out);
+  }
+  copyFileSync(DRIVER, join(entry, "JvmVerify.java"));
+  copyFileSync(fileURLToPath(import.meta.url), join(entry, "jvm-verifies.ts"));
+  for (const file of [KNOWN, DECLINES]) {
+    if (existsSync(file)) copyFileSync(file, join(entry, file.slice(file.lastIndexOf("/") + 1)));
+  }
+  return entry;
+}
 
 /** JvmVerify's output as `{ invalid, missing, verified, total }`, or null when it printed no summary. */
 function readVerify(text) {
@@ -288,6 +338,28 @@ function judge(failed, known, projects, unmeasured) {
 
 /** The pin's must-fire arms over fabricated verifier output: how many did not fire. */
 function selfTest(printing) {
+  const invalid = "Error: refusing to emit code from invalid HIR\n";
+  for (const [result, expected] of [
+    [{ status: 0, out: "classes emitted" }, "emitted"],
+    [{ status: 1, out: invalid }, "invalid-hir"],
+    [{ status: 1, out: "other error" }, "failed"],
+    [{ status: 101, out: invalid }, "failed"],
+    [{ status: null, signal: "SIGKILL", out: invalid }, "failed"],
+    [{ status: 1, error: new Error("launch failed"), out: invalid }, "failed"],
+    [{ status: 1, out: "Error: refusing to emit code from invalid HI" }, "failed"],
+  ]) {
+    if (emissionState(result) !== expected) throw new Error("invalid-HIR status dispatch self-test failed");
+  }
+  for (const [result, summary, expected] of [
+    [{ status: 0 }, {}, null],
+    [{ status: 0 }, null, "no summary"],
+    [{ status: 1 }, {}, "exit 1"],
+    [{ status: null, signal: "SIGKILL" }, {}, "signal SIGKILL"],
+    [{ error: new Error("launch failed") }, {}, "launch failed"],
+  ]) {
+    if (verifierFailure(result, summary) !== expected) throw new Error("verifier status self-test failed");
+  }
+
   const site = (s) => `nts.gen.Program VerifyError: Bad type on operand stack Exception Details: Location: nts/gen/${s}(Lnts/rt/NtsValue;)V @16: invokestatic`;
   const known = parseKnown([
     "m/pinned\t(A) held\tpin: invalid=Program.convertQueuingStrategyHighWaterMark",
@@ -423,27 +495,33 @@ async function check(project, slot) {
   // class(es) verify across 29 of 29 project(s)" against main's 25003, exit 0,
   // and the one line that said so read as a note (fb3325b3f, 2026-10-10). So
   // there it is NOT MEASURED, and the run fails.
-  if (/refusing to emit code from invalid HIR/.test(emit.out)) {
+  const state = emissionState(emit);
+  if (state === "invalid-hir") {
     if (project.startsWith("tests/outcomes/")) {
       invalidHir.push(project);
     } else {
       const why = emit.out.split("\n").find((l) => l.startsWith("invalid HIR")) ?? "invalid HIR";
       unmeasured.push(`${project}: emit-jvm wrote no class -- ${why.slice(0, 160)}`);
+      retainFailure(project, out, emit, null, "runtime invalid HIR");
     }
     return;
   }
-  if (emit.error || emit.signal || !existsSync(jar)) {
+  if (state === "failed" || !existsSync(jar)) {
     unmeasured.push(`${project}: emit-jvm ${emit.signal ?? emit.error?.message ?? `exit ${emit.status}`}, no class written -- ${emit.out.trim().split("\n").pop()?.slice(0, 100)}`);
+    retainFailure(project, out, emit, null, "emit did not supply a verifiable output");
     return;
   }
   const v = await run(JAVA, ["-Xverify:all", "-cp", `${out}:${jar}`, DRIVER, out]);
   const read = readVerify(v.out);
-  if (v.error || !read) {
-    unmeasured.push(`${project}: the verifier printed no summary -- ${(v.error?.message ?? v.out.trim().split("\n").pop() ?? "").slice(0, 120)}`);
+  const failure = verifierFailure(v, read);
+  if (failure) {
+    const saved = retainFailure(project, out, emit, v, failure);
+    unmeasured.push(`${project}: verifier ${failure} -- ${v.out.trim().split("\n").pop()?.slice(0, 120) ?? ""}; full evidence ${saved}`);
     return;
   }
   if (read.total === 0) {
     unmeasured.push(`${project}: emit-jvm wrote no class`);
+    retainFailure(project, out, emit, v, "zero classes measured");
     return;
   }
   classes += read.total;
@@ -451,6 +529,13 @@ async function check(project, slot) {
   if (read.invalid.length + read.missing.length > 0) failed.push({ project, ...read });
   if (read.unresolved.length > 0) unresolved.push({ project, lines: read.unresolved });
   if (read.shadowed.length > 0) shadowed.push({ project, lines: read.shadowed });
+  const unclassified = emit.out.split("\n").some((line) => {
+    const shape = declineShape(line);
+    return shape && !declinesKnown.has(shape);
+  });
+  if (read.invalid.length + read.missing.length + read.unresolved.length + read.shadowed.length > 0 || unclassified) {
+    retainFailure(project, out, emit, v, "class/link/dispatch finding");
+  }
 }
 
 const started = Date.now();

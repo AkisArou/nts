@@ -137,7 +137,7 @@ pub struct Literal<'p> {
 pub enum VariableKind { Var, Let, Const, Using, AwaitUsing }
 pub enum ImportPhase { Value, Type, Defer, Source }
 pub enum ExportAssignmentKind { Default, Equals }
-pub enum MetaProperty { ImportMeta, NewTarget }
+pub enum MetaProperty { ImportMeta, NewTarget, ImportSource, ImportDefer }
 pub enum HeritageKind { Extends, Implements }
 pub struct Modifiers {
     pub export: bool, pub default: bool, pub declare: bool,

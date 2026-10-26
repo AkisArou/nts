@@ -385,7 +385,7 @@ function compiles(module) {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
+      env: { ...process.env, NTS_CHECKERS: "1" },
     },
   );
   const totals = loweringTotals(out);
@@ -418,7 +418,7 @@ function backendRefusals(module) {
     {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
-      env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
+      env: { ...process.env, NTS_CHECKERS: "1" },
     },
   );
   const out = `${run.stdout ?? ""}${run.stderr ?? ""}`;
@@ -939,7 +939,7 @@ if (!withCompiles && modules.length > 1) {
     const text = `${reach.stdout ?? ""}${reach.stderr ?? ""}`;
     if (text.includes("INSTRUMENT FAILURE")) {
       console.log("\nblocker reach: INSTRUMENT FAILURE -- zero shapes, see below");
-      for (const line of text.split("\n").filter((l) => l.includes("NTS_TSGO") || l.includes("INSTRUMENT"))) {
+      for (const line of text.split("\n").filter((l) => l.includes("frontend") || l.includes("INSTRUMENT"))) {
         console.log(`  ${line.trim()}`);
       }
     } else {

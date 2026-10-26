@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use xxhash_rust::xxh3::{Xxh3, xxh3_128};
@@ -62,6 +63,31 @@ fn main() {
         );
         println!("cargo:rustc-env={variable}={value}");
     }
+    let patches = upstream["patches"]
+        .as_array()
+        .map_or(&[][..], Vec::as_slice);
+    let mut expression = String::from("&[\n");
+    for patch in patches {
+        let id = patch["id"].as_str().expect("carried patch id");
+        let digest = patch["sha256"].as_str().expect("carried patch digest");
+        assert!(
+            id.bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        );
+        assert!(digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        writeln!(
+            expression,
+            "VendorPatch {{ id: {id:?}, sha256: {digest:?} }},"
+        )
+        .expect("write generated patch identity");
+    }
+    expression.push_str("]\n");
+    std::fs::write(
+        PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo output directory"))
+            .join("vendor_patches.rs"),
+        expression,
+    )
+    .expect("generated carried patch identity");
     let manifest = root.join("third_party/tsrs/MANIFEST");
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!(

@@ -199,8 +199,8 @@ captures and assertions, Unicode decoding, emoji string tries and folding.
 It is supplementary to Test262, not a second conformance corpus.
 
 ```sh
-NTS_BACKEND=c NTS_TSGO=target/tsgo target/release/nts check tooling/conformance/ecmascript/compiled/tsconfig.json
-NTS_BACKEND=jvm NTS_TSGO=target/tsgo target/release/nts check tooling/conformance/ecmascript/compiled/tsconfig.json
+NTS_BACKEND=c target/release/nts check tooling/conformance/ecmascript/compiled/tsconfig.json
+NTS_BACKEND=jvm target/release/nts check tooling/conformance/ecmascript/compiled/tsconfig.json
 ```
 
 Inspect the CLI output as well as its status: `nts check` can return success

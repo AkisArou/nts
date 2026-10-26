@@ -8,14 +8,14 @@ use std::collections::BTreeMap;
 pub(super) fn collect(
     probe: &FuncBuilder<'_>,
     hierarchy: &Hierarchy,
-) -> BTreeMap<NodeId, Vec<(TypeId, String)>> {
+) -> BTreeMap<NodeId, Vec<(TypeId, super::PropertyKey)>> {
     let mut sites = BTreeMap::new();
     for index in 0..probe.snapshot.nodes.len() {
         let Ok(index) = u32::try_from(index) else {
             continue;
         };
         let at = NodeId(index);
-        let mut reads: Vec<(TypeId, String)> = reads(probe, at)
+        let mut reads: Vec<(TypeId, super::PropertyKey)> = reads(probe, at)
             .into_iter()
             .flat_map(
                 |(face, member)| match hierarchy.template_instances.get(&face) {
@@ -32,7 +32,9 @@ pub(super) fn collect(
                 && !hierarchy
                     .declares
                     .get(&hierarchy.declared_face(*face))
-                    .is_some_and(|methods| methods.contains(member))
+                    .is_some_and(|methods| {
+                        methods.contains(&super::MemberKey::method(member.clone()))
+                    })
                 && interfaces::property(probe.snapshot, *face, member)
                     .is_some_and(|property| property.kind != MemberKind::Method)
         });
@@ -43,8 +45,8 @@ pub(super) fn collect(
     sites
 }
 
-fn reads(probe: &FuncBuilder<'_>, at: NodeId) -> Vec<(TypeId, String)> {
-    if let Some((receiver, member)) = probe.member_access(at) {
+fn reads(probe: &FuncBuilder<'_>, at: NodeId) -> Vec<(TypeId, super::PropertyKey)> {
+    if let Some((receiver, member)) = probe.member_access_key(at) {
         return probe
             .snapshot
             .node_types
@@ -81,7 +83,7 @@ fn reads(probe: &FuncBuilder<'_>, at: NodeId) -> Vec<(TypeId, String)> {
             let member = if rest.is_some() {
                 None
             } else {
-                property.or(name).and_then(|name| probe.literal_name(name))
+                property.or(name).and_then(|name| probe.property_key(name))
             };
             (face, member)
         }
@@ -94,7 +96,7 @@ fn reads(probe: &FuncBuilder<'_>, at: NodeId) -> Vec<(TypeId, String)> {
             let member = probe
                 .children(at)
                 .first()
-                .and_then(|name| probe.literal_name(*name));
+                .and_then(|name| probe.property_key(*name));
             (assignment_source(probe, pattern, 0), member)
         }
         _ => return Vec::new(),
@@ -141,7 +143,7 @@ fn assignment_source(probe: &FuncBuilder<'_>, pattern: NodeId, depth: u32) -> Op
             }
             let outer = walk::parent(probe.snapshot, parent)?;
             let source = assignment_source(probe, outer, depth + 1)?;
-            let name = probe.literal_name(*name)?;
+            let name = probe.property_key(*name)?;
             Some(interfaces::property(probe.snapshot, source, &name)?.ty)
         }
         _ => None,

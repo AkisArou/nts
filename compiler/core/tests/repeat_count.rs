@@ -7,26 +7,26 @@
 //! unasked. The driver was fixed and `tests/programs/strings` went red on five cases
 //! the same day.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, BinOp, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -56,9 +56,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
 /// rather than only the fixture.
 #[test]
 fn a_repeat_count_is_tested_for_both_refusals() {
-    let Some(lowered) = lowered("strings") else {
-        return;
-    };
+    let lowered = lowered("strings");
     let repeated = func(&lowered, "repeated");
 
     let compared: Vec<BinOp> = repeated
@@ -116,9 +114,7 @@ fn a_repeat_count_is_tested_for_both_refusals() {
 /// that, so the type comes from a reserved band when the snapshot has none.
 #[test]
 fn the_thrown_class_does_not_need_the_program_to_name_it() {
-    let Some(lowered) = lowered("strings") else {
-        return;
-    };
+    let lowered = lowered("strings");
     let repeated = func(&lowered, "repeated");
 
     let built: Vec<&str> = lowered

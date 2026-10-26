@@ -40,8 +40,8 @@
 //! 4. the example then disagrees, is refused, or errors. Any of the three is the
 //!    harness noticing; counting only reported disagreements misses the other two.
 //!
-//! Skips without a JDK or without `tsgo`, and the gate step that runs it
-//! requires both.
+//! Requires the compiled nts under test. A missing compiler fails; a missing
+//! JDK is the platform toolchain skip, and the gate requires that toolchain.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -143,10 +143,15 @@ fn method_body<'a>(source: &'a str, method: &str) -> Option<(usize, &'a str)> {
 /// The compiler under test. `NTS_BIN` names it, as everywhere else in the gate:
 /// three sessions build into different target directories, and a hard-coded
 /// path can measure somebody else's binary.
-fn binary() -> Option<PathBuf> {
+fn binary() -> PathBuf {
     let named = std::env::var("NTS_BIN").ok().map(PathBuf::from);
     let path = named.unwrap_or_else(|| repository().join("target/release/nts"));
-    path.exists().then_some(path)
+    assert!(
+        path.is_file(),
+        "build the compiler under test or set NTS_BIN: {}",
+        path.display()
+    );
+    path
 }
 
 /// Whether the example agrees with node, with this runtime.
@@ -189,11 +194,6 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
     if tool("javac").is_none() || tool("java").is_none() {
         return;
     }
-    let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
-    if !Path::new(&tsgo).exists() && tool("tsgo").is_none() {
-        return;
-    }
-
     let scratch = std::env::temp_dir().join(format!("nts-jvm-sabotage-{}", std::process::id()));
     std::fs::create_dir_all(&scratch).unwrap();
     // **Sabotaged in a copy, never in the tree.** Each sabotage used to be
@@ -251,7 +251,7 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         // since the 2024 edition: a differential that shares a process with the
         // thing testing it also shares any state either of them leaks, and the
         // whole point is to observe the harness from outside.
-        let Some(binary) = binary() else { return };
+        let binary = binary();
         let tsconfig = root
             .join("tests/programs")
             .join(sabotage.example)

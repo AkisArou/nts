@@ -3,24 +3,22 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, BinOp, Callee, OpKind, Terminator};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn snapshot() -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let frontend = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> nts_semantic_schema::SemanticSnapshot {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/bigint-literal-guards/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    Some(snapshot)
+    snapshot
 }
 
 #[test]
 fn safe_literals_avoid_guards_and_raising_copies_but_controls_keep_them() {
-    let Some(snapshot) = snapshot() else {
-        return;
-    };
+    let snapshot = snapshot();
     let lowered = hir::lower::lower(&snapshot);
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     let program = lowered.program;
@@ -107,9 +105,7 @@ fn safe_literals_avoid_guards_and_raising_copies_but_controls_keep_them() {
 
 #[test]
 fn a_discarded_unsigned_mask_drops_storage_but_keeps_its_width_throw() {
-    let Some(snapshot) = snapshot() else {
-        return;
-    };
+    let snapshot = snapshot();
     let prepared = hir::prepare(&snapshot).expect("valid prepared HIR");
     assert!(
         prepared.diagnostics.is_empty(),

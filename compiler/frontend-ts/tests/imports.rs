@@ -1,25 +1,21 @@
 //! Which files a project compiles, and what that buys across module boundaries.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::SemanticSnapshot;
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/imports/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/imports fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_call_resolution(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 fn callee_uri(snapshot: &SemanticSnapshot, name: &str) -> Option<String> {
@@ -30,7 +26,12 @@ fn callee_uri(snapshot: &SemanticSnapshot, name: &str) -> Option<String> {
             snapshot.nodes[site.0 as usize]
                 .children
                 .first()
-                .and_then(|c| snapshot.nodes[c.0 as usize].text.as_deref())
+                .and_then(|c| {
+                    snapshot.nodes[c.0 as usize]
+                        .text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                })
                 == Some(name)
         })
         .and_then(|(_, target)| target.callee)
@@ -42,7 +43,7 @@ fn callee_uri(snapshot: &SemanticSnapshot, name: &str) -> Option<String> {
 
 #[test]
 fn a_file_imported_from_outside_the_include_set_is_compiled() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `root_files` is only what tsconfig `include` names. `vendor/helper.ts` is
     // reached by an import from a sibling directory, so compiling only the roots
     // left every symbol it declares with no node and no identity.
@@ -56,7 +57,7 @@ fn a_file_imported_from_outside_the_include_set_is_compiled() {
 
 #[test]
 fn a_call_across_a_module_boundary_names_its_callee() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     assert_eq!(
         callee_uri(&snapshot, "distance").as_deref(),
         Some("nts-workspace:///src/geometry.ts"),
@@ -69,7 +70,7 @@ fn a_call_across_a_module_boundary_names_its_callee() {
 
 #[test]
 fn the_default_library_is_not_compiled() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // The program contains 63 `bundled:///libs/*.d.ts` files. Compiling them would
     // cost more round trips than the project and produce declarations this
     // compiler does not lower anyway — the same boundary decomposition stops at.
@@ -84,7 +85,7 @@ fn the_default_library_is_not_compiled() {
 
 #[test]
 fn a_call_into_the_library_reports_no_callee() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `Math.sqrt` is declared in lib.es5.d.ts, which is deliberately not compiled.
     // The signature is still known, so the call is typed exactly; only the direct
     // symbol reference is unavailable, and saying so beats pointing somewhere.
@@ -98,7 +99,7 @@ fn a_call_into_the_library_reports_no_callee() {
 
 #[test]
 fn compiled_file_paths_are_still_remapped() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     for source in &snapshot.sources {
         assert!(
             source.uri.starts_with("nts-workspace:///"),
@@ -120,13 +121,12 @@ fn compiled_file_paths_are_still_remapped() {
 /// program that has no imported reads to begin with.
 #[test]
 fn an_import_records_the_symbol_it_aliases() {
-    let tsgo = nts_frontend_ts::tsgo::locate();
-    let Some(tsgo) = tsgo else { return };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/module-bindings/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/module-bindings fixture is checked in");
-    let snapshot = TsgoApi::new(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
 
@@ -136,8 +136,14 @@ fn an_import_records_the_symbol_it_aliases() {
         .filter_map(|record| {
             let target = record.aliased?;
             Some((
-                record.name.as_str(),
-                snapshot.symbols[target.0 as usize].name.as_str(),
+                record
+                    .name
+                    .public_name()
+                    .expect("this fixture uses public names"),
+                snapshot.symbols[target.0 as usize]
+                    .name
+                    .public_name()
+                    .expect("this fixture uses public names"),
             ))
         })
         .collect();

@@ -11,7 +11,7 @@
 //! The control differs in one thing: an argument that may be a fraction
 //! (`i / 2`), which the test exists for, and which still goes through it.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -21,7 +21,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 const SOURCE: &str = r"
 export function scan(text: string, from: number): number {
@@ -70,10 +70,6 @@ fn callees(program: &hir::Program, name: &str) -> Vec<String> {
 
 #[test]
 fn a_call_that_passes_the_guard_calls_the_whole_copy() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP guarded calls: tsgo is required");
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
@@ -85,7 +81,8 @@ fn a_call_that_passes_the_guard_calls_the_whole_copy() {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");

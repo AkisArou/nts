@@ -6,21 +6,19 @@
 mod scratch;
 use scratch::ScratchDir;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
-fn toolchain() -> Option<Utf8PathBuf> {
-    let tsgo = nts_frontend_ts::tsgo::locate();
-    if tsgo.is_none() || Command::new("clang").arg("--version").output().is_err() {
-        eprintln!("SKIP generated header: tsgo and clang are required");
-        return None;
-    }
-    tsgo
+fn require_clang() {
+    assert!(
+        Command::new("clang").arg("--version").output().is_ok(),
+        "clang is required for this compiler guard"
+    );
 }
 
-fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (ScratchDir, nts_codegen_c::Emitted) {
+fn emit(name: &str, source: &str) -> (ScratchDir, nts_codegen_c::Emitted) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -32,7 +30,8 @@ fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (ScratchDir, nts_codegen_c
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo.to_owned())
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
@@ -84,11 +83,8 @@ fn run(dir: &Utf8Path, caller: &str, runtime: bool) {
 
 #[test]
 fn scalar_header_links_without_runtime_and_rejects_wrong_prototypes() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "scalars",
         "export function add(a: number, b: number): number { return a + b; }\nexport function bool(v: boolean): boolean { return !v; }\nexport function answer(): number { return 42; }",
     );
@@ -113,9 +109,7 @@ fn scalar_header_links_without_runtime_and_rejects_wrong_prototypes() {
 
 #[test]
 fn anonymous_alias_survives_type_renumbering_and_named_layout_merging() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let body = "export function sumOf(o: { a: number; b: number }): number { return o.a + o.b; }";
     let prefixes = [
         "",
@@ -124,11 +118,7 @@ fn anonymous_alias_survives_type_renumbering_and_named_layout_merging() {
     ];
     let mut aliases = Vec::new();
     for (at, prefix) in prefixes.iter().enumerate() {
-        let (dir, emitted) = emit(
-            &tsgo,
-            &format!("anonymous-{at}"),
-            &format!("{prefix}{body}"),
-        );
+        let (dir, emitted) = emit(&format!("anonymous-{at}"), &format!("{prefix}{body}"));
         aliases.push(
             emitted
                 .header
@@ -158,11 +148,8 @@ fn anonymous_alias_survives_type_renumbering_and_named_layout_merging() {
 
 #[test]
 fn managed_returns_and_promises_are_callable_from_the_header() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "managed",
         "export class Point { constructor(public x: number, public y: number) {} }\nexport function makePoint(n: number): Point { return new Point(n, n * 2); }\nexport async function later(n: number): Promise<number> { const v = await Promise.resolve(n); return v + 1; }",
     );
@@ -175,11 +162,8 @@ fn managed_returns_and_promises_are_callable_from_the_header() {
 
 #[test]
 fn c_constructed_numeric_arrays_cross_the_export_boundary() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "array-constructor",
         "export function sum(xs: number[]): number { let total = 0; for (let i = 0; i < xs.length; i++) total += xs[i]; return total; }",
     );
@@ -205,11 +189,8 @@ int main(void) {
 
 #[test]
 fn exported_generators_step_without_a_typescript_consumer_and_stay_done() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "generator-steps",
         r"let finished = 0;
 export function completions(): number { return finished; }
@@ -248,12 +229,9 @@ int main(void) {
 
 #[test]
 fn generator_object_yields_can_be_retained_past_the_next_step() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     for (arm, extra) in ["", "type Witness = Generator<number>;"].iter().enumerate() {
         let (dir, _) = emit(
-            &tsgo,
             &format!("generator-objects-{arm}"),
             &format!(
                 "export function* objects(n: number) {{ yield {{ value: n }}; yield {{ value: n + 1 }}; }}\n{extra}"
@@ -283,11 +261,8 @@ int main(void) {
 
 #[test]
 fn library_constructor_signatures_survive_type_symbol_resolution() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "library-constructor-signature",
         r"export function read(index: number): number {
     try {
@@ -308,11 +283,8 @@ fn library_constructor_signatures_survive_type_symbol_resolution() {
 
 #[test]
 fn a_local_function_published_under_an_alias_has_external_linkage() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, emitted) = emit(
-        &tsgo,
         "local-alias",
         "function local(o: { x: number }): number { return o.x; }\nexport { local as read };\nfunction privateHelper(): number { return 0; }",
     );
@@ -326,11 +298,8 @@ fn a_local_function_published_under_an_alias_has_external_linkage() {
 
 #[test]
 fn nested_objects_returned_to_c_remain_mutable_between_calls() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "nested",
         "interface Inner { value: number }\ninterface Outer { inner: Inner }\nexport function make(): Outer { return { inner: { value: 1 } }; }\nexport function read(o: Outer): number { return o.inner.value; }",
     );
@@ -343,11 +312,8 @@ fn nested_objects_returned_to_c_remain_mutable_between_calls() {
 
 #[test]
 fn module_initialization_is_declared_and_callable() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, emitted) = emit(
-        &tsgo,
         "initializer",
         "let text = String(12);\nexport function length(): number { return text.length; }",
     );
@@ -362,11 +328,8 @@ fn module_initialization_is_declared_and_callable() {
 
 #[test]
 fn object_aliases_do_not_collide_with_exported_functions() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "alias-collision",
         "export function sumOf(o: { a: number }): number { return o.a; }\nexport function sumOf_o_t(): number { return 42; }",
     );
@@ -379,11 +342,8 @@ fn object_aliases_do_not_collide_with_exported_functions() {
 
 #[test]
 fn exposed_and_internal_fields_keep_distinct_facts_in_one_program() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "mixed-field-boundaries",
         r"
 export function sumOf(o: { a: number; b: number }): number { return o.a + o.b; }
@@ -461,9 +421,7 @@ fn defined_symbols(dir: &Utf8Path) -> Vec<String> {
 
 #[test]
 fn a_global_whose_spelling_a_function_holds_keeps_its_own_symbol() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     // `stdin` is a <stdio.h> macro, so the function takes `stdin_`; the global
     // then takes `stdin__` because `c_global` yields file scope to the function.
     // Two exports, two distinct symbols -- and one name if both are spelled with
@@ -471,7 +429,6 @@ fn a_global_whose_spelling_a_function_holds_keeps_its_own_symbol() {
     // came out with `stdin_` named twice, `stdin__` named never, and `local: *`
     // hiding an exported constant the header still declared.
     let (dir, emitted) = emit(
-        &tsgo,
         "colliding-global",
         "export function stdin(): number { return 7; }\nexport const stdin_: number = 11;\n",
     );
@@ -497,11 +454,8 @@ fn a_global_whose_spelling_a_function_holds_keeps_its_own_symbol() {
 
 #[test]
 fn a_published_class_is_reported_as_crossing_no_symbol() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, emitted) = emit(
-        &tsgo,
         "published-class",
         "export class Counter {\n  private n: number = 0;\n  bump(): number { this.n = this.n + 1; return this.n; }\n}\nexport function published(x: number): number { return x + 1; }\n",
     );
@@ -533,11 +487,8 @@ fn a_published_class_is_reported_as_crossing_no_symbol() {
 /// reference the export then also releases.
 #[test]
 fn an_export_borrows_even_the_parameters_it_keeps() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "takes-over",
         "interface Box { s: string }\nexport function keep(n: number, s: string): Box { return { s }; }\nexport function size(s: string): number { return s.length; }",
     );
@@ -559,11 +510,8 @@ fn an_export_borrows_even_the_parameters_it_keeps() {
 
 #[test]
 fn generator_parameter_entry_keeps_its_exported_step() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let (dir, _) = emit(
-        &tsgo,
         "generator-parameter-entry",
         r"let count = 0;
 function tick(): number { count++; return 7; }
@@ -591,7 +539,7 @@ int main(void) {
 
 #[test]
 fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
-    let Some(tsgo) = toolchain() else { return };
+    require_clang();
     for (name, source, unicode) in [
         (
             "notices-number",
@@ -604,7 +552,7 @@ fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
             true,
         ),
     ] {
-        let (dir, emitted) = emit(&tsgo, name, source);
+        let (dir, emitted) = emit(name, source);
         assert_eq!(emitted.needs_unicode(), unicode);
         for notice in [
             "nts-runtime/LICENSE",
@@ -640,4 +588,25 @@ fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
             assert!(text.ends_with("authorization of the copyright holder.\n"));
         }
     }
+}
+
+#[test]
+fn a_public_field_keeps_its_c_abi_among_private_symbol_and_escaped_keys() {
+    require_clang();
+    let source = concat!(
+        include_str!("../../../../tests/programs/three-kinds-of-member-key/src/main.ts"),
+        "\nexport function inspect(value: MixedKeys): number { return value.read(); }\n"
+    );
+    let (dir, emitted) = emit("three-member-namespaces", source);
+    assert!(emitted.header.contains(" x;"), "{}", emitted.header);
+    assert!(
+        emitted.header.contains(" p_u003a__u0023_x;"),
+        "{}",
+        emitted.header
+    );
+    run(
+        &dir,
+        "#include \"program.h\"\nint main(void) { NtsObj_MixedKeys value = {0}; value.x = 7; value.p_u003a__u0023_x = 9; return value.x != 7 || value.p_u003a__u0023_x != 9; }",
+        true,
+    );
 }

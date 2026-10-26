@@ -19,16 +19,11 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// The values every function is driven with.
 const POOL: &str = "{0.0, 1.0, -1.0, 3.5, -0.0, 1e21, 1.0/0.0, -1.0/0.0, 0.0/0.0, \
                     9007199254740993.0, 2147483648.0}";
-
-fn tsgo() -> Option<String> {
-    let path = std::env::var("NTS_TSGO").ok()?;
-    std::path::Path::new(&path).exists().then_some(path)
-}
 
 /// Lower a fixture, render it both ways, build both, run both, compare.
 fn both_backends(case: &str, source: &str, driver: &str) -> Option<(String, String)> {
@@ -41,7 +36,6 @@ fn both_backends_with(
     driver: &str,
     flags: &[&str],
 ) -> Option<(String, String)> {
-    let tsgo = tsgo()?;
     // Per *case*, not per process: `cargo test` runs these in parallel and one
     // directory keyed on the pid means two tests writing each other's
     // `program.ll`. Which is how this was found -- the test that had passed
@@ -62,7 +56,8 @@ fn both_backends_with(
     let tsconfig = Utf8Path::from_path(&dir)
         .expect("utf-8 path")
         .join("tsconfig.json");
-    let mut source_api = TsgoApi::for_compilation(tsgo);
+    let mut source_api =
+        Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
     let snapshot = source_api
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -374,7 +369,7 @@ int main(void) {{
 "#
     );
     let Some((llvm, c)) = both_backends("scalar", source, &driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
@@ -451,7 +446,7 @@ int main(void) {
 }
 "#;
     let Some((llvm, c)) = both_backends("fields", source, driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
@@ -513,7 +508,7 @@ int main(void) {
 }
 "#;
     let Some((llvm, c)) = both_backends("objects", source, driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
@@ -568,7 +563,7 @@ int main(void) {
 }
 "#;
     let Some((llvm, c)) = both_backends("globals", source, driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
@@ -620,7 +615,7 @@ int main(void) {
 }
 "#;
     let Some((llvm, c)) = both_backends("strings", source, driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
@@ -711,7 +706,7 @@ int main(void) {
 "#;
     let driver = format!("#include \"nts_runtime.h\"\n{driver}");
     let Some((llvm, c)) = both_backends("erased", source, &driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");
@@ -765,7 +760,7 @@ int main(void) {
 }
 "#;
     let Some((llvm, c)) = both_backends("float-bitwise", source, driver) else {
-        eprintln!("SKIP: NTS_TSGO is not set to a built frontend");
+        eprintln!("SKIP: the required backend toolchain is unavailable");
         return;
     };
     assert!(!llvm.is_empty(), "the run produced nothing");

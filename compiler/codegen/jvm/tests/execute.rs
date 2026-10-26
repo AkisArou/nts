@@ -23,12 +23,11 @@
 //! of them rather than a corpus. Anything that wants corpus scale belongs in
 //! the gate, where it already is.
 //!
-//! Skips loudly without `NTS_TSGO` or a JDK: a skip that prints nothing is
 //! indistinguishable from a pass.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -63,14 +62,6 @@ fn tool(name: &str) -> Option<PathBuf> {
 /// `body` is the inside of a `main`, so a test reads as the Java it drives with
 /// rather than as a string-building exercise.
 fn run(example: &str, body: &str) -> Option<String> {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP execute/{example}: NTS_TSGO is not set");
-        return None;
-    };
-    if !tsgo.exists() {
-        eprintln!("SKIP execute/{example}: no tsgo at {tsgo}");
-        return None;
-    }
     let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
         eprintln!("SKIP execute/{example}: no JDK");
         return None;
@@ -86,7 +77,8 @@ fn run(example: &str, body: &str) -> Option<String> {
     )
     .expect("a UTF-8 path");
 
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{example} should typecheck");

@@ -13,7 +13,7 @@ use std::process::Command;
 
 use camino::Utf8PathBuf;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 mod common;
 
@@ -39,15 +39,11 @@ const RAISING_SOURCE: &str = "const fs: Array<(x: number) => number> = [\n\
                               (x: number): number => x + 1,\n];\n\
                               export function run(n: number): number {\n  try {\n    return fs[n & 1]!(n);\n  } catch (e) {\n    return -1;\n  }\n}\n";
 
-fn lowered(name: &str) -> Option<(hir::Program, std::path::PathBuf)> {
+fn lowered(name: &str) -> (hir::Program, std::path::PathBuf) {
     lowered_from(name, SOURCE)
 }
 
-fn lowered_from(name: &str, source: &str) -> Option<(hir::Program, std::path::PathBuf)> {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP dead_closures/{name}: NTS_TSGO is not set");
-        return None;
-    };
+fn lowered_from(name: &str, source: &str) -> (hir::Program, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("nts-dead-closures-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -62,11 +58,12 @@ fn lowered_from(name: &str, source: &str) -> Option<(hir::Program, std::path::Pa
     .unwrap();
     std::fs::write(dir.join("src/main.ts"), source).unwrap();
     let tsconfig = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     let prepared = common::prepare(&snapshot).expect("prepared");
-    Some((prepared.program, dir))
+    (prepared.program, dir)
 }
 
 fn closure_type(program: &hir::Program, layout: &str) -> nts_semantic_schema::TypeId {
@@ -129,12 +126,8 @@ fn names(bytes: &[u8], needle: &str) -> bool {
 /// does. The control holds the same op in a block and reads it.
 #[test]
 fn a_closure_static_no_block_holds_gets_no_singleton() {
-    let Some((mut dead, _)) = lowered("dead") else {
-        return;
-    };
-    let Some((mut live, _)) = lowered("live") else {
-        return;
-    };
+    let (mut dead, _) = lowered("dead");
+    let (mut live, _) = lowered("live");
     with_closure_static(&mut dead, false);
     with_closure_static(&mut live, true);
     assert!(
@@ -208,7 +201,7 @@ enum Entry {
 /// `raising` asserts the fixture still has a `@raises` body, which is what
 /// makes the root's raising entry.
 fn uncallable(name: &str, source: &str, raising: bool, entry: Entry) -> Option<String> {
-    let (mut program, dir) = lowered_from(name, source)?;
+    let (mut program, dir) = lowered_from(name, source);
     let Some(java) = common::tool("java") else {
         eprintln!("SKIP dead_closures/{name}: no JDK");
         return None;

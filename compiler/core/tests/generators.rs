@@ -11,13 +11,13 @@
 //! frame; and the `for...of` that walks one must be one call and one load an
 //! iteration, with the frame as its whole state.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind, Terminator};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// The program as `lower` and `hir::suspend` leave it, and no further.
 ///
@@ -28,43 +28,43 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 /// caller*, so `upTo` is not a function at all by the end. That is the right
 /// outcome and it is checked separately below; these tests are about what the
 /// two passes produce.
-fn machine(name: &str) -> Option<hir::Program> {
-    let mut lowered = lowered(name)?;
+fn machine(name: &str) -> hir::Program {
+    let mut lowered = lowered(name);
     let refusals = hir::suspend::transform(&mut lowered.program);
     assert!(
         refusals.is_empty(),
         "nothing in tests/programs/generators is refused: {refusals:#?}",
     );
-    Some(lowered.program)
+    lowered.program
 }
 
 /// The whole pipeline, for the one claim that is about what survives it.
-fn prepared(name: &str) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()))
+    hir::prepare_unverified(&snapshot, &hir::Options::default())
 }
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(program: &'a hir::Program, name: &str) -> &'a hir::Func {
@@ -88,9 +88,7 @@ fn func<'a>(program: &'a hir::Program, name: &str) -> &'a hir::Func {
 /// this walk exists not to do.
 #[test]
 fn a_generator_walk_allocates_nothing_per_element() {
-    let Some(program) = machine("generators") else {
-        return;
-    };
+    let program = machine("generators");
     let total = func(&program, "total");
     let allocations = total
         .values
@@ -132,9 +130,7 @@ fn a_generator_walk_allocates_nothing_per_element() {
 /// which names its fields.
 #[test]
 fn the_element_is_read_from_the_frame() {
-    let Some(program) = machine("generators") else {
-        return;
-    };
+    let program = machine("generators");
     let layout = program
         .layouts
         .iter()
@@ -143,7 +139,7 @@ fn the_element_is_read_from_the_frame() {
     let yielded = layout
         .fields
         .iter()
-        .position(|field| field.name == "yielded")
+        .position(|field| field.name == "yielded".into())
         .expect("a generator's frame holds the element it stopped on");
 
     let total = func(&program, "total");
@@ -166,7 +162,7 @@ fn the_element_is_read_from_the_frame() {
         layout
             .fields
             .iter()
-            .position(|field| field.name == "state")
+            .position(|field| field.name == "state".into())
             .expect("a frame holds its state"),
         "the element and the state are different slots",
     );
@@ -180,9 +176,7 @@ fn the_element_is_read_from_the_frame() {
 /// element slot of a frame that stopped filling it.
 #[test]
 fn the_resumption_answers_done() {
-    let Some(program) = machine("generators") else {
-        return;
-    };
+    let program = machine("generators");
     let resume = func(&program, "upTo__resume");
     assert_eq!(
         resume.return_type,
@@ -225,9 +219,7 @@ fn the_resumption_answers_done() {
 /// one of them is a loop that never starts or never stops.
 #[test]
 fn a_yield_is_a_return_with_the_element_in_the_frame() {
-    let Some(program) = machine("generators") else {
-        return;
-    };
+    let program = machine("generators");
     let resume = func(&program, "upTo__resume");
     let mut answered: Vec<bool> = resume
         .blocks
@@ -261,7 +253,7 @@ fn a_yield_is_a_return_with_the_element_in_the_frame() {
         layout
             .fields
             .iter()
-            .position(|field| field.name == "yielded")
+            .position(|field| field.name == "yielded".into())
             .expect("a generator's frame holds the element it stopped on"),
     )
     .expect("a frame has few enough fields to count");
@@ -289,9 +281,7 @@ fn a_yield_is_a_return_with_the_element_in_the_frame() {
 /// been left holding, which is a plausible number rather than an obvious one.
 #[test]
 fn the_frame_holds_what_survives_the_suspension() {
-    let Some(program) = machine("generators") else {
-        return;
-    };
+    let program = machine("generators");
     let layout = program
         .layouts
         .iter()
@@ -300,7 +290,12 @@ fn the_frame_holds_what_survives_the_suspension() {
     let names: Vec<&str> = layout
         .fields
         .iter()
-        .map(|field| field.name.as_str())
+        .map(|field| {
+            field
+                .name
+                .public_name()
+                .expect("this fixture uses public fields")
+        })
         .collect();
     assert_eq!(
         &names[..5],
@@ -317,9 +312,7 @@ fn the_frame_holds_what_survives_the_suspension() {
 /// A generator's frame is not a promise frame, and the two spaces do not meet.
 #[test]
 fn a_generator_frame_is_its_own_kind_of_synthetic_type() {
-    let Some(program) = machine("generators") else {
-        return;
-    };
+    let program = machine("generators");
     let upto = func(&program, "upTo");
     let HirType::Managed(ManagedType::Object(ty)) = upto.return_type else {
         panic!("calling a generator produces its frame");
@@ -344,9 +337,7 @@ fn a_generator_frame_is_its_own_kind_of_synthetic_type() {
 /// the resumption allocate, since the answers would stay right either way.
 #[test]
 fn a_walk_of_any_length_allocates_once() {
-    let Some(prepared) = prepared("generators") else {
-        return;
-    };
+    let prepared = prepared("generators");
     let total = func(&prepared.program, "total");
     let allocations = total
         .values
@@ -408,9 +399,7 @@ fn a_walk_of_any_length_allocates_once() {
 /// declares. See `a-generator-walked-elsewhere`.
 #[test]
 fn what_a_generator_is_refused_for() {
-    let Some(lowered) = lowered("generator-unsupported") else {
-        return;
-    };
+    let lowered = lowered("generator-unsupported");
     let said: Vec<&str> = lowered
         .diagnostics
         .iter()

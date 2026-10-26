@@ -1,18 +1,11 @@
-//! TSX, and the one checker question that is asked rather than extracted.
+//! JSX elements have types; their tag names carry symbol identities.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::{Client, types::flags};
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, TypeKind};
-
-fn tsgo() -> Option<Utf8PathBuf> {
-    let path = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    path.exists().then_some(path)
-}
 
 fn fixture(name: &str) -> Utf8PathBuf {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -23,23 +16,17 @@ fn fixture(name: &str) -> Utf8PathBuf {
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"))
 }
 
-fn jsx_snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = tsgo()?;
-    Some(
-        TsgoApi::new(tsgo)
-            .with_decomposition(Budget::DEFAULT)
-            .snapshot(&fixture("jsx"))
-            .expect("snapshot should succeed"),
-    )
+fn jsx_snapshot() -> SemanticSnapshot {
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&fixture("jsx"))
+        .expect("snapshot should succeed")
 }
 
 #[test]
-fn a_tsx_file_typechecks_and_decodes() {
-    let Some(snapshot) = jsx_snapshot() else {
-        return;
-    };
-    // TSX needs no special handling: the encoded AST carries JSX nodes like any
-    // other, and the diagnostics gate proves the checker accepted the file.
+fn a_tsx_file_typechecks_and_is_captured() {
+    let snapshot = jsx_snapshot();
+    // Capturing the syntax must not turn an intrinsic tag into a free variable.
     assert!(
         !snapshot.has_errors(),
         "the TSX fixture should typecheck: {:?}",
@@ -49,10 +36,31 @@ fn a_tsx_file_typechecks_and_decodes() {
 }
 
 #[test]
+fn intrinsic_and_component_tag_names_keep_symbols_without_expression_types() {
+    use nts_semantic_schema::syntax;
+
+    let snapshot = jsx_snapshot();
+    let tags: Vec<_> = snapshot
+        .nodes
+        .iter()
+        .filter(|node| node.kind == NodeKind::Syntax(syntax::JSX_SELF_CLOSING_ELEMENT))
+        .map(|element| element.children[0])
+        .collect();
+    assert_eq!(tags.len(), 2);
+    for tag in tags {
+        let node = &snapshot.nodes[tag.0 as usize];
+        assert!(
+            node.symbol.is_some(),
+            "{} has its resolved symbol",
+            node.text.as_ref().and_then(|text| text.as_utf8()).unwrap()
+        );
+        assert!(!snapshot.node_types.contains_key(&tag));
+    }
+}
+
+#[test]
 fn jsx_elements_carry_their_element_type() {
-    let Some(snapshot) = jsx_snapshot() else {
-        return;
-    };
+    let snapshot = jsx_snapshot();
     // This is what a renderer needs: the type at a JSX element, reached through
     // the ordinary node-type path rather than a JSX-specific one.
     let typed_jsx = snapshot
@@ -68,7 +76,7 @@ fn jsx_elements_carry_their_element_type() {
         .filter(|id| {
             matches!(
                 &snapshot.types[id.0 as usize].kind,
-                TypeKind::Object { properties } if properties.iter().any(|p| p.name == "kind")
+                TypeKind::Object { properties } if properties.iter().any(|p| p.name == "kind".into())
             )
         })
         .count();
@@ -76,87 +84,4 @@ fn jsx_elements_carry_their_element_type() {
         typed_jsx >= 1,
         "a JSX element should resolve to the declared JSX.Element type",
     );
-}
-
-#[test]
-fn assignability_answers_a_question_the_snapshot_cannot() {
-    let Some(tsgo) = tsgo() else { return };
-    let tsconfig = fixture("types");
-    let mut client = Client::spawn(&tsgo, tsconfig.parent().unwrap()).expect("tsgo should start");
-    client.initialize().expect("initialize");
-    let opened = client.open_project(&tsconfig).expect("open");
-    let project = &opened.projects[0].id;
-
-    // Whether one type may flow into another depends on a *pair*, so there is
-    // nothing to store up front — lowering asks where a coercion might be needed
-    // and the answer decides between emitting a conversion and emitting nothing.
-    //
-    // Located by flags rather than by id, since checker ids are not stable across
-    // runs. A literal is assignable to its widened primitive; the reverse is not.
-    let path = Utf8PathBuf::from(&opened.projects[0].root_files[0]);
-    let bytes = client
-        .source_file(opened.snapshot, project, &path)
-        .expect("source file");
-    assert_ne!(bytes, [] as [u8; 0]);
-
-    // `string` is assignable to `string`; `string` is not assignable to `number`.
-    // Both operands come from the same program, so any two distinct primitives
-    // prove the call works and that it is not answering a constant.
-    let string_type = find_primitive(&mut client, &opened, flags::STRING);
-    let number_type = find_primitive(&mut client, &opened, flags::NUMBER);
-    let (Some(string_type), Some(number_type)) = (string_type, number_type) else {
-        return;
-    };
-
-    assert!(
-        client
-            .is_type_assignable_to(opened.snapshot, project, string_type, string_type)
-            .expect("assignable"),
-        "a type is assignable to itself",
-    );
-    assert!(
-        !client
-            .is_type_assignable_to(opened.snapshot, project, string_type, number_type)
-            .expect("assignable"),
-        "string is not assignable to number",
-    );
-}
-
-/// Find a checker type id for a primitive, by asking about the program's nodes.
-fn find_primitive(
-    client: &mut Client,
-    opened: &nts_frontend_ts::tsgo::proto::UpdateSnapshotResponse,
-    wanted: u32,
-) -> Option<u32> {
-    let project = &opened.projects[0].id;
-    let path = Utf8PathBuf::from(&opened.projects[0].root_files[0]);
-    let bytes = client.source_file(opened.snapshot, project, &path).ok()?;
-    let decoded = nts_frontend_ts::tsgo::ast::decode(&bytes, nts_diagnostics::SourceId(0)).ok()?;
-
-    let handles: Vec<nts_frontend_ts::tsgo::proto::NodeHandle> = decoded
-        .nodes
-        .iter()
-        .enumerate()
-        .filter_map(|(index, node)| match node.kind {
-            NodeKind::Syntax(kind) => Some(nts_frontend_ts::tsgo::proto::NodeHandle(
-                nts_frontend_ts::tsgo::types::node_handle(
-                    u32::try_from(index).ok()? + 1,
-                    kind,
-                    path.as_str(),
-                ),
-            )),
-            NodeKind::List => None,
-        })
-        .collect();
-
-    let responses = client.types_at(opened.snapshot, project, handles).ok()?;
-    // `None` where the checker crashed on that location rather than answering;
-    // see `Client::types_at`.
-    responses
-        .iter()
-        .flatten()
-        .find(|response| {
-            response.flags & wanted != 0 && response.flags & flags::STRING_LITERAL == 0
-        })
-        .map(|response| response.id)
 }

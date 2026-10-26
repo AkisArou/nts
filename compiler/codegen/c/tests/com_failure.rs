@@ -14,7 +14,7 @@ mod scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use scratch::ScratchDir;
 use std::process::Command;
 
@@ -163,8 +163,7 @@ fn com_helpers() -> String {
     text
 }
 
-fn build(provider: hir::Provider) -> Option<ScratchDir> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn build(provider: hir::Provider) -> ScratchDir {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -178,7 +177,8 @@ fn build(provider: hir::Provider) -> Option<ScratchDir> {
     std::fs::write(dir.join("tsconfig.json"), format!(
         r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts","{root}/runtime/winrt/winrt.d.ts"]}}"#
     )).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -239,16 +239,13 @@ fn build(provider: hir::Provider) -> Option<ScratchDir> {
         "{provider:?}: {}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    Some(dir)
+    dir
 }
 
 #[test]
 fn only_successful_hresult_outputs_are_taken_and_released() {
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some(dir) = build(provider) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let dir = build(provider);
         for mode in 0..4 {
             let output = Command::new(dir.join("caller"))
                 .arg(mode.to_string())

@@ -9,6 +9,66 @@ fn string() -> HirType {
     HirType::Managed(ManagedType::String)
 }
 
+#[test]
+fn lone_literal_imports_are_lossless_interned_and_deterministic() {
+    use nts_semantic_schema::JsText;
+    let functions = [
+        JsText::from_utf16(vec![0xd800]),
+        JsText::from_utf16(vec![0xdc00]),
+        JsText::from_utf16(vec![0xd800]),
+        JsText::from("ordinary"),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, text)| {
+        let mut f = function(&format!("literal{index}"), &[], string());
+        let out = value(&mut f, OpKind::ConstString(text), string());
+        f.blocks
+            .push(block(&[], &[out], Terminator::Return(Some(out))));
+        f
+    })
+    .collect();
+    let program = program(functions);
+    let emitted = nts_codegen_wasm::emit(&program).unwrap();
+    let again = nts_codegen_wasm::emit(&program).unwrap();
+    assert_eq!(emitted.bytes, again.bytes);
+    assert_eq!(
+        serde_json::to_value(&emitted.manifest).unwrap(),
+        serde_json::to_value(&again.manifest).unwrap()
+    );
+    let constants = &emitted.manifest.literal_constants;
+    assert_eq!(constants.len(), 2);
+    assert_eq!(constants[&0].utf16().as_ref(), &[0xd800]);
+    assert_eq!(constants[&1].utf16().as_ref(), &[0xdc00]);
+    // Engine string globals are intentionally absent from both host import
+    // lists. Inspect the actual module, rather than the function-only catalog.
+    let mut ordinary = false;
+    for payload in wasmparser::Parser::new(0).parse_all(&emitted.bytes) {
+        if let wasmparser::Payload::ImportSection(imports) = payload.unwrap() {
+            for import in imports.into_imports() {
+                let import = import.unwrap();
+                ordinary |= import.module == "'"
+                    && import.name == "ordinary"
+                    && matches!(import.ty, wasmparser::TypeRef::Global(_));
+            }
+        }
+    }
+    assert!(
+        ordinary,
+        "ordinary constants retain importedStringConstants"
+    );
+    let host = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node).unwrap();
+    assert!(host.instance.contains("\\ud800"));
+    assert!(host.instance.contains("\\udc00"));
+    let mut missing = emitted.manifest.clone();
+    missing.literal_constants.remove(&0);
+    assert!(
+        nts_codegen_wasm::glue(&missing, nts_codegen_wasm::Host::Node)
+            .unwrap_err()
+            .contains("no matching immutable UTF-16 constant")
+    );
+}
+
 fn read(checked: bool) -> Func {
     let (name, index_type, result) = if checked {
         ("checked", F64, F64)
@@ -84,11 +144,12 @@ fn an_unchecked_read_has_no_length_import_and_a_false_bound_traps() {
 #[test]
 fn prepared_unicode_scans_keep_the_core_proof() {
     use camino::Utf8PathBuf;
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
     let root = common::repository();
     let fixture = root.join("tests/wasm/proven-string-units");
-    let tsgo = std::env::var("NTS_TSGO").expect("NTS_TSGO required for proven string regression");
-    let snapshot = TsgoApi::for_compilation(Utf8PathBuf::from(tsgo))
+
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&Utf8PathBuf::from_path_buf(fixture.join("tsconfig.json")).unwrap())
         .unwrap();
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);

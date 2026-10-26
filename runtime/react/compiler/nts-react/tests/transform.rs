@@ -1,20 +1,45 @@
 //! The stage as nts runs it: through the frontend's source-transform driver,
 //! and its revision -- a compiled function an error falls inside is given
-//! back as the user wrote it. Skips without `NTS_TSGO`.
+//! back as the user wrote it.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::transform::{NodeTypes, SourceTransform, TransformInput};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
-use nts_react::project::Session;
+use nts_frontend_ts::Frontend;
+use nts_frontend_ts::transform::{NodeTypes, SourceTransform, TransformInput};
 use nts_react::stage::{self, FunctionState};
 use nts_react::transform::ReactTransform;
-use nts_semantic_schema::{NodeId, NodeKind};
+use nts_semantic_schema::NodeKind;
 
-fn tsgo() -> Option<Utf8PathBuf> {
-    let path = Utf8PathBuf::from(std::env::var("NTS_TSGO").ok()?);
-    path.exists().then_some(path)
+fn frontend() -> Frontend {
+    Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN)
+}
+
+fn inspect_file<R: Send>(
+    project: &Utf8Path,
+    name: &str,
+    visitor: impl FnOnce(&TransformInput<'_>, &NodeTypes<'_>) -> R + Send,
+) -> R {
+    let directory = project.parent().unwrap();
+    let mut visitor = Some(visitor);
+    frontend()
+        .inspect(
+            project,
+            |file, types| -> Result<_, nts_semantic_schema::SnapshotError> {
+                Ok(
+                    if file.path.starts_with(directory) && file.path.file_name() == Some(name) {
+                        Some(visitor.take().expect("one selected source")(file, types))
+                    } else {
+                        None
+                    },
+                )
+            },
+        )
+        .unwrap()
+        .into_iter()
+        .flatten()
+        .next()
+        .expect("the checked-in source is loaded")
 }
 
 fn fixtures() -> Utf8PathBuf {
@@ -26,7 +51,7 @@ fn fixtures() -> Utf8PathBuf {
 
 /// tsgo's `JsxElement`, `JsxSelfClosingElement` and `JsxFragment` kinds.
 fn is_jsx(kind: u16) -> bool {
-    use nts_react::tsgo::kinds as k;
+    use nts_react::syntax::kinds as k;
     matches!(
         kind,
         k::JSX_ELEMENT | k::JSX_SELF_CLOSING_ELEMENT | k::JSX_FRAGMENT
@@ -35,8 +60,7 @@ fn is_jsx(kind: u16) -> bool {
 
 #[test]
 fn nts_reads_the_project_compiled_and_without_jsx() {
-    let Some(tsgo) = tsgo() else { return };
-    let plain = TsgoApi::new(&tsgo).snapshot(&fixtures()).unwrap();
+    let plain = frontend().snapshot(&fixtures()).unwrap();
     assert!(
         plain
             .nodes
@@ -46,7 +70,7 @@ fn nts_reads_the_project_compiled_and_without_jsx() {
     );
 
     let (transform, report) = ReactTransform::new(stage::default_options());
-    let snapshot = TsgoApi::new(&tsgo)
+    let snapshot = frontend()
         .with_transform(Box::new(transform))
         .snapshot(&fixtures())
         .unwrap();
@@ -108,45 +132,19 @@ fn nts_reads_the_project_compiled_and_without_jsx() {
     );
 }
 
-/// No checker: a revision re-prints from what the first print learned.
-struct NoTypes;
-
-impl NodeTypes for NoTypes {
-    fn type_at(&mut self, _: NodeId) -> Option<String> {
-        None
-    }
-}
-
 #[test]
 fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
-    if tsgo().is_none() {
-        return;
-    }
-    let mut session = Session::open(&fixtures()).unwrap();
-    let path = session
-        .own_sources()
-        .unwrap()
-        .into_iter()
-        .find(|p| p.file_name() == Some("keys.tsx"))
-        .unwrap();
-    let tree = session.file(&path).unwrap();
-    let code = std::fs::read_to_string(&path).unwrap();
-
     let (mut transform, report) = ReactTransform::new(stage::default_options());
-    assert!(
-        transform.diagnostics(&path).is_empty(),
-        "nothing to say before the file is offered"
-    );
-    let compiled = transform
-        .transform(
-            &TransformInput {
-                path: &path,
-                text: &code,
-                tree: &tree,
-            },
-            &mut NoTypes,
-        )
-        .expect("keys.tsx is rewritten");
+    let (path, code, compiled) = inspect_file(&fixtures(), "keys.tsx", |file, types| {
+        assert!(
+            transform.diagnostics(file.path).is_empty(),
+            "nothing to say before the file is offered"
+        );
+        let compiled = transform
+            .transform(file, types)
+            .expect("keys.tsx is rewritten");
+        (file.path.to_owned(), file.text.to_owned(), compiled)
+    });
     let keys = report.lock().unwrap()[&path]
         .functions
         .iter()
@@ -192,24 +190,8 @@ fn an_error_inside_a_compiled_function_gives_it_back_as_written() {
     assert_eq!(transform.revise(&path, &[(start + 1, start + 2)]), None);
 }
 
-/// The checker, through a session: what `nts` asks when it runs the stage.
-struct SessionTypes<'s> {
-    session: &'s mut Session,
-    path: &'s Utf8Path,
-    tree: &'s nts_frontend_ts::tsgo::ast::EncodedSourceFile,
-}
-
-impl NodeTypes for SessionTypes<'_> {
-    fn type_at(&mut self, node: NodeId) -> Option<String> {
-        self.session.type_text(self.path, self.tree, node)
-    }
-}
-
 #[test]
 fn a_typed_cache_that_does_not_typecheck_steps_down_to_the_array_before_giving_the_function_back() {
-    if tsgo().is_none() {
-        return;
-    }
     // The TSX probe: it resolves our React, so its JSX is typed and so are
     // its caches. (The JSX fixtures do not resolve `react`: their caches hold
     // `any`, and stay the compiler's array.)
@@ -217,34 +199,13 @@ fn a_typed_cache_that_does_not_typecheck_steps_down_to_the_array_before_giving_t
         .join("../../native/compiled/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked in");
-    let mut session = Session::open(&probe).unwrap();
-    let path = session
-        .own_sources()
-        .unwrap()
-        .into_iter()
-        .find(|p| p.file_name() == Some("main.tsx"))
-        .unwrap();
-    let tree = session.file(&path).unwrap();
-    let code = std::fs::read_to_string(&path).unwrap();
-
     let (mut transform, report) = ReactTransform::new(stage::default_options());
-    let typed = {
-        let mut types = SessionTypes {
-            session: &mut session,
-            path: &path,
-            tree: &tree,
-        };
-        transform
-            .transform(
-                &TransformInput {
-                    path: &path,
-                    text: &code,
-                    tree: &tree,
-                },
-                &mut types,
-            )
-            .expect("rewritten")
-    };
+    let (path, typed) = inspect_file(&probe, "main.tsx", |file, types| {
+        (
+            file.path.to_owned(),
+            transform.transform(file, types).expect("rewritten"),
+        )
+    });
     let item = |report: &nts_react::transform::Report| {
         report.lock().unwrap()[&path]
             .functions
@@ -282,11 +243,34 @@ fn a_typed_cache_that_does_not_typecheck_steps_down_to_the_array_before_giving_t
     assert_eq!(report.lock().unwrap()[&path].fell_back, vec![first.span]);
 }
 
+fn rewritten_files(
+    project: &Utf8Path,
+    names: &[&str],
+) -> std::collections::BTreeMap<String, String> {
+    frontend()
+        .inspect(
+            project,
+            |file, types| -> Result<_, nts_semantic_schema::SnapshotError> {
+                let Some(name) = file.path.file_name().filter(|name| names.contains(name)) else {
+                    return Ok(None);
+                };
+                let (mut transform, _) = ReactTransform::new(stage::default_options());
+                Ok(Some((
+                    name.to_owned(),
+                    transform
+                        .transform(file, types)
+                        .expect("fixture is rewritten"),
+                )))
+            },
+        )
+        .unwrap()
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
 #[test]
 fn a_member_tag_lowers_to_its_own_host_type() {
-    if tsgo().is_none() {
-        return;
-    }
     // react-gtk declares a widget with slot or child elements as an
     // intersection, `HostComponent<"GtkPaned", ...> & PanedSlots`, and each
     // element as a member of it: both the widget and `Paned.StartChild` lower
@@ -295,32 +279,9 @@ fn a_member_tag_lowers_to_its_own_host_type() {
         .join("../fixtures/host-components/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked in");
-    let mut session = Session::open(&project).unwrap();
-    let path = session
-        .own_sources()
-        .unwrap()
-        .into_iter()
-        .find(|p| p.file_name() == Some("members.tsx"))
-        .unwrap();
-    let tree = session.file(&path).unwrap();
-    let code = std::fs::read_to_string(&path).unwrap();
-    let input = TransformInput {
-        path: &path,
-        text: &code,
-        tree: &tree,
-    };
-
-    let (mut transform, _) = ReactTransform::new(stage::default_options());
-    let lowered = transform
-        .transform(
-            &input,
-            &mut SessionTypes {
-                session: &mut session,
-                path: &path,
-                tree: &tree,
-            },
-        )
-        .expect("members.tsx is rewritten");
+    let results = rewritten_files(&project, &["members.tsx", "members-untyped.tsx"]);
+    let lowered = &results["members.tsx"];
+    let written = &results["members-untyped.tsx"];
     for host in [
         "GtkPaned",
         "GtkPaned.StartChild",
@@ -340,12 +301,7 @@ fn a_member_tag_lowers_to_its_own_host_type() {
         "no member tag is a component: {lowered}"
     );
 
-    // The control: without the checker's answer a member tag is the member
-    // expression it was written as.
-    let (mut blind, _) = ReactTransform::new(stage::default_options());
-    let written = blind
-        .transform(&input, &mut NoTypes)
-        .expect("members.tsx is rewritten");
+    // The real checker sees the same spelling with `any` widget declarations.
     assert!(
         written.contains("Paned.StartChild") && !written.contains("\"GtkPaned.StartChild\""),
         "{written}"
@@ -354,10 +310,7 @@ fn a_member_tag_lowers_to_its_own_host_type() {
 
 #[test]
 fn text_outside_ascii_keeps_every_span() {
-    if tsgo().is_none() {
-        return;
-    }
-    // tsgo and the compiler both count UTF-16 units (src/convert/text.rs).
+    // The frontend and the compiler both count UTF-16 units (src/convert/text.rs).
     // Greek and an astral emoji before the component shift every later span
     // by a different amount in UTF-8 bytes than in UTF-16 units, so a span
     // counted in the wrong unit would cut the printed text or miss a tag.
@@ -365,32 +318,12 @@ fn text_outside_ascii_keeps_every_span() {
         .join("../fixtures/host-components/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked in");
-    let mut session = Session::open(&project).unwrap();
-    let path = session
-        .own_sources()
-        .unwrap()
-        .into_iter()
-        .find(|p| p.file_name() == Some("unicode.tsx"))
-        .unwrap();
-    let tree = session.file(&path).unwrap();
-    let code = std::fs::read_to_string(&path).unwrap();
-    let input = TransformInput {
-        path: &path,
-        text: &code,
-        tree: &tree,
-    };
-
     let (mut transform, _) = ReactTransform::new(stage::default_options());
-    let lowered = transform
-        .transform(
-            &input,
-            &mut SessionTypes {
-                session: &mut session,
-                path: &path,
-                tree: &tree,
-            },
-        )
-        .expect("unicode.tsx is rewritten");
+    let lowered = inspect_file(&project, "unicode.tsx", |file, types| {
+        transform
+            .transform(file, types)
+            .expect("unicode.tsx is rewritten")
+    });
     for text in [
         "\"Καλημέρα κόσμε 🌍\"",
         "`Μετρητής 🌍 ${count}`",
@@ -410,39 +343,13 @@ fn text_outside_ascii_keeps_every_span() {
 
 #[test]
 fn a_host_component_tag_lowers_to_its_host_type() {
-    if tsgo().is_none() {
-        return;
-    }
     let project = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../fixtures/host-components/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked in");
-    let mut session = Session::open(&project).unwrap();
-    let path = session
-        .own_sources()
-        .unwrap()
-        .into_iter()
-        .find(|p| p.file_name() == Some("app.tsx"))
-        .unwrap();
-    let tree = session.file(&path).unwrap();
-    let code = std::fs::read_to_string(&path).unwrap();
-    let input = TransformInput {
-        path: &path,
-        text: &code,
-        tree: &tree,
-    };
-
-    let (mut transform, _) = ReactTransform::new(stage::default_options());
-    let lowered = transform
-        .transform(
-            &input,
-            &mut SessionTypes {
-                session: &mut session,
-                path: &path,
-                tree: &tree,
-            },
-        )
-        .expect("app.tsx is rewritten");
+    let results = rewritten_files(&project, &["app.tsx", "app-untyped.tsx"]);
+    let lowered = &results["app.tsx"];
+    let written = &results["app-untyped.tsx"];
     for host in ["\"GtkBox\"", "\"GtkLabel\"", "\"GtkButton\""] {
         assert!(
             lowered.contains(&format!("_jsx(\"{}", &host[1..]))
@@ -455,12 +362,7 @@ fn a_host_component_tag_lowers_to_its_host_type() {
         "no tag is a component: {lowered}"
     );
 
-    // The control: without the checker's answer a tag is the name it was
-    // written as.
-    let (mut blind, _) = ReactTransform::new(stage::default_options());
-    let written = blind
-        .transform(&input, &mut NoTypes)
-        .expect("app.tsx is rewritten");
+    // The real checker sees the same spelling with `any` widget declarations.
     assert!(
         written.contains("_jsx(Button") && !written.contains("\"GtkButton\""),
         "{written}"

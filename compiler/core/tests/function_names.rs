@@ -5,32 +5,29 @@
 //! a target known only at run time -- and that a name is never a function the
 //! program has to carry.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, FunctionName, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared() -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared() -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/function-names/tsconfig.json")
         .canonicalize_utf8()
         .expect("the program is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("valid HIR").program)
+    hir::prepare(&snapshot).expect("valid HIR").program
 }
 
 #[test]
 fn every_closure_is_named_where_it_is_written() {
-    let Some(program) = prepared() else {
-        eprintln!("SKIP function_names: tsgo is not built");
-        return;
-    };
+    let program = prepared();
     let names: Vec<&FunctionName> = program
         .layouts
         .iter()
@@ -60,10 +57,7 @@ fn every_closure_is_named_where_it_is_written() {
 
 #[test]
 fn a_name_the_type_settles_is_a_constant_and_any_other_is_asked() {
-    let Some(program) = prepared() else {
-        eprintln!("SKIP function_names: tsgo is not built");
-        return;
-    };
+    let program = prepared();
     let names = program
         .funcs
         .iter()
@@ -73,7 +67,7 @@ fn a_name_the_type_settles_is_a_constant_and_any_other_is_asked() {
         names
             .values
             .iter()
-            .any(|op| op.kind == OpKind::ConstString("add".to_owned())),
+            .any(|op| op.kind == OpKind::ConstString("add".into())),
         "`add.name` is the constant `\"add\"`"
     );
     let asks = |func: &hir::Func| {

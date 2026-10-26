@@ -1,6 +1,5 @@
 //! What a program does with its `any` and `unknown` values.
 //!
-//! Runs the frontend, so it skips only when `tsgo` is not built.
 //!
 //! The fixture is deliberately two files. `docs/any-unknown.md` argues that the
 //! cheapest representation for `console`'s `unknown` is decided by a use in
@@ -11,18 +10,18 @@
 
 use camino::Utf8Path;
 use nts_core::erasure::{self, Analysis, Checker, Erasure, Verdict};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn classified() -> Option<Erasure> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn classified() -> Erasure {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/erasure/tsconfig.json")
         .canonicalize_utf8()
         .expect("the erasure fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(erasure::classify(&snapshot))
+    erasure::classify(&snapshot)
 }
 
 fn site<'a>(erasure: &'a Erasure, name: &str) -> &'a erasure::Site {
@@ -47,7 +46,7 @@ fn site<'a>(erasure: &'a Erasure, name: &str) -> &'a erasure::Site {
 /// alone would be a weaker claim.
 #[test]
 fn a_value_that_is_only_moved_is_carried() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     assert_eq!(site(&erasure, "carries.value").verdict, Verdict::Carried);
     assert_eq!(site(&erasure, "<module>.kept").verdict, Verdict::Carried);
 }
@@ -62,7 +61,7 @@ fn a_value_that_is_only_moved_is_carried() {
 /// here so that cannot happen quietly.
 #[test]
 fn a_value_written_into_a_binding_inherits_the_reads_of_it() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     assert_eq!(
         site(&erasure, "<module>.stashed").verdict,
         Verdict::Examined
@@ -93,7 +92,7 @@ fn a_value_written_into_a_binding_inherits_the_reads_of_it() {
 /// and it is the difference between a tag and general erasure.
 #[test]
 fn a_type_test_is_a_test_and_the_read_after_it_is_not() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     let tested = site(&erasure, "tests.value");
     assert_eq!(
         tested.verdict,
@@ -111,7 +110,7 @@ fn a_type_test_is_a_test_and_the_read_after_it_is_not() {
 /// Reading a property is an examination.
 #[test]
 fn a_property_read_examines() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     let examined = site(&erasure, "examines.value");
     assert_eq!(examined.verdict, Verdict::Examined);
     assert_eq!(examined.checker, Checker::Any);
@@ -119,7 +118,7 @@ fn a_property_read_examines() {
 
 #[test]
 fn the_deciding_use_survives_a_same_file_forwarder() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     let forwarded = site(&erasure, "forwardsThroughLocal.value");
     assert_eq!(forwarded.verdict, Verdict::Examined);
     assert!(
@@ -131,7 +130,7 @@ fn the_deciding_use_survives_a_same_file_forwarder() {
 /// A shared checker type must not merge two parameters' evidence.
 #[test]
 fn bindings_and_parameter_positions_keep_distinct_classifications() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     let first = site(&erasure, "twoParameters.first");
     let second = site(&erasure, "twoParameters.second");
     assert_eq!(first.verdict, Verdict::Examined);
@@ -156,7 +155,7 @@ fn bindings_and_parameter_positions_keep_distinct_classifications() {
 /// An unresolved return consumer must not erase another consumer's flow edge.
 #[test]
 fn every_return_consumer_contributes_its_uses() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     assert_eq!(
         site(&erasure, "returnedToDifferentUses.value").verdict,
         Verdict::Examined
@@ -173,7 +172,7 @@ fn every_return_consumer_contributes_its_uses() {
 /// A cycle settles when an examined use reaches both forwarding parameters.
 #[test]
 fn cyclic_forwarders_share_the_examined_use() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     for name in ["cycleA.value", "cycleB.value"] {
         assert_eq!(site(&erasure, name).verdict, Verdict::Examined);
         assert!(!site(&erasure, name).unresolved);
@@ -187,7 +186,7 @@ fn cyclic_forwarders_share_the_examined_use() {
 /// `reads`, in a different file, that decides its representation.
 #[test]
 fn a_forwarded_value_inherits_what_the_receiver_does() {
-    let Some(erasure) = classified() else { return };
+    let erasure = classified();
     let forwarded = site(&erasure, "forwards.value");
     assert_eq!(forwarded.verdict, Verdict::Examined);
     assert!(
@@ -211,14 +210,12 @@ fn a_forwarded_value_inherits_what_the_receiver_does() {
 /// optimistic, and a representation chosen from it would be too small.
 #[test]
 fn the_local_analysis_is_optimistic_where_it_differs() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/erasure/tsconfig.json")
         .canonicalize_utf8()
         .expect("the erasure fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let whole = erasure::classify_as(&snapshot, Analysis::WholeProgram);

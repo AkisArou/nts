@@ -1,0 +1,7 @@
+{
+  "extends": "../../../../../tsconfig.fixtures.json",
+  "files": [
+    "src/eager.ts"
+  ],
+  "include": []
+}

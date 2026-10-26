@@ -33,7 +33,7 @@ pub fn enclosing_module(snapshot: &SemanticSnapshot, mut at: NodeId) -> Option<&
             return node.children.iter().find_map(|child| {
                 let child = snapshot.nodes.get(child.0 as usize)?;
                 if child.kind == NodeKind::Syntax(syntax::STRING_LITERAL) {
-                    child.text.as_deref()
+                    child.text.as_ref().and_then(|text| text.as_utf8())
                 } else {
                     None
                 }
@@ -54,7 +54,7 @@ pub fn declared_name(snapshot: &SemanticSnapshot, at: NodeId) -> Option<&str> {
         .find_map(|child| {
             let child = snapshot.nodes.get(child.0 as usize)?;
             if child.kind == NodeKind::Syntax(syntax::IDENTIFIER) {
-                child.text.as_deref()
+                child.text.as_ref().and_then(|text| text.as_utf8())
             } else {
                 None
             }

@@ -10,7 +10,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 mod common;
@@ -33,12 +33,14 @@ fn method(listing: &str, name: &str) -> String {
 
 #[test]
 fn a_proven_view_access_takes_the_proved_accessor() {
-    let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../tests/programs/a-view-read-guarded-by-its-length-across-a-detaching-call/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     let program = common::prepare(&snapshot).expect("valid HIR").program;
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(

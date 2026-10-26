@@ -17,7 +17,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 mod common;
@@ -44,12 +44,14 @@ fn bodies(listing: &str) -> Vec<(String, String)> {
 
 #[test]
 fn an_accumulator_is_held_only_where_the_three_rules_allow() {
-    let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/accumulators/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
     let program = common::prepare(&snapshot).expect("valid HIR").program;
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(

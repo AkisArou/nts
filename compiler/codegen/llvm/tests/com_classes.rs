@@ -15,7 +15,7 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 /// `Microsoft.UI.Xaml.Application` as `bind-winmd` writes it, cut down: one
@@ -66,12 +66,11 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
 }
 "#;
 
-fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
+fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with(name, BINDING, source)
 }
 
-fn prepare_with(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepare_with(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -86,15 +85,16 @@ fn prepare_with(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, 
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{name}: {:?}", snapshot.diagnostics);
-    Some((
+    (
         dir,
         hir::prepare(&snapshot)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
-    ))
+    )
 }
 
 const PROGRAM: &str = r#"import { Application } from "winrt:Test.Xaml";
@@ -123,10 +123,7 @@ export function start(): number {
 /// Windows.
 #[test]
 fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
-    let Some((dir, prepared)) = prepare("shape", PROGRAM) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("shape", PROGRAM);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -246,10 +243,7 @@ fn a_delegate_taking_a_boolean_is_ir() {
 }
 "#;
     let source = "import type { ISource } from \"winrt:Test.Events\";\nexport function watch(source: ISource): number {\n  let seen = 0;\n  source.Watch((flag) => {\n    if (flag) seen += 1;\n  });\n  return seen;\n}\n";
-    let Some((dir, prepared)) = prepare_with("delegate-bool", EVENTS, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("delegate-bool", EVENTS, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -339,10 +333,7 @@ const LAYOUT: &str = r#"declare module "winrt:Test.Layout" {
 #[test]
 fn a_forwarded_record_is_passed_as_win64_passes_it() {
     let source = "import { Element } from \"winrt:Test.Layout\";\nlet applied = 0;\nclass Panel extends Element {\n  OnApplyTemplate(): void {\n    applied += 1;\n  }\n}\nexport function start(): number {\n  new Panel();\n  return applied;\n}\n";
-    let Some((dir, prepared)) = prepare_with("forward-record", LAYOUT, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("forward-record", LAYOUT, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -413,10 +404,7 @@ fn a_forwarded_record_is_passed_as_win64_passes_it() {
 #[test]
 fn an_override_answers_through_the_result_pointer() {
     let source = "import { Element } from \"winrt:Test.Layout\";\nimport type { Size } from \"winrt:Test.Layout\";\nimport type { ByValue } from \"c:types\";\nclass Panel extends Element {\n  MeasureOverride(available: ByValue<Size>): ByValue<Size> {\n    return super.MeasureOverride(available);\n  }\n  Allowed(level: number): boolean {\n    return level > 2;\n  }\n}\nexport function start(): void {\n  new Panel();\n}\n";
-    let Some((dir, prepared)) = prepare_with("results", LAYOUT, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("results", LAYOUT, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -487,10 +475,7 @@ fn an_override_answers_through_the_result_pointer() {
 #[test]
 fn a_composed_class_keeps_its_fields_in_its_outer_object() {
     let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  count = 0;\n  name = \"app\";\n  OnLaunched(_args: IInspectable | null): void {\n    this.count += 1;\n  }\n}\nexport function start(): string {\n  const app = new App();\n  return app.name + String(app.count);\n}\n";
-    let Some((dir, prepared)) = prepare("fields", source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("fields", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -547,10 +532,7 @@ fn a_composed_class_keeps_its_fields_in_its_outer_object() {
 #[test]
 fn a_string_argument_is_the_text_of_the_lent_hstring() {
     let source = "import { Element } from \"winrt:Test.Layout\";\nlet last = \"\";\nclass Panel extends Element {\n  GoToElementStateCore(stateName: string, useTransitions: boolean): boolean {\n    last = stateName;\n    return useTransitions && stateName.length > 0;\n  }\n}\nexport function start(): string {\n  new Panel();\n  return last;\n}\n";
-    let Some((dir, prepared)) = prepare_with("hstring", LAYOUT, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("hstring", LAYOUT, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -605,10 +587,7 @@ fn a_string_argument_is_the_text_of_the_lent_hstring() {
 #[test]
 fn a_composed_class_constructor_runs_after_its_composition() {
     let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  label = \"\";\n  constructor(name: string) {\n    super();\n    this.label = \"hello \" + name;\n  }\n  OnLaunched(_args: IInspectable | null): void {}\n}\nexport function start(): string {\n  return new App(\"ada\").label;\n}\n";
-    let Some((dir, prepared)) = prepare("constructor", source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("constructor", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -670,10 +649,7 @@ fn a_composed_class_constructor_runs_after_its_composition() {
 #[test]
 fn an_override_answers_an_object_the_caller_owns() {
     let source = "import { Element } from \"winrt:Test.Layout\";\nimport type { IInspectable } from \"winrt:types\";\nclass Panel extends Element {\n  kept: IInspectable | null = null;\n  Allowed(_level: number): boolean {\n    return true;\n  }\n  Peer(): IInspectable | null {\n    return this.kept;\n  }\n}\nexport function start(): void {\n  new Panel();\n}\n";
-    let Some((dir, prepared)) = prepare_with("object-result", LAYOUT, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("object-result", LAYOUT, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -728,10 +704,7 @@ fn an_override_answers_an_object_the_caller_owns() {
 #[test]
 fn an_override_answers_a_string_as_an_hstring_of_its_own() {
     let source = "import { Element } from \"winrt:Test.Layout\";\nclass Panel extends Element {\n  Name(): string {\n    return \"panel\";\n  }\n}\nexport function start(): void {\n  new Panel();\n}\n";
-    let Some((dir, prepared)) = prepare_with("string-result", LAYOUT, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("string-result", LAYOUT, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -785,10 +758,7 @@ fn an_override_answers_a_string_as_an_hstring_of_its_own() {
 #[test]
 fn a_composed_class_has_methods_of_its_own() {
     let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  count = 0;\n  bump(by: number): number {\n    this.count += by;\n    return this.count;\n  }\n  OnLaunched(_args: IInspectable | null): void {\n    this.bump(1);\n  }\n}\nexport function start(): number {\n  return new App().bump(2);\n}\n";
-    let Some((dir, prepared)) = prepare("own-method", source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("own-method", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -841,10 +811,7 @@ const SURFACE: &str = r#"declare module "winrt:Test.Surface" {
 #[test]
 fn a_surface_member_is_called_through_its_interface() {
     let source = "import type { Gadget, Widget } from \"winrt:Test.Surface\";\nexport function own(w: Widget): number {\n  w.size = 3;\n  return w.size;\n}\nexport function other(w: Widget): void {\n  w.refresh();\n}\nexport function inherited(g: Gadget): number {\n  return g.size;\n}\n";
-    let Some((dir, prepared)) = prepare_with("surface", SURFACE, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("surface", SURFACE, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -913,10 +880,7 @@ fn a_surface_member_is_called_through_its_interface() {
 fn a_surface_name_other_than_the_slots_is_refused() {
     let binding = SURFACE.replace("    refresh(): void;", "    reload(): void;");
     let source = "import type { Widget } from \"winrt:Test.Surface\";\nexport function other(w: Widget): void {\n  w.reload();\n}\n";
-    let Some((_, prepared)) = prepare_with("surface-name", &binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare_with("surface-name", &binding, source);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -937,10 +901,7 @@ fn a_surface_name_other_than_the_slots_is_refused() {
 #[test]
 fn a_bindings_composable_class_is_made_by_its_factory() {
     let source = "import { Application } from \"winrt:Test.Xaml\";\nexport function start(): void {\n  new Application();\n}\n";
-    let Some((dir, prepared)) = prepare("new-binding-class", source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("new-binding-class", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -970,10 +931,7 @@ fn a_bindings_composable_class_is_made_by_its_factory() {
 #[test]
 fn super_in_an_override_calls_the_base_through_its_slot() {
     let source = "import { Application } from \"winrt:Test.Xaml\";\nimport type { IInspectable } from \"winrt:types\";\nclass App extends Application {\n  OnLaunched(args: IInspectable | null): void {\n    super.OnLaunched(args);\n  }\n}\nexport function start(): void {\n  new App();\n}\n";
-    let Some((dir, prepared)) = prepare("super", source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("super", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1091,10 +1049,7 @@ fn windows_syntax(dir: &Utf8Path, emitted: &nts_codegen_c::Emitted) {
 #[test]
 fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
     let source = "import { Application } from \"winrt:Test.Xaml\";\nclass App extends Application {\n  First(): void {}\n}\nexport function start(): void {\n  new App();\n}\n";
-    let Some((dir, prepared)) = prepare("forward", source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare("forward", source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1187,10 +1142,7 @@ fn what_a_composed_class_cannot_hold_is_refused_by_name() {
         ),
     ] {
         let source = format!("{head}class App extends Application {{\n{body}}}\n{tail}");
-        let Some((_, prepared)) = prepare(name, &source) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare(name, &source);
         let messages: Vec<&String> = prepared.diagnostics.iter().map(|d| &d.message).collect();
         assert!(
             messages.iter().any(|m| m.contains(refusal)),
@@ -1231,10 +1183,7 @@ const UPCAST: &str = r#"declare module "winrt:Test.Upcast" {
 #[test]
 fn a_handle_passed_as_its_base_is_asked_for_the_base_interface() {
     let source = "import type { IButton, IWindow } from \"winrt:Test.Upcast\";\nexport function show(w: IWindow, b: IButton): void {\n  w.put_Content(b);\n}\n";
-    let Some((dir, prepared)) = prepare_with("upcast", UPCAST, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("upcast", UPCAST, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1290,10 +1239,7 @@ const EVENTS: &str = r#"declare module "winrt:Test.Events" {
 #[test]
 fn an_event_listener_is_added_and_removed_by_the_runtime() {
     let source = "import type { Button } from \"winrt:Test.Events\";\nlet clicks = 0;\nconst onClick = (): void => {\n  clicks += 1;\n};\nexport function wire(b: Button): number {\n  b.addEventListener(\"click\", onClick);\n  b.removeEventListener(\"click\", onClick);\n  return clicks;\n}\n";
-    let Some((dir, prepared)) = prepare_with("events", EVENTS, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("events", EVENTS, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1342,10 +1288,7 @@ fn a_listener_naming_no_event_is_refused() {
         "(sender: IInspectable, e: IInspectable) => void",
     );
     let source = "import type { Button } from \"winrt:Test.Events\";\nexport function wire(b: Button): void {\n  b.addEventListener(\"click\", () => {});\n}\n";
-    let Some((_, prepared)) = prepare_with("events-no-event", &binding, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare_with("events-no-event", &binding, source);
     assert!(
         prepared.diagnostics.iter().any(|d| d
             .message
@@ -1401,10 +1344,7 @@ const GENERIC: &str = r#"declare module "winrt:Test.Generic" {
 #[test]
 fn a_generic_interfaces_surface_is_called_on_its_own_table() {
     let source = "import type { IInspectable } from \"winrt:types\";\nimport type { IVector, Things } from \"winrt:Test.Generic\";\nexport function count(v: IVector<IInspectable>): number {\n  return v.size;\n}\nexport function first(v: Things): IInspectable {\n  return v.getAt(0);\n}\n";
-    let Some((dir, prepared)) = prepare_with("generic", GENERIC, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("generic", GENERIC, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1435,10 +1375,7 @@ fn a_generic_interfaces_surface_is_called_on_its_own_table() {
 #[test]
 fn a_vector_is_walked_by_count_through_its_own_table() {
     let source = "import type { IInspectable } from \"winrt:types\";\nimport type { IVector } from \"winrt:Test.Generic\";\nexport function count(v: IVector<IInspectable>): number {\n  let n = 0;\n  for (const item of v) {\n    if (item !== null) n += 1;\n  }\n  return n;\n}\nexport function copied(v: IVector<IInspectable>): number {\n  return Array.from(v).length;\n}\n";
-    let Some((dir, prepared)) = prepare_with("vector-walk", GENERIC, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("vector-walk", GENERIC, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1485,10 +1422,7 @@ const STATICS: &str = r#"declare module "winrt:Test.Statics" {
 #[test]
 fn a_static_property_is_called_on_its_factory() {
     let source = "import { Clock } from \"winrt:Test.Statics\";\nexport function tick(): number {\n  Clock.ticks = (Clock.ticks + 1) | 0;\n  return Clock.ticks;\n}\n";
-    let Some((dir, prepared)) = prepare_with("statics", STATICS, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("statics", STATICS, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1551,10 +1485,7 @@ const BOXING: &str = r#"declare module "winrt:Test.Boxing" {
 #[test]
 fn a_primitive_where_an_object_is_taken_is_boxed() {
     let source = "import type { IInspectable } from \"winrt:types\";\nimport type { IHolder } from \"winrt:Test.Boxing\";\nexport function fill(h: IHolder, object: IInspectable): void {\n  h.Put(\"text\");\n  h.Put(4.5);\n  h.Put(object);\n  h.content = \"Press\";\n}\n";
-    let Some((dir, prepared)) = prepare_with("boxing", BOXING, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("boxing", BOXING, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1592,10 +1523,7 @@ fn a_primitive_where_an_object_is_taken_is_boxed() {
 #[test]
 fn an_object_read_back_is_unboxed() {
     let source = "import type { IHolder } from \"winrt:Test.Boxing\";\nexport function label(h: IHolder): string {\n  const content = h.content;\n  return typeof content === \"string\" ? content : \"object\";\n}\n";
-    let Some((dir, prepared)) = prepare_with("unboxing", BOXING, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("unboxing", BOXING, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1667,10 +1595,7 @@ const NARROWING: &str = r#"declare module "winrt:Test.Narrow" {
 #[test]
 fn an_instanceof_narrows_a_com_value_to_its_interface() {
     let source = "import { Thing } from \"winrt:Test.Narrow\";\nimport type { IHolder } from \"winrt:Test.Narrow\";\nexport function poke(h: IHolder): boolean {\n  const value = h.get_Content();\n  if (value instanceof Thing) {\n    value.Poke();\n    return true;\n  }\n  return false;\n}\n";
-    let Some((dir, prepared)) = prepare_with("narrowing", NARROWING, source) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (dir, prepared) = prepare_with("narrowing", NARROWING, source);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

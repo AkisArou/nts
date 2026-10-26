@@ -156,7 +156,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.ts";
-import { frontendFor } from "./pin.ts";
+
 import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { followCpu, followInstructions } from "../gate/cputime.mjs";
@@ -167,8 +167,8 @@ const KNOWN = join(HERE, "integrity.known");
 /** The projects built as addons: their exported surface is called from outside. */
 const ADDON = /^runtime\/(node|web-platform)(\/|$)/;
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
-const FRONTEND = frontendFor(NTS, ROOT);
-const env = { ...process.env, NTS_TSGO: FRONTEND.path };
+
+const env = { ...process.env, NTS_CHECKERS: "1" };
 // Four listings per project; `http` alone lowers for about 95 s. Memory, not
 // cores, is what this box runs out of.
 const WORKERS = Number(process.env.NTS_INTEGRITY_JOBS ?? 4);
@@ -247,9 +247,11 @@ export function readLayouts(text) {
     if (base) current.base = base[1];
     const implemented = /^ {2}implements (.+)$/.exec(line);
     if (implemented) current.implements.push(...implemented[1].split(/,\s*|\s+/).filter(Boolean));
-    if (/^ {2}\S+ : /.test(line)) current.fields += 1;
     const table = /^ {2}methods (?!:)(.+)$/.exec(line);
+    // Typed symbol and quoted field labels can contain spaces. Classify a
+    // method-table row first: its target label may also contain ` : `.
     if (table) current.methods.push(table[1]);
+    else if (/^ {2}.+ : /.test(line)) current.fields += 1;
   }
   return { byName, byId, byType };
 }
@@ -444,7 +446,91 @@ const ARRAY_ELEMENT = /^call\.extern nts_array_element\((%\d+), %\d+(?:, %\d+)?\
  * built class descends from, and no `instanceof` of the same value guards:
  * `{ fn, target }` each. See `unerase-is-built`.
  */
+// Optional final-operation proof facts. A partial, stale or contradictory
+// projection grants nothing; old listings retain the original judgment.
+function readFieldContracts(prepared) {
+  const result = new Map();
+  const integer = (n) => Number.isSafeInteger(n) && n >= 0;
+  for (const line of prepared.split("\n")) {
+    if (!line.startsWith("field-read-contract ")) continue;
+    try {
+      const encoded = line.slice("field-read-contract ".length);
+      if (!/^(?:[a-f0-9]{2})+$/.test(encoded)) return new Map();
+      const text = Buffer.from(encoded, "hex").toString("utf8"), p = JSON.parse(text);
+      if (Buffer.from(text, "utf8").toString("hex") !== encoded) return new Map();
+      const key = `${p.function}\0${p.operation}`;
+      const member = p.member && typeof p.member === "object" && !Array.isArray(p.member) ? Object.keys(p.member) : [];
+      if (JSON.stringify(p) !== text || p.version !== 1 || p.eager !== false || typeof p.function !== "string"
+          || ![p.operation, p.root, p.receiver, p.face, p.field].every(integer)
+          || ![null, 0].includes(p.argument) || typeof p.rendered !== "string"
+          || !/^[a-f0-9]{64}$/.test(p.body_sha256)
+          || !Array.isArray(p.dependencies)
+          || p.dependencies.some((d) => typeof d.function !== "string" || !/^[a-f0-9]{64}$/.test(d.body_sha256) || d.function === p.function)
+          || new Set(p.dependencies.map((d) => d.function)).size !== p.dependencies.length
+          || ((p.argument === null) !== (p.dependencies.length === 0))
+          || typeof p.representation !== "string" || !p.representation
+          || member.length !== 1 || !["Name", "Private", "Symbol"].includes(member[0])
+          || (member[0] === "Symbol" ? !integer(p.member.Symbol) : typeof p.member[member[0]] !== "string")
+          || !Array.isArray(p.owners) || p.owners.length === 0
+          || p.owners.some((o) => !integer(o.id) || typeof o.field_prefix !== "boolean")
+          || new Set(p.owners.map((o) => o.id)).size !== p.owners.length
+          || ![p.prefix_receivers, p.other_receivers].every((v) => Array.isArray(v) && v.every(integer) && new Set(v).size === v.length)
+          || p.prefix_receivers.some((id) => p.other_receivers.includes(id))
+          || !["stored-prefix", "dominating-direct", "validated-small-dispatch"].includes(p.mode)
+          || (p.mode === "stored-prefix" && p.owners.some((o) => !o.field_prefix))
+          || ((p.argument === null) !== ["stored-prefix", "dominating-direct"].includes(p.mode))
+          || result.has(key)) return new Map();
+      result.set(key, p);
+    } catch { return new Map(); }
+  }
+  return result;
+}
+
+// Check all uses, not just a recognized getter. The producer owns licensing;
+// this reader binds it to the exact active op, receiver and call argument.
+// Unsupported alias/control transfers fail closed rather than lose a use.
+function contractedFieldRead(f, start, face, contracts) {
+  const lines = f.chunk.split("\n").filter((line) => line.startsWith("  "));
+  const users = new Map();
+  for (const line of lines) {
+    const definition = /^ {2}(%\d+) = /.exec(line)?.[1];
+    const expression = line.replace(/^ {2}%\d+ = /, "");
+    for (const value of new Set(expression.match(/%\d+/g) ?? [])) {
+      users.set(value, [...(users.get(value) ?? []), { line, definition, expression }]);
+    }
+  }
+  let reads = 0;
+  const seen = new Set();
+  const walk = (value) => {
+    if (seen.has(value)) return true;
+    seen.add(value);
+    const uses = users.get(value) ?? [];
+    if (uses.length === 0) return false;
+    return uses.every(({ line, definition, expression }) => {
+      // These inspect identity/tag only, and the scalar result is not an alias.
+      if (new RegExp(`^(?:instanceof|tag\\.of) ${value}(?: |$)`).test(expression)) return true;
+      if (definition && new RegExp(`^(?:erase|unerase|convert) ${value}(?: :|$)`).test(expression)) return walk(definition);
+      const id = definition ? Number(definition.slice(1)) : null;
+      const proof = contracts.get(`${f.name}\0${id}`);
+      if (!proof || proof.root !== Number(start.slice(1)) || proof.face !== Number(face)
+          || proof.receiver !== Number(value.slice(1)) || line !== `  ${proof.rendered}`) return false;
+      if (proof.argument === null) {
+        if (expression !== `field.get ${value}.${proof.field} : ${proof.representation}`) return false;
+      } else {
+        // Exactly one receiver argument, at the recorded ABI index. A default
+        // body name or another use of this value cannot stand in for the op.
+        const call = /^call (.+)\(([^()]*)\) : .+$/.exec(expression);
+        if (!call || call[2].trim() !== value || !proof.dependencies.some((d) => d.function === call[1])) return false;
+      }
+      reads += 1;
+      return true;
+    });
+  };
+  return walk(start) && reads > 0;
+}
+
 export function unbuiltUnerases(prepared, { byName, byId, byType }) {
+  const fieldContracts = readFieldContracts(prepared);
   // Anonymous cast faces dispatch by the concrete receiver. They need no
   // allocation of the face's own layout; a positional read still violates
   // that contract and must not gain an exemption from the printed marker.
@@ -471,13 +557,32 @@ export function unbuiltUnerases(prepared, { byName, byId, byType }) {
     }
   }
   const fns = new Map();
+  let duplicateFunctions = false;
   for (const chunk of prepared.split(/\n(?=(?:export )?(?:declare )?func )/)) {
     const name = /^(?:export )?(?:declare )?func (.+?)\(/.exec(chunk)?.[1];
     if (!name) continue;
     const params = new Map([...chunk.matchAll(/^ {2}(%\d+) = param (\d+) /gm)].map((m) => [m[1], Number(m[2])]));
     const values = new Map([...chunk.matchAll(/^ {2}(%\d+) = (.*?) : (.+)$/gm)].map((m) => [m[1], { op: m[2], type: m[3] }]));
+    if (fns.has(name)) duplicateFunctions = true;
     fns.set(name, { name, chunk, exported: chunk.startsWith("export "), params, values });
   }
+  const bodyHashes = new Map();
+  const bodyHash = (name) => {
+    if (!bodyHashes.has(name)) {
+      const f = fns.get(name);
+      const body = f ? f.chunk.slice(f.chunk.indexOf("\n") + 1, f.chunk.lastIndexOf("\n}")) + "\n" : null;
+      bodyHashes.set(name, body === null ? null : createHash("sha256").update(body).digest("hex"));
+    }
+    return bodyHashes.get(name);
+  };
+  if (duplicateFunctions || [...fieldContracts.values()].some((p) => {
+    const f = fns.get(p.function), op = f?.values.get(`%${p.operation}`), root = f?.values.get(`%${p.root}`);
+    return !op || !root || !f.values.has(`%${p.receiver}`)
+      || bodyHash(p.function) !== p.body_sha256
+      || p.dependencies.some((d) => bodyHash(d.function) !== d.body_sha256)
+      || p.rendered !== `%${p.operation} = ${op.op} : ${op.type}`
+      || !/^unerase %\d+$/.test(root.op) || root.type !== `managed<obj#${p.face}>`;
+  })) fieldContracts.clear();
   const callers = new Map();
   for (const f of fns.values()) {
     for (const m of f.chunk.matchAll(/^ {2}(?:%\d+ = )?call ([^\s(]+)\(([^)]*)\)/gm)) {
@@ -550,6 +655,8 @@ export function unbuiltUnerases(prepared, { byName, byId, byType }) {
       if (head) { block = head[1]; continue; }
       const u = /^ {2}%\d+ = unerase (%\d+) : managed<obj#(\d+)>$/.exec(line);
       if (!u || guarded.has(`${block} ${u[1]}`) || boundary(f, u[1])) continue;
+      const result = /^ {2}(%\d+) = unerase /.exec(line)?.[1];
+      if (result && !castFaces.has(u[2]) && contractedFieldRead(f, result, u[2], fieldContracts)) continue;
       const layout = byId.get(u[2]);
       if (castFaces.has(u[2])) {
         const result = /^ {2}(%\d+) = unerase /.exec(line)?.[1];
@@ -746,6 +853,16 @@ function selfTest() {
   };
   const parsedSlots = readLayouts(slots.layouts).byName.get("Other").methods;
   if (JSON.stringify(parsedSlots) !== JSON.stringify(slotNames)) return `slot names were lost or joined: ${JSON.stringify(parsedSlots)}`;
+  // Field labels retain spaces and typed/private key spellings; a field
+  // named methods remains distinct from actual table rows, including labels
+  // containing the same colon separator as a field.
+  const fieldRows = readLayouts([
+    "Fields [21]", "  plain : Erased", "  #private : Erased",
+    "  [symbol #0] : Erased", "  two words : Erased", "  methods : Erased",
+    "  methods Fields#set has : colon", "  methods Fields#get plain", "",
+  ].join("\n")).byName.get("Fields");
+  if (fieldRows.fields !== 5) return `field labels were lost or tables counted as fields: ${fieldRows.fields}`;
+  if (JSON.stringify(fieldRows.methods) !== JSON.stringify(["Fields#set has : colon", "Fields#get plain"])) return "field labels attached as method-table rows";
   // Count raw rows independently of block boundaries: resetting too early
   // must not make a dropped table look like a clean, smaller program.
   const countsAgree = (text) => {
@@ -979,6 +1096,47 @@ function selfTest() {
   if (!rules({ ...clean, layouts: clean.layouts.replace("Other [11]", "Other [12]") }).includes("owner-has-layout")) return "a method whose `this` type has no layout was not caught";
   // A field named `methods` is not a table.
   if (readLayouts("C [1]\n  methods : Erased\n").byName.get("C").methods.length !== 0) return "a field named `methods` read as a table";
+  // Producer facts are synthetic in this reader control; the core tests
+  // separately demand real final-operation contracts from both gated fixtures.
+  const proved = ["func proved(x: erased) -> f64 {", "b0:",
+    "  %0 = param 0 : erased", "  %1 = unerase %0 : managed<obj#10>",
+    "  %2 = field.get %1.0 : f64", "  ret %2", "}", ""].join("\n");
+  const proofFor = (text) => ({ version: 1, eager: false, dependencies: [], function: "proved", operation: 2,
+    root: 1, receiver: 1, argument: null, face: 10, field: 0,
+    member: { Name: "width" }, representation: "f64", owners: [{ id: 13, field_prefix: true }],
+    prefix_receivers: [13], other_receivers: [], mode: "stored-prefix",
+    rendered: "%2 = field.get %1.0 : f64",
+    body_sha256: createHash("sha256").update(text.slice(text.indexOf("\n") + 1, text.lastIndexOf("\n}")) + "\n").digest("hex"),
+  });
+  const facts = (text, proof = proofFor(text)) => `field-read-contract ${Buffer.from(JSON.stringify(proof)).toString("hex")}\n${text}`;
+  const fieldLayouts = readLayouts("Shape [10]\n  width : Float { bits: 64 }\nSquare [13]\n  width : Float { bits: 64 }\n");
+  if (unbuiltUnerases(proved, fieldLayouts).length !== 1) return "an old positional listing gained a field-read exemption";
+  if (unbuiltUnerases(facts(proved), fieldLayouts).length !== 0) return "a complete bound field-read contract was lost";
+  if (JSON.stringify([...readHir(proved).defined]) !== JSON.stringify([...readHir(facts(proved)).defined]) || JSON.stringify(readHir(proved).calls) !== JSON.stringify(readHir(facts(proved)).calls)) return "field proof metadata changed raw function or call populations";
+  if (unbuiltUnerases(`cast-face 10\n${facts(proved)}`, fieldLayouts).length !== 1) return "a fresh complete stored-prefix fact hid a cast-face positional read";
+  // Supported-only mixed facts keep the good exact root. A deliberately
+  // supplied unsupported Param/Convert root still invalidates all facts.
+  const mixedRead = proved.replace("proved(x: erased)", "proved(x: erased, named: managed<obj#10>)")
+    .replace("  %0 = param 0 : erased", "  %0 = param 0 : erased\n  %3 = param 1 : managed<obj#10>\n  %4 = convert %3 : managed<obj#10>\n  %5 = field.get %3.0 : f64\n  %6 = field.get %4.0 : f64");
+  if (unbuiltUnerases(facts(mixedRead), fieldLayouts).length !== 0) return "unsupported mixed candidates poisoned a supported exact root";
+  for (const [root, operation] of [[3, 5], [4, 6]]) {
+    const unsupported = { ...proofFor(mixedRead), root, receiver: root, operation,
+      rendered: `%${operation} = field.get %${root}.0 : f64` };
+    const bad = `field-read-contract ${Buffer.from(JSON.stringify(unsupported)).toString("hex")}\n${facts(mixedRead)}`;
+    if (unbuiltUnerases(bad, fieldLayouts).length !== 1) return "a supplied unsupported mixed root did not fail closed";
+  }
+  const escapedRead = proved.replace("  ret %2", "  %3 = erase %1 : erased\n  call leak(%3) : void\n  ret %2");
+  for (const bad of [
+    facts(proved, { ...proofFor(proved), owners: [] }),
+    facts(proved, { ...proofFor(proved), owners: [{ id: 13, field_prefix: false }] }),
+    facts(proved, { ...proofFor(proved), root: 0 }),
+    facts(proved, { ...proofFor(proved), argument: 1 }),
+    facts(proved, { ...proofFor(proved), member: "width" }),
+    facts(proved.replace("field.get %1.0", "field.get %1.1"), proofFor(proved)),
+    facts(escapedRead), // Fresh body binding still cannot hide an uncovered use.
+    `field-read-contract {\n${facts(proved)}`,
+    `${facts(proved).split("\n")[0]}\n${facts(proved)}`,
+  ]) if (unbuiltUnerases(bad, fieldLayouts).length !== 1) return "an absent/contradictory/stale field proof or extra alias use hid a positional risk";
   // A listing that lost a function is not a clean program.
   if (!judge({ ...clean, prepared: clean.prepared.replace(summary(5), summary(6)) }).unmeasured) return "a listing short of its summary was measured";
   return null;
@@ -999,12 +1157,6 @@ if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
   process.exit(2);
 }
-// No frontend, and every project prints nothing: which reads as "0 violations".
-if (!FRONTEND.exists) {
-  console.log(`  NOT MEASURED: no frontend at ${FRONTEND.path} -- in a worktree, set NTS_TSGO to the main tree's, or use a pin (it records its frontend)`);
-  process.exit(2);
-}
-
 const under = (base) =>
   readdirSync(join(ROOT, base), { withFileTypes: true })
     .filter((e) => e.isDirectory() && existsSync(join(ROOT, base, e.name, "tsconfig.json")))
@@ -1097,13 +1249,10 @@ const slot = limiter(WORKERS);
 // Each process holds one of the gate's tokens while it runs (tokens.mjs).
 const run = (args) => slot(() => withToken(() =>
   new Promise((resolve) => {
-    // The timed listing runs with the snapshot cache off: whether it hits,
-    // misses or stores changes the compiler's own work by up to 1.8x
-    // (runtime/node/assert: 291 G instructions off or on a hit, 524 G on a
-    // miss that stores), and what it prints is the same either way -- the
-    // snapshot-cache step checks exactly that.
+    // The native producer captures anew; there is no producer-cache mode.
+    // Only a kept prepared listing supplies the compile-time step's counters.
     const timedRun = KEEP && args[0] === "hir" && args[1] === "--prepared";
-    const child = spawn(NTS, args, { cwd: ROOT, env: timedRun ? { ...env, NTS_NO_SNAPSHOT_CACHE: "1" } : env });
+    const child = spawn(NTS, args, { cwd: ROOT, env });
     // The lowering's own work -- instructions retired, and CPU seconds -- kept
     // for the compile-time step (tooling/gate/compile-time.mjs): measured on
     // the listing it would otherwise make itself, so the corpus is lowered

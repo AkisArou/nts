@@ -17,7 +17,7 @@ pub(super) use adapters::declare;
 pub(super) struct Supplies {
     owners: FxHashMap<TypeId, Vec<NodeId>>,
     allocations: FxHashMap<NodeId, TypeId>,
-    writes: FxHashMap<(TypeId, Option<String>), Vec<NodeId>>,
+    writes: FxHashMap<(TypeId, Option<super::PropertyKey>), Vec<NodeId>>,
     effects: absence::Effects,
     mixed: FxHashSet<TypeId>,
     functions: Option<std::sync::Arc<super::closed_calls::Functions>>,
@@ -56,9 +56,8 @@ impl Supplies {
             probe.children(*literal).into_iter().all(|member| {
                 probe.kind_of(member) != Some(syntax::SPREAD_ASSIGNMENT)
                     && probe
-                        .member_name(member)
-                        .or_else(|| probe.symbol_member_name(*literal, member, Some(owner)))
-                        .is_some_and(|name| name != key && name != "__proto__")
+                        .member_key(member)
+                        .is_some_and(|name| !name.is_name(key) && !name.is_name("__proto__"))
             })
         })
     }
@@ -69,21 +68,12 @@ impl Supplies {
         &self,
         probe: &FuncBuilder,
         owner: TypeId,
-        key: &str,
+        key: &super::MemberKey,
     ) -> Vec<NodeId> {
         let mut declarations = Vec::new();
         for literal in self.owners.get(&owner).into_iter().flatten() {
             for member in probe.children(*literal) {
-                let prefix = match probe.kind_of(member) {
-                    Some(syntax::METHOD_DECLARATION) => "",
-                    Some(syntax::GET_ACCESSOR) => "get ",
-                    Some(syntax::SET_ACCESSOR) => "set ",
-                    _ => continue,
-                };
-                let name = probe
-                    .member_name(member)
-                    .or_else(|| probe.symbol_member_name(*literal, member, Some(owner)));
-                if name.is_some_and(|name| format!("{prefix}{name}") == key) {
+                if super::member_dispatch_key(probe, member).as_ref() == Some(key) {
                     declarations
                         .push(probe.implementation_of(super::the_function_of(probe, member)));
                 }
@@ -112,7 +102,7 @@ impl Supplies {
                 continue;
             }
             let left = probe.through_assertions(*left);
-            let (object, member) = match probe.member_access(left) {
+            let (object, member) = match probe.member_access_key(left) {
                 Some((object, member)) => (object, Some(member)),
                 None if probe.kind_of(left) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) => {
                     let Some(object) = probe.children(left).first().copied() else {
@@ -233,9 +223,16 @@ impl Supplies {
                     })
                 })
                 .collect(),
-            Some(TypeKind::Any | TypeKind::Unknown | TypeKind::Structured { .. }) | None => {
-                self.owners().collect()
-            }
+            Some(
+                TypeKind::Any | TypeKind::Unknown | TypeKind::NonPrimitive | TypeKind::Structured,
+            )
+            | None => self.owners().collect(),
+            // A unique symbol is a primitive, so it cannot own these members.
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            Some(TypeKind::UniqueSymbol) => Vec::new(),
             _ => Vec::new(),
         }
     }
@@ -287,7 +284,7 @@ impl Supplies {
             let member = probe
                 .children(*literal)
                 .into_iter()
-                .find(|member| probe.member_name(*member).as_deref() == Some(wanted.name.as_str()));
+                .find(|member| probe.member_key(*member).as_ref() == Some(&wanted.name));
             member.is_some_and(|member| {
                 if probe.kind_of(member) == Some(syntax::METHOD_DECLARATION) {
                     initial_contract(probe, *literal, member).is_some_and(|mine| {
@@ -350,12 +347,17 @@ impl Supplies {
 
     /// A direct body is emitted at the allocation owner's name, even when
     /// the contextual interface inherits the method's signature elsewhere.
-    fn declares_direct(&self, probe: &FuncBuilder, owner: TypeId, member: &str) -> bool {
+    fn declares_direct(
+        &self,
+        probe: &FuncBuilder,
+        owner: TypeId,
+        member: &super::MemberKey,
+    ) -> bool {
         self.owners.get(&owner).is_some_and(|literals| {
             literals.iter().all(|literal| {
                 probe.children(*literal).into_iter().any(|at| {
                     probe.kind_of(at) == Some(syntax::METHOD_DECLARATION)
-                        && probe.member_name(at).as_deref() == Some(member)
+                        && super::member_dispatch_key(probe, at).as_ref() == Some(member)
                 })
             })
         })
@@ -364,9 +366,16 @@ impl Supplies {
 
 /// A method value through another face would require extracting the original
 /// closure across layouts. A fresh bound wrapper would silently change `===`.
-pub(super) fn supplies_method_value(probe: &FuncBuilder, face: TypeId, member: &str) -> bool {
+pub(super) fn supplies_method_value(
+    probe: &FuncBuilder,
+    face: TypeId,
+    member: &super::PropertyKey,
+) -> bool {
     !probe.hierarchy.literal_methods.is_legacy(face)
-        && probe.hierarchy.declaring(face, member).is_some()
+        && probe
+            .hierarchy
+            .declaring(face, &super::MemberKey::method(member.clone()))
+            .is_some()
         && probe.hierarchy.literal_methods.owners().any(|owner| {
             owner != face
                 && probe.hierarchy.descends_from(owner, face)
@@ -377,7 +386,7 @@ pub(super) fn supplies_method_value(probe: &FuncBuilder, face: TypeId, member: &
 fn initial_contract(probe: &FuncBuilder, literal: NodeId, member: NodeId) -> Option<Contract> {
     match probe.kind_of(member)? {
         syntax::METHOD_DECLARATION => {
-            let name = probe.member_name(member)?;
+            let name = probe.member_key(member)?;
             let actual = *probe.snapshot.node_types.get(&literal)?;
             let property = interfaces::property(probe.snapshot, actual, &name)?;
             interfaces::contract_at(probe, property.ty, Some(member))
@@ -431,7 +440,7 @@ pub(super) fn stored_call(probe: &FuncBuilder, call: NodeId) -> bool {
     let Some(callee) = probe.children(call).first().copied() else {
         return false;
     };
-    let Some((receiver, member)) = probe.member_access(probe.through_assertions(callee)) else {
+    let Some((receiver, member)) = probe.member_access_key(probe.through_assertions(callee)) else {
         return false;
     };
     let effective = probe
@@ -471,7 +480,8 @@ pub(super) enum TableTarget {
         owner: TypeId,
         root: TypeId,
         field: u32,
-        member: String,
+        member: super::MemberKey,
+        raising: bool,
     },
 }
 
@@ -483,9 +493,11 @@ impl TableTarget {
                 owner,
                 root,
                 member,
+                raising,
                 ..
             } => {
-                let (plain, suffix) = super::without_the_raising_suffix(member);
+                let plain = member.emitted_name();
+                let suffix = if *raising { super::RAISING_SUFFIX } else { "" };
                 let name = super::nominal_or_stand_in(probe.snapshot, *owner);
                 format!(
                     "{name}{}#{plain}@field${}_${}{suffix}",
@@ -502,27 +514,30 @@ pub(super) fn target(
     probe: &FuncBuilder,
     owner: TypeId,
     root: TypeId,
-    member: &str,
+    member: &super::MemberKey,
+    raising: bool,
     fields: &[super::Field],
 ) -> Option<TableTarget> {
     let hierarchy = &probe.hierarchy;
-    let (plain, suffix) = super::without_the_raising_suffix(member);
+    let plain = member.emitted_name();
+    let suffix = if raising { super::RAISING_SUFFIX } else { "" };
     if hierarchy.faces.contains(&root)
         && !hierarchy.literal_methods.is_legacy(root)
         && hierarchy.literal_methods.contains(owner)
-        && probe.literal_member_is_storage(owner, plain)
+        && probe.literal_member_is_storage(owner, &member.key)
     {
-        let field = fields.iter().position(|field| field.name == plain)?;
+        let field = fields.iter().position(|field| field.name == member.key)?;
         return Some(TableTarget::StoredLiteral {
             owner,
             root,
             field: u32::try_from(field).ok()?,
-            member: member.to_owned(),
+            member: member.clone(),
+            raising,
         });
     }
     if hierarchy
         .literal_methods
-        .declares_direct(probe, owner, plain)
+        .declares_direct(probe, owner, member)
     {
         let name = hierarchy.name.get(&owner).cloned().unwrap_or_else(|| {
             format!(
@@ -533,7 +548,7 @@ pub(super) fn target(
         });
         return Some(TableTarget::Direct(format!("{name}#{plain}{suffix}")));
     }
-    let declared = hierarchy.declaring(owner, plain)?;
+    let declared = hierarchy.declaring(owner, member)?;
     let name = hierarchy.name.get(&declared)?;
     Some(TableTarget::Direct(format!("{name}#{plain}{suffix}")))
 }

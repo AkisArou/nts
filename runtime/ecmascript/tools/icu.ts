@@ -26,7 +26,7 @@ const fixture = resolve(root, "tooling/conformance/ecmascript/icu-compiled");
 const nts = process.env.NTS_BIN ?? resolve(root, "target/release/nts");
 const env: NodeJS.ProcessEnv = {
   ...process.env,
-  NTS_TSGO: process.env.NTS_TSGO ?? resolve(root, "target/tsgo"),
+  NTS_CHECKERS: "1",
 };
 let androidDevice: string | undefined;
 for (let index = 2; index < process.argv.length; index++) {

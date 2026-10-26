@@ -11,7 +11,7 @@
 use std::process::Command;
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 mod common;
 
@@ -28,10 +28,6 @@ fn run_whole_script(name: &str, source: &str) -> Option<(i32, String, String)> {
 }
 
 fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, String)> {
-    let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
-        eprintln!("SKIP whole_program/{name}: NTS_TSGO is not set");
-        return None;
-    };
     let Some(java) = common::tool("java") else {
         eprintln!("SKIP whole_program/{name}: no JDK");
         return None;
@@ -59,7 +55,8 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
     std::fs::write(dir.join("src").join(file), source).expect("write the program");
 
     let tsconfig = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).expect("a UTF-8 path");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(

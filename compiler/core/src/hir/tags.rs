@@ -349,7 +349,7 @@ pub fn fold_comparisons(func: &mut super::Func) -> usize {
         };
     let spelling =
         |func: &super::Func, value: super::ValueId| match &func.values[value.0 as usize].kind {
-            OpKind::ConstString(text) => of_spelling(text),
+            OpKind::ConstString(text) => text.as_utf8().and_then(of_spelling),
             _ => None,
         };
 

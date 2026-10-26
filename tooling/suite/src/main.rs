@@ -23,10 +23,10 @@
 //!
 //! # The vendored corpus
 //!
-//! `third_party/typescript-go/testdata/tests/cases` comes with the frontend's
-//! submodule. It is a few hundred files, which is enough to build against and
-//! enough to be useful; the full TypeScript corpus is another submodule deeper
-//! and is worth pulling once this is a nightly rather than a command.
+//! `third_party/typescript/tsc/testdata/tests/cases` is bootstrapped at the native checker's
+//! TypeScript commit. The checked-in manifest keeps the old repository's 316 source
+//! cases as the stable landing population. `--full` selects every source case
+//! in the pinned upstream tree for the separate full-corpus survey.
 //!
 //! Multi-file cases are skipped. They use `// @filename:` directives that mean
 //! something to the TypeScript test harness and nothing here, and treating one
@@ -37,12 +37,16 @@ use std::fmt::Write as _;
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use rustc_hash::FxHashMap;
 
+mod corpus;
+mod isolated;
+mod rows;
 mod test262;
 
 /// What happened to one file.
+#[derive(serde::Serialize, serde::Deserialize)]
 enum Outcome {
     /// Lowered completely: every construct in it is supported.
     Lowered,
@@ -51,14 +55,16 @@ enum Outcome {
     /// The typechecker rejected it, which for a corpus of compiler tests is
     /// usually the point of the file rather than a failure.
     Rejected,
-    /// The *frontend* failed: a transport error, or a query tsgo could not
-    /// answer. Always a bug, and counted apart from a typecheck rejection
+    /// Loading or snapshot capture failed, rather than rejecting the program's
+    /// types. Counted apart from a typecheck rejection
     /// because the two look identical from here and mean opposite things --
     /// one is the corpus working as intended and the other is this compiler
     /// falling over. Folding them together hid a real regression once.
     Failed(String),
     /// Lowering produced HIR the verifier rejected. Always a bug.
     Invalid,
+    /// The isolated compiler process died; never a checker rejection.
+    Crashed(String),
 }
 
 struct Totals {
@@ -67,6 +73,7 @@ struct Totals {
     rejected: usize,
     failed: usize,
     invalid: usize,
+    crashed: usize,
     /// Programs whose generated C does not compile.
     ///
     /// A second thing that must stay at zero, and a different failure from
@@ -144,6 +151,13 @@ fn repository_root() -> Result<Utf8PathBuf> {
 
 fn main() -> Result<()> {
     let root = repository_root()?;
+    if let Some(worker) = std::env::args()
+        .skip_while(|arg| arg != "--corpus-worker")
+        .nth(1)
+    {
+        let worker = worker.parse().context("corpus worker index")?;
+        return isolated::serve(&root, worker);
+    }
 
     let limit = std::env::args()
         .skip_while(|arg| arg != "--limit")
@@ -155,19 +169,44 @@ fn main() -> Result<()> {
         return numeric(&root);
     }
 
-    let corpus = root.join("third_party/typescript-go/testdata/tests/cases");
+    let corpus = root.join("third_party/typescript/tsc/testdata/tests/cases");
     if !corpus.is_dir() {
-        bail!("no corpus at {corpus}; the typescript-go submodule is not checked out");
+        bail!("no corpus at {corpus}; run node tooling/bootstrap/typescript.ts first");
     }
 
-    let mut files: Vec<Utf8PathBuf> = Vec::new();
-    collect(&corpus, &mut files)?;
+    // A new upstream pin must not silently enlarge every landing gate.
+    // The manifest keeps the old Go repository's source cases; --full is
+    // the separate survey, with its named failure backlog.
+    let full = std::env::args().any(|arg| arg == "--full");
+    let mut files = if full {
+        let mut files = Vec::new();
+        collect(&corpus, &mut files)?;
+        files
+    } else {
+        corpus::core(&corpus)?
+    };
     files.sort();
+    println!(
+        "  TypeScript corpus: {} ({} source files before multi-file filtering)",
+        if full {
+            "full upstream"
+        } else {
+            "recorded core"
+        },
+        files.len()
+    );
 
-    let totals = run(&root, &files, limit)?;
+    let totals = if full {
+        run_with(&root, &files, limit, true)?
+    } else {
+        run(&root, &files, limit)?
+    };
     report(&totals);
     let written = write_corpus_result(&root, &totals)?;
     println!("\nwrote {written}");
+    if totals.crashed != 0 {
+        bail!("{} corpus case(s) crashed", totals.crashed);
+    }
     Ok(())
 }
 
@@ -308,6 +347,7 @@ impl Workspace {
 /// The notes are carried rather than printed where they are found: the workers
 /// finish in whatever order they finish, and a gate whose output depends on
 /// scheduling is a gate nobody can diff. They are printed in file order below.
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Examined {
     outcome: Outcome,
     notes: Vec<String>,
@@ -337,8 +377,7 @@ fn has_a_jdk() -> bool {
 }
 
 /// One corpus file, start to finish.
-fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
-    let text = std::fs::read_to_string(file).unwrap_or_default();
+fn examine(file: &Utf8Path, workspace: &Workspace) -> Examined {
     let target = workspace.src.join(if file.extension() == Some("tsx") {
         "main.tsx"
     } else {
@@ -347,9 +386,11 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
     // Only one of the two may exist, or the compilation has two entry points.
     let _ = std::fs::remove_file(workspace.src.join("main.ts"));
     let _ = std::fs::remove_file(workspace.src.join("main.tsx"));
-    if std::fs::write(&target, &text).is_err() {
+    // Encoding is part of the case. UTF-16/BOM and invalid-UTF-8 tests
+    // must reach the checker unchanged, rather than becoming empty programs.
+    if let Err(error) = std::fs::copy(file, &target) {
         return Examined {
-            outcome: Outcome::Failed("could not write the case".to_owned()),
+            outcome: Outcome::Failed(format!("could not copy case `{file}`: {error}")),
             notes: Vec::new(),
             uncompilable: false,
             unverifiable: false,
@@ -363,7 +404,13 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
     // A fresh frontend per file. Sharing one would be faster and would also
     // share whatever state a pathological input leaves behind, and the point of
     // a corpus is that some of these inputs are pathological.
-    let mut source = TsgoApi::for_compilation(tsgo.to_owned());
+    let mut source = Frontend::new(
+        workspace
+            .tsconfig
+            .parent()
+            .expect("workspace config directory"),
+    )
+    .with_checkers(std::num::NonZeroU16::MIN);
     // The conservation law is enforced in the lowering rather than measured
     // here: `hir::lower` refuses every function neither walk reached, which is
     // why it shows up as an ordinary refusal in the histogram. Asking again at
@@ -447,21 +494,9 @@ fn examine(file: &Utf8Path, workspace: &Workspace, tsgo: &str) -> Examined {
 
 /// How many files to examine at once.
 ///
-/// Every case is an independent subprocess tree -- a frontend, then clang -- so
-/// this is the one place the machine's size shows. It took the corpus from
-/// thirty seconds to four.
-///
-/// Capped low, and the cap is empirical rather than derived. What breaks first
-/// is not this process (it peaks at 145MB whatever the worker count) but the
-/// *frontends*, which are separate processes holding a type graph each: at
-/// thirty-two and at sixteen, one of them died inside Go's collector and the
-/// run reported `io error talking to tsgo` and one extra frontend failure. At
-/// eight it did not, twice. A gate that is fast and occasionally wrong is worth
-/// less than one that is slow and never is.
-///
-/// So eight is a floor under a machine's core count rather than a measurement
-/// of anything, and `NTS_SUITE_JOBS` is there for a machine that differs. If
-/// the frontend stops falling over under concurrency, this cap should go.
+/// Each case owns a native frontend and invokes backend toolchains. Bound
+/// concurrent programs independently of the checker's per-process pool size.
+/// `NTS_SUITE_JOBS` changes the process count; each process uses one checker.
 const CROWDED: usize = 8;
 
 fn workers(files: usize) -> usize {
@@ -476,26 +511,29 @@ fn workers(files: usize) -> usize {
         .min(files.max(1))
 }
 
-fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
-    // See the note in `nts_differential::check`: the bare name reaches an asdf
-    // shim here and an unpinned frontend elsewhere, and a corpus run whose
-    // frontend never starts reports every case as `frontend failed` rather than
-    // as an environment problem.
-    let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
-        nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |at| at.to_string())
-    });
+fn single_file(file: &Utf8Path) -> bool {
+    // The directive is ASCII even when the source has invalid UTF-8.
+    // Keep unreadable files here: examine reports the copy failure.
+    std::fs::read(file).map_or(true, |bytes| {
+        !bytes
+            .windows(b"@filename".len())
+            .any(|part| part == b"@filename")
+    })
+}
 
+fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
+    run_with(root, files, limit, false)
+}
+
+fn run_with(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize, isolate: bool) -> Result<Totals> {
+    let mut rows = rows::Writer::from_args()?;
     // A multi-file case, which this harness has one workspace per worker for
     // and therefore cannot express. Filtered before the limit is applied so
     // that `--limit 25` means twenty-five examined rather than twenty-five
     // considered.
     let files: Vec<&Utf8PathBuf> = files
         .iter()
-        .filter(|file| {
-            !std::fs::read_to_string(file)
-                .unwrap_or_default()
-                .contains("@filename")
-        })
+        .filter(|file| single_file(file))
         .take(limit)
         .collect();
 
@@ -510,24 +548,34 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         let mut handles = Vec::new();
         for worker in 0..workers {
             let workspace = Workspace::open(root, worker)?;
-            let (files, results, done, next, tsgo) =
-                (&files, &results, &done, &next, tsgo.as_str());
-            handles.push(scope.spawn(move || {
-                loop {
-                    let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(file) = files.get(at) else {
-                        return;
-                    };
-                    let examined = examine(file, &workspace, tsgo);
-                    *results[at]
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(examined);
-                    let count = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                    if count % 25 == 0 {
-                        println!("  {count} files...");
-                    }
-                }
-            }));
+            let (files, results, done, next) = (&files, &results, &done, &next);
+            handles.push(
+                std::thread::Builder::new()
+                    .name(format!("corpus-{worker}"))
+                    .stack_size(nts_core::COMPILER_STACK_BYTES)
+                    .spawn_scoped(scope, move || {
+                        let mut child = isolate.then(|| isolated::Worker::new(root, worker));
+                        loop {
+                            let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some(file) = files.get(at) else {
+                                return;
+                            };
+                            let examined = child.as_mut().map_or_else(
+                                || examine(file, &workspace),
+                                |child| child.examine(file),
+                            );
+                            *results[at]
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                                Some(examined);
+                            let count = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                            if count % 25 == 0 {
+                                println!("  {count} files...");
+                            }
+                        }
+                    })
+                    .context("starting a corpus worker")?,
+            );
         }
         for handle in handles {
             handle
@@ -537,6 +585,14 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         Ok(())
     })?;
 
+    fold_results(&files, results, &mut rows)
+}
+
+fn fold_results(
+    files: &[&Utf8PathBuf],
+    results: Vec<std::sync::Mutex<Option<Examined>>>,
+    rows: &mut rows::Writer,
+) -> Result<Totals> {
     // Folded in file order, so the output of a run does not depend on which
     // worker got there first.
     let mut totals = Totals {
@@ -545,6 +601,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         rejected: 0,
         failed: 0,
         invalid: 0,
+        crashed: 0,
         uncompilable: 0,
         unverifiable: 0,
         reasons: FxHashMap::default(),
@@ -557,6 +614,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
         else {
             continue;
         };
+        rows.record(files[at], &examined)?;
         for note in examined.notes {
             println!("{note}");
         }
@@ -577,6 +635,10 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
                 totals.invalid += 1;
                 println!("INVALID HIR: {}", files[at]);
             }
+            Outcome::Crashed(signal) => {
+                totals.crashed += 1;
+                println!("CRASHED: {}: {signal}", files[at]);
+            }
             Outcome::Refused(reasons) => {
                 totals.refused += 1;
                 for reason in &reasons {
@@ -590,6 +652,7 @@ fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
             }
         }
     }
+    rows.finish()?;
     Ok(totals)
 }
 
@@ -601,14 +664,19 @@ fn shorten(message: &str) -> String {
 }
 
 fn report(totals: &Totals) {
-    let attempted =
-        totals.lowered + totals.refused + totals.rejected + totals.failed + totals.invalid;
+    let attempted = totals.lowered
+        + totals.refused
+        + totals.rejected
+        + totals.failed
+        + totals.invalid
+        + totals.crashed;
     println!("\n{attempted} single-file cases");
     println!("  lowered completely      {}", totals.lowered);
     println!("  refused a construct     {}", totals.refused);
     println!("  rejected by typecheck   {}", totals.rejected);
     println!("  frontend failed         {}", totals.failed);
     println!("  invalid HIR             {}", totals.invalid);
+    println!("  compiler crashed        {}", totals.crashed);
     // Counted since it was added and never printed, which is the same as not
     // counting it: the two rows that must stay at zero are only a gate if a
     // reader can see both.
@@ -659,8 +727,12 @@ fn report(totals: &Totals) {
 }
 
 fn write_corpus_result(root: &Utf8Path, totals: &Totals) -> Result<Utf8PathBuf> {
-    let attempted =
-        totals.lowered + totals.refused + totals.rejected + totals.failed + totals.invalid;
+    let attempted = totals.lowered
+        + totals.refused
+        + totals.rejected
+        + totals.failed
+        + totals.invalid
+        + totals.crashed;
     let considered = totals.lowered + totals.refused;
     // Percentages of a few hundred files: integer arithmetic says it exactly and
     // says it without a cast anyone has to think about.
@@ -706,24 +778,21 @@ fn write_corpus_result(root: &Utf8Path, totals: &Totals) -> Result<Utf8PathBuf> 
     );
     let _ = writeln!(
         out,
+        "| **compiler process crashed** | **{}** |",
+        totals.crashed
+    );
+    let _ = writeln!(
+        out,
         "\nOf the {considered} that typecheck, **{share}%** lower completely. \
          The typechecker rejects the rest by design — a compiler's test suite is \
          largely programs that are supposed to fail.\n"
     );
     let _ = writeln!(
         out,
-        "The last two rows are the ones that must stay at zero: a panic or a \
-         rejected SSA form on arbitrary input is a bug however well the \
-         hand-written tests do, and so is a query this compiler makes that the \
-         typechecker cannot answer.\n\nThe second row was counted as a typecheck \
-         rejection until it was split out, which is how eight of these hid. Six \
-         are now survived: a batched query that crashes tsgo is bisected and \
-         retried, so one poisonous location costs its own type rather than the \
-         file. The two that remain are an enum member whose value is `NaN`, \
-         which tsgo cannot write as JSON at all — and they are reached through \
-         queries whose answers are *sets* rather than positional lists, where \
-         dropping the one that failed would quietly change a type rather than \
-         leave a hole.\n"
+        "Frontend failures, invalid HIR, compiler crashes, uncompilable C and \
+         unverifiable classes must stay at zero. The full corpus runs each \
+         compilation in a child process: a signal is attributed to its source \
+         file, the worker restarts, and the remaining cases still run.\n"
     );
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
@@ -759,4 +828,97 @@ fn write_corpus_result(root: &Utf8Path, totals: &Totals) -> Result<Utf8PathBuf> 
         "TypeScript's own tests, compiled as programs",
         &out,
     )
+}
+
+#[cfg(test)]
+mod corpus_input_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    pub(super) struct Scratch(pub(super) Utf8PathBuf);
+
+    impl Scratch {
+        pub(super) fn open() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let cache = std::env::var("TMPDIR").unwrap_or_else(|_| {
+                format!("{}/.cache", std::env::var("HOME").expect("home directory"))
+            });
+            let root = Utf8PathBuf::from(cache).join(format!(
+                "nts-suite-input-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir(&root).expect("private scratch");
+            Self(root)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn encoded_cases_reach_the_worker_without_empty_substitution() {
+        let scratch = Scratch::open();
+        let file = scratch.0.join("encoded.ts");
+        let workspace = Workspace::open(&scratch.0, 0).expect("worker");
+        for bytes in [
+            b"\xff\xfe\x61\0".as_slice(),
+            b"\xfe\xff\0\x61",
+            b"\xffconst x=1;",
+        ] {
+            std::fs::write(&file, bytes).expect("encoded input");
+            assert!(single_file(&file));
+            let _ = examine(&file, &workspace);
+            assert_eq!(
+                std::fs::read(workspace.src.join("main.ts")).expect("worker input"),
+                bytes
+            );
+        }
+        std::fs::write(&file, b"\xff// @filename: other.ts\n").expect("multi-file input");
+        assert!(!single_file(&file));
+    }
+
+    #[test]
+    fn an_unreadable_case_is_measured_as_a_named_failure() {
+        let scratch = Scratch::open();
+        let file = scratch.0.join("missing.ts");
+        let workspace = Workspace::open(&scratch.0, 0).expect("worker");
+        assert!(
+            single_file(&file),
+            "must reach examine rather than disappear"
+        );
+        let result = examine(&file, &workspace);
+        let Outcome::Failed(message) = result.outcome else {
+            panic!("an unreadable input must fail");
+        };
+        assert!(message.contains("could not copy case"), "{message}");
+        assert!(message.contains(file.as_str()), "{message}");
+        assert!(!workspace.src.join("main.ts").exists());
+    }
+
+    #[test]
+    fn a_corpus_worker_can_compile_the_clis_deep_binary_chain() {
+        let scratch = Scratch::open();
+        let file = scratch.0.join("deep-chain.ts");
+        // The same deep left-associated shape as the upstream binder stress
+        // case: it passed the CLI but overflowed a default 2 MiB worker.
+        let numeric = (0..1500)
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(" + ");
+        let strings = vec!["''"; 4950].join(" +\n");
+        std::fs::write(&file, format!("{numeric};\nvar caps = {strings};\n"))
+            .expect("deep-chain case");
+        let totals = run(&scratch.0, &[file], 1).expect("corpus worker");
+        assert_eq!(totals.lowered, 1);
+        assert_eq!(totals.refused, 0);
+        assert_eq!(totals.rejected, 0);
+        assert_eq!(totals.failed, 0);
+        assert_eq!(totals.invalid, 0);
+        assert_eq!(totals.uncompilable, 0);
+        assert_eq!(totals.unverifiable, 0);
+    }
 }

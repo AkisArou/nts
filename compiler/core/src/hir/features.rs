@@ -67,7 +67,7 @@ pub fn fold_provided(program: &mut Program, provided: Provided) -> usize {
                 } else {
                     "undefined"
                 };
-                op.kind = OpKind::ConstString(answer.to_owned());
+                op.kind = OpKind::ConstString(answer.to_owned().into());
                 folded += 1;
             }
         }

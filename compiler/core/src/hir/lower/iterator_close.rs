@@ -160,13 +160,19 @@ impl Contract {
             .known_absent(probe, receiver, "return")
         {
             Return::Absent
-        } else if let Some(property) = properties.iter().find(|property| property.name == "return")
+        } else if let Some(property) = properties
+            .iter()
+            .find(|property| property.name.is_name("return"))
         {
             match property.kind {
-                MemberKind::Method if !probe.hierarchy.stores(receiver, "return") => {
+                MemberKind::Method
+                    if !probe
+                        .hierarchy
+                        .stores(receiver, &super::PropertyKey::Name("return".into())) =>
+                {
                     match (
-                        Method::resolve(probe, receiver, "return"),
-                        probe.member_returns(receiver, "return"),
+                        Method::resolve(probe, receiver, &super::MemberKey::named("return")),
+                        probe.member_returns(receiver, &super::PropertyKey::Name("return".into())),
                         super::signature_key(probe.snapshot, property.ty),
                     ) {
                         (Some(method), Some(result), Some((_, ty))) => Return::Method {
@@ -178,7 +184,11 @@ impl Contract {
                     }
                 }
                 MemberKind::Accessor(Accessor::Set) => Return::Absent,
-                MemberKind::Accessor(_) => match Method::resolve(probe, receiver, "get return") {
+                MemberKind::Accessor(_) => match Method::resolve(
+                    probe,
+                    receiver,
+                    &super::MemberKey::get(super::PropertyKey::Name("return".into())),
+                ) {
                     Some(getter) => Return::Value {
                         getter: Some(Rc::new(getter)),
                         ty: property.ty,
@@ -232,10 +242,13 @@ pub(super) fn may_leave_without_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bo
 /// emitted exits still use the builder's one lexical action stack.
 fn crosses_iterator(probe: &FuncBuilder<'_>, owner: NodeId, exit: NodeId) -> bool {
     let continuing = probe.kind_of(exit) == Some(syntax::CONTINUE_STATEMENT);
-    let label = probe
-        .children(exit)
-        .first()
-        .and_then(|name| probe.node(*name).text.as_deref());
+    let label = probe.children(exit).first().and_then(|name| {
+        probe
+            .node(*name)
+            .text
+            .as_ref()
+            .and_then(|text| text.as_utf8())
+    });
     let mut parent = probe.node(exit).parent;
     for _ in 0..probe.snapshot.nodes.len() {
         let Some(at) = parent else { return false };
@@ -243,10 +256,13 @@ fn crosses_iterator(probe: &FuncBuilder<'_>, owner: NodeId, exit: NodeId) -> boo
         let target = if let Some(label) = label {
             let parts = probe.children(at);
             if kind == Some(syntax::LABELED_STATEMENT)
-                && parts
-                    .first()
-                    .and_then(|name| probe.node(*name).text.as_deref())
-                    == Some(label)
+                && parts.first().and_then(|name| {
+                    probe
+                        .node(*name)
+                        .text
+                        .as_ref()
+                        .and_then(|text| text.as_utf8())
+                }) == Some(label)
             {
                 if continuing {
                     parts.last().copied()
@@ -561,10 +577,10 @@ impl FuncBuilder<'_> {
         &mut self,
         action: Action,
         receiver: TypeId,
-        key: &str,
+        key: &super::MemberKey,
     ) -> Result<Vec<ValueId>, Diagnostic> {
         let declaration = self
-            .member_declaration(receiver, key)
+            .member_declaration(receiver, &key.key)
             .map(|declaration| self.implementation_of(declaration))
             .ok_or_else(|| {
                 self.unsupported(
@@ -582,9 +598,12 @@ impl FuncBuilder<'_> {
         for (parameter, (ty, optional, rest)) in
             parameters.zip(self.parameters_declared_by(declaration))
         {
-            let name = self
-                .name_node(parameter)
-                .and_then(|name| self.node(name).text.as_deref());
+            let name = self.name_node(parameter).and_then(|name| {
+                self.node(name)
+                    .text
+                    .as_ref()
+                    .and_then(|text| text.as_utf8())
+            });
             if name == Some("this")
                 || optional
                 || rest
@@ -600,7 +619,8 @@ impl FuncBuilder<'_> {
             return Err(self.unsupported(
                 action.at,
                 &format!(
-                    "IteratorClose of `{owner}#{key}` with required parameter `{}` that cannot admit undefined",
+                    "IteratorClose of `{owner}#{}` with required parameter `{}` that cannot admit undefined",
+                    key.emitted_name(),
                     name.unwrap_or("<binding pattern>")
                 ),
             ));
@@ -919,6 +939,11 @@ fn function_type(probe: &FuncBuilder<'_>, ty: TypeId) -> Option<TypeId> {
                 TypeKind::Function(_)
             )
         }),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     }
 }

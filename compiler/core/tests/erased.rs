@@ -1,6 +1,5 @@
 //! `unknown` as a value with a representation.
 //!
-//! Runs the frontend, so it skips only when `tsgo` is not built.
 //!
 //! `docs/records/0019` measures what programs do with erased values and
 //! records the representation chosen from it. These are the three shapes that
@@ -11,20 +10,20 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, OpKind, lower::Lowered};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lower_at(relative: &str) -> Option<Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lower_at(relative: &str) -> Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("{relative} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a Lowered, name: &str) -> &'a hir::Func {
@@ -43,9 +42,7 @@ fn count(f: &hir::Func, want: fn(&OpKind) -> bool) -> usize {
 /// An `unknown` parameter is one erased value, not a refusal.
 #[test]
 fn an_unknown_parameter_has_a_representation() {
-    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/unknown");
     assert!(
         lowered.diagnostics.is_empty(),
         "tests/programs/unknown should lower clean: {:?}",
@@ -66,9 +63,7 @@ fn an_unknown_parameter_has_a_representation() {
 /// was, and C accepts it.
 #[test]
 fn a_concrete_value_is_erased_at_the_boundary() {
-    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/unknown");
     assert_eq!(
         count(func(&lowered, "tested"), |k| matches!(
             k,
@@ -98,9 +93,7 @@ fn a_concrete_value_is_erased_at_the_boundary() {
 /// `tests/programs/absent` holds both.
 #[test]
 fn typeof_on_an_erased_value_reads_the_tag() {
-    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/unknown");
     assert_eq!(
         count(func(&lowered, "kind"), |k| matches!(
             k,
@@ -118,9 +111,7 @@ fn typeof_on_an_erased_value_reads_the_tag() {
 /// has none.
 #[test]
 fn an_unerase_appears_only_inside_the_narrowed_branch() {
-    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/unknown");
     let add_one = func(&lowered, "addOne");
     assert_eq!(
         count(add_one, |k| matches!(k, OpKind::Unerase { .. })),
@@ -155,9 +146,7 @@ fn an_unerase_appears_only_inside_the_narrowed_branch() {
 /// releasing would pass against a runtime that had never learned any of this.
 #[test]
 fn a_reference_survives_being_erased() {
-    let Some(lowered) = lower_at("../../tests/programs/unknown-references") else {
-        return;
-    };
+    let lowered = lower_at("../../tests/programs/unknown-references");
     assert!(
         lowered.diagnostics.is_empty(),
         "tests/programs/unknown-references should lower clean: {:?}",
@@ -201,15 +190,13 @@ fn a_reference_survives_being_erased() {
 /// `nts hir` dumps the lowering's output and would show the unfolded form.
 #[test]
 fn a_typeof_comparison_is_folded_to_an_integer_compare() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/unknown")
         .join("tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/unknown is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let prepared = nts_core::hir::prepare(&snapshot).expect("valid HIR");
@@ -279,7 +266,6 @@ fn written_for(directory: &camino::Utf8Path) -> Option<camino::Utf8PathBuf> {
 }
 
 fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
     let directory = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .canonicalize_utf8()
@@ -297,7 +283,8 @@ fn prepared_at(relative: &str) -> Option<nts_core::hir::Prepared> {
         // same question about a different file and would drift in silence.
         written_for(&directory)?
     };
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     Some(nts_core::hir::prepare(&snapshot).expect("valid HIR"))

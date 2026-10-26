@@ -7,7 +7,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Absent, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 fn erased_slots(program: &hir::Program, name: &str) -> Vec<Absent> {
     let func = program
@@ -33,12 +33,10 @@ fn erased_slots(program: &hir::Program, name: &str) -> Vec<Absent> {
 
 #[test]
 fn an_erased_array_says_what_its_null_slots_mean() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/erased-null-slots/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());

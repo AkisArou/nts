@@ -10,7 +10,7 @@
 //
 // usage: node tools/journal-twin.ts [--update]
 //   NTS_REACT names the nts-react binary (default: the lane's debug build),
-//   NTS_TSGO the tsgo it drives. --update writes the log as expected.log.
+//   --update writes the log as expected.log.
 
 import { build, type Plugin } from "esbuild";
 import { execFileSync } from "node:child_process";

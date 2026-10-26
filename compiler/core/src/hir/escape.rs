@@ -1397,7 +1397,7 @@ mod tests {
                 name: "Point".to_owned(),
                 interfaces: Vec::new(),
                 fields: vec![Field {
-                    name: "f".to_owned(),
+                    name: "f".to_owned().into(),
                     ty: HirType::NUMBER,
                     readonly: false,
                     declared_by: None,
@@ -1513,7 +1513,7 @@ mod tests {
                 name: "Point".to_owned(),
                 interfaces: Vec::new(),
                 fields: vec![Field {
-                    name: "f".to_owned(),
+                    name: "f".to_owned().into(),
                     ty: HirType::NUMBER,
                     readonly: false,
                     declared_by: None,
@@ -1605,7 +1605,7 @@ mod tests {
                 name: "Point".to_owned(),
                 interfaces: Vec::new(),
                 fields: vec![Field {
-                    name: "f".to_owned(),
+                    name: "f".to_owned().into(),
                     ty: HirType::NUMBER,
                     readonly: false,
                     declared_by: None,

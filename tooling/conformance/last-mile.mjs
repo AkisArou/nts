@@ -101,7 +101,7 @@ function refusals(module) {
   const run = spawnSync(
     compiler,
     ["emit-c", join(ROOT, "runtime/node", module, "tsconfig.json"), "--out", out, "--napi"],
-    { encoding: "utf8", env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") } },
+    { encoding: "utf8", env: { ...process.env, NTS_CHECKERS: "1" } },
   );
   const text = `${run.stdout ?? ""}${run.stderr ?? ""}`;
   const roots = [];

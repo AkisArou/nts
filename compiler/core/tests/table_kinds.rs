@@ -12,17 +12,16 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, HirType, OpKind, ValueId};
-use nts_frontend_ts::SemanticSource;
 
-fn prepared(name: &str) -> Option<hir::Program> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(name: &str) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/outcomes")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/outcomes/{name} is checked in"));
-    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+    let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = hir::Options {
@@ -30,7 +29,7 @@ fn prepared(name: &str) -> Option<hir::Program> {
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };
-    Some(hir::prepare_unverified(&snapshot, &options).program)
+    hir::prepare_unverified(&snapshot, &options).program
 }
 
 /// The constant a value is, if it is one.
@@ -89,9 +88,7 @@ fn keyed_calls(program: &hir::Program) -> Vec<(String, String, Option<HirType>, 
 
 #[test]
 fn a_narrow_kind_is_named_only_for_a_key_of_its_sort() {
-    let Some(program) = prepared("a-typed-table-seen-with-wider-keys") else {
-        return;
-    };
+    let program = prepared("a-typed-table-seen-with-wider-keys");
     let calls = keyed_calls(&program);
     assert_ne!(
         calls,
@@ -119,9 +116,7 @@ fn a_narrow_kind_is_named_only_for_a_key_of_its_sort() {
 
 #[test]
 fn the_wide_view_promises_nothing_and_the_typed_one_its_kind() {
-    let Some(program) = prepared("a-typed-table-seen-with-wider-keys") else {
-        return;
-    };
+    let program = prepared("a-typed-table-seen-with-wider-keys");
     let calls = keyed_calls(&program);
     // `writesWide` sets a number, a string and -0 through the wide view; the
     // typed half sets "a" into the same table through its own type.

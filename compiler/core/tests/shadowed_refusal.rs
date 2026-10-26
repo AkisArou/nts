@@ -16,7 +16,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Prepared};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 /// **`prepare_unverified` rather than `lower`, because the cascade is not
 /// lowering's.** `drop_callers_of_refused` is what turns a call to a dropped
@@ -24,18 +24,18 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 /// `lower`. A first version of this test asserted on `lower`'s diagnostics and
 /// found three NTS1001s and no cascade at all -- the list was right and the
 /// half that prints the wrong cause was not being run.
-fn lower_at(relative: &str) -> Option<Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lower_at(relative: &str) -> Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("{relative} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()))
+    hir::prepare_unverified(&snapshot, &hir::Options::default())
 }
 
 fn held(lowered: &Prepared) -> Vec<&str> {
@@ -59,10 +59,7 @@ fn reason_for<'a>(lowered: &'a Prepared, name: &str) -> Option<&'a str> {
 /// The two halves of the collision, in one lowering.
 #[test]
 fn a_member_does_not_publish_its_reason_under_the_bare_member_name() {
-    let Some(lowered) = lower_at("tests/programs/shadowed-refusal") else {
-        eprintln!("SKIP shadowed refusal: tsgo is required");
-        return;
-    };
+    let lowered = lower_at("tests/programs/shadowed-refusal");
 
     // **The controls first**: both refusals happened, and they are *different*
     // sentences. Without this the assertions below would pass on a program
@@ -153,10 +150,7 @@ fn a_member_does_not_publish_its_reason_under_the_bare_member_name() {
 /// that is not always true.
 #[test]
 fn a_static_members_refusal_is_recorded_under_its_emitted_name() {
-    let Some(lowered) = lower_at("tests/programs/shadowed-refusal") else {
-        eprintln!("SKIP shadowed refusal: tsgo is required");
-        return;
-    };
+    let lowered = lower_at("tests/programs/shadowed-refusal");
 
     assert_eq!(
         reason_for(&lowered, "Statics.named").map(|why| why.contains("regular expression")),
@@ -209,10 +203,7 @@ fn a_static_members_refusal_is_recorded_under_its_emitted_name() {
 /// any module-scope function of that name.
 #[test]
 fn an_accessors_refusal_is_recorded_under_its_emitted_name() {
-    let Some(lowered) = lower_at("tests/programs/shadowed-refusal") else {
-        eprintln!("SKIP shadowed refusal: tsgo is required");
-        return;
-    };
+    let lowered = lower_at("tests/programs/shadowed-refusal");
 
     assert_eq!(
         reason_for(&lowered, "Reader#get size").map(|why| why.contains("regular expression")),
@@ -259,10 +250,7 @@ fn an_accessors_refusal_is_recorded_under_its_emitted_name() {
 /// `func make(...)` was emitted, and a bare `make` carried the copy's reason.
 #[test]
 fn a_copys_refusal_is_not_published_against_the_original() {
-    let Some(lowered) = lower_at("tests/programs/copy-phantom") else {
-        eprintln!("SKIP copy phantom: tsgo is required");
-        return;
-    };
+    let lowered = lower_at("tests/programs/copy-phantom");
 
     // The controls: the plain body compiled, and the copy really did refuse.
     // Either one failing would make the assertion below pass for the wrong

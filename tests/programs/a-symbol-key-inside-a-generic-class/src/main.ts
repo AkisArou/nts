@@ -6,7 +6,7 @@
 // computed `this[kCount]` did, and in a generic class there is nothing there to
 // find: TypeScript models `this` as a type parameter constrained to its own
 // class, and for a generic class that constraint is the *uninstantiated* form,
-// which `tsgo::decompose` leaves as a `Structured` placeholder. The stated
+// which frontend capture leaves as a `Structured` placeholder. The stated
 // ground for the placeholder -- "only instantiations are ever lowered, so the
 // members of a form parameterised by one are members nothing can use" -- is
 // true of a generic function and false of a method reaching its own field.

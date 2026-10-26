@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::tsgo::generated::{Complaint, Generated};
+use nts_frontend_ts::generated::{Complaint, Generated};
 use nts_surfaces::{Binder, Package, Surface};
 
 use crate::bind_gir;
@@ -467,7 +467,6 @@ fn missing_module(complaint: &Complaint) -> Option<&str> {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use nts_frontend_ts::SemanticSource;
 
     /// **GTK's packages typecheck**, whole and together, with their values
     /// files and nothing else: the check a package's `// @ts-nocheck` spares
@@ -476,10 +475,6 @@ mod tests {
     #[test]
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn the_gir_packages_typecheck() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
         let search = bind_gir::search_path();
         let roots: BTreeSet<String> = ["Gtk-4.0", "Adw-1"]
             .iter()
@@ -597,7 +592,8 @@ mod tests {
             ),
         )
         .unwrap();
-        let snapshot = nts_frontend_ts::TsgoApi::new(tsgo)
+        let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&dir.join("tsconfig.json"))
             .unwrap();
         let errors: Vec<String> = snapshot

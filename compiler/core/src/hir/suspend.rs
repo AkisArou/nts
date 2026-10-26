@@ -1029,7 +1029,7 @@ fn resume_slot(layouts: &[Layout], declared: super::TypeId) -> (usize, Option<us
 /// the two cannot drift into disagreeing about its width or its name.
 fn state_field() -> Field {
     Field {
-        name: "state".to_owned(),
+        name: ("state".to_owned()).into(),
         ty: HirType::Int {
             bits: 32,
             signed: true,
@@ -1101,7 +1101,7 @@ pub fn generator_prefix(yields: &HirType) -> Vec<Field> {
     vec![
         state_field(),
         Field {
-            name: "yielded".to_owned(),
+            name: ("yielded".to_owned()).into(),
             ty: yields.clone(),
             readonly: false,
             declared_by: None,
@@ -1127,14 +1127,14 @@ pub fn generator_prefix(yields: &HirType) -> Vec<Field> {
 pub fn async_generator_prefix(yields: &HirType) -> Vec<Field> {
     let mut fields = generator_prefix(yields);
     fields.push(Field {
-        name: "awaited".to_owned(),
+        name: ("awaited".to_owned()).into(),
         ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
         readonly: false,
         declared_by: None,
         written: None,
     });
     fields.push(Field {
-        name: "result".to_owned(),
+        name: ("result".to_owned()).into(),
         ty: step_promise(),
         readonly: false,
         declared_by: None,
@@ -1160,14 +1160,14 @@ fn frame_fields(
         Mode::Async => vec![
             state_field(),
             Field {
-                name: "result".to_owned(),
+                name: ("result".to_owned()).into(),
                 ty: func.return_type.clone(),
                 readonly: false,
                 declared_by: None,
                 written: None,
             },
             Field {
-                name: "awaited".to_owned(),
+                name: ("awaited".to_owned()).into(),
                 // Whatever was most recently awaited. The payload varies between
                 // suspension points, and the *reader* knows which it is because the
                 // resume block was generated beside the `await` that set it.
@@ -1187,7 +1187,7 @@ fn frame_fields(
     };
     for param in &func.params {
         fields.push(Field {
-            name: param.name.clone(),
+            name: (param.name.clone()).into(),
             ty: param.ty.clone(),
             readonly: false,
             declared_by: None,
@@ -1198,7 +1198,7 @@ fn frame_fields(
         fields.push(Field {
             // Named by position rather than by anything in the source: these
             // are SSA values, and most were never a name anyone wrote.
-            name: format!("held{at}"),
+            name: format!("held{at}").into(),
             ty: func.values[value.0 as usize].ty.clone(),
             readonly: false,
             declared_by: None,

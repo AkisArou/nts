@@ -6,7 +6,7 @@
 //! name its file and line where it has one: a checker that passed any of them
 //! would let a fact rot into a check of nothing.
 //!
-//! Skips when the frontend is absent.
+//! Native capture failures fail the test.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -27,10 +27,6 @@ export function run(rounds: number): number {
 }
 ";
 
-fn frontend_available() -> bool {
-    std::env::var_os("NTS_TSGO").is_some() || nts_frontend_ts::tsgo::locate().is_some()
-}
-
 fn fixture(name: &str, facts: &str) -> PathBuf {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     let src = root.join("src");
@@ -49,7 +45,6 @@ fn expect_ir(root: &Path) -> (bool, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("expect-ir")
         .arg(root.join("tsconfig.json"))
-        .env("NTS_NO_SNAPSHOT_CACHE", "1")
         .output()
         .expect("running nts expect-ir");
     let text = format!(
@@ -69,9 +64,6 @@ const TRUE_FACTS: &str = "
 
 #[test]
 fn facts_that_hold_pass_on_every_backend_they_name() {
-    if !frontend_available() {
-        return;
-    }
     let (passed, text) = expect_ir(&fixture("expect-ir-holds", TRUE_FACTS));
     assert!(passed, "{text}");
     assert_eq!(text.matches("PASS").count(), 4, "{text}");
@@ -83,9 +75,6 @@ fn facts_that_hold_pass_on_every_backend_they_name() {
 
 #[test]
 fn a_false_fact_fails_and_says_what_it_found() {
-    if !frontend_available() {
-        return;
-    }
     let (passed, text) = expect_ir(&fixture(
         "expect-ir-false",
         &format!("{TRUE_FACTS}// expect-ir: c: step returns f64\n"),
@@ -99,9 +88,6 @@ fn a_false_fact_fails_and_says_what_it_found() {
 
 #[test]
 fn named_helper_counts_do_not_count_other_external_calls() {
-    if !frontend_available() {
-        return;
-    }
     let root = fixture("expect-ir-helper-count", "");
     std::fs::write(
         root.join("src/main.ts"),
@@ -120,9 +106,6 @@ fn named_helper_counts_do_not_count_other_external_calls() {
 
 #[test]
 fn a_fact_about_a_function_that_is_not_there_is_unresolved_and_fails() {
-    if !frontend_available() {
-        return;
-    }
     let (passed, text) = expect_ir(&fixture(
         "expect-ir-unresolved",
         &format!("{TRUE_FACTS}// expect-ir: all: no erase in renamed\n"),
@@ -136,9 +119,6 @@ fn a_fact_about_a_function_that_is_not_there_is_unresolved_and_fails() {
 
 #[test]
 fn a_fact_that_does_not_parse_fails_and_names_its_line() {
-    if !frontend_available() {
-        return;
-    }
     let (passed, text) = expect_ir(&fixture(
         "expect-ir-unparsed",
         &format!("{TRUE_FACTS}// expect-ir: all: no erasure in run\n"),
@@ -152,9 +132,6 @@ fn a_fact_that_does_not_parse_fails_and_names_its_line() {
 
 #[test]
 fn a_project_with_no_fact_fails() {
-    if !frontend_available() {
-        return;
-    }
     let (passed, text) = expect_ir(&fixture("expect-ir-none", ""));
     assert!(!passed, "{text}");
     assert!(text.contains("a check of nothing is not a pass"), "{text}");

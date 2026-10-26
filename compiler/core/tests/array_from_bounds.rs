@@ -1,21 +1,17 @@
 //! A callback-free table collection is sized at the table's live count and
 //! filled by one call; a mapped one grows, because its callback can change
 //! that count. (The fill replaced a walk whose output position had to stay
-//! bounded by the allocation while the table cursor skipped holes.)
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared() -> Option<hir::Prepared> {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        eprintln!("SKIP: no tsgo; set NTS_TSGO to run the array-from bounds guards");
-        return None;
-    };
+fn prepared() -> hir::Prepared {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/array-from-set-bounds/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
@@ -25,7 +21,7 @@ fn prepared() -> Option<hir::Prepared> {
         "every fixture export must compile: {:#?}",
         prepared.diagnostics
     );
-    Some(prepared)
+    prepared
 }
 
 /// Only stores into an array allocated at a table's live count. A mapped
@@ -107,7 +103,7 @@ fn collection_fills(program: &hir::Program, name: &str) -> (Vec<String>, bool) {
 /// hole to put out of step, and no cursor at all.
 #[test]
 fn callback_free_table_collections_are_one_fill_at_the_live_count() {
-    let Some(prepared) = prepared() else { return };
+    let prepared = prepared();
     for (name, helper) in [
         ("fromSet", "nts_map_keys_into"),
         ("fromEmptySet", "nts_map_keys_into"),
@@ -128,7 +124,7 @@ fn callback_free_table_collections_are_one_fill_at_the_live_count() {
 
 #[test]
 fn supplying_a_mapper_keeps_a_growing_write_checked() {
-    let Some(prepared) = prepared() else { return };
+    let prepared = prepared();
     assert_eq!(
         collection_stores(&prepared.program, "fromMappedSet"),
         "",

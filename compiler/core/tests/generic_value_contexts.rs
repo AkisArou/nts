@@ -9,24 +9,24 @@
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 // The eight-copies example has eleven receiving signatures; a cap at or above
 // that would leave it testing nothing past the cap.
 const _: () = assert!(hir::generics::VALUE_CONTEXT_CAP < 11);
 
 /// The example's program as lowering made it, and as preparation hands it on.
-fn programs(example: &str) -> Option<(hir::Program, hir::Program)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn programs(example: &str) -> (hir::Program, hir::Program) {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(format!("../../tests/programs/{example}/tsconfig.json"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let lowered = hir::lower::lower(&snapshot).program;
     let prepared = hir::prepare(&snapshot).expect("valid HIR").program;
-    Some((lowered, prepared))
+    (lowered, prepared)
 }
 
 fn named<'a>(program: &'a hir::Program, prefix: &str) -> Vec<&'a str> {
@@ -40,10 +40,7 @@ fn named<'a>(program: &'a hir::Program, prefix: &str) -> Vec<&'a str> {
 
 #[test]
 fn each_receiving_signature_reaches_its_own_typed_context() {
-    let Some((lowered, prepared)) = programs("a-generic-function-value-keeps-one-erased-root")
-    else {
-        return;
-    };
+    let (lowered, prepared) = programs("a-generic-function-value-keeps-one-erased-root");
     for context in [
         "basicReducer<value-f64@",
         "basicReducer<value-str@",
@@ -96,11 +93,7 @@ fn each_receiving_signature_reaches_its_own_typed_context() {
 
 #[test]
 fn copies_stop_at_the_cap_and_the_rest_share_the_erased_root() {
-    let Some((lowered, _)) =
-        programs("a-generic-function-value-uses-the-erased-root-after-eight-copies")
-    else {
-        return;
-    };
+    let (lowered, _) = programs("a-generic-function-value-uses-the-erased-root-after-eight-copies");
     // Eleven receiving signatures, one per `Box` class: more than the cap (a
     // compile-time assertion above), or this would not reach the root. Counted
     // where lowering makes them -- preparation forwards every call to an

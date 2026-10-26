@@ -1,19 +1,17 @@
 //! Which packages under `node_modules` the frontend reads: a platform
 //! surface's declarations, and nothing else (`docs/nts-config.md` 3a).
 //!
-//! Skips without `NTS_TSGO`; see `tsgo_transport.rs` for how to build the
 //! pinned binary.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{SemanticSnapshot, SnapshotError};
 
 /// A project whose one package, `@x/kit`, declares `objc:Kit`, with `nts` as
 /// the package's `package.json` says it.
-fn over_a_package(arm: &str, nts: &str) -> Option<Result<SemanticSnapshot, SnapshotError>> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn over_a_package(arm: &str, nts: &str) -> Result<SemanticSnapshot, SnapshotError> {
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
         .join(format!("nts-surfaces-{}-{arm}", std::process::id()));
@@ -36,7 +34,9 @@ fn over_a_package(arm: &str, nts: &str) -> Option<Result<SemanticSnapshot, Snaps
     )
     .unwrap();
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-    Some(TsgoApi::new(tsgo).snapshot(&tsconfig))
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
 }
 
 fn reads_the_package(snapshot: &SemanticSnapshot) -> bool {
@@ -51,9 +51,7 @@ fn reads_the_package(snapshot: &SemanticSnapshot) -> bool {
 /// them as much as it needs the program's own.
 #[test]
 fn a_surface_packages_declarations_are_read() {
-    let Some(snapshot) = over_a_package("surface", r#", "nts": { "surface": "objc" }"#) else {
-        return;
-    };
+    let snapshot = over_a_package("surface", r#", "nts": { "surface": "objc" }"#);
     assert!(reads_the_package(
         &snapshot.expect("snapshot should succeed")
     ));
@@ -63,9 +61,7 @@ fn a_surface_packages_declarations_are_read() {
 /// read.
 #[test]
 fn an_ordinary_package_is_not_read() {
-    let Some(snapshot) = over_a_package("ordinary", "") else {
-        return;
-    };
+    let snapshot = over_a_package("ordinary", "");
     assert!(!reads_the_package(
         &snapshot.expect("snapshot should succeed")
     ));
@@ -76,9 +72,7 @@ fn an_ordinary_package_is_not_read() {
 /// no word of why.
 #[test]
 fn an_unknown_surface_is_refused_by_name() {
-    let Some(snapshot) = over_a_package("unknown", r#", "nts": { "surface": "cobol" }"#) else {
-        return;
-    };
+    let snapshot = over_a_package("unknown", r#", "nts": { "surface": "cobol" }"#);
     match snapshot {
         Err(SnapshotError::Project(why)) => assert!(why.contains("\"cobol\""), "{why}"),
         other => panic!(

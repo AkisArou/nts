@@ -314,7 +314,6 @@ pub(crate) fn available(platform: &ApplePlatform) -> bool {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use nts_frontend_ts::SemanticSource;
     use nts_surfaces::Binder;
 
     /// The structs a package declares are read from its own module block
@@ -362,9 +361,6 @@ mod tests {
 
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn typechecks(os: &str) {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let target = nts_build::config::Target {
             id: os.to_owned(),
             os: os.to_owned(),
@@ -490,7 +486,8 @@ mod tests {
         )
         .unwrap();
         let errors = || -> Vec<String> {
-            let snapshot = nts_frontend_ts::TsgoApi::new(tsgo.clone())
+            let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+                .with_checkers(std::num::NonZeroU16::MIN)
                 .snapshot(&dir.join("tsconfig.json"))
                 .unwrap();
             snapshot

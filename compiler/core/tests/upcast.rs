@@ -6,26 +6,26 @@
 //! discarded. What the tests are about is *which* type comes out: the one the
 //! slot wants, not the root of the hierarchy and not the first arm.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// The layout name each `Unerase` in a function produces.
@@ -55,9 +55,7 @@ fn unerased_to(lowered: &hir::lower::Lowered, name: &str) -> Vec<String> {
 /// to the base.
 #[test]
 fn a_union_of_subclasses_is_unerased_to_the_base() {
-    let Some(lowered) = lowered("upcast") else {
-        return;
-    };
+    let lowered = lowered("upcast");
     assert_eq!(
         lowered
             .diagnostics
@@ -98,9 +96,7 @@ fn a_union_of_subclasses_is_unerased_to_the_base() {
 /// new path is for unions the contextual type does *not* dissolve.
 #[test]
 fn a_union_the_context_dissolves_is_never_erased_at_all() {
-    let Some(lowered) = lowered("upcast") else {
-        return;
-    };
+    let lowered = lowered("upcast");
     assert_eq!(
         unerased_to(&lowered, "toAMiddleClass"),
         Vec::<String>::new(),

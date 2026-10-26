@@ -23,8 +23,8 @@ not available to execute. Record real diagnostics rather than adding host fallba
 For the shared package, the repository's documented probes can be adapted to:
 
 ```sh
-NTS_TSGO="$PWD/target/tsgo" ./target/release/nts hir runtime/web-platform/tsconfig.json
-NTS_TSGO="$PWD/target/tsgo" ./target/release/nts emit-c runtime/web-platform/tsconfig.json --out /tmp/nts-web-check --napi
+./target/release/nts hir runtime/web-platform/tsconfig.json
+./target/release/nts emit-c runtime/web-platform/tsconfig.json --out /tmp/nts-web-check --napi
 ```
 
 Do not rebuild Rust or take over another agent's output directory to make these

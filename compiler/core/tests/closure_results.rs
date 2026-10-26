@@ -12,32 +12,30 @@
 //! is lane-independent is the question this file asks: after lowering, does the
 //! returned signature have a layout?
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered() -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/closure-results/tsconfig.json")
         .canonicalize_utf8()
         .expect("the fixture is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 /// Every closure call's result type has a layout, and one of them is a function.
 #[test]
 fn a_returned_signature_has_a_class() {
-    let Some(lowered) = lowered() else {
-        return;
-    };
+    let lowered = lowered();
     assert!(
         lowered.diagnostics.is_empty(),
         "the fixture lowers without refusals: {:?}",

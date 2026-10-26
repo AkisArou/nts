@@ -72,7 +72,7 @@ pub(crate) fn call(
         Op::ToNumber | Op::ToNumberExplicit => {
             let target = callee(b.m, op == Op::ToNumberExplicit)?;
             b.load(value)?;
-            strings::constant(b, &b.func.name.clone());
+            strings::constant(b, b.func.name.clone());
             b.call(target);
             numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())
         }

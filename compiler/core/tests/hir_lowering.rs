@@ -1,6 +1,5 @@
 //! Lowering a real program to HIR.
 //!
-//! Runs the frontend, so it skips only when `tsgo` is not built.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -8,10 +7,9 @@ use camino::Utf8Path;
 use nts_core::hir::{
     self, BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, lower::Lowered,
 };
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(fixture: &str) -> Option<Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(fixture: &str) -> Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(fixture)
@@ -22,11 +20,12 @@ fn lowered(fixture: &str) -> Option<Lowered> {
     // tested a snapshot no user of this compiler ever gets: without decomposed
     // signatures, an un-annotated function's return type is unavailable and
     // lowering has to fall back to reading the annotation that is not there.
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a Lowered, name: &str) -> &'a Func {
@@ -40,9 +39,7 @@ fn func<'a>(lowered: &'a Lowered, name: &str) -> &'a Func {
 
 #[test]
 fn a_number_becomes_a_double() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     // The conservative decision. `number` *is* an IEEE double in TypeScript, so
     // this is correct — and it is what specialization will improve on once
     // analysis can show a value is integral and in range.
@@ -53,9 +50,7 @@ fn a_number_becomes_a_double() {
 
 #[test]
 fn one_binding_becomes_one_value() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     // `a + b` mentions `a` and `b` a second time. Both resolve to the parameter
     // values rather than to fresh loads, which is only possible because the two
     // identifiers carry the same symbol.
@@ -78,9 +73,7 @@ fn one_binding_becomes_one_value() {
 
 #[test]
 fn plus_on_strings_is_not_the_same_operator_as_plus_on_numbers() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     // The same `+` token. On numbers it is arithmetic; on strings it is
     // concatenation, and the two lower to nothing alike. Resolving it here means
     // no backend has to ask again.
@@ -100,9 +93,7 @@ fn plus_on_strings_is_not_the_same_operator_as_plus_on_numbers() {
 
 #[test]
 fn a_string_is_a_managed_reference_and_a_number_is_not() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     // The distinction a write barrier and a root slot are decided from.
     let textual = func(&lowered, "cat");
     assert_eq!(textual.params[0].ty, HirType::Managed(ManagedType::String));
@@ -112,9 +103,7 @@ fn a_string_is_a_managed_reference_and_a_number_is_not() {
 
 #[test]
 fn a_comparison_returns_a_bool_not_the_operand_type() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     let less = func(&lowered, "lt");
     assert_eq!(less.params[0].ty, HirType::Float { bits: 64 });
     assert_eq!(less.return_type, HirType::Bool);
@@ -122,9 +111,7 @@ fn a_comparison_returns_a_bool_not_the_operand_type() {
 
 #[test]
 fn every_operation_carries_an_origin() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     // Not conditional and not debug-only: once a lowering has run without it
     // the mapping back to source is gone for good.
     for f in &lowered.program.funcs {
@@ -141,17 +128,13 @@ fn every_operation_carries_an_origin() {
 
 #[test]
 fn exported_functions_are_marked_as_roots() {
-    let Some(lowered) = lowered("arith") else {
-        return;
-    };
+    let lowered = lowered("arith");
     assert!(lowered.program.funcs.iter().all(|f| f.exported));
 }
 
 #[test]
 fn an_unsupported_construct_is_refused_rather_than_skipped() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     // The failure this guards is the quiet one. A lowering that emits nothing for
     // a statement it did not understand produces a function that compiles, runs,
     // and is wrong — with no signal anywhere.
@@ -190,9 +173,7 @@ fn an_unsupported_construct_is_refused_rather_than_skipped() {
 
 #[test]
 fn an_async_function_is_refused_rather_than_emptied() {
-    let Some(lowered) = lowered("async-unsupported") else {
-        return;
-    };
+    let lowered = lowered("async-unsupported");
     // The failure this guards against: `Promise<number>` had no representation,
     // so an `async` function's return type resolved to `void`, the returned
     // value was converted away, and the verifier accepted it. A caller read
@@ -217,9 +198,7 @@ fn an_async_function_is_refused_rather_than_emptied() {
 
 #[test]
 fn a_const_binding_costs_nothing() {
-    let Some(lowered) = lowered("calls2") else {
-        return;
-    };
+    let lowered = lowered("calls2");
     // `const scaled = double(a); const shifted = scaled + b; return shifted;`
     // Neither local survives as a slot or a store — each name is bound to the
     // value its initializer produced, and later mentions resolve to that value.
@@ -236,9 +215,7 @@ fn a_const_binding_costs_nothing() {
 
 #[test]
 fn a_resolved_call_names_its_target_statically() {
-    let Some(lowered) = lowered("calls2") else {
-        return;
-    };
+    let lowered = lowered("calls2");
     // The point of resolving call targets in the frontend: the backend emits a
     // static call rather than going through a function value.
     let compute = func(&lowered, "compute");
@@ -255,9 +232,7 @@ fn a_resolved_call_names_its_target_statically() {
 
 #[test]
 fn a_call_passes_the_values_it_was_given() {
-    let Some(lowered) = lowered("calls2") else {
-        return;
-    };
+    let lowered = lowered("calls2");
     let compute = func(&lowered, "compute");
     let args = compute
         .values
@@ -274,9 +249,7 @@ fn a_call_passes_the_values_it_was_given() {
 
 #[test]
 fn a_private_function_is_lowered_but_not_marked_exported() {
-    let Some(lowered) = lowered("calls2") else {
-        return;
-    };
+    let lowered = lowered("calls2");
     // `double` is not exported, so it is not a reachability root — but it is
     // called, so it must still be lowered.
     assert!(!func(&lowered, "double").exported);
@@ -285,9 +258,7 @@ fn a_private_function_is_lowered_but_not_marked_exported() {
 
 #[test]
 fn string_locals_and_concatenation_lower_together() {
-    let Some(lowered) = lowered("calls2") else {
-        return;
-    };
+    let lowered = lowered("calls2");
     let greet = func(&lowered, "greet");
     assert_eq!(greet.return_type, HirType::Managed(ManagedType::String));
     assert!(greet.values.iter().any(|op| matches!(
@@ -307,9 +278,7 @@ fn string_locals_and_concatenation_lower_together() {
 
 #[test]
 fn a_known_math_member_becomes_an_operation() {
-    let Some(program) = lowered("calls2") else {
-        return;
-    };
+    let program = lowered("calls2");
     // `Math.max(n, 0)` is an operation, not a call. Lowering it as one is what
     // lets the analysis know the result is bounded by its arguments; a call
     // would return TOP and poison everything downstream of it.
@@ -330,9 +299,7 @@ fn a_known_math_member_becomes_an_operation() {
 
 #[test]
 fn an_unimplemented_math_member_is_refused_rather_than_guessed() {
-    let Some(program) = lowered("mathops-unsupported") else {
-        return;
-    };
+    let program = lowered("mathops-unsupported");
     // Emitting a call to a C function that happens to share a name would be
     // assuming libm agrees about the semantics — and for `round` and `min` it
     // demonstrably does not. Refuse rather than approximate.
@@ -342,9 +309,7 @@ fn an_unimplemented_math_member_is_refused_rather_than_guessed() {
 
 #[test]
 fn a_declaration_with_a_type_annotation_lowers() {
-    let Some(program) = lowered("nested") else {
-        return;
-    };
+    let program = lowered("nested");
     // `const scale: number = 3` — the annotation is a child of the declaration,
     // so reading its children positionally found the *type* where the
     // initializer should be and refused it as having none.
@@ -365,9 +330,7 @@ fn a_declaration_with_a_type_annotation_lowers() {
 
 #[test]
 fn an_if_lowers_to_a_branch_with_two_targets() {
-    let Some(lowered) = lowered("control") else {
-        return;
-    };
+    let lowered = lowered("control");
     let max = func(&lowered, "max");
     let Terminator::Branch {
         then_target,
@@ -385,9 +348,7 @@ fn an_if_lowers_to_a_branch_with_two_targets() {
 
 #[test]
 fn an_if_without_an_else_creates_no_empty_block() {
-    let Some(lowered) = lowered("control") else {
-        return;
-    };
+    let lowered = lowered("control");
     // `if (a > b) { return a; } return b;` is three blocks: the test, the taken
     // arm, and the continuation. Allocating an else block for the false edge
     // would leave a fourth whose only content is a jump — once per `if` without
@@ -404,9 +365,7 @@ fn an_if_without_an_else_creates_no_empty_block() {
 
 #[test]
 fn when_every_arm_returns_no_merge_block_is_created() {
-    let Some(lowered) = lowered("control") else {
-        return;
-    };
+    let lowered = lowered("control");
     // `clamp` returns from all three arms, so nothing follows the `if` and there
     // is nowhere for a merge block to be reached from.
     let clamp = func(&lowered, "clamp");
@@ -427,9 +386,7 @@ fn when_every_arm_returns_no_merge_block_is_created() {
 
 #[test]
 fn every_block_ends_in_exactly_one_terminator() {
-    let Some(lowered) = lowered("control") else {
-        return;
-    };
+    let lowered = lowered("control");
     // Guaranteed by construction rather than checked at the end: a block is
     // terminated once and later terminations are ignored, so a `return` inside a
     // branch cannot be followed by the jump that would otherwise be appended.
@@ -446,9 +403,7 @@ fn every_block_ends_in_exactly_one_terminator() {
 
 #[test]
 fn every_successor_names_a_real_block() {
-    let Some(lowered) = lowered("control") else {
-        return;
-    };
+    let lowered = lowered("control");
     // A dangling successor is a malformed CFG, and every pass downstream —
     // dominance, liveness, register allocation — would walk into it.
     for f in &lowered.program.funcs {
@@ -466,9 +421,7 @@ fn every_successor_names_a_real_block() {
 
 #[test]
 fn code_after_a_return_is_not_lowered() {
-    let Some(lowered) = lowered("control") else {
-        return;
-    };
+    let lowered = lowered("control");
     // A block that has already returned cannot hold more operations, so the
     // statements after it are skipped rather than emitted into a closed block.
     for f in &lowered.program.funcs {
@@ -487,9 +440,7 @@ fn code_after_a_return_is_not_lowered() {
 #[test]
 fn the_lowered_program_is_valid_ssa() {
     for fixture in ["arith", "control", "loops", "calls2"] {
-        let Some(lowered) = lowered(fixture) else {
-            return;
-        };
+        let lowered = lowered(fixture);
         if let Err(problems) = hir::verify::verify(&lowered.program) {
             panic!("{fixture} lowered to invalid HIR: {problems:#?}");
         }
@@ -498,9 +449,7 @@ fn the_lowered_program_is_valid_ssa() {
 
 #[test]
 fn a_loop_carried_value_becomes_a_block_parameter() {
-    let Some(lowered) = lowered("loops") else {
-        return;
-    };
+    let lowered = lowered("loops");
     // `let total = 0; let i = 0; while (i < n) { total = total + i; i = i + 1; }`
     // Both names differ per iteration, so the header takes both as parameters:
     // the entry passes the initial values, the back edge the updated ones.
@@ -519,9 +468,7 @@ fn a_loop_carried_value_becomes_a_block_parameter() {
 
 #[test]
 fn loop_conditions_carry_their_writes_and_publish_the_final_write() {
-    let Some(lowered) = lowered("a-loop-condition-keeps-its-writes") else {
-        return;
-    };
+    let lowered = lowered("a-loop-condition-keeps-its-writes");
     assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
     assert_eq!(
         lowered.program.funcs.iter().filter(|f| f.exported).count(),
@@ -551,9 +498,7 @@ fn loop_conditions_carry_their_writes_and_publish_the_final_write() {
 
 #[test]
 fn the_value_after_a_loop_is_the_header_parameter() {
-    let Some(lowered) = lowered("loops") else {
-        return;
-    };
+    let lowered = lowered("loops");
     // The bug this pins: the exit is reached from the *header*, not the body, so
     // returning the value the body defined uses something the exit does not
     // dominate. It reads whatever the last iteration left, and nothing crashes.
@@ -579,9 +524,7 @@ fn the_value_after_a_loop_is_the_header_parameter() {
 
 #[test]
 fn an_assignment_emits_no_store() {
-    let Some(lowered) = lowered("loops") else {
-        return;
-    };
+    let lowered = lowered("loops");
     // `total = total + i` rebinds a name; with the name bound directly to a value
     // there is no slot to store into. What the loop costs is the add, not the add
     // plus a store plus a reload.
@@ -611,9 +554,7 @@ fn handlers(func: &Func) -> Vec<&hir::Block> {
 
 #[test]
 fn a_thrown_error_is_the_object_and_not_its_message() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // The lowering used to reduce `new Error(m)` to `m` and throw the string,
     // on the reasoning that `Error` was `lib.d.ts`'s and could not be
     // constructed. It is `hir::builtin`'s. Nothing could observe the difference
@@ -640,9 +581,7 @@ fn a_thrown_error_is_the_object_and_not_its_message() {
 
 #[test]
 fn a_handler_receives_the_thrown_value_as_a_block_parameter() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // Which is the whole mechanism: no unwinder, no landing pad, no table --
     // an edge carrying an argument, of the kind every merge in the program
     // already is.
@@ -659,9 +598,7 @@ fn a_handler_receives_the_thrown_value_as_a_block_parameter() {
 
 #[test]
 fn a_name_the_throws_disagree_about_becomes_a_parameter() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // `edgesDisagree` assigns `seen` between its two `throw`s, so the handler
     // cannot read one value for it -- and it takes a parameter for `seen` and
     // for nothing else, because every other name in scope is the same value on
@@ -678,9 +615,7 @@ fn a_name_the_throws_disagree_about_becomes_a_parameter() {
 
 #[test]
 fn a_try_that_cannot_throw_leaves_no_handler() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // A `try` around code that cannot throw is how a person writes
     // defensively. It should cost nothing, and the block is not merely dead --
     // it is never created: a block with no predecessors is one the verifier
@@ -694,9 +629,7 @@ fn a_try_that_cannot_throw_leaves_no_handler() {
 
 #[test]
 fn a_throw_in_a_catch_belongs_to_the_enclosing_try() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // The handler stack is popped before the handler's own body is lowered, so
     // a `throw` inside a `catch` finds the *enclosing* `try` and not the one it
     // is the handler for -- which would be a loop back into itself.
@@ -710,9 +643,7 @@ fn a_throw_in_a_catch_belongs_to_the_enclosing_try() {
 
 #[test]
 fn a_finally_is_lowered_once_per_way_out() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // `loopThroughFinally` leaves its `try` three ways -- `break`, `continue`,
     // and falling off the end of the body -- and the `finally` runs on each. It
     // is duplicated rather than shared, so its `10` is lowered three times.
@@ -736,9 +667,7 @@ fn a_finally_is_lowered_once_per_way_out() {
 
 #[test]
 fn a_finally_that_returns_replaces_the_return() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // `try { return 5 } finally { return 99 }` returns 99, and neither 5 nor 6
     // is ever returned. The `finally` is lowered where the `return` would have
     // been, it terminates the block itself, and the `return` that called for it
@@ -774,9 +703,7 @@ fn calls(func: &Func, helper: &str) -> bool {
 
 #[test]
 fn a_promise_executor_is_lowered_where_the_promise_is_built() {
-    let Some(lowered) = lowered("promise-constructor") else {
-        return;
-    };
+    let lowered = lowered("promise-constructor");
     // `new Promise(f)` calls `f` synchronously, so when `f` is written at the
     // call its body belongs at the construction site -- and then `resolve` is
     // not a value at all, it is the settle it stands for. No closure is
@@ -798,9 +725,7 @@ fn a_promise_executor_is_lowered_where_the_promise_is_built() {
 
 #[test]
 fn an_async_throw_rejects_its_own_promise() {
-    let Some(lowered) = lowered("promise-constructor") else {
-        return;
-    };
+    let lowered = lowered("promise-constructor");
     // A `throw` in an `async` function rejects the promise it already owns and
     // hands it back, which is what its `return` does through `settle`. It used
     // to end the program: node rejects, and a caller awaiting it sees a
@@ -816,9 +741,7 @@ fn an_async_throw_rejects_its_own_promise() {
 
 #[test]
 fn a_default_that_cannot_apply_is_not_emitted() {
-    let Some(lowered) = lowered("destructuring") else {
-        return;
-    };
+    let lowered = lowered("destructuring");
     // `{ a = 99 }` where `a` is required: the representation has no room for
     // `undefined`, so the default is unreachable. The language says the same --
     // a default is evaluated only when the value is missing -- so the branch,
@@ -835,9 +758,7 @@ fn a_default_that_cannot_apply_is_not_emitted() {
 
 #[test]
 fn a_labelled_break_names_the_loop_it_leaves() {
-    let Some(lowered) = lowered("loops") else {
-        return;
-    };
+    let lowered = lowered("loops");
     // Three loops, two labels, and a `break`/`continue` naming each. That this
     // function is in the program at all is the assertion: a label is matched by
     // text, and picking the wrong loop for a name produces a jump to the wrong
@@ -852,9 +773,7 @@ fn a_labelled_break_names_the_loop_it_leaves() {
 
 #[test]
 fn the_provided_error_classes_are_told_apart() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // All four hold a `message` and a `name` and nothing else, so the layout
     // merge -- which is *shape* everywhere else, and has to be, because that is
     // what makes two interfaces of one shape interchangeable -- put them in one
@@ -886,9 +805,7 @@ fn the_provided_error_classes_are_told_apart() {
 
 #[test]
 fn instanceof_is_a_comparison_against_a_closed_set() {
-    let Some(lowered) = lowered("exceptions") else {
-        return;
-    };
+    let lowered = lowered("exceptions");
     // `e instanceof Error` names `Error` and everything extending it, which is
     // decided here and cannot grow: a compiled program gains no subclasses. So
     // there is no chain to walk, and the operation carries the whole answer.
@@ -922,9 +839,7 @@ fn instanceof_is_a_comparison_against_a_closed_set() {
 /// module and the hierarchy has to relate them after the hop.
 #[test]
 fn instanceof_follows_an_import_alias() {
-    let Some(lowered) = lowered("cross-file-class") else {
-        return;
-    };
+    let lowered = lowered("cross-file-class");
     assert!(
         !lowered
             .diagnostics
@@ -954,9 +869,7 @@ fn instanceof_follows_an_import_alias() {
 
 #[test]
 fn an_optional_call_evaluates_its_arguments_only_in_the_present_arm() {
-    let Some(lowered) = lowered("optional-access") else {
-        return;
-    };
+    let lowered = lowered("optional-access");
     // `f?.(g())` must not call `g` when `f` is absent. The branch is taken
     // first and the argument is lowered inside the arm, so the call to `bump`
     // is dominated by the test rather than sitting above it.
@@ -973,9 +886,7 @@ fn an_optional_call_evaluates_its_arguments_only_in_the_present_arm() {
 
 #[test]
 fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
-    let Some(lowered) = lowered("optional-access") else {
-        return;
-    };
+    let lowered = lowered("optional-access");
     // A closure's implementation is emitted from its declared function type,
     // which nothing narrows. So a call through the table has to keep that
     // return: narrowing it spelled `int32_t (*)(...)` for a body returning
@@ -1021,9 +932,7 @@ fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
 
 #[test]
 fn a_nullish_assignment_to_a_never_absent_target_tests_nothing() {
-    let Some(lowered) = lowered("logical-assignment") else {
-        return;
-    };
+    let lowered = lowered("logical-assignment");
     // `x ??= 99` where `x` is a `number`. The type has no room for an absence,
     // so there is nothing to test -- and because there is nothing to test,
     // nothing is ever written. That is what the specification says happens
@@ -1042,9 +951,7 @@ fn a_nullish_assignment_to_a_never_absent_target_tests_nothing() {
 
 #[test]
 fn a_logical_assignment_leaves_its_right_operand_unevaluated_on_the_keeping_path() {
-    let Some(lowered) = lowered("logical-assignment") else {
-        return;
-    };
+    let lowered = lowered("logical-assignment");
     // `x ||= bump(n)` must not call `bump` when `x` is truthy. The call
     // therefore belongs inside the arm the test took, and an entry block
     // holding it would be a program that calls a function JavaScript does not.
@@ -1072,9 +979,7 @@ fn a_logical_assignment_leaves_its_right_operand_unevaluated_on_the_keeping_path
 
 #[test]
 fn nullish_assignment_asks_a_different_question_from_or_assignment() {
-    let Some(lowered) = lowered("logical-assignment") else {
-        return;
-    };
+    let lowered = lowered("logical-assignment");
     // The reason `??=` exists. `||=` overwrites a present `0` and `??=` does
     // not, so lowering one as the other is wrong on every falsy value the
     // argument pool supplies -- and the two are close enough in the source
@@ -1111,9 +1016,7 @@ fn nullish_assignment_asks_a_different_question_from_or_assignment() {
 
 #[test]
 fn a_conditional_write_in_a_loop_reaches_the_loop_header() {
-    let Some(lowered) = lowered("logical-assignment") else {
-        return;
-    };
+    let lowered = lowered("logical-assignment");
     // A logical assignment writes on one path, and "assigned anywhere in this
     // subtree" is still true of it. The collector that builds a loop header's
     // parameters has to agree, because missing a write there does not produce a
@@ -1140,9 +1043,7 @@ fn a_conditional_write_in_a_loop_reaches_the_loop_header() {
 
 #[test]
 fn an_assignment_that_reads_through_an_accessor_is_refused_in_those_words() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     // The plain shape lowers now -- the getter travels with the setter in the
     // `Place`, so `g.level ||= n` on a `number` accessor reads, tests and
     // writes. What is left is the **erased** one: the read is both the absence
@@ -1169,9 +1070,7 @@ fn an_assignment_that_reads_through_an_accessor_is_refused_in_those_words() {
 
 #[test]
 fn a_symbol_keyed_method_is_emitted_and_reached_under_one_name() {
-    let Some(lowered) = lowered("computed-members") else {
-        return;
-    };
+    let lowered = lowered("computed-members");
     // Three places decide this name and all three have to agree letter for
     // letter: the declaration decides what the function is emitted as, the
     // hierarchy decides what a lookup finds, and the call site decides what is
@@ -1188,7 +1087,7 @@ fn a_symbol_keyed_method_is_emitted_and_reached_under_one_name() {
         .funcs
         .iter()
         .map(|func| func.name.as_str())
-        .filter(|name| name.contains("__@kStep@"))
+        .filter(|name| name.contains("#@symbol"))
         .collect();
     assert_eq!(emitted.len(), 1, "one symbol-keyed method, got {emitted:?}");
     let declared = emitted[0];
@@ -1206,9 +1105,7 @@ fn a_symbol_keyed_method_is_emitted_and_reached_under_one_name() {
 
 #[test]
 fn a_user_iterable_is_stepped_once_per_iteration() {
-    let Some(lowered) = lowered("iteration") else {
-        return;
-    };
+    let lowered = lowered("iteration");
     // The whole design of the protocol walk in one assertion. `next()` both
     // advances the iterator and produces the element, so calling it for the
     // test and again for the element would step twice and yield every other
@@ -1243,7 +1140,7 @@ fn a_user_iterable_is_stepped_once_per_iteration() {
         .filter(|value| {
             matches!(
                 &func.values[value.0 as usize].kind,
-                OpKind::Call { callee: Callee::Direct(target), .. } if target.contains("__@iterator@"),
+                OpKind::Call { callee: Callee::Direct(target), .. } if target.contains("#@symbol"),
             )
         })
         .count();
@@ -1255,9 +1152,7 @@ fn a_user_iterable_is_stepped_once_per_iteration() {
 
 #[test]
 fn a_protocol_loop_carries_no_cursor() {
-    let Some(lowered) = lowered("iteration") else {
-        return;
-    };
+    let lowered = lowered("iteration");
     // Every other walk advances an index the loop carries. This one's state is
     // inside the iterator, so a cursor would be a loop-carried value nothing
     // reads -- and the *reason* it must not exist is `continue`: the step lives
@@ -1286,9 +1181,7 @@ fn a_protocol_loop_carries_no_cursor() {
 
 #[test]
 fn a_parameter_property_stores_the_field_before_the_body() {
-    let Some(lowered) = lowered("instances") else {
-        return;
-    };
+    let lowered = lowered("instances");
     // `constructor(private seed: number, public step: number)` declares two
     // members and assigns both. The layout already had the slots -- the checker
     // reports them like any other property -- so what this pins is the *stores*
@@ -1334,9 +1227,7 @@ fn a_parameter_property_stores_the_field_before_the_body() {
 
 #[test]
 fn an_enum_member_is_an_immediate_and_not_a_lookup() {
-    let Some(lowered) = lowered("enums") else {
-        return;
-    };
+    let lowered = lowered("enums");
     // The whole claim: an enum has no run-time existence. The checker gives
     // `Colour.Red` a literal type carrying the value, so the member is an
     // immediate and there is no object to read it from.
@@ -1367,9 +1258,7 @@ fn an_enum_member_is_an_immediate_and_not_a_lookup() {
 
 #[test]
 fn the_enum_shape_that_is_refused_is_named() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     // It was two, and the other one was the *string member* -- which is a
     // constant this compiler now produces, because the checker gives the member
     // access the same literal type it gives the literal and the interned static
@@ -1418,9 +1307,7 @@ fn the_enum_shape_that_is_refused_is_named() {
 /// its own if only part of the resolution is restored.
 #[test]
 fn an_enum_folds_through_the_alias_an_import_names() {
-    let Some(lowered) = lowered("an-enum-across-a-module") else {
-        return;
-    };
+    let lowered = lowered("an-enum-across-a-module");
     assert!(
         lowered.diagnostics.is_empty(),
         "nothing should be refused: {:?}",

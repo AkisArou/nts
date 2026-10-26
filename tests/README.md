@@ -10,7 +10,7 @@ program, a refusal that now compiles becomes a program. Its tsconfig's
 
 | Kind | What a fixture is | What runs it |
 | --- | --- | --- |
-| [`programs/`](programs) | A program compiled, run and compared with node. Many are a specific test's input: check before editing or reusing one. | `examples`, `llvm`, `llvm-rc`, `jvm`, `rc`, `integrity`, `example-refusals`, `dex`, `snapshot-cache` |
+| [`programs/`](programs) | A program compiled, run and compared with node. Many are a specific test's input: check before editing or reusing one. | `examples`, `llvm`, `llvm-rc`, `jvm`, `rc`, `integrity`, `example-refusals`, `dex`, `frontend-tsrs` |
 | [`refusals/`](refusals) | A program the compiler must refuse, with the message its `// expect:` line names. | `blockers`, `integrity` |
 | [`outcomes/`](outcomes) | A recorded wrong answer or crash (`outcome.json`), then a guard once fixed. | `outcomes`, `integrity`, `jvm-verifies` |
 | [`agreements/`](agreements) | Node-agreement seam cases. | `tooling/conformance/agreement.mjs` |

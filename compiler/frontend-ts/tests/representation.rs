@@ -5,26 +5,22 @@
 //! signature rules out a flat struct, and a tuple's fixed arity is what lets it
 //! be laid out flat where an array needs a pointer and a length.
 //!
-//! Skips without `NTS_TSGO`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::{Utf8Path, Utf8PathBuf};
-use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo::decompose::Budget};
+use nts_frontend_ts::Frontend;
 use nts_semantic_schema::{PropertyRecord, SemanticSnapshot, TypeKind};
 
-fn snapshot() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/readonly/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/readonly fixture is checked in");
-    Some(
-        TsgoApi::new(tsgo)
-            .with_decomposition(Budget::DEFAULT)
-            .snapshot(&tsconfig)
-            .expect("snapshot should succeed"),
-    )
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed")
 }
 
 fn object_with<'a>(snapshot: &'a SemanticSnapshot, names: &[&str]) -> &'a [PropertyRecord] {
@@ -35,7 +31,11 @@ fn object_with<'a>(snapshot: &'a SemanticSnapshot, names: &[&str]) -> &'a [Prope
             TypeKind::Object { properties }
                 if properties
                     .iter()
-                    .map(|p| p.name.as_str())
+                    .map(|p| {
+                        p.name
+                            .public_name()
+                            .expect("this fixture uses public names")
+                    })
                     .eq(names.iter().copied()) =>
             {
                 Some(properties.as_slice())
@@ -47,9 +47,9 @@ fn object_with<'a>(snapshot: &'a SemanticSnapshot, names: &[&str]) -> &'a [Prope
 
 #[test]
 fn readonly_by_keyword_is_recorded() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let config = object_with(&snapshot, &["host", "port", "timeout"]);
-    let get = |name: &str| config.iter().find(|p| p.name == name).unwrap();
+    let get = |name: &str| config.iter().find(|p| p.name.is_name(name)).unwrap();
 
     assert!(get("host").readonly, "`readonly host: string`");
     assert!(!get("port").readonly, "`port: number` is writable");
@@ -57,7 +57,7 @@ fn readonly_by_keyword_is_recorded() {
 
 #[test]
 fn readonly_by_mapped_type_is_recorded() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `Readonly<{ a: number; b: string }>` writes no `readonly` keyword on any
     // declaration. The modifier alone misses it entirely; only the checker knows.
     let frozen = snapshot
@@ -67,7 +67,7 @@ fn readonly_by_mapped_type_is_recorded() {
             TypeKind::Object { properties }
                 if properties.len() == 2
                     && properties.iter().all(|p| p.readonly)
-                    && properties.iter().any(|p| p.name == "a") =>
+                    && properties.iter().any(|p| p.name.is_name("a")) =>
             {
                 Some(properties)
             }
@@ -79,9 +79,9 @@ fn readonly_by_mapped_type_is_recorded() {
 
 #[test]
 fn optional_properties_are_distinguished() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     let config = object_with(&snapshot, &["host", "port", "timeout"]);
-    let get = |name: &str| config.iter().find(|p| p.name == name).unwrap();
+    let get = |name: &str| config.iter().find(|p| p.name.is_name(name)).unwrap();
 
     // An optional property needs a presence bit or an undefined slot, so it
     // cannot share a representation with a required one.
@@ -91,7 +91,7 @@ fn optional_properties_are_distinguished() {
 
 #[test]
 fn index_signatures_are_recorded_with_their_readonly_ness() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // The fixture has `Bag` and `ReadonlyBag`. A type with an index signature
     // cannot be a flat struct: its keys are not known at compile time.
     assert_eq!(snapshot.index_signatures.len(), 2);
@@ -108,7 +108,7 @@ fn index_signatures_are_recorded_with_their_readonly_ness() {
 
 #[test]
 fn a_tuple_keeps_its_element_types_and_arity() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // A tuple is an object type *and* array-like, so it has to be separated
     // before either path. Treated as an array it loses its arity, which is the
     // property that lets it be laid out flat.
@@ -129,7 +129,7 @@ fn a_tuple_keeps_its_element_types_and_arity() {
 
 #[test]
 fn optional_and_rest_parameters_are_distinguished() {
-    let Some(snapshot) = snapshot() else { return };
+    let snapshot = snapshot();
     // `optionals(a: number, b?: string, ...rest: number[])`. Neither
     // `SymbolFlagsOptional` nor `CheckFlagsOptionalParameter` is set on the
     // symbols the parameter endpoint returns — the `?` is a QuestionToken child
@@ -151,8 +151,7 @@ fn optional_and_rest_parameters_are_distinguished() {
 
 /// A snapshot of a program written to hold **both** kinds of `any`, side by
 /// side, in the shape `decomposition.rs` writes a synthetic project in.
-fn over_both_kinds_of_any() -> Option<SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn over_both_kinds_of_any() -> SemanticSnapshot {
     let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .unwrap()
         .join(format!("nts-two-anys-{}", std::process::id()));
@@ -180,32 +179,17 @@ fn over_both_kinds_of_any() -> Option<SemanticSnapshot> {
     )
     .unwrap();
     let tsconfig = dir.join("tsconfig.json").canonicalize_utf8().unwrap();
-    let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
-    Some(source.snapshot(&tsconfig).expect("snapshot should succeed"))
+    let mut source =
+        Frontend::new(env!("CARGO_MANIFEST_DIR")).with_checkers(std::num::NonZeroU16::MIN);
+    source.snapshot(&tsconfig).expect("snapshot should succeed")
 }
 
-/// **The two `any`s arrive as two kinds, and this is what a stale `target/tsgo`
-/// fails.**
-///
-/// `written(value: any)` is the checker's `c.anyType`; `var held;` and `const
-/// growing = []` are its `c.autoType` and `c.autoArrayType`. They are two facts
-/// -- "no trust" and "not yet" -- and the whole of what separates them on the
-/// wire is one `ObjectFlag` that `newTypeResponse` did not report for an intrinsic
-/// until `third_party/patches/typescript-go-objectflags-on-every-type.patch`.
-///
-/// So this is the **binary** half of that patch's guard, where
-/// `types.rs`'s `the_pin_reports_object_flags_for_every_type` is the source
-/// half. A rebuilt frontend answers both kinds; one built before the patch
-/// answers `Any` to all three, which the lowering cannot tell from a written
-/// `any` -- measured at 243 recorded test262 passes, and **silent**, because
-/// every program still compiles and merely compiles wrongly. A test is the only
-/// thing that can say so: a stale binary is not an absent one, so this runs and
-/// fails rather than skipping.
+/// A written `any` and the checker's evolving declarations are different facts.
+/// Erasing the latter before its writes are known silently throws away the
+/// element proved by `push`; the former intentionally carries no such proof.
 #[test]
 fn the_frontend_tells_a_written_any_from_an_evolving_one() {
-    let Some(snapshot) = over_both_kinds_of_any() else {
-        return;
-    };
+    let snapshot = over_both_kinds_of_any();
     let count = |wanted: &TypeKind| -> usize {
         snapshot
             .types
@@ -224,9 +208,7 @@ fn the_frontend_tells_a_written_any_from_an_evolving_one() {
          `TypeKind::Evolving` reached the snapshot, so the frontend cannot tell \
          the checker's `autoType` from its `anyType`.\n\
          \n\
-         `target/tsgo` is almost certainly built from before \
-         third_party/patches/typescript-go-objectflags-on-every-type.patch. \
-         `sh tooling/bootstrap/bootstrap.sh` applies it and rebuilds. Until then \
+         Native capture must retain the checker's evolving-type fact. Otherwise \
          every evolving declaration is read as a written `any`, which is silent \
          and wrong: an erased `const growing = []` throws away the element its \
          own `push` proves."

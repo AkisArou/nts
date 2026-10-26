@@ -106,7 +106,7 @@ pub(crate) fn call(
             } else {
                 contract::decline(b.m)?
             };
-            strings::constant(b, &b.func.name.clone());
+            strings::constant(b, b.func.name.clone());
             b.load(arg)?;
             b.call(target);
             b.instruction(&I::Unreachable);
@@ -133,7 +133,7 @@ pub(crate) fn call(
                 _ => tag_name(b.m)?,
             };
             b.load(arg)?;
-            strings::constant(b, &b.func.name.clone());
+            strings::constant(b, b.func.name.clone());
             b.call(text);
         }
     }
@@ -157,7 +157,7 @@ fn no_arm(b: &mut Body<'_, '_>, args: &[ValueId]) -> Result<(), Failure> {
     let concat = strings::callee(b.m, strings::Helper::Concat)?;
     let head = b.m.literal("calling `");
     let tail = b.m.literal("` on a value no arm of its chain recognised");
-    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, b.func.name.clone());
     b.global_get(head);
     b.load(member)?;
     b.call(concat);

@@ -273,7 +273,7 @@ impl FuncBuilder<'_> {
         }
         let origin = self.origin(at);
         let reason = self.push(OpKind::ConstString(
-            "an object converted to a number, whose ToPrimitive conversion this compiler does not yet perform".to_owned(),
+            "an object converted to a number, whose ToPrimitive conversion this compiler does not yet perform".to_owned().into(),
         ), HirType::Managed(ManagedType::String), origin.clone());
         self.runtime_call("nts_refused", vec![reason], HirType::Void, origin.clone());
         self.terminate(Terminator::Unreachable);

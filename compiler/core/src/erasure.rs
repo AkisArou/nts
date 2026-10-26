@@ -477,6 +477,13 @@ impl Walk<'_> {
                 let (checker, _) = self.erased(element)?;
                 Some((checker, true))
             }
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
+            // Neither new leaf has an Any/Unknown obligation. The remaining
+            // variants likewise introduce no erased binding site here.
             // [`TypeKind::Evolving`] is deliberately not here, and it counted as
             // `Any` before the two were split. An evolving declaration -- `var x;`,
             // `const xs = []` -- is not a site *needing* a representation: the
@@ -884,7 +891,8 @@ impl Walk<'_> {
                         | syntax::FALSE_KEYWORD,
                     ) => Use::Says(Verdict::Tested, "compared against a literal".to_owned()),
                     Some(syntax::IDENTIFIER)
-                        if other.and_then(|node| self.text_of(node)) == Some("undefined") =>
+                        if other.and_then(|node| self.snapshot.builtin_binding_at(node))
+                            == Some(nts_semantic_schema::BuiltinBinding::Undefined) =>
                     {
                         Use::Says(Verdict::Tested, "compared against `undefined`".to_owned())
                     }

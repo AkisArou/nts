@@ -888,7 +888,7 @@ pub fn closures(program: &Program) -> FieldClosures {
             held = held.join(match row {
                 Some(name) if access.default_bodies.contains_key(name) => Held::Absent,
                 Some(name) if access.storage_bodies.contains_key(name) => layout
-                    .index_of(&family.member)
+                    .index_of_key(&family.member)
                     .map_or(Held::Many, |own| shared(layout, own)),
                 // **No row is the family's default, which reads the face's own
                 // positional field** (`Plan::default_for`): the owner whose

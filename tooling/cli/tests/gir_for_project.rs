@@ -54,7 +54,6 @@ impl Project {
             .arg(command)
             .arg(self.0.join("tsconfig.json"))
             .env("NTS_TYPES_ROOT", self.0.join("store"))
-            .env("NTS_NO_SNAPSHOT_CACHE", "1")
             .output()
             .expect("running the CLI")
     }
@@ -67,7 +66,6 @@ impl Drop for Project {
 }
 
 fn available() -> bool {
-    let frontend = nts_frontend_ts::tsgo::locate().is_some();
     let tools = ["clang", "pkg-config"].iter().all(|tool| {
         Command::new(tool)
             .arg("--version")
@@ -78,7 +76,7 @@ fn available() -> bool {
         .args(["--exists", "cairo-gobject"])
         .status()
         .is_ok_and(|status| status.success());
-    if frontend && tools && cairo {
+    if tools && cairo {
         return true;
     }
     assert!(

@@ -19,3 +19,4 @@ workspace = true
 [dev-dependencies]
 nts-frontend-ts.workspace = true
 camino.workspace = true
+

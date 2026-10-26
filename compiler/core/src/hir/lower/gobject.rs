@@ -124,7 +124,7 @@ impl FuncBuilder<'_> {
             HirType::Float { .. } => OpKind::ConstFloat(0.0),
             HirType::Int { .. } => OpKind::ConstInt(0),
             HirType::Bool => OpKind::ConstBool(false),
-            HirType::Managed(ManagedType::String) => OpKind::ConstString(String::new()),
+            HirType::Managed(ManagedType::String) => OpKind::ConstString("".into()),
             HirType::NativePointer(_) | HirType::Managed(_) => OpKind::ConstNull,
             _ => {
                 return Err(self.unsupported(id, &format!("{what} of a type with no zero here")));

@@ -16,14 +16,12 @@ const CALLER: &str =
 
 #[test]
 fn a_view_lent_from_a_field_outlives_a_callback_that_overwrites_it() {
-    let Some((dir, prepared)) = prepare_with_files(
+    let (dir, prepared) = prepare_with_files(
         "string-view-lend",
         SOURCE,
         hir::Provider::ReferenceCounting,
         &[("visit.d.ts", DECLARATIONS)],
-    ) else {
-        return;
-    };
+    );
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

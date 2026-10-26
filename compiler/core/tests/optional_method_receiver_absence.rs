@@ -12,7 +12,7 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Absent, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
 fn erases_before_the_class_test(program: &hir::Program, name: &str) -> Vec<Absent> {
     let func = program
@@ -34,12 +34,10 @@ fn erases_before_the_class_test(program: &hir::Program, name: &str) -> Vec<Absen
 
 #[test]
 fn an_optional_methods_receiver_is_erased_with_its_own_absence() {
-    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/optional-method-receiver-absence/tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());

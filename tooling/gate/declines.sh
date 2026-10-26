@@ -33,7 +33,7 @@ bin=${NTS_BIN:-./target-jvm/release/nts}
     case "$d" in *"/invalid/"*|*"/unsupported/"*) exit 0 ;; esac
     n=$(basename "$d" .tsconfig.json)
     [ "$n" = tsconfig.json ] && n=$(basename "$(dirname "$d")")
-    out=$(NTS_TSGO=target/tsgo NTS_BACKEND=jvm '"$bin"' check "$d" 2>&1)
+    out=$(NTS_CHECKERS=1 NTS_BACKEND=jvm '"$bin"' check "$d" 2>&1)
     # `NTS` narrows this to the *backend* declining a function. `nts check`
     # also reports how many hostile-pool cases the compiled program declined at
     # run time -- an index a `!` promised was in range and was not -- and those

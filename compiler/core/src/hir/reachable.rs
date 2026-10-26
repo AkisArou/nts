@@ -787,6 +787,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             }
         }
     }
+    super::refused::retain_guarded(program);
     retain_printed(program, &keep);
     before - program.funcs.len()
 }

@@ -249,9 +249,13 @@ fn declares_how_it_prints(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     else {
         return false;
     };
-    properties
-        .iter()
-        .any(|property| property.name == "toString" || property.name.contains("@toStringTag"))
+    properties.iter().any(|property| {
+        property.name.is_name("toString")
+            || snapshot.key_is_well_known(
+                &property.name,
+                nts_semantic_schema::WellKnownSymbol::ToStringTag,
+            )
+    })
 }
 
 /// A class used as a value: a program class's token or a provided one's.
@@ -275,7 +279,7 @@ fn error_to_string(layout: &Layout) -> Option<Func> {
         layout
             .fields
             .iter()
-            .position(|field| field.name == named && field.ty == string)
+            .position(|field| field.name.is_name(named) && field.ty == string)
             .and_then(|at| u32::try_from(at).ok())
     };
     let (name_at, message_at) = (field("name")?, field("message")?);
@@ -301,7 +305,7 @@ fn error_to_string(layout: &Layout) -> Option<Func> {
     let no_message = body.is_empty(message, zero);
     let b2 = span(ValueId(unnamed.0 + 1), no_message);
     // b4: both.
-    let colon = body.push(OpKind::ConstString(": ".to_owned()), string.clone());
+    let colon = body.push(OpKind::ConstString(": ".into()), string.clone());
     let named = body.concat(name, colon);
     let text = body.concat(named, message);
     let b4 = span(colon, text);
@@ -480,12 +484,14 @@ pub(super) fn devirtualize(
                         frame: None,
                     };
                 }
-                Direct::Text(text) => func.values[at].kind = OpKind::ConstString(text.to_owned()),
+                Direct::Text(text) => {
+                    func.values[at].kind = OpKind::ConstString(text.to_owned().into());
+                }
                 Direct::Join(helper, array) => {
                     let comma = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
                     let origin = func.values[at].origin.clone();
                     func.values.push(Op {
-                        kind: OpKind::ConstString(",".to_owned()),
+                        kind: OpKind::ConstString(",".into()),
                         ty: HirType::Managed(ManagedType::String),
                         origin,
                     });

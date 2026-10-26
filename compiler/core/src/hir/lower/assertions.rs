@@ -427,7 +427,7 @@ pub(super) fn decline_when(
     if !builder.is_terminated() {
         let origin = builder.origin(id);
         let reason = builder.push(
-            OpKind::ConstString(message.to_owned()),
+            OpKind::ConstString(message.to_owned().into()),
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );

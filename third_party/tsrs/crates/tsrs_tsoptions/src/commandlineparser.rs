@@ -1,6 +1,6 @@
 use rustc_hash::FxHashSet;
 use tsrs_ast::{Diagnostic, Node, SourceFile, new_compiler_diagnostic};
-use tsrs_core::collections::{OrderedMap, OrderedMapExt};
+use tsrs_core::collections::OrderedMap;
 use tsrs_core::stringutil;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{BuildOptions, CompilerOptions, P};
@@ -165,7 +165,7 @@ pub fn parse_build_command_line(
     result
 }
 
-pub fn parse_command_line_worker(
+fn parse_command_line_worker(
     parse_command_line_with_diagnostics: &'static ParseCommandLineWorkerDiagnostics,
     command_line: &[String],
     fs: Option<&dyn FS>,
@@ -225,14 +225,14 @@ impl CommandLineParser {
     }
 }
 
-pub fn get_input_option_name(input: &str) -> &str {
+fn get_input_option_name(input: &str) -> &str {
     // removes at most two leading '-' from the input string
     let input = input.strip_prefix('-').unwrap_or(input);
     input.strip_prefix('-').unwrap_or(input)
 }
 
 impl CommandLineParser {
-    pub(crate) fn parse_response_file(&mut self, file_name: &str, fs: Option<&dyn FS>) {
+    fn parse_response_file(&mut self, file_name: &str, fs: Option<&dyn FS>) {
         let file_name = tspath::get_normalized_absolute_path(file_name, &self.current_directory);
         let use_case_sensitive_file_names = match fs {
             Some(fs) => fs.use_case_sensitive_file_names(),
@@ -311,7 +311,7 @@ pub fn try_read_file(
 }
 
 impl CommandLineParser {
-    pub(crate) fn parse_option_value(
+    fn parse_option_value(
         &mut self,
         args: &[String],
         mut i: usize,
@@ -321,11 +321,11 @@ impl CommandLineParser {
         if opt.is_tsconfig_only && i <= args.len() {
             let opt_value = if i < args.len() { args[i].as_str() } else { "" };
             if opt_value == "null" {
-                self.options.set(opt.name.to_string(), CompilerOptionsValue::Null);
+                self.options.insert(opt.name.to_string(), CompilerOptionsValue::Null);
                 i += 1;
             } else if opt.kind == CommandLineOptionKind::Boolean {
                 if opt_value == "false" {
-                    self.options.set(opt.name.to_string(), CompilerOptionsValue::Bool(false));
+                    self.options.insert(opt.name.to_string(), CompilerOptionsValue::Bool(false));
                     i += 1;
                 } else {
                     if opt_value == "true" {
@@ -349,14 +349,14 @@ impl CommandLineParser {
             // Check to see if no argument was provided (e.g. "--locale" is the last command-line argument).
             if i >= args.len() {
                 if opt.kind == CommandLineOptionKind::Boolean {
-                    self.options.set(opt.name.to_string(), CompilerOptionsValue::Bool(true));
+                    self.options.insert(opt.name.to_string(), CompilerOptionsValue::Bool(true));
                 } else {
                     self.errors.push(new_compiler_diagnostic(
                         diag,
                         &[&opt.name, &get_compiler_option_value_type_string(opt)],
                     ));
                     if opt.kind == CommandLineOptionKind::List {
-                        self.options.set(
+                        self.options.insert(
                             opt.name.to_string(),
                             CompilerOptionsValue::StringArray(Vec::new()),
                         );
@@ -367,7 +367,7 @@ impl CommandLineParser {
                 return i;
             }
             if args[i] == "null" {
-                self.options.set(opt.name.to_string(), CompilerOptionsValue::Null);
+                self.options.insert(opt.name.to_string(), CompilerOptionsValue::Null);
                 i += 1;
             } else {
                 match opt.kind {
@@ -376,8 +376,10 @@ impl CommandLineParser {
                         match args[i].parse::<i64>() {
                             Ok(num) => {
                                 if num >= opt.min_value as i64 {
-                                    self.options
-                                        .set(opt.name.to_string(), CompilerOptionsValue::Int(num));
+                                    self.options.insert(
+                                        opt.name.to_string(),
+                                        CompilerOptionsValue::Int(num),
+                                    );
                                 } else {
                                     self.errors.push(new_compiler_diagnostic(
                                         &diagnostics::OPTION_0_REQUIRES_VALUE_TO_BE_GREATER_THAN_1,
@@ -399,10 +401,10 @@ impl CommandLineParser {
                         // check next argument as boolean flag value
                         if opt_value == "false" {
                             self.options
-                                .set(opt.name.to_string(), CompilerOptionsValue::Bool(false));
+                                .insert(opt.name.to_string(), CompilerOptionsValue::Bool(false));
                         } else {
                             self.options
-                                .set(opt.name.to_string(), CompilerOptionsValue::Bool(true));
+                                .insert(opt.name.to_string(), CompilerOptionsValue::Bool(true));
                         }
                         // try to consume next argument as value for boolean flag; do not consume argument if it is not "true" or "false"
                         if opt_value == "false" || opt_value == "true" {
@@ -426,7 +428,7 @@ impl CommandLineParser {
                                 &[path],
                             ));
                         } else if err.is_empty() {
-                            self.options.set(opt.name.to_string(), val);
+                            self.options.insert(opt.name.to_string(), val);
                         } else {
                             self.errors.extend(err);
                         }
@@ -435,7 +437,8 @@ impl CommandLineParser {
                     CommandLineOptionKind::List => {
                         let (result, err) = Self::parse_list_type_option(opt, &args[i]);
                         let advance = !result.is_empty() || !err.is_empty();
-                        self.options.set(opt.name.to_string(), CompilerOptionsValue::Array(result));
+                        self.options
+                            .insert(opt.name.to_string(), CompilerOptionsValue::Array(result));
                         self.errors.extend(err);
                         if advance {
                             i += 1;
@@ -453,7 +456,7 @@ impl CommandLineParser {
                             None,
                             None,
                         );
-                        self.options.set(opt.name.to_string(), val);
+                        self.options.insert(opt.name.to_string(), val);
                         self.errors.extend(err);
                         i += 1;
                     }
@@ -463,7 +466,7 @@ impl CommandLineParser {
         i
     }
 
-    pub(crate) fn parse_list_type_option(
+    fn parse_list_type_option(
         opt: &'static CommandLineOption,
         value: &str,
     ) -> (Vec<CompilerOptionsValue>, Vec<P<Diagnostic>>) {

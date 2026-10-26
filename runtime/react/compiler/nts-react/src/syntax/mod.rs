@@ -1,0 +1,82 @@
+//! Reading nts's snapshot of a program the way the React Compiler's frontend
+//! needs to: a node's children by the property they fill.
+//!
+//! The snapshot keeps children in nts's semantic slot order and a mask of
+//! which properties are present (`NodeData::Children`). The shared
+//! [`nts_semantic_schema::children`] table names each slot. Naming children
+//! by property lets the converter distinguish a type from an initializer.
+
+pub mod kinds;
+
+use nts_semantic_schema::{NodeData, NodeId, NodeKind, NodeRecord, children};
+
+/// Decoded nodes -- one file's, or a whole snapshot's -- read by property.
+/// A node's id is its index in the slice.
+#[derive(Debug, Clone, Copy)]
+pub struct Nodes<'a> {
+    pub nodes: &'a [NodeRecord],
+}
+
+impl<'a> Nodes<'a> {
+    #[must_use]
+    pub fn new(nodes: &'a [NodeRecord]) -> Self {
+        Self { nodes }
+    }
+
+    #[must_use]
+    pub fn record(self, id: NodeId) -> &'a NodeRecord {
+        &self.nodes[id.0 as usize]
+    }
+
+    /// The node's syntax kind, or `None` for a list node.
+    #[must_use]
+    pub fn kind(self, id: NodeId) -> Option<u16> {
+        match self.nodes.get(id.0 as usize)?.kind {
+            NodeKind::Syntax(kind) => Some(kind),
+            NodeKind::List => None,
+        }
+    }
+
+    /// The presence mask of a node's child properties, if it has any.
+    fn present(self, id: NodeId) -> Option<u8> {
+        match self.nodes.get(id.0 as usize)?.data {
+            NodeData::Children { present, .. } => Some(present),
+            _ => None,
+        }
+    }
+
+    /// The child filling `property`, if the node has that property and it is
+    /// present. A list property answers the list node; see [`Self::items`].
+    #[must_use]
+    pub fn child(self, id: NodeId, property: &str) -> Option<NodeId> {
+        let properties = children::properties(self.kind(id)?);
+        let bit = properties.iter().position(|p| *p == property)?;
+        let present = self.present(id)?;
+        if present & (1 << bit) == 0 {
+            return None;
+        }
+        // The children are the present properties, in bit order, once the
+        // JSDoc nodes documenting this one are set aside.
+        let index = (present & ((1u8 << bit) - 1)).count_ones() as usize;
+        self.property_children(id).nth(index)
+    }
+
+    /// A node's children that fill its properties: all of them but its `JSDoc`.
+    pub fn property_children(self, id: NodeId) -> impl Iterator<Item = NodeId> + 'a {
+        let nodes = self.nodes;
+        nodes[id.0 as usize]
+            .children
+            .iter()
+            .copied()
+            .filter(move |child| !matches!(nodes[child.0 as usize].kind, NodeKind::Syntax(kind) if children::is_jsdoc(kind)))
+    }
+
+    /// The elements of a list node.
+    #[must_use]
+    pub fn items(self, list: NodeId) -> &'a [NodeId] {
+        match self.nodes.get(list.0 as usize) {
+            Some(node) if node.kind == NodeKind::List => &node.children,
+            _ => &[],
+        }
+    }
+}

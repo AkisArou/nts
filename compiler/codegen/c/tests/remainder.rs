@@ -10,16 +10,15 @@
 //!
 //! The control reads one convert elsewhere too, so it is still emitted.
 //!
-//! Skips without the frontend or clang.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 #[path = "../../../test-support/scratch.rs"]
 mod scratch;
 use scratch::ScratchDir;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 const SOURCE: &str = r"
@@ -33,20 +32,16 @@ export function drawAndScale(seed: number, max: number): number {
 }
 ";
 
-fn toolchain() -> Option<Utf8PathBuf> {
-    let tsgo = nts_frontend_ts::tsgo::locate();
-    if tsgo.is_none() || Command::new("clang").arg("--version").output().is_err() {
-        eprintln!("SKIP remainder: tsgo and clang are required");
-        return None;
-    }
-    tsgo
+fn require_clang() {
+    assert!(
+        Command::new("clang").arg("--version").output().is_ok(),
+        "clang is required for this compiler guard"
+    );
 }
 
 #[test]
 fn a_remainder_answered_from_its_integers_compiles_warning_free() {
-    let Some(tsgo) = toolchain() else {
-        return;
-    };
+    require_clang();
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -58,7 +53,8 @@ fn a_remainder_answered_from_its_integers_compiles_warning_free() {
     )
     .unwrap();
     std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");

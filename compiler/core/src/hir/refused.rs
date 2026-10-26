@@ -10,7 +10,7 @@ use super::{
 pub(super) fn stop(func: &mut Func, message: String, origin: &Origin) -> Block {
     let what = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
     func.values.push(Op {
-        kind: OpKind::ConstString(message),
+        kind: OpKind::ConstString(message.into()),
         ty: HirType::Managed(ManagedType::String),
         origin: origin.clone(),
     });
@@ -70,6 +70,12 @@ pub(super) fn guard_slots(program: &mut Program) {
     let layouts = super::fields::LayoutIndex::build(program);
     let mut chain_contracts = FxHashMap::default();
     let mut added = Vec::new();
+    let mut guarded = GuardedEntries {
+        names,
+        chosen: FxHashMap::default(),
+        bodies: Vec::new(),
+        proofs: std::collections::BTreeMap::new(),
+    };
     for (owner, layout) in program.layouts.iter().enumerate() {
         // A closure with a refused body is rejected when it is constructed,
         // not repaired by making an otherwise uncallable closure constructible.
@@ -109,40 +115,127 @@ pub(super) fn guard_slots(program: &mut Program) {
                         slot,
                     )
                 });
-            let Some(contract) = inherited
-                .or_else(|| contracts.get(&slot).copied())
-                .map(|at| &program.funcs[at])
-            else {
+            let Some(contract_at) = inherited.or_else(|| contracts.get(&slot).copied()) else {
                 // No live virtual call declares this slot and no layout has a
                 // surviving signature/body for it. An emitter rejects a call
                 // without its declared ABI before dispatch; keep that existing
                 // refusal frontier. Prune removes the missing name as before.
                 continue;
             };
+            let contract = &program.funcs[contract_at];
             if contract.params.is_empty() {
                 continue;
             }
-            // A dispatch entry is not a source member. Readers such as
-            // published_classes use Class#member as evidence that a class has
-            // a surviving member, even when its constructor was refused.
-            let mut name = format!("nts$refused${}${slot}", layout.name);
-            while !names.insert(name.clone()) {
-                name.push('$');
-            }
-            let func = stopped_entry(
-                name.clone(),
+            let func = guarded.entry(
+                (owner, method, contract_at),
+                (*receiver, &layout.name),
+                slot,
                 contract,
-                *receiver,
-                format!("`{method}` was refused: {reason}"),
+                reason,
             );
-            added.push((owner, slot, name, func));
+            added.push((owner, slot, func.name.clone()));
         }
     }
-    for (owner, slot, name, func) in added {
+    let GuardedEntries { bodies, proofs, .. } = guarded;
+    for (owner, slot, name) in added {
         program.layouts[owner].methods[slot] = Some(name);
-        program.funcs.push(func);
+    }
+    program.funcs.extend(bodies);
+    program.guarded_dispatch.extend(proofs);
+}
+
+/// Reuse is a repeated original entry, not equivalence between stopped bodies.
+/// The original name chooses the same first reason; the exact live contract
+/// index includes every signature/origin/absence obligation without re-keying.
+struct GuardedEntries<'a> {
+    names: FxHashSet<String>,
+    chosen: FxHashMap<(usize, &'a str, usize), usize>,
+    bodies: Vec<Func>,
+    proofs: std::collections::BTreeMap<String, super::GuardedDispatch>,
+}
+
+impl<'a> GuardedEntries<'a> {
+    fn entry(
+        &mut self,
+        key: (usize, &'a str, usize),
+        receiver: (super::TypeId, &str),
+        slot: usize,
+        contract: &Func,
+        reason: &str,
+    ) -> &Func {
+        let (receiver, owner_name) = receiver;
+        let at = if let Some(&at) = self.chosen.get(&key) {
+            at
+        } else {
+            // A dispatch entry is not a source member. published_classes
+            // must not mistake a stop for a surviving source Class#member.
+            let mut name = format!("nts$refused${owner_name}${slot}");
+            while !self.names.insert(name.clone()) {
+                name.push('$');
+            }
+            let at = self.bodies.len();
+            self.bodies.push(stopped_entry(
+                name,
+                contract,
+                receiver,
+                format!("`{}` was refused: {reason}", key.1),
+            ));
+            self.chosen.insert(key, at);
+            at
+        };
+        let func = &self.bodies[at];
+        if let Ok(slot) = u32::try_from(slot) {
+            self.proofs
+                .entry(func.name.clone())
+                .or_insert_with(|| super::GuardedDispatch {
+                    original: key.1.to_owned(),
+                    contract: contract.name.clone(),
+                    receiver,
+                    slots: std::collections::BTreeSet::new(),
+                })
+                .slots
+                .insert(slot);
+        }
+        func
     }
 }
+
+/// A removed/retargeted entry loses its optional provenance, never its reason.
+/// One table scan, only in programs with guarded entries.
+pub(super) fn retain_guarded(program: &mut Program) {
+    if program.guarded_dispatch.is_empty() {
+        return;
+    }
+    let live: FxHashSet<&str> = program
+        .funcs
+        .iter()
+        .map(|func| func.name.as_str())
+        .collect();
+    let mut slots: FxHashMap<&str, FxHashSet<u32>> = FxHashMap::default();
+    for layout in &program.layouts {
+        for (slot, name) in layout.methods.iter().enumerate() {
+            if let Some(name) = name.as_deref()
+                && program.guarded_dispatch.contains_key(name)
+                && let Ok(slot) = u32::try_from(slot)
+            {
+                slots.entry(name).or_default().insert(slot);
+            }
+        }
+    }
+    program.guarded_dispatch.retain(|name, proof| {
+        proof.slots.retain(|slot| {
+            slots
+                .get(name.as_str())
+                .is_some_and(|live| live.contains(slot))
+        });
+        live.contains(name.as_str())
+            && live.contains(proof.contract.as_str())
+            && !proof.slots.is_empty()
+    });
+}
+
+#[cfg(test)]
+mod entry_reuse_tests;
 
 /// A declared contract for a slot with no surviving ancestor signature. Keep
 /// virtual-call declarations first, followed by source-order layout entries.

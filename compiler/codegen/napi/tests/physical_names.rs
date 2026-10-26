@@ -6,7 +6,7 @@ mod scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 // The subject failed to link on e33dd233e: N-API mangled `union` as a bare
@@ -29,9 +29,6 @@ const FIXTURES: [(&str, &str, &str, &str); 2] = [
 
 #[test]
 fn physical_type_names_keep_keyword_constructors_distinct() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let headers = root.join("third_party/node/src");
     assert!(
@@ -39,7 +36,8 @@ fn physical_type_names_keep_keyword_constructors_distinct() {
         "Node-API headers required"
     );
     for (fixture, first, second, control) in FIXTURES {
-        let snapshot = TsgoApi::for_compilation(tsgo.clone())
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&root.join(fixture).join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors());

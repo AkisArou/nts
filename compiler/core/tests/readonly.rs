@@ -17,26 +17,26 @@
 //! `root`, `name` and `path` — every name common enough that something,
 //! somewhere, declares it readonly.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, ManagedType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -54,9 +54,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
 /// readonly one declared beside it. Nothing here may be refused.
 #[test]
 fn readonly_does_not_leak_between_unrelated_types() {
-    let Some(lowered) = lowered("readonly-names") else {
-        return;
-    };
+    let lowered = lowered("readonly-names");
     assert_eq!(
         lowered
             .diagnostics
@@ -94,9 +92,7 @@ fn readonly_does_not_leak_between_unrelated_types() {
 /// cannot be asked of a layout.
 #[test]
 fn the_frozen_and_writable_classes_share_a_layout() {
-    let Some(lowered) = lowered("readonly-names") else {
-        return;
-    };
+    let lowered = lowered("readonly-names");
     let of = |func_name: &str| -> Vec<usize> {
         func(&lowered, func_name)
             .values
@@ -129,9 +125,7 @@ fn the_frozen_and_writable_classes_share_a_layout() {
 /// derived class's own member list instead would lose it.
 #[test]
 fn an_inherited_readonly_property_is_still_readonly() {
-    let Some(lowered) = lowered("readonly-names") else {
-        return;
-    };
+    let lowered = lowered("readonly-names");
     // `FrozenChild` inherits `readonly size` and declares a writable `extra`,
     // and the example reads both without writing either outside a constructor.
     // What is checked here is that the snapshot still says so, which is the

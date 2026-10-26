@@ -6,14 +6,11 @@ mod scratch;
 
 use camino::Utf8Path;
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::process::Command;
 
 #[test]
 fn shared_storage_keeps_each_exported_constructor_and_its_members() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let headers = root.join("third_party/node/src");
     assert!(
@@ -34,7 +31,8 @@ fn shared_storage_keeps_each_exported_constructor_and_its_members() {
             "First",
         ),
     ] {
-        let snapshot = TsgoApi::for_compilation(tsgo.clone())
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&root.join(fixture).join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors());

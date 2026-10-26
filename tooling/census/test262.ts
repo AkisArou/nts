@@ -50,7 +50,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { materialise, pinCompiler, workspace as scratchProject } from "./project.ts";
-import { frontendFor } from "../conformance/pin.ts";
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -105,9 +105,7 @@ if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bo
 // The frontend the compiler under test runs with, as `run262.ts` and
 // `conformance262.ts` resolve it: a pinned copy in the scratch has no frontend
 // beside it, and the control then fails as a "frontend-crash".
-const FRONTEND = frontendFor(NTS, ROOT);
-if (!FRONTEND.exists) cannotMeasure(`no frontend at ${FRONTEND.path} -- set NTS_TSGO, or use a pin (it records its frontend)`);
-process.env.NTS_TSGO = FRONTEND.path;
+
 
 // Copied, so a twenty-minute census measures one binary rather than whichever
 // build happened to be at that path when each file's turn came.
@@ -203,12 +201,8 @@ function compile(dir, body) {
         // diagnostic the reader never sees is a diagnostic the reader cannot
         // count.
         stdio: ["ignore", "pipe", "pipe"],
-        // The cache key is the tsconfig *path*, and every worker reuses one
-        // path for thousands of different programs. `cache.rs` records what
-        // that costs: two projects hashing to one entry, the second handed the
-        // first's program, surfacing only because an unrelated check happened
-        // to catch it.
-        env: { ...process.env, NTS_NO_SNAPSHOT_CACHE: "1" },
+        // One native checker per worker bounds concurrent frontend memory.
+        env: { ...process.env, NTS_CHECKERS: "1" },
       }),
       failed: false,
     };
@@ -240,18 +234,9 @@ function classify(result) {
     if (asFooter) footer = { functions: Number(asFooter[1]), refused: Number(asFooter[2] ?? 0) };
   }
   if (result.error?.signal === "SIGTERM") return { bucket: "timeout", ts, nts, footer };
-  // **A frontend panic is not a compiler refusal and must not be counted as
-  // one.** Found on the first full run: 18 files in slice 1 crash `tsgo` with
-  //
-  //   panic: Debug failure. False expression: Trying to get the type of
-  //   `import.defer` in `import.defer(...)`
-  //
-  // out of `getSymbolsAtLocations`. That is a defect in the vendored
-  // typescript-go, not a gap in this compiler, and folding it into either the
-  // refusal ranking or the typecheck column would attribute an upstream crash
-  // to the lowering.
-  if (result.out.includes("frontend transport failed") || result.out.includes("panic: ")) {
-    return { bucket: "frontend-crash", ts, nts, footer };
+  // A native abort or panic is a crash, separate from a semantic refusal.
+  if (result.error?.signal || result.status === 101 || result.status >= 128) {
+    return { bucket: "crash", ts, nts, footer };
   }
   if (result.out.includes("invalid HIR:")) return { bucket: "invalid-hir", ts, nts, footer };
   if (ts.length > 0) return { bucket: `ts:${ts[0].code}`, ts, nts, footer };

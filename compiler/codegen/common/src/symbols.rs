@@ -627,7 +627,23 @@ pub fn bridge_name(
     name
 }
 
+#[must_use]
 pub fn c_identifier(name: &str) -> String {
+    let spelled = c_identifier_spelling(name);
+    assert!(
+        spelled
+            .chars()
+            .next()
+            .is_some_and(|c| c == '_' || c == '$' || c.is_alphabetic())
+            && spelled
+                .chars()
+                .all(|c| c == '_' || c == '$' || c.is_alphanumeric()),
+        "invalid emitted C identifier {spelled:?} from {name:?}"
+    );
+    spelled
+}
+
+fn c_identifier_spelling(name: &str) -> String {
     // A qualified name carries punctuation no C identifier may: `Class#method`
     // for a method, `Class.method` for a static one, `Class<id>` for one
     // instantiation of a generic class, and `name@module` for a function whose
@@ -651,7 +667,7 @@ pub fn c_identifier(name: &str) -> String {
         && name.len() > 1
         && name[1..].bytes().all(|b| b.is_ascii_digit());
 
-    if matches!(name, "malloc" | "free" | "nts_native_malloc")
+    let spelled = if matches!(name, "malloc" | "free" | "nts_native_malloc")
         || RESERVED.contains(&name)
         || collides_with_a_header(name)
         || generated
@@ -660,6 +676,28 @@ pub fn c_identifier(name: &str) -> String {
         format!("{name}_")
     } else {
         name.to_string()
+    };
+    // JavaScript identifier parts include joiners and combining marks that
+    // the C identifier contract cannot spell literally. Qualified members
+    // already pass through `escaped`; unqualified source names need the same
+    // spelling for these parts. ASCII display-label punctuation is still an
+    // error, and the emitted-name collision checks remain authoritative.
+    if spelled
+        .chars()
+        .any(|c| !c.is_ascii() && !c.is_alphanumeric())
+    {
+        spelled
+            .chars()
+            .map(|c| {
+                if !c.is_ascii() && !c.is_alphanumeric() {
+                    escaped(c)
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect()
+    } else {
+        spelled
     }
 }
 
@@ -771,49 +809,45 @@ pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) ->
 /// taken, not against the names**: the JVM backend's method-limit helpers
 /// (`F#split<k>`, in `nts_codegen_jvm::split`) skip any `k` whose spelling a
 /// declared function has, and the next synthesized name should do the same.
+///
+/// # Distinct Unicode identifier parts
+///
+/// Replacing both U+200C and U+200D with `$` made the two exports `$\u200C`
+/// and `$\u200D` declare one `$$(D)D`, so the whole program class was declined.
+/// Escape those two parts distinctly. U+00A2 is a currency symbol: legal in
+/// Java source identifiers as well as JVMS and pre-040 DEX names. Java source
+/// matters too: the benchmark driver interpolates this result into a call.
+///
+/// A non-ASCII marker keeps every existing ASCII spelling stable. Doubling a
+/// literal marker keeps a written escape lookalike distinct from an escaped
+/// joiner; other Unicode letters retain their names. This does not change the
+/// older ASCII punctuation collisions above, whose guards remain necessary.
+///
+/// Passing the joiners through Java source cannot rescue them: javac ignores
+/// identifier-ignorable characters, so those source names would collapse again.
+/// The ASCII-only sweep missed this DEX gap (U+2000..U+200F); the existing
+/// zero-width/Japanese control below records why these two need escaping.
 #[must_use]
 pub fn jvm_member_name(raw: &str) -> String {
-    raw.chars()
-        .map(|ch| match ch {
-            // `module#init` becomes `module$init`: `#` is legal in a member
-            // name and reads badly in a stack trace, which is the one place a
-            // generated name is shown to a person.
-            //
-            // Everything else DEX forbids. Listing the six by hand was the
-            // bug: `@` was missing, and so were twenty-one others -- a space
-            // among them, which `class C { "a b": number }` produces from four
-            // lines of legal TypeScript. A predicate cannot be short by one.
-            //
-            // Non-ASCII is left alone deliberately. `SimpleName` admits large
-            // unicode ranges and a TypeScript identifier may legitimately use
-            // them, so mangling those would rename valid programs for a
-            // constraint that does not exist.
-            //
-            // **Except for two, and they are exactly two.** `SimpleName` is a
-            // list of ranges rather than a rule, and it has a gap:
-            // `U+2010..U+2027` picks up after `U+00a1..U+1fff`, so everything
-            // from `U+2000` to `U+200f` is outside it. ECMAScript reaches into
-            // that gap on purpose -- `IdentifierPart` is `ID_Continue` *plus*
-            // ZWNJ and ZWJ, named in the grammar because a Persian or Indic
-            // identifier needs them to be spelled correctly.
-            //
-            // Intersecting the two gave 2 codepoints out of the 1.1 million
-            // scanned, and both were confirmed against `d8` rather than read
-            // off the specification: a field `a<ZWJ>b` is refused with "cannot
-            // be represented in dex format" and `a<U+3042>b` in the same class
-            // file is accepted, so the general claim above survives and only
-            // its two exceptions are handled here.
-            //
-            // No hand-written Java can reach this, which is why the runtime jar
-            // never found it: **javac silently strips** ZWNJ and ZWJ from an
-            // identifier, so `int a\u200db;` is a field called `ab`. A compiler
-            // that preserves what the source wrote is the only thing that emits
-            // one, and this is that compiler.
-            '\u{200c}' | '\u{200d}' => '$',
-            other if other.is_ascii() && !other.is_ascii_alphanumeric() && other != '_' => '$',
-            other => other,
-        })
-        .collect()
+    let mut spelled = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '\u{00a2}' => spelled.push_str("\u{00a2}\u{00a2}"),
+            '\u{200c}' => spelled.push_str("\u{00a2}u200c$"),
+            '\u{200d}' => spelled.push_str("\u{00a2}u200d$"),
+            // Preserve the existing ASCII ABI, including module#init ->
+            // module$init. Only the Unicode escape namespace changes here.
+            other if other.is_ascii() && !other.is_ascii_alphanumeric() && other != '_' => {
+                spelled.push('$');
+            }
+            other => spelled.push(other),
+        }
+    }
+    assert!(
+        dex_can_spell(&spelled),
+        "invalid emitted JVM member name {spelled:?} from {raw:?}"
+    );
+    spelled
 }
 
 /// Whether a member name survives `d8`, in the ASCII range this compiler emits.
@@ -855,6 +889,12 @@ fn dex_forbids(ch: char) -> bool {
 /// file is named.
 #[must_use]
 pub fn jvm_class_name(package: &str, raw: &str) -> String {
+    assert!(
+        package
+            .split('/')
+            .all(|part| !part.is_empty() && !part.contains(['.', ';', '['])),
+        "invalid emitted JVM package {package:?}"
+    );
     format!("{package}/{}", jvm_member_name(raw))
 }
 
@@ -904,7 +944,7 @@ mod jvm_tests {
     ///
     /// **Its population is ASCII and that is the whole of its claim**, which is
     /// what let the zero-width pair through for as long as it did. See
-    /// `the_zero_width_pair_is_mangled_and_nothing_else_outside_ascii_is`.
+    /// `the_zero_width_pair_is_distinct_and_other_letters_keep_their_names`.
     #[test]
     fn every_mangled_ascii_name_can_be_spelled_in_dex() {
         for byte in 0x20..=0x7eu8 {
@@ -946,11 +986,14 @@ mod jvm_tests {
     /// while `a<U+3042>b` in the same class file is accepted, which is also the
     /// control for the arm below.
     #[test]
-    fn the_zero_width_pair_is_mangled_and_nothing_else_outside_ascii_is() {
-        for ch in ['\u{200c}', '\u{200d}'] {
+    fn the_zero_width_pair_is_distinct_and_other_letters_keep_their_names() {
+        for (ch, encoded) in [
+            ('\u{200c}', "a\u{00a2}u200c$b"),
+            ('\u{200d}', "a\u{00a2}u200d$b"),
+        ] {
             let raw = format!("a{ch}b");
             assert!(!dex_can_spell(&raw), "{ch:?} reached d8 unmangled");
-            assert_eq!(jvm_member_name(&raw), "a$b", "{ch:?} was not mangled");
+            assert_eq!(jvm_member_name(&raw), encoded, "{ch:?} was not escaped");
         }
         // The control, and the reason this is two characters and not "non-ASCII":
         // `SimpleName` admits large unicode ranges, so mangling those would
@@ -967,6 +1010,54 @@ mod jvm_tests {
                 "{ch:?} was renamed for no reason"
             );
         }
+    }
+
+    #[test]
+    fn joiners_do_not_alias_dollars_or_literal_escape_spellings() {
+        let inputs = [
+            "$\u{200c}",
+            "$\u{200d}",
+            "$$",
+            "$u200c$",
+            "$u200d$",
+            "$\u{00a2}u200c$",
+            "$\u{00a2}u200d$",
+            "$\u{00a2}\u{00a2}u200c$",
+            "a\u{200c}\u{200d}b",
+            "a\u{200d}\u{200c}b",
+        ];
+        let mut names = std::collections::BTreeSet::new();
+        for raw in inputs {
+            let name = jvm_member_name(raw);
+            assert!(dex_can_spell(&name), "{raw:?} -> {name:?}");
+            assert!(names.insert(name), "{raw:?} aliases another input");
+        }
+        assert_eq!(
+            jvm_member_name("$\u{00a2}u200d$"),
+            "$\u{00a2}\u{00a2}u200d$"
+        );
+    }
+
+    #[test]
+    fn public_ascii_and_existing_synthetic_spellings_stay_stable() {
+        for (raw, expected) in [
+            ("$", "$"),
+            ("$$", "$$"),
+            ("$a", "$a"),
+            ("_count", "_count"),
+            ("$u200d$", "$u200d$"),
+            ("module#init", "module$init"),
+            ("Class#method", "Class$method"),
+            ("resolve@win32", "resolve$win32"),
+        ] {
+            assert_eq!(jvm_member_name(raw), expected);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid emitted JVM member name")]
+    fn an_empty_jvm_name_still_fails_the_guard() {
+        let _ = jvm_member_name("");
     }
 
     #[test]
@@ -1057,5 +1148,42 @@ mod jvm_tests {
         ] {
             assert_eq!(c_identifier(name), name);
         }
+    }
+}
+
+#[cfg(test)]
+mod emitted_name_guards {
+    #[test]
+    fn generated_and_written_dollar_names_are_valid_target_identifiers() {
+        // Clang and LLVM accept dollar identifiers. Refused virtual slots use
+        // this existing namespace; it carries identity rather than display text.
+        for name in ["nts$refused$Refused$0", "$counter", "written$value"] {
+            assert_eq!(super::c_identifier(name), name);
+        }
+    }
+
+    #[test]
+    fn unqualified_unicode_identifier_parts_use_the_member_escape() {
+        assert_eq!(super::c_identifier("$\u{200d}"), "$_u200d_");
+        assert_eq!(super::c_identifier("$\u{200c}"), "$_u200c_");
+        assert_eq!(super::c_identifier("क्"), "क_u094d_");
+        assert_eq!(super::c_identifier("_a\u{200d}"), "_a_u200d__");
+        assert_ne!(
+            super::c_identifier("$\u{200d}"),
+            super::c_identifier("$\u{200c}")
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid emitted C identifier")]
+    fn a_display_label_is_not_a_c_symbol() {
+        let _ = super::c_identifier("anonymous class");
+    }
+
+    #[test]
+    fn language_identifiers_and_mangled_members_stay_valid() {
+        assert_eq!(super::c_identifier("сложить"), "сложить");
+        assert!(!super::c_identifier("Class#@symbol4").contains(['#', '@']));
+        assert!(super::dex_can_spell(&super::jvm_member_name("a b.@key")));
     }
 }

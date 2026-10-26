@@ -32,7 +32,7 @@
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use serde::{Deserialize, Serialize};
 
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
@@ -3094,16 +3094,11 @@ fn prepared_program(
     provider: hir::Provider,
     backend: nts_codegen_common::Backend,
 ) -> Result<hir::Program> {
-    // `NTS_TSGO`, then the frontend this repository builds, and only then the
-    // bare name -- the order the CLI, the suite and the differential all use.
-    // This was the last caller left on the bare name, and it failed exactly as
-    // `frontend_binary`'s comment predicts it would: the shim it reaches has no
-    // version set, so all fifty cases reported `frontend transport failed`,
-    // which reads like a compiler fault rather than an unset variable.
-    let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
-        nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |path| path.to_string())
-    });
-    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
+    let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir()?)
+        .map_err(|_| anyhow::anyhow!("the benchmark directory is not UTF-8"))?;
+    let snapshot = Frontend::new(cwd)
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(tsconfig)?;
     if snapshot.has_errors() {
         bail!("{tsconfig} does not typecheck");
     }
@@ -3378,7 +3373,7 @@ fn default_timed_cpus(preferred: &str, inherited: &str) -> Result<String> {
 ///
 /// Rebuilt rather than mutated because `Command` has no way to prepend a
 /// program. Everything the caller set has to be carried over by hand, and the
-/// environment is the part that would fail silently -- `NTS_TSGO` and the
+/// environment is the part that would fail silently -- `NTS_CHECKERS` and the
 /// provider variables all arrive that way.
 fn confine(command: &std::process::Command, cpus: &str) -> std::process::Command {
     let mut pinned = std::process::Command::new("taskset");

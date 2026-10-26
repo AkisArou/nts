@@ -82,13 +82,17 @@ pub(super) fn bridge(
     let owners = owners_by_name(hierarchy);
     let tables = slot_tables(program);
     // Sorted, so one compiler on one input makes its bridges in one order.
-    let mut slots: Vec<(&(TypeId, String), &u32)> = hierarchy.slots.iter().collect();
+    let mut slots: Vec<_> = hierarchy.slots.iter().collect();
     slots.sort_by_key(|(_, slot)| **slot);
-    for ((root, member), &slot) in slots {
+    for ((root, member, raising), &slot) in slots {
         let Some(owner) = hierarchy.name.get(root) else {
             continue;
         };
-        let root_declaration = format!("{owner}#{member}");
+        let root_declaration = format!(
+            "{owner}#{}{}",
+            member.emitted_name(),
+            if *raising { super::RAISING_SUFFIX } else { "" }
+        );
         let through = calls.get(&slot).map(Vec::as_slice).unwrap_or_default();
         let empty = BTreeMap::new();
         let table = tables.get(&slot).unwrap_or(&empty);
@@ -113,7 +117,7 @@ pub(super) fn bridge(
             let projection = Projection {
                 params: func.params.clone(),
                 returns: HirType::Erased,
-                arguments_absent: Vec::new(),
+                arguments: (0..func.params.len()).map(Argument::Pass).collect(),
                 result_absent: result_absent(snapshot, &owners, name, &func.return_type),
             };
             let bridge = intern_projection(
@@ -217,17 +221,28 @@ fn crosses(answer: &HirType) -> bool {
 struct Projection {
     params: Vec<Param>,
     returns: HirType,
-    arguments_absent: Vec<Absent>,
+    arguments: Vec<Argument>,
     result_absent: Absent,
+}
+
+/// Every target argument is explicit. Missing inputs are values, never an
+/// identity inferred by zipping unequal parameter lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Argument {
+    Pass(usize),
+    Erase { input: usize, absent: Absent },
+    Undefined,
 }
 
 impl Projection {
     fn is_identity(&self, target: &Func) -> bool {
-        target
-            .params
-            .iter()
-            .zip(&self.params)
-            .all(|(target, through)| target.ty != HirType::Erased || through.ty == HirType::Erased)
+        target.params.len() <= self.params.len()
+            && self.arguments.len() == target.params.len()
+            && self
+                .arguments
+                .iter()
+                .enumerate()
+                .all(|(at, argument)| *argument == Argument::Pass(at))
             && if self.returns == HirType::Void {
                 matches!(target.return_type, HirType::Void | HirType::Never)
             } else {
@@ -260,7 +275,7 @@ fn projected_bridge(name: String, target: &Func, projection: &Projection) -> Fun
         });
         ValueId(u32::try_from(values.len() - 1).unwrap_or(u32::MAX))
     };
-    let args = projected_arguments(&mut values, &origin, target, projection);
+    let args = projected_arguments(&mut values, &origin, projection);
     let answered = push(
         &mut values,
         OpKind::Call {
@@ -317,28 +332,23 @@ fn projected_bridge(name: String, target: &Func, projection: &Projection) -> Fun
 fn projected_arguments(
     values: &mut Vec<Op>,
     origin: &Origin,
-    target: &Func,
     projection: &Projection,
 ) -> Vec<ValueId> {
-    target
-        .params
+    projection
+        .arguments
         .iter()
-        .enumerate()
-        .map(|(at, wanted)| {
-            let value = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
-            if wanted.ty != HirType::Erased || projection.params[at].ty == HirType::Erased {
-                return value;
-            }
-            values.push(Op {
-                kind: OpKind::Erase {
-                    value,
-                    absent: projection
-                        .arguments_absent
-                        .get(at)
-                        .copied()
-                        .unwrap_or(Absent::Impossible),
+        .map(|argument| {
+            let kind = match *argument {
+                Argument::Pass(input) => return ValueId(u32::try_from(input).unwrap_or(u32::MAX)),
+                Argument::Erase { input, absent } => OpKind::Erase {
+                    value: ValueId(u32::try_from(input).unwrap_or(u32::MAX)),
+                    absent,
                     slots: Absent::Impossible,
                 },
+                Argument::Undefined => OpKind::ConstUndefined,
+            };
+            values.push(Op {
+                kind,
                 ty: HirType::Erased,
                 origin: origin.clone(),
             });
@@ -352,7 +362,7 @@ struct AdapterKey {
     target: String,
     params: Vec<AbiType>,
     returns: AbiType,
-    arguments_absent: Vec<Absent>,
+    arguments: Vec<Argument>,
     result_absent: Absent,
 }
 
@@ -370,23 +380,7 @@ impl AdapterKey {
             // Only conversions the body performs distinguish projections.
             // A class return bridge and an interface adapter with unchanged
             // inputs must share one body, whatever their source slot.
-            arguments_absent: target
-                .params
-                .iter()
-                .enumerate()
-                .skip(1)
-                .map(|(at, param)| {
-                    if param.ty == HirType::Erased && projection.params[at].ty != HirType::Erased {
-                        projection
-                            .arguments_absent
-                            .get(at)
-                            .copied()
-                            .unwrap_or(Absent::Impossible)
-                    } else {
-                        Absent::Impossible
-                    }
-                })
-                .collect(),
+            arguments: projection.arguments.iter().skip(1).copied().collect(),
             result_absent: if projection.returns == HirType::Erased
                 && target.return_type != HirType::Erased
             {
@@ -449,23 +443,27 @@ fn adapt_interfaces(
     let mut slots: Vec<_> = hierarchy
         .slots
         .iter()
-        .filter(|((root, _), _)| hierarchy.faces.contains(root))
+        .filter(|((root, _, _), _)| hierarchy.faces.contains(root))
         .collect();
     slots.sort_by_key(|(_, slot)| **slot);
     let probe = super::FuncBuilder::probe(snapshot);
-    for ((root, member), slot) in slots {
+    let mut refused_slots = BTreeMap::new();
+    for ((root, member, raising), slot) in slots {
         let Some(owner) = hierarchy.name.get(root) else {
             continue;
         };
-        let declared = format!("{owner}#{member}");
+        let declared = format!(
+            "{owner}#{}{}",
+            member.emitted_name(),
+            if *raising { super::RAISING_SUFFIX } else { "" }
+        );
         let Some(&declaration) = index.get(&declared) else {
             continue;
         };
         let Some(table) = tables.get(slot) else {
             continue;
         };
-        let plain = without_the_raising_suffix(member).0;
-        let Some(property) = super::interfaces::property(snapshot, *root, plain) else {
+        let Some(property) = super::interfaces::property(snapshot, *root, &member.key) else {
             continue;
         };
         let Some(contract) = super::interfaces::contract(&probe, property) else {
@@ -478,9 +476,26 @@ fn adapt_interfaces(
             if target.abstract_declaration || same_signature(through, target) {
                 continue;
             }
-            let Some(projection) =
-                interface_projection(snapshot, hierarchy, &owners, through, target, &contract)
-            else {
+            let tail = super::interfaces::target_optional_tail(
+                &probe,
+                member,
+                target,
+                through.params.len(),
+            );
+            let Some(projection) = interface_projection(
+                snapshot,
+                hierarchy,
+                &owners,
+                through,
+                target,
+                &contract,
+                tail.as_ref(),
+            ) else {
+                if target.params.len() > through.params.len() {
+                    let refused =
+                        refuse_optional_projection(program, index, holders, *slot, name, owner);
+                    refused_slots.entry(*slot).or_insert(refused);
+                }
                 continue;
             };
             let bridge = intern_projection(
@@ -494,6 +509,49 @@ fn adapt_interfaces(
             );
             for &layout in holders {
                 program.layouts[layout].methods[*slot as usize] = Some(bridge.clone());
+            }
+        }
+    }
+    // A missing virtual entry alone is NOT a caller dependency. Convert only
+    // these rejected slots to the named missing callee so existing direct-call
+    // cascade and module-statement excision handle the refusal before emission.
+    refuse_slot_calls(program, &refused_slots);
+}
+
+fn refuse_optional_projection(
+    program: &mut Program,
+    index: &FxHashMap<String, usize>,
+    holders: &[usize],
+    slot: u32,
+    target: &str,
+    owner: &str,
+) -> String {
+    let mut name = format!("{target}@{owner}@optional-tail-refused");
+    while index.contains_key(&name) {
+        name.push('$');
+    }
+    for &layout in holders {
+        program.layouts[layout].methods[slot as usize] = Some(name.clone());
+    }
+    program.uncompiled.push((name.clone(), format!(
+        "the optional tail of `{target}` has no matching owned written implementation contract for `{owner}`"
+    )));
+    name
+}
+
+fn refuse_slot_calls(program: &mut Program, refused: &BTreeMap<u32, String>) {
+    if refused.is_empty() {
+        return;
+    }
+    for func in &mut program.funcs {
+        for block in &func.blocks {
+            for value in &block.ops {
+                if let OpKind::Call { callee, .. } = &mut func.values[value.0 as usize].kind
+                    && let Callee::Virtual { slot, .. } = callee
+                    && let Some(name) = refused.get(slot)
+                {
+                    *callee = Callee::Direct(name.clone());
+                }
             }
         }
     }
@@ -517,9 +575,11 @@ fn interface_projection(
     through: &Func,
     target: &Func,
     contract: &super::interfaces::Contract,
+    tail: Option<&super::interfaces::OptionalTail>,
 ) -> Option<Projection> {
     if target.params.is_empty()
-        || target.params.len() > through.params.len()
+        || (target.params.len() > through.params.len()
+            && tail.is_none_or(|tail| !tail.matches(target, through.params.len())))
         || !target
             .params
             .iter()
@@ -546,24 +606,31 @@ fn interface_projection(
         param.written = None;
         param.shape = crate::hir::ParamShape::Ordinary;
     }
-    let arguments_absent = std::iter::once(Absent::Impossible)
-        .chain(contract.sources.iter().enumerate().map(|(at, ty)| {
-            if target
-                .params
-                .get(at + 1)
-                .is_some_and(|param| param.ty == HirType::Erased)
-                && through.params[at + 1].ty != HirType::Erased
-            {
-                super::absent_of_result(snapshot, *ty)
+    let arguments = target
+        .params
+        .iter()
+        .enumerate()
+        .map(|(at, target)| {
+            let Some(through) = params.get(at) else {
+                return Argument::Undefined;
+            };
+            if target.ty != HirType::Erased || through.ty == HirType::Erased {
+                Argument::Pass(at)
             } else {
-                Absent::Impossible
+                let absent = at
+                    .checked_sub(1)
+                    .and_then(|at| contract.sources.get(at))
+                    .map_or(Absent::Impossible, |ty| {
+                        super::absent_of_result(snapshot, *ty)
+                    });
+                Argument::Erase { input: at, absent }
             }
-        }))
+        })
         .collect();
     Some(Projection {
         params,
         returns: through.return_type.clone(),
-        arguments_absent,
+        arguments,
         result_absent: result_absent(snapshot, owners, &target.name, &target.return_type),
     })
 }
@@ -698,10 +765,12 @@ fn member_result(snapshot: &SemanticSnapshot, owner: TypeId, member: &str) -> Op
     if let Some(getter) = member.strip_prefix("get ") {
         return properties
             .iter()
-            .find(|property| property.name == getter)
+            .find(|property| property.name.is_name(getter.as_ref()))
             .map(|property| property.ty);
     }
-    let property = properties.iter().find(|property| property.name == member)?;
+    let property = properties
+        .iter()
+        .find(|property| property.name.is_name(member.as_ref()))?;
     let TypeKind::Function(signature) = snapshot.types.get(property.ty.0 as usize)?.kind else {
         return None;
     };
@@ -710,3 +779,6 @@ fn member_result(snapshot: &SemanticSnapshot, owner: TypeId, member: &str) -> Op
         .get(signature.0 as usize)
         .map(|signature| signature.return_type)
 }
+
+#[cfg(test)]
+mod optional_tail_tests;

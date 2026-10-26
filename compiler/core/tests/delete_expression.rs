@@ -6,26 +6,26 @@
 //! says the value is absent and the bit says the property is, and `{ x:
 //! undefined }` proves those are different facts.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered(name: &str) -> Option<hir::lower::Lowered> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    hir::lower::lower(&snapshot)
 }
 
 fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
@@ -61,9 +61,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
 /// implemented.
 #[test]
 fn a_deletion_is_a_store_of_undefined() {
-    let Some(lowered) = lowered("delete") else {
-        return;
-    };
+    let lowered = lowered("delete");
     let function = func(&lowered, "deletesAndReads");
 
     let undefineds = function
@@ -104,9 +102,7 @@ fn a_deletion_is_a_store_of_undefined() {
 /// TypeScript refused the rest — so there is nothing to test at run time.
 #[test]
 fn the_result_is_a_constant() {
-    let Some(lowered) = lowered("delete") else {
-        return;
-    };
+    let lowered = lowered("delete");
     let function = func(&lowered, "itsResult");
     let trues = function
         .values
@@ -126,9 +122,7 @@ fn the_result_is_a_constant() {
 /// pass while a third was declined.
 #[test]
 fn nothing_in_the_fixture_is_refused() {
-    let Some(lowered) = lowered("delete") else {
-        return;
-    };
+    let lowered = lowered("delete");
     assert_eq!(
         lowered
             .diagnostics
@@ -158,9 +152,7 @@ fn nothing_in_the_fixture_is_refused() {
 /// reported on 29 of 29 cases once a fixture asked.
 #[test]
 fn object_statics_refuse_an_optional_property() {
-    let Some(lowered) = lowered("unsupported") else {
-        return;
-    };
+    let lowered = lowered("unsupported");
     let reasons: Vec<&str> = lowered
         .diagnostics
         .iter()

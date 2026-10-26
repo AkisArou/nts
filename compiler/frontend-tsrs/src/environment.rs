@@ -130,7 +130,12 @@ impl Environment {
                 code: 0,
                 message: format!(
                     "{key}={} is set; tsrs is running in a non-default mode",
-                    value.as_ref().expect("set value").to_string_lossy()
+                    value
+                        .as_ref()
+                        .expect(
+                            "the preceding filter retained only environment entries with a value"
+                        )
+                        .to_string_lossy()
                 ),
                 chain: Vec::new(),
                 related: Vec::new(),

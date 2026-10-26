@@ -48,7 +48,7 @@ pub(super) struct Supply {
 #[derive(Debug, Clone)]
 pub(super) struct Family {
     pub face: TypeId,
-    pub member: String,
+    pub member: super::PropertyKey,
     pub returns: HirType,
     pub writes: Option<HirType>,
     pub written_input: Option<crate::hir::native::Scalar>,
@@ -76,8 +76,12 @@ impl Family {
         })
     }
 
-    pub(super) fn key(&self, writes: bool) -> String {
-        format!("nts${}${}", if writes { "set" } else { "get" }, self.member)
+    pub(super) fn key(&self, writes: bool) -> super::MemberKey {
+        if writes {
+            super::MemberKey::set(self.member.clone())
+        } else {
+            super::MemberKey::get(self.member.clone())
+        }
     }
 
     pub(super) fn accessors_for(&self, writes: bool) -> Vec<NodeId> {
@@ -139,7 +143,11 @@ impl Read<'_> {
 }
 
 /// One spelling for the selector's fallback and a backend's failed view cast.
-pub(super) fn cast_field_failure(hierarchy: &Hierarchy, face: TypeId, member: &str) -> String {
+pub(super) fn cast_field_failure(
+    hierarchy: &Hierarchy,
+    face: TypeId,
+    member: &super::PropertyKey,
+) -> String {
     let face = &hierarchy.cast_descriptions[&face];
     format!(
         "the field `{member}` read through structural cast {face} on an object whose layout supplies no accessor for it"
@@ -217,7 +225,7 @@ impl FuncBuilder<'_> {
         self.switch_to(absent);
         let name = &self.hierarchy.cast_descriptions[&face];
         let message = self.push(
-            OpKind::ConstString(format!("property membership for `{key}` through structural cast {name} on a non-object, whose TypeError this compiler does not yet lower")),
+            OpKind::ConstString(format!("property membership for `{key}` through structural cast {name} on a non-object, whose TypeError this compiler does not yet lower").into()),
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
@@ -243,7 +251,7 @@ impl FuncBuilder<'_> {
             signed: true,
         };
         let text = self.push(
-            OpKind::ConstString(key.to_owned()),
+            OpKind::ConstString(key.into()),
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
@@ -338,7 +346,7 @@ impl FuncBuilder<'_> {
         });
         self.switch_to(unknown);
         let name = &self.hierarchy.cast_descriptions[&face];
-        let message = self.push(OpKind::ConstString(format!("property membership for `{key}` through structural cast {name} on an object whose layout supplies no membership plan")), HirType::Managed(ManagedType::String), origin.clone());
+        let message = self.push(OpKind::ConstString(format!("property membership for `{key}` through structural cast {name} on an object whose layout supplies no membership plan").into()), HirType::Managed(ManagedType::String), origin.clone());
         self.runtime_call("nts_refused", vec![message], HirType::Void, origin);
         self.terminate(Terminator::Unreachable);
         self.switch_to(known);
@@ -350,7 +358,7 @@ impl FuncBuilder<'_> {
             return None;
         }
         let face = self
-            .member_access(at)
+            .member_access_key(at)
             .and_then(|(receiver, _)| self.read_type(receiver))
             .or_else(|| self.field_access_family(at).map(|family| family.face))?;
         self.hierarchy.cast_faces.contains(&face).then_some(face)
@@ -360,7 +368,7 @@ impl FuncBuilder<'_> {
         &mut self,
         at: NodeId,
         value: super::ValueId,
-        member: &str,
+        member: &super::PropertyKey,
     ) -> Result<Option<super::ValueId>, nts_diagnostics::Diagnostic> {
         let Some(face) = self.erased_cast_face(at, value) else {
             return Ok(None);
@@ -393,7 +401,7 @@ impl FuncBuilder<'_> {
         at: NodeId,
         object: super::ValueId,
         face: TypeId,
-        member: &str,
+        member: &super::PropertyKey,
     ) -> Result<Option<super::ValueId>, nts_diagnostics::Diagnostic> {
         // This object was allocated with exactly this storage. A wider
         // family's erased ABI says nothing about the value in its own slot.
@@ -420,7 +428,7 @@ impl FuncBuilder<'_> {
         };
         let ty = family.returns.clone();
         let callee = self
-            .accessor_callee(at, face, member, "get ")?
+            .accessor_callee(at, face, member, super::MethodAccessor::Get)?
             .ok_or_else(|| self.unsupported(at, "an unlicensed interface field read"))?;
         if self.values[object.0 as usize].ty == HirType::Erased {
             self.layout_of(at, face)?;
@@ -443,7 +451,7 @@ impl FuncBuilder<'_> {
         at: NodeId,
         read: super::ValueId,
         face: TypeId,
-        member: &str,
+        member: &super::PropertyKey,
     ) -> Result<super::ValueId, nts_diagnostics::Diagnostic> {
         // A const alias stores the complete result. Each later use chooses
         // its own consumer, including aliases of that alias.
@@ -501,7 +509,7 @@ impl FuncBuilder<'_> {
         at: NodeId,
         object: super::ValueId,
         face: TypeId,
-        member: &str,
+        member: &super::PropertyKey,
         callee: super::Callee,
     ) -> super::ValueId {
         use super::{BinOp, ManagedType, OpKind, Terminator};
@@ -568,15 +576,16 @@ impl FuncBuilder<'_> {
         at: NodeId,
         face: TypeId,
         tag: super::ValueId,
-        member: &str,
+        member: &super::PropertyKey,
         merge: super::BlockId,
     ) {
         use super::{BinOp, OpKind, Terminator};
         let origin = self.origin(at);
         let missing = self.new_block();
-        if !super::property_keys::OBJECT_PROTOTYPE_MEMBERS.contains(&member)
-            && !matches!(member, "toFixed" | "toExponential" | "toPrecision")
-        {
+        if !member.public_name().is_some_and(|name| {
+            super::property_keys::OBJECT_PROTOTYPE_MEMBERS.contains(&name)
+                || matches!(name, "toFixed" | "toExponential" | "toPrecision")
+        }) {
             for allowed in [
                 super::super::tags::NUMBER,
                 super::super::tags::BOOLEAN,
@@ -608,7 +617,7 @@ impl FuncBuilder<'_> {
             }
         }
         let name = &self.hierarchy.cast_descriptions[&face];
-        let message = self.push(OpKind::ConstString(format!("the field `{member}` read through structural cast {name} on a value whose kind supplies no accessor for it")), HirType::Managed(super::ManagedType::String), origin.clone());
+        let message = self.push(OpKind::ConstString(format!("the field `{member}` read through structural cast {name} on a value whose kind supplies no accessor for it").into()), HirType::Managed(super::ManagedType::String), origin.clone());
         self.runtime_call("nts_refused", vec![message], HirType::Void, origin.clone());
         self.terminate(Terminator::Unreachable);
         self.switch_to(missing);
@@ -624,7 +633,7 @@ impl FuncBuilder<'_> {
         at: NodeId,
         object: super::ValueId,
         face: TypeId,
-        member: &str,
+        member: &super::PropertyKey,
     ) -> Result<Option<super::Place>, nts_diagnostics::Diagnostic> {
         // A cast is no evidence that the object has storage for this field.
         // Refuse before even an unlicensed family can fall back to FieldSet.
@@ -650,9 +659,9 @@ impl FuncBuilder<'_> {
             .clone()
             .ok_or_else(|| self.unsupported(at, "assigning to a readonly interface field"))?;
         let callee = self
-            .accessor_callee(at, face, member, "set ")?
+            .accessor_callee(at, face, member, super::MethodAccessor::Set)?
             .ok_or_else(|| self.unsupported(at, "an unlicensed interface field write"))?;
-        let getter = self.accessor_callee(at, face, member, "get ")?;
+        let getter = self.accessor_callee(at, face, member, super::MethodAccessor::Get)?;
         Ok(Some(super::Place::Setter {
             object: Some(object),
             callee,
@@ -685,7 +694,7 @@ impl FuncBuilder<'_> {
                 .filter(|family| family.eager)
                 .map(Read::Family);
         }
-        let (receiver, member) = self.member_access(at)?;
+        let (receiver, member) = self.member_access_key(at)?;
         let face = self.snapshot.node_types.get(&receiver).copied()?;
         let face = self.substitution.instance_of(face).unwrap_or(face);
         if let Some(HirType::Managed(super::ManagedType::Object(actual))) =
@@ -758,7 +767,7 @@ impl FuncBuilder<'_> {
 
     fn field_read_site(&self, mut at: NodeId) -> Option<NodeId> {
         for _ in 0..32 {
-            if self.member_access(at).is_some() {
+            if self.member_access_key(at).is_some() {
                 return Some(at);
             }
             if matches!(
@@ -814,8 +823,8 @@ impl FuncBuilder<'_> {
 #[derive(Debug, Clone, Default)]
 pub(super) struct Families {
     pub licensed: Vec<Family>,
-    pub declined: BTreeMap<(TypeId, String), &'static str>,
-    by_member: FxHashMap<TypeId, BTreeMap<String, usize>>,
+    pub declined: BTreeMap<(TypeId, super::PropertyKey), &'static str>,
+    by_member: FxHashMap<TypeId, BTreeMap<super::PropertyKey, usize>>,
     by_site: FxHashMap<NodeId, Vec<usize>>,
     transports: FxHashSet<(TypeId, TypeId)>,
     transport_faces: FxHashSet<TypeId>,
@@ -890,13 +899,13 @@ impl Families {
         owners.sort_unstable();
         owners
     }
-    pub(super) fn for_key(&self, face: TypeId, key: &str) -> Option<(&Family, bool)> {
-        let (key, _) = super::without_the_raising_suffix(key);
-        let (member, writes) = key
-            .strip_prefix("nts$get$")
-            .map(|member| (member, false))
-            .or_else(|| key.strip_prefix("nts$set$").map(|member| (member, true)))?;
-        self.get(face, member).map(|family| (family, writes))
+    pub(super) fn for_key(&self, face: TypeId, key: &super::MemberKey) -> Option<(&Family, bool)> {
+        let writes = match key.accessor {
+            super::MethodAccessor::Method => return None,
+            super::MethodAccessor::Get => false,
+            super::MethodAccessor::Set => true,
+        };
+        self.get(face, &key.key).map(|family| (family, writes))
     }
 
     pub(super) fn number_slots(&self, hierarchy: &mut Hierarchy) {
@@ -908,7 +917,7 @@ impl Families {
                 let slot = u32::try_from(hierarchy.slots.len()).unwrap_or(u32::MAX);
                 hierarchy
                     .slots
-                    .insert((family.face, family.key(writes)), slot);
+                    .insert((family.face, family.key(writes), false), slot);
             }
         }
     }
@@ -1041,7 +1050,7 @@ impl Families {
         self.transports.extend(transports);
     }
 
-    pub(super) fn get(&self, face: TypeId, member: &str) -> Option<&Family> {
+    pub(super) fn get(&self, face: TypeId, member: &super::PropertyKey) -> Option<&Family> {
         self.by_member
             .get(&face)
             .and_then(|members| members.get(member))
@@ -1126,7 +1135,7 @@ fn fits_the_face(
         !hierarchy
             .declares
             .get(&hierarchy.declared_face(face))
-            .is_some_and(|methods| methods.contains(&wanted.name))
+            .is_some_and(|methods| methods.contains(&super::MemberKey::method(wanted.name.clone())))
             || interfaces::property(probe.snapshot, owner, &wanted.name)
                 .is_none_or(|found| interfaces::candidate(probe, found, wanted))
     })
@@ -1137,7 +1146,7 @@ fn fits_the_face(
 #[derive(Debug, Clone, Default)]
 struct Owners {
     all: Vec<TypeId>,
-    by_member: FxHashMap<String, FxHashSet<TypeId>>,
+    by_member: FxHashMap<super::PropertyKey, FxHashSet<TypeId>>,
 }
 
 impl Owners {
@@ -1155,7 +1164,7 @@ impl Owners {
         all.extend(literals.keys().copied());
         all.sort_unstable();
         all.dedup();
-        let mut by_member: FxHashMap<String, FxHashSet<TypeId>> = FxHashMap::default();
+        let mut by_member: FxHashMap<super::PropertyKey, FxHashSet<TypeId>> = FxHashMap::default();
         for owner in &all {
             for property in properties(probe, *owner).into_iter().flatten() {
                 by_member
@@ -1194,6 +1203,11 @@ impl Owners {
 fn properties<'a>(probe: &'a FuncBuilder<'_>, owner: TypeId) -> Option<&'a [PropertyRecord]> {
     match &probe.snapshot.types.get(owner.0 as usize)?.kind {
         TypeKind::Object { properties } => Some(properties),
+        #[expect(
+            clippy::match_same_arms,
+            reason = "keep audited semantic type variants explicit"
+        )]
+        TypeKind::NonPrimitive | TypeKind::UniqueSymbol => None,
         _ => None,
     }
 }
@@ -1256,7 +1270,7 @@ fn literal_own_shape(
     face: TypeId,
     wanted: &[PropertyRecord],
 ) -> bool {
-    let names: Option<Vec<Vec<String>>> = probe
+    let names: Option<Vec<Vec<super::PropertyKey>>> = probe
         .children(literal)
         .into_iter()
         .map(|property| {
@@ -1281,7 +1295,7 @@ fn literal_own_shape(
             probe
                 .children(property)
                 .first()
-                .and_then(|name| probe.literal_name(*name))
+                .and_then(|name| probe.property_key(*name))
                 .map(|name| vec![name])
         })
         .collect();
@@ -1300,8 +1314,10 @@ fn literal_own_shape(
             .all(|(name, field)| *name == field.name)
 }
 
-fn used_members(sites: &BTreeMap<NodeId, Vec<(TypeId, String)>>) -> BTreeMap<TypeId, Vec<String>> {
-    let mut used: BTreeMap<TypeId, Vec<String>> = BTreeMap::new();
+fn used_members(
+    sites: &BTreeMap<NodeId, Vec<(TypeId, super::PropertyKey)>>,
+) -> BTreeMap<TypeId, Vec<super::PropertyKey>> {
+    let mut used: BTreeMap<TypeId, Vec<super::PropertyKey>> = BTreeMap::new();
     for reads in sites.values() {
         for (face, member) in reads {
             used.entry(*face).or_default().push(member.clone());
@@ -1343,16 +1359,6 @@ fn family(
 ) -> Result<Family, &'static str> {
     if candidates.is_empty() {
         return Err("no concrete supplier");
-    }
-    if properties(probe, face)
-        .into_iter()
-        .flatten()
-        .any(|property| {
-            property.name == format!("nts$get${}", wanted.name)
-                || (!wanted.readonly && property.name == format!("nts$set${}", wanted.name))
-        })
-    {
-        return Err("a source member colliding with the reserved field accessor name");
     }
     let declared = property_storage(probe, wanted).ok_or("an unrepresentable field contract")?;
     let mut supplies = Vec::new();
@@ -1441,6 +1447,10 @@ fn family(
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep semantic text and key projection beside its existing dispatch"
+)]
 fn supply(
     probe: &FuncBuilder<'_>,
     hierarchy: &Hierarchy,
@@ -1463,8 +1473,22 @@ fn supply(
     };
     let ty = property_storage(probe, found).ok_or("an unrepresentable concrete field")?;
     let absent = absent_of_result(probe.snapshot, found.ty);
-    let getter = accessor(probe, hierarchy, sources, owner, &wanted.name, "get ");
-    let setter = accessor(probe, hierarchy, sources, owner, &wanted.name, "set ");
+    let getter = accessor(
+        probe,
+        hierarchy,
+        sources,
+        owner,
+        &wanted.name,
+        super::MethodAccessor::Get,
+    );
+    let setter = accessor(
+        probe,
+        hierarchy,
+        sources,
+        owner,
+        &wanted.name,
+        super::MethodAccessor::Set,
+    );
     let reader = match found.kind {
         MemberKind::Accessor(_) => {
             let accessor = getter.ok_or("an accessor without a getter")?;
@@ -1482,7 +1506,7 @@ fn supply(
                     probe
                         .children(*literal)
                         .iter()
-                        .any(|member| probe.member_name(*member).as_ref() == Some(&found.name))
+                        .any(|member| probe.member_key(*member).as_ref() == Some(&found.name))
                 })
             });
             let admits_undefined = type_absences(probe, found.ty)
@@ -1583,12 +1607,18 @@ fn accessor(
     hierarchy: &Hierarchy,
     sources: &Sources,
     owner: TypeId,
-    name: &str,
-    prefix: &str,
+    name: &super::PropertyKey,
+    accessor: super::MethodAccessor,
 ) -> Option<Accessor> {
-    let owner = hierarchy.declaring(owner, &format!("{prefix}{name}"))?;
+    let owner = hierarchy.declaring(
+        owner,
+        &super::MemberKey {
+            key: name.clone(),
+            accessor,
+        },
+    )?;
     let declaration = interfaces::property(probe.snapshot, owner, name)?.declaration?;
-    let expected = if prefix == "get " {
+    let expected = if accessor == super::MethodAccessor::Get {
         syntax::GET_ACCESSOR
     } else {
         syntax::SET_ACCESSOR
@@ -1598,8 +1628,7 @@ fn accessor(
         .or_else(|| {
             let parent = probe.node(declaration).parent?;
             probe.children(parent).into_iter().find(|at| {
-                probe.kind_of(*at) == Some(expected)
-                    && probe.member_name(*at).as_deref() == Some(name)
+                probe.kind_of(*at) == Some(expected) && probe.member_key(*at).as_ref() == Some(name)
             })
         })?;
     Some(Accessor {
@@ -1637,6 +1666,11 @@ fn read_members(probe: &FuncBuilder<'_>, ty: TypeId, optional: bool) -> Vec<Opti
     let mut members: Vec<Option<TypeId>> =
         match probe.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
             Some(TypeKind::Union(members)) => members.clone(),
+            #[expect(
+                clippy::match_same_arms,
+                reason = "keep audited semantic type variants explicit"
+            )]
+            Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => vec![ty],
             _ => vec![ty],
         }
         .into_iter()
@@ -1692,16 +1726,14 @@ fn join_absences(joined: &mut Option<Vec<u32>>, other: Option<Vec<u32>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nts_frontend_ts::{SemanticSource, TsgoApi};
+    use nts_frontend_ts::Frontend;
 
     #[test]
     fn field_supplies_include_both_halves_of_a_user_accessor() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/accessor-families/tsconfig.json");
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&config)
             .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
         let snapshot = super::super::LoweringSnapshot::new(&snapshot);
@@ -1718,14 +1750,14 @@ mod tests {
             .map_or_else(|| panic!("missing Counter"), |(face, _)| *face);
         let family = hierarchy
             .access_families
-            .get(face, "value")
+            .get(face, &"value".into())
             .unwrap_or_else(|| {
                 panic!(
                     "Counter.value was declined: {:?}",
                     hierarchy
                         .access_families
                         .declined
-                        .get(&(face, "value".to_owned()))
+                        .get(&(face, "value".to_owned().into()))
                 )
             });
         assert_eq!(family.accessors_for(false).len(), 1);
@@ -1741,7 +1773,7 @@ mod tests {
             hierarchy
                 .access_families
                 .at(binding)
-                .any(|family| family.face == face && family.member == "value")
+                .any(|family| family.face == face && family.member.is_name("value"))
         );
     }
 }

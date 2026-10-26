@@ -43,7 +43,9 @@ const fn forwarded(name: &'static str, label: &'static str) -> Flag {
 }
 
 const HELP: &[Flag] = &[switch("--help"), switch("-h")];
-const PROJECT: &[Flag] = &[switch("--no-acquire")];
+const CHECKER_COUNT: Flag = value("--checkers", "1..256");
+const CHECKERS: &[Flag] = &[CHECKER_COUNT];
+const PROJECT: &[Flag] = &[switch("--no-acquire"), CHECKER_COUNT];
 const ROOTS: &[Flag] = &[value("--entry", "name[,name]"), value("--product", "name")];
 const PROVIDER: &[Flag] = &[switch("--rc")];
 const SHAPE: &[Flag] = &[switch("--main"), switch("--napi"), switch("--glib")];
@@ -90,18 +92,7 @@ const fn command(
 }
 
 pub(crate) const COMMANDS: &[Command] = &[
-    command(
-        "frontend",
-        " [project]",
-        &[
-            PROJECT,
-            &[
-                switch("--decompose"),
-                switch("--calls"),
-                switch("--constants"),
-            ],
-        ],
-    ),
+    command("frontend", " [project]", &[PROJECT]),
     command(
         "build",
         " [project]",
@@ -285,7 +276,10 @@ pub(crate) const COMMANDS: &[Command] = &[
     command(
         "deps",
         " [project]",
-        &[&[switch("--dry-run"), switch("--verbose"), switch("--json")]],
+        &[
+            CHECKERS,
+            &[switch("--dry-run"), switch("--verbose"), switch("--json")],
+        ],
     ),
     command("version", "", &[]),
     command("help", "", &[]),

@@ -62,7 +62,7 @@ sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 # came back `javac declined ref.java` with `symbol: class Queens`, which reads
 # as a broken reference rather than an absent dependency.
 #
-# That is the same trap as `NTS_BIN` and `NTS_TSGO`, which this lane already
+# That is the same trap as `NTS_BIN` and `NTS_CHECKERS`, which this lane already
 # passes as absolute paths into the checkout for exactly this reason, and it
 # was missed because those two are named in the note and this one is not.
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
@@ -169,7 +169,7 @@ JSON
   # `--entry` twice: `named_entry()` collects every occurrence and does not
   # split on commas, and `--entry work` alone prunes module evaluation -- which
   # goes missing as a wrong answer rather than a link error.
-  if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
+  if ! NTS_CHECKERS=1 "$nts" emit-jvm "$out/tsconfig.json" \
        --out "$out/nts/classes" --entry "${entry:-module#init}" --entry "module#init" \
        > "$out/emit.log" 2>&1; then
     printf "%-24s %s\n" "$case" "the backend declined it"

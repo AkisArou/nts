@@ -20,7 +20,7 @@ printf '%-22s %8s %8s   %s\n' module own cone "first own-source refusal"
 for m in $(ls runtime/node | grep -v '^node_modules$' | sort); do
   [ -f "runtime/node/$m/tsconfig.json" ] || continue
   log="$scratch/refusals-$m.txt"
-  NTS_TSGO="$root/target/tsgo" "$bin" emit-c "runtime/node/$m/tsconfig.json" \
+  NTS_CHECKERS=1 "$bin" emit-c "runtime/node/$m/tsconfig.json" \
     --out "$scratch/emit-$m" --napi > "$log" 2>&1 || true
   own=$(grep -E 'NTS1001' "$log" | grep -c "runtime/node/$m/src" || true)
   cone=$(grep -cE 'NTS1001' "$log" || true)

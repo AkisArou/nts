@@ -644,7 +644,7 @@ fn field(
     let slot = found
         .fields
         .iter()
-        .find(|slot| slot.name == field)
+        .find(|slot| slot.name.is_name(field))
         .ok_or_else(|| Verdict::Unresolved(format!("no field `{field}` in `{layout}`")))?;
     Ok(if ty.admits(&slot.ty) {
         Verdict::Pass
@@ -704,10 +704,6 @@ mod tests {
     /// word unparseable, or worse, naming nothing.
     #[test]
     fn a_fact_names_an_operation_by_the_word_nts_hir_prints() {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            eprintln!("SKIP expect-ir words: tsgo is required");
-            return;
-        };
         let programs = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/programs");
         let vocabulary = vocabulary();
         let mut seen = std::collections::BTreeSet::new();
@@ -719,11 +715,10 @@ mod tests {
             "array-from",
         ] {
             let tsconfig = programs.join(fixture).join("tsconfig.json");
-            let snapshot = nts_frontend_ts::SemanticSource::snapshot(
-                &mut nts_frontend_ts::TsgoApi::for_compilation(tsgo.clone()),
-                &tsconfig,
-            )
-            .unwrap_or_else(|error| panic!("{fixture}: {error}"));
+            let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+                .with_checkers(std::num::NonZeroU16::MIN)
+                .snapshot(&tsconfig)
+                .unwrap_or_else(|error| panic!("{fixture}: {error}"));
             let prepared = hir::prepare(&snapshot).unwrap_or_else(|_| panic!("{fixture} prepares"));
             for func in &prepared.program.funcs {
                 for (id, op) in ops(func) {

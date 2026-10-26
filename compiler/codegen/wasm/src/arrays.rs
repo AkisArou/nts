@@ -290,13 +290,13 @@ fn template(
     b: &mut Body<'_, '_>,
     result: ValueId,
     site: u32,
-    cooked: &[String],
+    cooked: &[nts_semantic_schema::JsText],
 ) -> Result<(), Failure> {
     let shape = storage(b, result)?;
     let (wrapper, backing, descriptor) = (shape.wrapper, shape.backing, shape.descriptor);
     let global = b.m.global(GlobalKey::Template(site), |m| {
         let descriptor = objects::descriptor(m, descriptor)?;
-        let pieces: Vec<_> = cooked.iter().map(|text| m.literal(text)).collect();
+        let pieces: Vec<_> = cooked.iter().map(|text| m.literal_text(text)).collect();
         let length =
             u32::try_from(pieces.len()).map_err(|_| Failure::from("too many template pieces"))?;
         let mut code = ir::Code::default();

@@ -4,32 +4,31 @@
 //! against node; this checks the decision, including the one an example
 //! cannot -- a function's text, which differs from node's on purpose.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Printed};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn lowered() -> Option<hir::lower::Lowered> {
+fn lowered() -> hir::lower::Lowered {
     lower_project("tests/programs/printed/tsconfig.json")
 }
 
-fn lower_project(project: &str) -> Option<hir::lower::Lowered> {
-    project_snapshot(project).map(|snapshot| hir::lower::lower(&snapshot))
+fn lower_project(project: &str) -> hir::lower::Lowered {
+    hir::lower::lower(&project_snapshot(project))
 }
 
-fn project_snapshot(project: &str) -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn project_snapshot(project: &str) -> nts_semantic_schema::SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(project)
         .canonicalize_utf8()
         .expect("the printed program is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
-        .expect("snapshot should succeed");
-    Some(snapshot)
+        .expect("snapshot should succeed")
 }
 
 fn calls(func: &hir::Func, helper: &str) -> usize {
@@ -45,10 +44,7 @@ fn calls(func: &hir::Func, helper: &str) -> usize {
 
 #[test]
 fn a_printer_callback_raises_even_without_a_source_try() {
-    let Some(lowered) = lower_project("tests/programs/printed-raises-no-try/tsconfig.json") else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    let lowered = lower_project("tests/programs/printed-raises-no-try/tsconfig.json");
     // AggregateError's library signature mentions abstract iterator methods;
     // those have no program implementation. Every source callable must compile.
     assert!(
@@ -91,10 +87,7 @@ fn a_printer_callback_raises_even_without_a_source_try() {
 
 #[test]
 fn primitive_and_nonthrowing_printers_add_no_pending_flag_test() {
-    let Some(lowered) = lower_project("tests/programs/printed-raises-no-try/tsconfig.json") else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    let lowered = lower_project("tests/programs/printed-raises-no-try/tsconfig.json");
     for name in ["primitive", "primitiveErased", "quiet"] {
         let func = lowered
             .program
@@ -113,10 +106,7 @@ fn primitive_and_nonthrowing_printers_add_no_pending_flag_test() {
 
 #[test]
 fn an_unavailable_raising_printer_keeps_the_runtime_stop() {
-    let Some(lowered) = lower_project("tests/programs/printed-raises-entries/tsconfig.json") else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    let lowered = lower_project("tests/programs/printed-raises-entries/tsconfig.json");
     assert!(
         lowered
             .program
@@ -146,12 +136,9 @@ fn an_unavailable_raising_printer_keeps_the_runtime_stop() {
 
 #[test]
 fn a_refused_printer_keeps_unrelated_conversions() {
-    let Some(lowered) = lower_project(
+    let lowered = lower_project(
         "../../tests/programs/a-refused-printer-keeps-unrelated-conversions/tsconfig.json",
-    ) else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    );
     for name in [
         "text",
         "primitive",
@@ -169,11 +156,7 @@ fn a_refused_printer_keeps_unrelated_conversions() {
 
 #[test]
 fn settled_printer_checks_follow_the_parameter_entry_split() {
-    let Some(snapshot) = project_snapshot("tests/programs/printed-raises-entries/tsconfig.json")
-    else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    let snapshot = project_snapshot("tests/programs/printed-raises-entries/tsconfig.json");
     let lowered = hir::lower::lower(&snapshot);
     let entries: Vec<_> = lowered
         .program
@@ -193,12 +176,9 @@ fn settled_printer_checks_follow_the_parameter_entry_split() {
 
 #[test]
 fn a_printer_failure_arm_does_not_rebind_its_success_continuation() {
-    let Some(lowered) = lower_project(
+    let lowered = lower_project(
         "../../tests/programs/a-printer-failure-arm-keeps-success-bindings/tsconfig.json",
-    ) else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    );
     assert!(
         lowered.program.uncompiled.is_empty(),
         "{:?}",
@@ -221,10 +201,7 @@ fn printed<'p>(program: &'p hir::Program, name: &str) -> &'p Printed {
 
 #[test]
 fn every_kind_of_object_prints_as_its_type_says() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     let program = &lowered.program;
     assert_eq!(printed(program, "Plain"), &Printed::Object);
     assert_eq!(
@@ -274,7 +251,12 @@ fn every_kind_of_object_prints_as_its_type_says() {
             .collect()
     };
     let tuples = answers(&|layout| hir::is_tuple_layout_name(&layout.name));
-    let own = answers(&|layout| layout.fields.iter().any(|field| field.name == "toString"));
+    let own = answers(&|layout| {
+        layout
+            .fields
+            .iter()
+            .any(|field| field.name == "toString".into())
+    });
     for (what, found) in [("tuple", tuples), ("own toString member", own)] {
         assert!(!found.is_empty(), "the program converts a {what}");
         assert!(
@@ -290,10 +272,7 @@ fn every_kind_of_object_prints_as_its_type_says() {
 /// answer would survive, so only this says the pass ran.
 #[test]
 fn a_conversion_the_type_settles_is_direct() {
-    let Some(lowered) = lowered() else {
-        eprintln!("SKIP printed: tsgo is not built");
-        return;
-    };
+    let lowered = lowered();
     let typed = lowered
         .program
         .funcs

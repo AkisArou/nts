@@ -726,7 +726,31 @@ fn imports(
     captures: &mut Captures,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
     let mut imports: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let literal_fields: std::collections::BTreeSet<_> = manifest
+        .literal_constants
+        .keys()
+        .map(ToString::to_string)
+        .collect();
+    let mut imported_literals = std::collections::BTreeSet::new();
     for import in &manifest.imports {
+        if import.module == crate::UTF16_LITERAL_MODULE {
+            if !literal_fields.contains(&import.name)
+                || !matches!(
+                    import.ty,
+                    ImportType::Global {
+                        ty: crate::ValueType::Externref { nullable: true },
+                        mutable: false,
+                    }
+                )
+            {
+                return Err(format!(
+                    "literal import `{}` has no matching immutable UTF-16 constant",
+                    import.name
+                ));
+            }
+            imported_literals.insert(import.name.clone());
+            continue;
+        }
         let value = match (import.module.as_str(), &import.ty) {
             ("js", ImportType::Tag) if import.name == "tag" => "WebAssembly.JSTag".to_owned(),
             ("nts:host/v1", found) => {
@@ -746,6 +770,26 @@ fn imports(
             .entry(import.module.clone())
             .or_default()
             .push(format!("{}: {value}", quote(&import.name)));
+    }
+    if imported_literals != literal_fields {
+        return Err("the UTF-16 literal constants and required imports differ".into());
+    }
+    if !manifest.literal_constants.is_empty() {
+        imports.insert(
+            crate::UTF16_LITERAL_MODULE.into(),
+            manifest
+                .literal_constants
+                .iter()
+                .map(|(ordinal, text)| {
+                    let units: String =
+                        text.encode_utf16().fold(String::new(), |mut units, unit| {
+                            let _ = write!(units, "\\u{unit:04x}");
+                            units
+                        });
+                    format!("{}: \"{units}\"", quote(&ordinal.to_string()))
+                })
+                .collect(),
+        );
     }
     Ok(imports)
 }
@@ -986,6 +1030,7 @@ mod tests {
             builtins: vec![],
             features: vec![],
             functions: vec![],
+            literal_constants: std::collections::BTreeMap::new(),
         };
         glue(&manifest, Host::Node)
     }

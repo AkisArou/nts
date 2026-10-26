@@ -5158,7 +5158,7 @@ impl Emitter<'_> {
             // free at the use -- better than the C backend, which emits a
             // static per literal and takes its address.
             OpKind::ConstString(text) => {
-                if nts_jvm_emitter::Pool::utf8_length(text) > 65_535 {
+                if nts_jvm_emitter::Pool::string_text_length(text) > 65_535 {
                     return Err(refuse(
                         self.func,
                         "a string literal past the 65,535-byte constant limit",
@@ -5200,7 +5200,7 @@ impl Emitter<'_> {
                         // `node-utf8`'s allocation.
                         code.invoke_special(origin, pool, crate::builder::BUILDER, "<init>", "()V");
                     } else {
-                        code.const_string(origin, pool, text);
+                        code.const_text(origin, pool, text);
                         code.invoke_special(
                             origin,
                             pool,
@@ -5211,7 +5211,7 @@ impl Emitter<'_> {
                     }
                     return Ok(Placed::OnStack);
                 }
-                code.const_string(origin, pool, text);
+                code.const_text(origin, pool, text);
                 Ok(Placed::OnStack)
             }
             // `String.length()` is an `int`; the middle end types a length as a
@@ -5471,7 +5471,11 @@ impl Emitter<'_> {
             };
             return Ok((
                 owner.name.clone(),
-                entry.name.clone(),
+                entry
+                    .name
+                    .public_name()
+                    .ok_or_else(|| refuse(self.func, "a foreign field with a non-string key"))?
+                    .to_owned(),
                 descriptor.to_owned(),
                 entry.ty.clone(),
             ));
@@ -6695,19 +6699,19 @@ impl Emitter<'_> {
 
     /// A call through a dispatch table, by name rather than by slot.
     ///
-    /// The slot is unused: the JVM has its own vtable, and naming the method is
-    /// what lets C2 devirtualise through class-hierarchy analysis -- which is
-    /// why this lane is expected to win the `dispatch` row rather than merely
-    /// match it.
+    /// The owned slot identity distinguishes an ordinary entry from its
+    /// raising variant even when a quiet receiver supplies one body for both.
+    /// The JVM dispatches by the resulting name and descriptor.
     fn virtual_call(
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
-        declared: &str,
+        target: (u32, &str),
         args: &[ValueId],
         result: &HirType,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
+        let (slot, declared) = target;
         let Some(&receiver) = args.first() else {
             return Err(refuse(self.func, "a virtual call with no receiver"));
         };
@@ -6728,7 +6732,7 @@ impl Emitter<'_> {
         for &arg in args {
             self.load(code, pool, arg)?;
         }
-        let member = crate::hierarchy::member_name(declared);
+        let member = crate::hierarchy::slot_member(self.program, slot as usize, declared);
         // Which instruction, decided by what the receiver's static type
         // is emitted as. The two are not interchangeable: they resolve
         // through different constant-pool tags, and the wrong one is an
@@ -7430,8 +7434,8 @@ impl Emitter<'_> {
             // A field family's accessor is a slot like any other: the face's
             // class answers it with the family's default and an owner with
             // its row (`split_faces::implement`), so the call is the same one.
-            Callee::Virtual { declared, .. } => {
-                return self.virtual_call(code, pool, declared, args, result, origin);
+            Callee::Virtual { slot, declared } => {
+                return self.virtual_call(code, pool, (*slot, declared), args, result, origin);
             }
             // A closure call is a dispatch like any other, and the only thing
             // that made it different was that there was nothing to dispatch
@@ -7702,7 +7706,7 @@ impl Emitter<'_> {
                         ),
                     ));
                 };
-                let member = crate::hierarchy::member_name(declared);
+                let member = crate::hierarchy::slot_member(self.program, slot as usize, declared);
                 // **Every argument against the parameter it lands in, as a
                 // direct call checks them.** The IR relates a class to a
                 // structural type the callback declares -- http's
@@ -8163,7 +8167,11 @@ impl Emitter<'_> {
                 "a cell whose layout this program does not carry",
             ));
         };
-        let Some(at) = layout.fields.iter().position(|field| field.name == "ready") else {
+        let Some(at) = layout
+            .fields
+            .iter()
+            .position(|field| field.name.is_name("ready"))
+        else {
             return Err(refuse(self.func, "a guarded cell with no `ready` field"));
         };
         let (owner, member, descriptor, _) =

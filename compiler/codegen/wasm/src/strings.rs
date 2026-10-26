@@ -195,8 +195,8 @@ pub(crate) fn call(b: &mut Body<'_, '_>, helper: Helper) -> Result<(), Failure> 
 }
 
 /// A string literal: an immutable imported global, so reading it is free.
-pub(crate) fn constant(b: &mut Body<'_, '_>, text: &str) {
-    let global = b.m.literal(text);
+pub(crate) fn constant(b: &mut Body<'_, '_>, text: impl Into<nts_semantic_schema::JsText>) {
+    let global = b.m.literal_text(&text.into());
     b.global_get(global);
 }
 

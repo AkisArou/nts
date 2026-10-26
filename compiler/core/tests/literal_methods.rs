@@ -2,28 +2,25 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use camino::Utf8Path;
 use nts_core::hir::{self, Absent, Callee, HirType, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn snapshot(fixture: &str) -> Option<nts_semantic_schema::SemanticSnapshot> {
-    let frontend = nts_frontend_ts::tsgo::locate()?;
+fn snapshot(fixture: &str) -> nts_semantic_schema::SemanticSnapshot {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(fixture)
         .join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some(snapshot)
+    snapshot
 }
 
 #[test]
 fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
-    let Some(snapshot) =
-        snapshot("tests/programs/a-capturing-literal-dispatched-through-another-interface")
-    else {
-        return;
-    };
+    let snapshot =
+        snapshot("tests/programs/a-capturing-literal-dispatched-through-another-interface");
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let prepared = hir::prepare_with(
             &snapshot,
@@ -58,11 +55,7 @@ fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
 
 #[test]
 fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
-    let Some(snapshot) =
-        snapshot("tests/refusals/a-literal-method-call-through-two-faces-loses-absence")
-    else {
-        return;
-    };
+    let snapshot = snapshot("tests/refusals/a-literal-method-call-through-two-faces-loses-absence");
     let prepared = hir::prepare(&snapshot).unwrap();
     let bodies: Vec<_> = prepared
         .program
@@ -92,10 +85,7 @@ fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
 
 #[test]
 fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
-    let Some(snapshot) = snapshot("tests/refusals/an-erased-alias-can-write-a-literal-method")
-    else {
-        return;
-    };
+    let snapshot = snapshot("tests/refusals/an-erased-alias-can-write-a-literal-method");
     let lowered = hir::lower::lower(&snapshot);
     assert!(
         !lowered
@@ -113,11 +103,8 @@ fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
 
 #[test]
 fn a_private_helper_proves_every_incoming_replacement() {
-    let Some(snapshot) =
-        snapshot("tests/programs/a-literal-method-replacement-proved-through-a-private-helper")
-    else {
-        return;
-    };
+    let snapshot =
+        snapshot("tests/programs/a-literal-method-replacement-proved-through-a-private-helper");
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
         prepared
@@ -144,10 +131,7 @@ fn a_private_helper_proves_every_incoming_replacement() {
 
 #[test]
 fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
-    let Some(snapshot) = snapshot("tests/refusals/a-literal-method-helper-has-a-narrowing-caller")
-    else {
-        return;
-    };
+    let snapshot = snapshot("tests/refusals/a-literal-method-helper-has-a-narrowing-caller");
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(
         !prepared
@@ -172,11 +156,8 @@ fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
 
 #[test]
 fn method_identity_copies_cover_aliases_and_downstream_helpers() {
-    let Some(snapshot) =
-        snapshot("tests/programs/a-literal-method-identity-preserved-through-another-interface")
-    else {
-        return;
-    };
+    let snapshot =
+        snapshot("tests/programs/a-literal-method-identity-preserved-through-another-interface");
     let prepared = hir::prepare(&snapshot).unwrap();
     assert_eq!(
         prepared.program.uncompiled,
@@ -207,11 +188,8 @@ fn method_identity_copies_cover_aliases_and_downstream_helpers() {
 
 #[test]
 fn mixed_comparison_and_invocation_preserves_the_legacy_face_globally() {
-    let Some(snapshot) =
-        snapshot("tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path")
-    else {
-        return;
-    };
+    let snapshot =
+        snapshot("tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path");
     let prepared = hir::prepare(&snapshot).unwrap();
     assert_eq!(
         prepared.program.uncompiled,

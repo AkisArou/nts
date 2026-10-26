@@ -19,6 +19,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Debug)]
 pub struct JvmProgram<'a> {
     program: &'a Program,
+    guarded_members: FxHashMap<usize, crate::guarded_members::Member>,
     /// Every type a split face's layout holds; see [`crate::split_faces`].
     split: FxHashSet<TypeId>,
     /// Per split face, by layout index, every layout whose values it can hold:
@@ -29,7 +30,10 @@ pub struct JvmProgram<'a> {
     implemented: FxHashMap<usize, Vec<usize>>,
     /// Each field family slot's declared accessor, which is what a call
     /// through the slot names; see [`Self::selector`].
-    selectors: FxHashMap<u32, &'a str>,
+    selectors: FxHashMap<u32, (&'a str, Option<TypeId>)>,
+    /// Actual first-parameter types of source-published missing-field defaults
+    /// installed at field-family slots. Source faces and row receivers differ.
+    selector_receivers: FxHashMap<&'a str, TypeId>,
     /// The dispatch slots some layout fills with a body; see [`Self::live`].
     live: FxHashSet<usize>,
     /// `(layout, field)` for every field some operation reads or writes by
@@ -175,36 +179,67 @@ fn declared_chain(
 impl<'a> JvmProgram<'a> {
     #[must_use]
     pub fn new(program: &'a Program) -> Self {
-        let selectors = program
+        let mut local_types = FxHashMap::default();
+        for layout in &program.layouts {
+            let local = !nts_core::hir::runtime::is_foreign_layout_name(&layout.name);
+            for id in &layout.types {
+                local_types.entry(*id).or_insert(local);
+            }
+        }
+        let selectors: FxHashMap<_, _> = program
             .interface_access
             .families
             .iter()
             .flat_map(|family| {
+                let local_types = &local_types;
                 std::iter::once(&family.getter)
                     .chain(family.setter.iter())
                     .chain(family.raising.iter())
+                    .map(move |entry| {
+                        let face = local_types
+                            .get(&family.face)
+                            .copied()
+                            .unwrap_or(false)
+                            .then_some(family.face);
+                        (entry.slot, (entry.declared.as_str(), face))
+                    })
             })
-            .map(|entry| (entry.slot, entry.declared.as_str()))
             .collect();
-        let bodies: FxHashSet<&str> = program
+        let bodies: FxHashMap<_, _> = program
             .funcs
             .iter()
             .filter(|func| !func.abstract_declaration)
-            .map(|func| func.name.as_str())
+            .map(|func| (func.name.as_str(), func))
             .collect();
-        let live = program
-            .layouts
-            .iter()
-            .flat_map(|layout| layout.methods.iter().enumerate())
-            .filter(|(_, entry)| entry.as_deref().is_some_and(|name| bodies.contains(name)))
-            .map(|(slot, _)| slot)
-            .collect();
+        let mut live = FxHashSet::default();
+        let mut selector_receivers = FxHashMap::default();
+        for layout in &program.layouts {
+            for (slot, entry) in layout.methods.iter().enumerate() {
+                let Some(func) = entry.as_deref().and_then(|name| bodies.get(name)) else {
+                    continue;
+                };
+                live.insert(slot);
+                if program
+                    .interface_access
+                    .default_bodies
+                    .contains_key(func.name.as_str())
+                    && u32::try_from(slot).is_ok_and(|slot| selectors.contains_key(&slot))
+                    && let Some(nts_core::hir::HirType::Managed(
+                        nts_core::hir::ManagedType::Object(receiver),
+                    )) = func.params.first().map(|param| &param.ty)
+                {
+                    selector_receivers.insert(func.name.as_str(), *receiver);
+                }
+            }
+        }
         let mut facts = Self {
             program,
+            guarded_members: FxHashMap::default(),
             split: FxHashSet::default(),
             members: FxHashMap::default(),
             implemented: FxHashMap::default(),
             selectors,
+            selector_receivers,
             live,
             positional: FxHashSet::default(),
             global_fields: global_fields(program),
@@ -213,7 +248,32 @@ impl<'a> JvmProgram<'a> {
         facts.positional = facts.positional_accesses();
         facts.declared = facts.declared_ancestry();
         facts.settle_faces();
+        facts.guarded_members = crate::guarded_members::plan(&facts);
         facts
+    }
+
+    /// An additional internal selector, never the public ordinary spelling.
+    pub(crate) fn guarded_member(&self, slot: usize) -> Option<&str> {
+        self.guarded_members
+            .get(&slot)
+            .map(|member| member.name.as_str())
+    }
+
+    /// The sole owner introducing this internal contract. Interface descendants
+    /// inherit it without an abstract redeclaration or a second default.
+    pub(crate) fn guarded_default(&self, layout: &Layout, slot: usize) -> bool {
+        self.guarded_members.get(&slot).is_some_and(|member| {
+            self.index(layout) == Some(member.default_owner)
+                && match member.kind {
+                    crate::guarded_members::ContractKind::Interface => {
+                        crate::hierarchy::is_interface(self, layout)
+                    }
+                    crate::guarded_members::ContractKind::Companion => self.is_split(layout),
+                    crate::guarded_members::ContractKind::ClassContract => {
+                        !crate::hierarchy::is_interface(self, layout) && !self.is_split(layout)
+                    }
+                }
+        })
     }
 
     /// Every field read or written by position through a value of its
@@ -578,7 +638,20 @@ impl<'a> JvmProgram<'a> {
     pub fn selector(&self, slot: usize) -> Option<&'a str> {
         u32::try_from(slot)
             .ok()
-            .and_then(|slot| self.selectors.get(&slot).copied())
+            .and_then(|slot| self.selectors.get(&slot).map(|(declared, _)| *declared))
+    }
+
+    /// The owned receiver of the actual missing-field default at a recognized
+    /// field-family slot. Its source face can have a different layout from the
+    /// row's receiver; a display name or equal storage never proves ownership.
+    /// Unknown and foreign selector faces do not license root storage. The
+    /// published default record supplies the domain, not purity or alias proof.
+    pub(crate) fn selector_receiver(&self, slot: usize, body: &str) -> Option<TypeId> {
+        let (_, face) = self.selectors.get(&u32::try_from(slot).ok()?)?;
+        if face.is_none() {
+            return None;
+        }
+        self.selector_receivers.get(body).copied()
     }
 }
 

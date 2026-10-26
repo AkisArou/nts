@@ -42,7 +42,7 @@ function owes(path, want, { not = [] } = {}) {
   return got;
 }
 
-test("native frontend and vendor changes select feature-on validation", () => {
+test("native frontend and vendor changes select native validation", () => {
   for (const path of [
     "third_party/tsrs/crates/tsrs_checker/src/checker.rs",
     "third_party/tsrs/MANIFEST",
@@ -60,7 +60,7 @@ test("compiler notice inputs select the independent license check", () => {
   assert.ok(!stepsFor("compiler/core/src/lower.rs").includes("licenses"));
 });
 
-test("native dependency and toolchain inputs select feature-on validation", () => {
+test("native dependency and toolchain inputs select native validation", () => {
   for (const path of ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]) {
     assert.ok(reach(path).includes("frontend-tsrs"), path);
   }
@@ -179,7 +179,7 @@ test("interop builds only the projects a range reaches, when it can say which", 
 test("what a step runs owes that step", () => {
   owes("tooling/conformance/integrity.ts", ["integrity", "integrity-runtime"], { not: ["examples"] });
   owes("tooling/conformance/c-compiles.mjs", ["c-compiles"], { not: ["examples"] });
-  owes("tooling/gate/costs.mjs", ["integrity-runtime", "snapshot-cache", "assembles", "jvm-verifies", "types"]);
+  owes("tooling/gate/costs.mjs", ["integrity-runtime", "assembles", "jvm-verifies", "types"]);
   // Run by llvm, llvm-rc and jvm through all.sh's backend_examples.
   owes("tooling/differential/agree.mjs", ["llvm", "llvm-rc", "jvm"]);
   owes("tooling/android/dexes.sh", ["dex"]);
@@ -366,7 +366,7 @@ test("a crate owes its own rule and every rule of the crates that depend on it",
 
 test("a deleted example still owes every step that compiles the examples", () => {
   const got = changeReach([{ path: "tests/programs/an-example-that-was-removed/src/main.ts", added: false, deleted: true }]);
-  superset(got, ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"], "a deleted example");
+  superset(got, ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex"], "a deleted example");
 });
 
 test("a rename is both paths: a blocker moved out still owes blockers, and moved into examples is a new example", () => {
@@ -448,4 +448,11 @@ test("land.ts and the registry owe tooling tests; lane.ts owes the baseline; the
   assert.ok(stepsFor("tooling/lanes/lanes.json").length < landing().length, "lanes.json owes the full gate");
   // pinned.sh builds every gate tree through it.
   assert.equal(stepsFor("tooling/lanes/inputs.sh").length, allSteps().length);
+});
+
+test("the stable TypeScript sample stays core; full population enforcement is deferred", () => {
+  assert.ok(!WIDE.has("ts-corpus"));
+  assert.ok(!WIDE.has("corpus"));
+  assert.ok(!allSteps().includes("ts-corpus"));
+  assert.ok(landing().includes("corpus"));
 });

@@ -8,42 +8,38 @@ use scratch::ScratchDir;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 use std::fmt::Write;
 use std::process::Command;
 
-fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
+fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with_types(name, source, true)
 }
 
 #[test]
 fn record_string_keys_bypass_the_primitive_formatter() {
-    let Some((_dir, prepared)) = prepare(
+    let (_dir, prepared) = prepare(
         "record-string-key",
         r"
         export function read(values: Record<string, unknown>, key: string): unknown {
             return values[key];
         }
     ",
-    ) else {
-        return;
-    };
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(!text.contains("nts_value_to_string("), "{text}");
     assert!(!text.contains("nts_value_tag("), "{text}");
 
-    let Some((_dir, prepared)) = prepare(
+    let (_dir, prepared) = prepare(
         "record-erased-key",
         r"
         export function read(values: Record<string, unknown>, key: any): unknown {
             return values[key];
         }
     ",
-    ) else {
-        return;
-    };
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
@@ -86,9 +82,7 @@ fn non_null_array_accesses_emit_no_receiver_guard() {
         export function read(values: number[]): number { return values[3]; }
         export function write(values: number[]): number { return values[3] = 9; }
     ";
-    let Some((_dir, prepared)) = prepare("present-receiver", source) else {
-        return;
-    };
+    let (_dir, prepared) = prepare("present-receiver", source);
     let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
@@ -99,12 +93,10 @@ fn non_null_array_accesses_emit_no_receiver_guard() {
 
     // The same access with a nullable contract must retain the real guard,
     // so the absence of it above cannot pass because guard emission is dead.
-    let Some((_dir, prepared)) = prepare(
+    let (_dir, prepared) = prepare(
         "nullable-receiver",
         "export function read(values: number[] | null): number { return values![3]; }",
-    ) else {
-        return;
-    };
+    );
     let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     // String constants are emitted as byte arrays, not C string literals.
@@ -129,9 +121,7 @@ fn object_key_refusal_keeps_primitive_and_erased_keys_licensed() {
             return values![key];
         }
     "#;
-    let Some((_dir, prepared)) = prepare("access-key-types", source) else {
-        return;
-    };
+    let (_dir, prepared) = prepare("access-key-types", source);
     let refused = &prepared.program.uncompiled;
     assert!(
         refused
@@ -163,12 +153,7 @@ fn object_key_refusal_keeps_primitive_and_erased_keys_licensed() {
 /// does not exist is `TS2664`. A binding has to arrive as an ambient
 /// declaration in a file of its own, so a test that inlines it is not testing
 /// the shape anybody writes.
-fn prepare_with_binding(
-    name: &str,
-    binding: &str,
-    source: &str,
-) -> Option<(ScratchDir, hir::Prepared)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepare_with_binding(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -183,36 +168,36 @@ fn prepare_with_binding(
     .unwrap();
     std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
     std::fs::write(dir.join("main.ts"), source).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((
+    (
         dir,
         hir::prepare(&snapshot)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
-    ))
+    )
 }
 
 fn prepare_with_types(
     name: &str,
     source: &str,
     include_types: bool,
-) -> Option<(ScratchDir, hir::Prepared)> {
-    let (dir, snapshot) = snapshot_with_types(name, source, include_types)?;
-    Some((
+) -> (ScratchDir, hir::Prepared) {
+    let (dir, snapshot) = snapshot_with_types(name, source, include_types);
+    (
         dir,
         hir::prepare(&snapshot)
             .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources))),
-    ))
+    )
 }
 
 fn snapshot_with_types(
     name: &str,
     source: &str,
     include_types: bool,
-) -> Option<(ScratchDir, nts_semantic_schema::SemanticSnapshot)> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+) -> (ScratchDir, nts_semantic_schema::SemanticSnapshot) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -239,11 +224,12 @@ fn snapshot_with_types(
         ""
     };
     std::fs::write(dir.join("main.ts"), format!("{imports}{source}")).unwrap();
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    Some((dir, snapshot))
+    (dir, snapshot)
 }
 
 #[path = "../../common/test-support/native_cases.rs"]
@@ -351,9 +337,7 @@ fn scalar_abi_matches_an_independently_compiled_c_library() {
         .unwrap();
     }
     caller.push_str("return 0; }\n");
-    let Some((dir, prepared)) = prepare("scalar-abi", &ts) else {
-        return;
-    };
+    let (dir, prepared) = prepare("scalar-abi", &ts);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -472,9 +456,7 @@ fn unbranded_parameter_and_return_are_separate_refusals() {
             let source = format!(
                 "{declaration}\n{unrelated}\nexport function run(n: number): number {{ return {call}; }}"
             );
-            let Some((_, prepared)) = prepare(name, &source) else {
-                return;
-            };
+            let (_, prepared) = prepare(name, &source);
             assert!(!prepared.program.funcs.iter().any(|f| f.name == "run"));
             assert!(
                 prepared
@@ -510,9 +492,7 @@ fn conflicting_authored_abis_and_runtime_symbol_collisions_are_errors() {
             "collides with a runtime or compiled function",
         ),
     ] {
-        let Some((_, prepared)) = prepare(name, source) else {
-            return;
-        };
+        let (_, prepared) = prepare(name, source);
         assert!(
             prepared.diagnostics.is_empty(),
             "{:?}",
@@ -576,11 +556,8 @@ fn unrelated_declarations_cannot_supply_a_calls_abi() {
             ] {
                 let declaration = declaration.strip_prefix("export ").unwrap();
                 let source = format!("{declaration}\n{witness}\n{call}");
-                let Some((_, prepared)) =
-                    prepare_with_types(&format!("{brand}-{position}"), &source, false)
-                else {
-                    return;
-                };
+                let (_, prepared) =
+                    prepare_with_types(&format!("{brand}-{position}"), &source, false);
                 assert!(
                     prepared.diagnostics.is_empty(),
                     "{brand}-{position}: {:?}",
@@ -634,9 +611,7 @@ fn curated_libc_bindings_match_system_headers_and_call_the_real_symbols() {
                 + ldexp(1.25 as Float64, 2 as c_int);
         }
     "#;
-    let Some((dir, prepared)) = prepare_with_types("libc", source, false) else {
-        return;
-    };
+    let (dir, prepared) = prepare_with_types("libc", source, false);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -720,9 +695,7 @@ fn type_headers_preserve_brands_and_boolean_abi() {
             return native_alias(n, 1n as size_t, true);
         }
     "#;
-    let Some((dir, prepared)) = prepare_with_types("type-headers", source, false) else {
-        return;
-    };
+    let (dir, prepared) = prepare_with_types("type-headers", source, false);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -791,10 +764,7 @@ fn a_gobject_a_call_hands_a_never_free_program_brings_the_support_file() {
          export function run(): void {\n\
          widget_mark(widget_new());\n\
          }\n";
-    let Some((_, prepared)) = prepare_with_binding("gobject-made", binding, program) else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, prepared) = prepare_with_binding("gobject-made", binding, program);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -862,12 +832,8 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         )
     };
 
-    let Some((_, agreeing)) =
-        prepare_with_binding("abi-agree", &binding("c_int"), &program("4 as c_int"))
-    else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
+    let (_, agreeing) =
+        prepare_with_binding("abi-agree", &binding("c_int"), &program("4 as c_int"));
     assert!(
         agreeing.diagnostics.is_empty(),
         "{:?}",
@@ -884,8 +850,7 @@ fn two_declarations_of_one_symbol_that_disagree_are_refused() {
         "abi-conflict",
         &binding("c_size_t"),
         &program("4n as c_size_t"),
-    )
-    .unwrap();
+    );
     assert!(
         conflicting.diagnostics.is_empty(),
         "{:?}",
@@ -985,13 +950,13 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
         )
     };
 
-    // `None` only when tsgo is absent. An empty witness is a *failure*, not a
-    // skip: this program names a foreign struct and a foreign function, so a
+    // An empty witness is a failure: this program names a foreign struct and a
+    // foreign function, so a
     // witness with nothing in it means the generator stopped working. Reading
     // the two as one condition is how this test passed for its first three runs
     // while never executing a line of what it exists to check.
-    let witness_of = |name: &str, field: &str, count: &str| -> Option<(ScratchDir, String)> {
-        let (dir, prepared) = prepare_with_binding(name, &binding(field, count), PROGRAM)?;
+    let witness_of = |name: &str, field: &str, count: &str| -> (ScratchDir, String) {
+        let (dir, prepared) = prepare_with_binding(name, &binding(field, count), PROGRAM);
         let emitted =
             nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
         assert!(
@@ -1003,18 +968,15 @@ fn a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not() {
             !emitted.witness.is_empty(),
             "{name}: a program naming `struct pollfd` and `poll` published no witness"
         );
-        Some((dir, emitted.witness))
+        (dir, emitted.witness)
     };
 
-    let Some((signed_dir, signed)) = witness_of("witness-signed", "Int16", "c_ulong") else {
-        eprintln!("skipped: no tsgo");
-        return;
-    };
-    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "Uint16", "c_ulong").unwrap();
+    let (signed_dir, signed) = witness_of("witness-signed", "Int16", "c_ulong");
+    let (unsigned_dir, unsigned) = witness_of("witness-unsigned", "Uint16", "c_ulong");
     // The function's type wrong and nothing else -- `long` where the header
     // says `unsigned long`, the same width -- so only the comparison of
     // `poll`'s own type can refuse it.
-    let (narrow_dir, narrow) = witness_of("witness-signed-count", "Int16", "c_long").unwrap();
+    let (narrow_dir, narrow) = witness_of("witness-signed-count", "Int16", "c_long");
 
     // The header's declaration compared with the binding's type, not a second
     // declaration of `poll`: an exact type, which is the check a
@@ -1119,10 +1081,7 @@ fn a_witnessed_function_is_called_through_its_header_only_where_the_header_is_in
         ),
     ];
     for (name, binding, program, prototype) in arms {
-        let Some((_, prepared)) = prepare_with_binding(name, binding, program) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare_with_binding(name, binding, program);
         assert!(
             prepared.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -1180,10 +1139,7 @@ export function run(x: c_int): number {{
     };
     let overriding = "class Shape { area(): number { return 1; } }\nclass Square extends Shape { override area(): number { return 4; } }\nexport function area(big: boolean): number { const s: Shape = big ? new Square() : new Shape(); return s.area(); }";
     for (name, shapes) in [("bridge-plain", ""), ("bridge-override", overriding)] {
-        let Some((_, prepared)) = prepare_with_binding(name, binding, &program(shapes)) else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
+        let (_, prepared) = prepare_with_binding(name, binding, &program(shapes));
         assert!(
             prepared.diagnostics.is_empty(),
             "{name}: {:?}",
@@ -1221,9 +1177,7 @@ export function unrelatedOrder(): boolean { const e = node_at(0 as c_int); retur
 // Control: one class on both sides, which was already valid C.
 export function sameType(): boolean { const e = node_at(0 as c_int); return node_first(e) === node_first(e); }
 "#;
-    let Some((dir, snapshot)) = snapshot_with_types("host-identity", source, false) else {
-        return;
-    };
+    let (dir, snapshot) = snapshot_with_types("host-identity", source, false);
     // A host handle needs the counting provider; a never-free program refuses it.
     let options = hir::Options {
         provider: hir::Provider::ReferenceCounting,
@@ -1281,9 +1235,7 @@ declare function seen_u16(v: Uint16): Float64;
         "{declarations}export function i32(x: number): number {{ return seen_i32(x); }}\n\
          export function store(p: Ptr<c_int>, x: number): void {{ p[0] = x; }}\n"
     );
-    let Some((_, snapshot)) = snapshot_with_types("unproven-integer", &unproven, false) else {
-        return;
-    };
+    let (_, snapshot) = snapshot_with_types("unproven-integer", &unproven, false);
     let Err(hir::Unprepared::Rejected(errors)) = hir::prepare(&snapshot) else {
         panic!("an unproven number into a C integer must be refused");
     };
@@ -1307,9 +1259,7 @@ declare function seen_u16(v: Uint16): Float64;
          export function u16(x: number): number {{ return seen_u16(x & 0xffff); }}\n\
          export function store(p: Ptr<c_int>, x: c_int): void {{ p[0] = x; }}\n"
     );
-    let Some((dir, prepared)) = prepare_with_types("proven-integer", &proven, false) else {
-        return;
-    };
+    let (dir, prepared) = prepare_with_types("proven-integer", &proven, false);
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",
@@ -1428,11 +1378,8 @@ export function counted(n: Int32): number {
            return failed;\n\
          }\n";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some((dir, snapshot)) =
-            snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false)
-        else {
-            return;
-        };
+        let (dir, snapshot) =
+            snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false);
         let prepared = hir::prepare_with(
             &snapshot,
             &hir::Options {
@@ -1534,14 +1481,14 @@ declare function leaf_at(i: c_int): Leaf;
 declare function node_value(n: Node): c_int;
 "#;
     let prepare_rc = |name: &str, body: &str| {
-        let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false)?;
+        let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false);
         let options = hir::Options {
             provider: hir::Provider::ReferenceCounting,
             ..hir::Options::default()
         };
-        Some(hir::prepare_with(&snapshot, &options))
+        hir::prepare_with(&snapshot, &options)
     };
-    let Some(dropped) = prepare_rc(
+    let dropped = prepare_rc(
         "handle-result-dropped",
         r"
 let calls = 0;
@@ -1552,9 +1499,7 @@ export function discarded(): number {
   return calls;
 }
 ",
-    ) else {
-        return;
-    };
+    );
     let dropped = dropped.unwrap();
     assert!(
         dropped
@@ -1572,15 +1517,13 @@ export function discarded(): number {
         "a void-typed call reached an entry that refuses the handle result"
     );
 
-    let Some(read) = prepare_rc(
+    let read = prepare_rc(
         "handle-result-read",
         r"
 function read(f: () => Node): number { return node_value(f()); }
 export function reads(): number { return read(() => node_at(1 as c_int)); }
 ",
-    ) else {
-        return;
-    };
+    );
     let read = read.unwrap();
     assert!(
         !read
@@ -1597,15 +1540,13 @@ export function reads(): number { return read(() => node_at(1 as c_int)); }
         "a reading call reached a refusing entry"
     );
 
-    let Some(adapted) = prepare_rc(
+    let adapted = prepare_rc(
         "handle-result-read-as-a-base",
         r"
 function read(f: () => Node): number { return node_value(f()); }
 export function reads(): number { return read(() => leaf_at(1 as c_int)); }
 ",
-    ) else {
-        return;
-    };
+    );
     // **Since `NTS_TAG_HANDLE_HOST` a host handle has an erased form**, so the
     // admission is no longer refused ("no erased form, passed where a signature
     // reads its result"), and the program it makes runs no refusing entry.
@@ -1689,9 +1630,7 @@ void handler_clear(void) {
                   \x20 return 0;\n}\n";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let name = format!("closure-result-{provider:?}");
-        let Some((dir, snapshot)) = snapshot_with_types(&name, source, false) else {
-            return;
-        };
+        let (dir, snapshot) = snapshot_with_types(&name, source, false);
         let options = hir::Options {
             provider,
             ..hir::Options::default()
@@ -1813,9 +1752,6 @@ export function handedOn(n: number): number {
                   \x20 }\n\
                   \x20 return 0;\n}\n";
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            return;
-        };
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
             .canonicalize_utf8()
@@ -1831,7 +1767,8 @@ export function handedOn(n: number): number {
         .unwrap();
         std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
         std::fs::write(dir.join("main.ts"), source).unwrap();
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&dir.join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
@@ -1965,10 +1902,6 @@ export function size(): number {
         ),
         ("plain-declarations", declarations.to_owned()),
     ] {
-        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-            eprintln!("skipped: no tsgo");
-            return;
-        };
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
             .canonicalize_utf8()
@@ -1984,7 +1917,8 @@ export function size(): number {
         std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
         std::fs::write(dir.join("main.ts"), program).unwrap();
         std::fs::write(dir.join("counted.h"), &header).unwrap();
-        let snapshot = TsgoApi::for_compilation(tsgo)
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(&dir.join("tsconfig.json"))
             .unwrap();
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);

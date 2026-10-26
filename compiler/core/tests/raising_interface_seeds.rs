@@ -3,29 +3,27 @@
 
 use camino::Utf8Path;
 use nts_core::hir::{self, Callee, OpKind, Program, Provider};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str, provider: Provider) -> Option<Program> {
-    let frontend = nts_frontend_ts::tsgo::locate()?;
+fn prepared(fixture: &str, provider: Provider) -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(fixture)
         .join("tsconfig.json");
-    let snapshot = TsgoApi::for_compilation(frontend)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    Some(
-        hir::prepare_with(
-            &snapshot,
-            &hir::Options {
-                provider,
-                ..hir::Options::default()
-            },
-        )
-        .expect("valid prepared HIR")
-        .program,
+    hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider,
+            ..hir::Options::default()
+        },
     )
+    .expect("valid prepared HIR")
+    .program
 }
 
 fn called_slot(program: &Program, caller: &str) -> usize {
@@ -49,12 +47,10 @@ fn called_slot(program: &Program, caller: &str) -> usize {
 #[test]
 fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
     for provider in [Provider::NoGc, Provider::ReferenceCounting] {
-        let Some(program) = prepared(
+        let program = prepared(
             "tests/programs/a-try-around-a-helper-that-calls-an-interface-method",
             provider,
-        ) else {
-            return;
-        };
+        );
         assert!(program.uncompiled.is_empty(), "{:?}", program.uncompiled);
         let slot = called_slot(&program, "invoke@raises");
         for target in ["Exact#then@raises", "Quiet#then"] {
@@ -81,12 +77,10 @@ fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
 #[test]
 fn a_transitive_literal_call_reaches_the_uniform_raising_entry() {
     for provider in [Provider::NoGc, Provider::ReferenceCounting] {
-        let Some(program) = prepared(
+        let program = prepared(
             "tests/programs/a-throwing-literal-interface-method-one-helper-below-a-try",
             provider,
-        ) else {
-            return;
-        };
+        );
         for name in ["caught", "control"] {
             assert!(program.funcs.iter().any(|f| f.name == name));
         }
@@ -108,12 +102,10 @@ fn a_transitive_literal_call_reaches_the_uniform_raising_entry() {
 
 #[test]
 fn the_strict_gate_still_withholds_the_uniform_raising_entry() {
-    let Some(program) = prepared(
+    let program = prepared(
         "tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off",
         Provider::NoGc,
-    ) else {
-        return;
-    };
+    );
     assert!(
         !program
             .funcs

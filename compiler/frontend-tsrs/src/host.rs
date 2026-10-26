@@ -82,7 +82,7 @@ impl fmt::Display for InputPath {
 /// Path-shaped native strings must have passed the UTF-8 host boundary.
 pub(crate) fn native_path(path: &str) -> &Utf8Path {
     Utf8Path::new(
-        std::str::from_utf8(path.as_bytes()).expect("native filesystem path must be valid UTF-8"),
+        std::str::from_utf8(path.as_bytes()).expect("public paths originate from validated roots, caller overlays or successful UTF-8 host lookups"),
     )
 }
 
@@ -147,7 +147,9 @@ impl Host {
     fn observe(&self, kind: InputKind, path: &str, answer: &[u8]) {
         self.inputs
             .lock()
-            .expect("input observations lock poisoned")
+            .expect(
+                "host observation critical sections never execute checker code or user callbacks",
+            )
             .insert(
                 (kind, InputPath::Utf8(self.key(path).into())),
                 xxh3_128(answer),
@@ -166,7 +168,9 @@ impl Host {
         }
         self.inputs
             .lock()
-            .expect("input observations lock poisoned")
+            .expect(
+                "host observation critical sections never execute checker code or user callbacks",
+            )
             .insert((kind, InputPath::Utf16(units)), kind.absent_fingerprint());
         None
     }
@@ -174,7 +178,9 @@ impl Host {
     pub(crate) fn inputs(&self) -> Vec<Input> {
         self.inputs
             .lock()
-            .expect("input observations lock poisoned")
+            .expect(
+                "host observation critical sections never execute checker code or user callbacks",
+            )
             .iter()
             .map(|((kind, path), fingerprint)| Input {
                 path: path.clone(),
@@ -212,7 +218,9 @@ impl Host {
         }
         self.inputs
             .lock()
-            .expect("input observations lock poisoned")
+            .expect(
+                "host observation critical sections never execute checker code or user callbacks",
+            )
             .get(&(input.kind, InputPath::Utf8(self.key(path).into())))
             .copied()
             .expect("every host method records its answer")
@@ -304,7 +312,9 @@ impl FS for Host {
         let answer = if let Some(text) = self.overlays.get(&key) {
             Some(FileInfo {
                 name: Utf8PathBuf::from(&key).file_name().unwrap_or("").to_owned(),
-                size: i64::try_from(text.len()).expect("source length fits i64"),
+                size: i64::try_from(text.len()).expect(
+                    "a Rust source String cannot exceed isize::MAX bytes on supported 64-bit hosts",
+                ),
                 mode: FileMode::None,
                 mod_time: None,
             })

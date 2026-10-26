@@ -5,26 +5,26 @@
 //! a `-0` in an integer slot is a wrong answer that only `1 / x` can see, and a
 //! fraction rounded into one is a wrong answer nothing announces at all.
 //!
-//! Skips only when `tsgo` is not built.
+//! Uses the linked in-process TypeScript frontend with one checker.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType};
-use nts_frontend_ts::{SemanticSource, TsgoApi};
+use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str) -> Option<hir::Prepared> {
-    let tsgo = nts_frontend_ts::tsgo::locate()?;
+fn prepared(fixture: &str) -> hir::Prepared {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
         .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare(&snapshot).expect("prepared HIR should verify"))
+    hir::prepare(&snapshot).expect("prepared HIR should verify")
 }
 
 /// The declared storage of a global, by the name it was written with.
@@ -46,9 +46,7 @@ fn is_int(ty: &HirType) -> bool {
 /// A global every store puts a small whole number into is held as an integer.
 #[test]
 fn a_module_scope_number_is_held_as_an_integer() {
-    let Some(prepared) = prepared("module-numbers") else {
-        return;
-    };
+    let prepared = prepared("module-numbers");
     // `step` is written `n | 0` and read inside a loop, which is the case the
     // pass exists for: without facts the read is TOP and every operation after
     // it is floating point however narrow the slot is.
@@ -70,9 +68,7 @@ fn a_module_scope_number_is_held_as_an_integer() {
 /// which compiles, and is what `hir::fields` records having done.
 #[test]
 fn a_read_of_a_narrowed_global_carries_the_narrowed_type() {
-    let Some(prepared) = prepared("module-numbers") else {
-        return;
-    };
+    let prepared = prepared("module-numbers");
     let narrowed: Vec<u32> = prepared
         .program
         .globals
@@ -111,9 +107,7 @@ fn a_read_of_a_narrowed_global_carries_the_narrowed_type() {
 /// than as a missing function.
 #[test]
 fn a_global_that_can_hold_what_an_integer_cannot_keeps_its_double() {
-    let Some(prepared) = prepared("module-numbers") else {
-        return;
-    };
+    let prepared = prepared("module-numbers");
     for (name, why) in [
         ("ratio", "a fraction, which an integer slot would round"),
         ("maybeNan", "NaN, which is not any integer"),
@@ -181,9 +175,7 @@ fn a_global_that_can_hold_what_an_integer_cannot_keeps_its_double() {
 /// points at the guard that is already waiting for it.
 #[test]
 fn no_global_is_exported_and_the_narrowing_guard_is_still_waiting() {
-    let Some(prepared) = prepared("module-numbers") else {
-        return;
-    };
+    let prepared = prepared("module-numbers");
     let exported: Vec<&str> = prepared
         .program
         .globals
@@ -235,9 +227,7 @@ fn no_global_is_exported_and_the_narrowing_guard_is_still_waiting() {
 /// So a test on the width alone would pass with the expensive half deleted.
 #[test]
 fn arithmetic_on_a_global_read_stays_integer() {
-    let Some(prepared) = prepared("module-numbers") else {
-        return;
-    };
+    let prepared = prepared("module-numbers");
     let func = prepared
         .program
         .funcs
@@ -288,14 +278,12 @@ fn arithmetic_on_a_global_read_stays_integer() {
 /// consumers and one value.
 #[test]
 fn a_program_records_the_provider_it_was_lowered_under() {
-    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
-        return;
-    };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/module-numbers/tsconfig.json")
         .canonicalize_utf8()
         .expect("tests/programs/module-numbers is checked in");
-    let snapshot = TsgoApi::for_compilation(tsgo)
+    let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
 

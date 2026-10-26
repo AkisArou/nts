@@ -57,7 +57,7 @@ by the rejected realm design, and making the new root project authoritative, thi
 command completed without invalid HIR:
 
 ```sh
-NTS_TSGO="$PWD/target/tsgo" NTS_BACKEND=jvm \
+NTS_BACKEND=jvm \
   ./target/release/nts check runtime/web-platform/tsconfig.json
 ```
 
