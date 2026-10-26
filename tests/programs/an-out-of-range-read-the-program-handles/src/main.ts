@@ -14,7 +14,7 @@
 //
 // # The compiler was not missing the information
 //
-// `noUncheckedIndexedAccess` is on in `runtime/node`'s config, so tsgo already
+// `noUncheckedIndexedAccess` is on in `runtime/node`'s config, so pre-switch tsgo already
 // types that read `number | undefined`. The `??` is not the author being
 // defensive — it is the author doing exactly what the type demands, on the very
 // next line. The compiler had the fact and aborted anyway, which makes this a

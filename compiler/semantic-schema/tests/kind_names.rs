@@ -2,7 +2,7 @@
 //!
 //! `syntax.rs` holds two things about a `SyntaxKind`: the constants the lowering
 //! matches on, read off an encoded program and pinned by a fixture, and the
-//! names `name_of` reports in a diagnostic, transcribed from tsgo's `iota` list.
+//! names `name_of` reports in a diagnostic, originally transcribed from the pre-switch tsgo's `iota` list.
 //! The second is allowed to be transcribed because a wrong *name* misspells a
 //! message while a wrong *constant* mis-identifies a node -- but only if
 //! something notices when the two disagree.

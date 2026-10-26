@@ -5153,7 +5153,7 @@ fn is_string_literal(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// past the declared ones.
 ///
 /// Two of the refusals here are **unreachable from TypeScript source, and
-/// checked to be**: tsgo reports `TS1014 A rest parameter must be last` and
+/// checked before the native switch**: tsgo reported `TS1014 A rest parameter must be last` and
 /// `TS2370 A rest parameter must be of an array type` before this is asked.
 /// They stay because the input is a snapshot rather than the source, and a
 /// malformed one should be refused and not laid out. They are not controls --

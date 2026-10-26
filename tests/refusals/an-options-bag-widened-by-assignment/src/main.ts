@@ -61,7 +61,7 @@
 //
 // Note that they disagree about order *as well*, and that that is a fact about
 // the checker rather than about this compiler: `fields_of` lays a type out in
-// the order `PropertyRecord`s arrive in, and tsgo lists a type's own members
+// the order `PropertyRecord`s arrive in, and pre-switch tsgo lists a type's own members
 // before its inherited ones -- so a subtype and its supertype order their
 // shared fields differently whenever the subtype declares any of its own.
 // Ordering is reported only where it is the binding constraint, which is why

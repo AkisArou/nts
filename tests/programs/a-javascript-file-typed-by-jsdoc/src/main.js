@@ -5,7 +5,7 @@
 // exactly this shape -- a package that is JavaScript on disk and fully typed to
 // anyone reading it through TypeScript.
 //
-// The frontend already handled it: tsgo resolves `.js` under `allowJs` and the
+// The frontend already handled it: pre-switch tsgo resolves `.js` under `allowJs` and the
 // snapshot carries the JSDoc types through, so these functions lower to the
 // same HIR their `.ts` twins would. What did not handle it was the snapshot
 // cache's project listing, which walked `.ts` and `.tsx` only -- so a `.js`

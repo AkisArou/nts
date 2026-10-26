@@ -1,7 +1,7 @@
 // An empty tuple *inside* another tuple, which used to end the compile with no
 // diagnostic and no file named.
 //
-// tsgo cannot encode the type. `newTypeResponse` reads `ObjectFlagsTuple` off
+// pre-switch tsgo cannot encode the type. `newTypeResponse` reads `ObjectFlagsTuple` off
 // the type and calls `AsTupleType()`, but an instantiated tuple's data is a
 // `TypeReference` and the tupleness lives on its *target*, so the cast panics:
 //

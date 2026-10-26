@@ -82,7 +82,7 @@ impl Converter<'_> {
             k::FUNCTION_TYPE => "TSFunctionType",
             k::CONSTRUCTOR_TYPE => "TSConstructorType",
             k::TYPE_LITERAL => "TSTypeLiteral",
-            // `null` is a literal type in tsgo and a keyword in Babel.
+            // `null` is a literal type in the syntax views and a keyword in Babel.
             k::LITERAL_TYPE
                 if self
                     .child(id, "literal")

@@ -18,7 +18,7 @@
 //!
 //! - **The checker's number is not the answer either.**
 //!   `[0.9999999999999999]` is a key named `"0.9999999999999999"` -- a distinct
-//!   double whose shortest round-trip string is itself -- while tsgo answers `1`
+//!   double whose shortest round-trip string is itself -- while the pre-switch tsgo answered `1`
 //!   for that literal.
 //! - **Nor is "the text, when it reprints identically".** `[1e-7]` is named
 //!   `"1e-7"` in JavaScript and `0.0000001` by Rust's `Display`, so that test
@@ -103,7 +103,7 @@ pub fn to_js_string(value: f64) -> String {
 /// **integers**, so a radix parse is exact and needs nothing from the checker.
 ///
 /// Not asking the checker is the point rather than an optimisation. It rounds
-/// (`ast.rs`: tsgo answers `1` for `0.9999999999999999`), and for a **static**
+/// (`ast.rs` before the switch: tsgo answered `1` for `0.9999999999999999`), and for a **static**
 /// computed member name it records no type on the literal's node at all -- so a
 /// first version of this that fell back to the checker turned six test262 cases
 /// from a wrong answer into a *refusal*: `static get [0x10]()` in both class forms,

@@ -30,7 +30,7 @@ class Accessors {
 
 // **Not here, and it is not this fix's to close.** A key spelled
 // `[0.9999999999999999]` is named `"0.9999999999999999"` -- a distinct double whose
-// shortest round-trip string is itself -- and tsgo answers `1` for that literal. The
+// shortest round-trip string is itself -- and pre-switch tsgo answers `1` for that literal. The
 // *declaration* reads the exact value (the decoder carries the literal's text for
 // precisely this reason), and a *read* of it does not: `canonical[0.9999999999999999]`
 // looks for `"1"` and refuses with ``\`1\`, which `an anonymous type` does not

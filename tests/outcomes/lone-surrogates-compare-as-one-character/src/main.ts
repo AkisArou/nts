@@ -11,7 +11,7 @@
 // **The cause (diagnosed by the compiler lane, by reading):** a lone surrogate
 // reaches HIR as *three* U+FFFD -- which is exactly `length=3` and
 // `unit=65533` below, and why two distinct lone surrogates compare equal (both
-// are the same three FFFDs, so the folder is right to call them equal). tsgo
+// are the same three FFFDs, so the folder is right to call them equal). pre-switch tsgo
 // preserves the surrogate as WTF-8 and the AST string table is byte-faithful,
 // but `lower_string` takes the value from the checker's literal *type*, which
 // crosses the frontend protocol as `json.Marshal` inside the msgpack framing --

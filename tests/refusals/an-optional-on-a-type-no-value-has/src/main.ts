@@ -20,7 +20,7 @@
 // — but 229 is the closing brace of `validateAbortSignal`, and every attempt to
 // reproduce that function's shape on its own failed. So truncation is localising
 // *how much of the file typechecks*, and therefore how much of its type table
-// tsgo emits, rather than localising a construct. Four reductions were tried and
+// pre-switch tsgo emits, rather than localising a construct. Four reductions were tried and
 // none reproduced: a `const` generic over `readonly string[]`, nested assertion
 // predicates, `in`-narrowing on an `unknown`, and the abort-signal predicate
 // itself.

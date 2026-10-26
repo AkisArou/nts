@@ -524,7 +524,7 @@ fn a_foreign_classs_member_types_are_decomposed_only_when_reached() {
 /// **Only a type reference is asked for its arguments.** `getTypeArguments`
 /// reads a `TypeReference` and dereferences nil on anything else, and an
 /// instantiated mapped type -- `Partial<Box>` -- has a target without being
-/// one. Asking recovered a panic in tsgo for each such type, which was 13% of
+/// one. Before the native switch, asking recovered a panic in tsgo for each such type, which was 13% of
 /// its time on a platform package's program. Asked of a reference only, the
 /// generic instance still has its arguments and nothing goes unanswered.
 #[test]

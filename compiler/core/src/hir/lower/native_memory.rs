@@ -1818,7 +1818,7 @@ impl FuncBuilder<'_> {
             // A `const` *destination* is the one direction C forbids, and the
             // surface already says so: `Ptr<T>` there, `ConstPtr<T>` on the
             // source. **Unreachable from TypeScript source, and checked to
-            // be** -- tsgo answers `TS2345 Argument of type 'ConstPtr<A>' is
+            // be before the native switch** -- tsgo answered `TS2345 Argument of type 'ConstPtr<A>' is
             // not assignable` before this is asked. Kept because a `Ptr` can
             // still be built by a cast, and because the store path refuses the
             // same thing; it is not a control, unlike the type check below,

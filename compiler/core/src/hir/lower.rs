@@ -28449,7 +28449,7 @@ impl<'a> FuncBuilder<'a> {
     /// **And the checker's number is not the answer either.**
     /// `[0.9999999999999999]` is a key named `"0.9999999999999999"` in
     /// JavaScript -- a distinct double whose shortest round-trip string is itself
-    /// -- while tsgo answers `1` for that literal, which is exactly why `ast.rs`
+    /// -- while the pre-switch tsgo answered `1` for that literal, which is exactly why `ast.rs`
     /// carries the text. So the two sources are each wrong for a different set of
     /// spellings, and the name comes from the *exact* value of what was written.
     ///
@@ -28465,7 +28465,7 @@ impl<'a> FuncBuilder<'a> {
     /// **Two rules that looked right were each refuted by one value**, which is
     /// why this ended up as the algorithm rather than a test on spellings. "Use
     /// the checker's number" dies on `[0.9999999999999999]`, whose key is
-    /// `"0.9999999999999999"` while tsgo answers `1`. "Use the text when it
+    /// `"0.9999999999999999"` while the pre-switch tsgo answered `1`. "Use the text when it
     /// reprints identically" dies on `[1e-7]`, whose key is `"1e-7"` while Rust's
     /// `Display` gives `0.0000001` -- so that rule would have started refusing a
     /// key that works today. The conformance lane found both against node before
@@ -84818,8 +84818,8 @@ impl<'a> FuncBuilder<'a> {
     fn lower_number(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // The source text first, parsed here.
         //
-        // The checker's value is a convenience and is not always right: tsgo
-        // returns `1` for `0.9999999999999999`, because a mantissa of sixteen
+        // The checker's value is a convenience: the pre-switch tsgo
+        // returned `1` for `0.9999999999999999`, because a mantissa of sixteen
         // nines is above 2^53 and rounds up before the division by a power of
         // ten. `0.9999999999999998` survives, because that mantissa is even.
         // test262 found it.
@@ -88447,7 +88447,7 @@ mod tests {
 
     /// The reason this function exists rather than trusting the checker.
     ///
-    /// tsgo returns `1` for this literal: a mantissa of sixteen nines is above
+    /// The pre-switch tsgo returned `1` for this literal: a mantissa of sixteen nines is above
     /// 2^53 and rounds up before the division by a power of ten. The neighbour
     /// below survives, because that mantissa is even. Rust's parser is correctly
     /// rounded and the literal's own text is the authority on what it says.

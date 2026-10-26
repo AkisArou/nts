@@ -14,7 +14,7 @@
 //   [0x10]                 "16"                     hex -- vanishes today
 //   [1e20]                 "100000000000000000000"  exponent spelling of an integer -- vanishes today
 //   [9007199254740992]     "9007199254740992"       2^53, works today
-//   [0.9999999999999999]   "0.9999999999999999"     a distinct double -- NOT "1", though tsgo's
+//   [0.9999999999999999]   "0.9999999999999999"     a distinct double -- NOT "1", though pre-switch tsgo's
 //                                                   checker value is 1 -- works today
 //
 // The cause of the vanishing is a-numeric-computed-accessor-name's: the literal's

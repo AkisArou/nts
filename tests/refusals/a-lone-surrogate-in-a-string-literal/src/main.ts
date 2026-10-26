@@ -36,7 +36,7 @@
 // does when it re-encodes invalid UTF-8 through runes.
 //
 // Our own decode is not the culprit and was checked: `StringTable::string` in
-// `frontend-ts/src/tsgo/ast.rs` is `String::from_utf8(...)` with a
+// `frontend-ts/src/pre-switch tsgo/ast.rs` is `String::from_utf8(...)` with a
 // `StringNotUtf8` error, so bytes `ED A0 80` would **fail the compile** rather
 // than become replacements. The replacements arrive already made.
 //

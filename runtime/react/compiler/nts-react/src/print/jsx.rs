@@ -2,6 +2,9 @@
 //! `--jsx react-jsx` emit lowers it (tsgo's `jsxtransforms/jsx.go`), because
 //! nts compiles calls and not JSX.
 //!
+//! The tsgo function names below record pre-switch algorithm provenance; this
+//! implementation reads native syntax views and never starts a Go frontend.
+//!
 //! - `<div a="x" key={k}>{child}</div>` is `_jsx("div", { a: "x", children: child }, k)`.
 //! - More than one child, or one spread child, is `_jsxs` with a children array.
 //! - A `key` after a spread attribute falls back to `_createElement` from

@@ -300,7 +300,7 @@ fn class_declaration(statement: &Statement) -> Option<&ClassDeclaration> {
 }
 
 /// The printed functions' output ranges, from byte offsets into `text` to
-/// UTF-16 units, as tsgo counts them.
+/// UTF-16 units, as the syntax views count them.
 fn utf16_ranges(text: &str, functions: &[OutputFunction]) -> Vec<PrintedFunction> {
     let mut offsets: Vec<usize> = functions
         .iter()

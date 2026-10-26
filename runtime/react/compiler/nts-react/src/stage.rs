@@ -89,7 +89,7 @@ impl std::fmt::Display for Refused {
     }
 }
 
-/// Puts one file through the stage. `code` is its text and `nodes` its tsgo
+/// Puts one file through the stage. `code` is its text and `nodes` its syntax
 /// syntax tree, whose node 0 is the `SourceFile`; `options` are the plugin's
 /// ([`default_options`]), and `filename` is what the compiler reports it as.
 pub fn compile_file(

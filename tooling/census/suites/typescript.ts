@@ -68,7 +68,7 @@ export function selectTypescript(root: string, under: string): Selected[] {
  * Node runs the harness and the case as one TypeScript file with
  * `--experimental-transform-types`, which strips the types and transforms
  * the runtime-bearing syntax -- enums, namespaces, parameter properties --
- * as tsgo's emit does.
+ * as TypeScript emit does.
  */
 export function oracle(source: string, scratch: string): { ok: true } | { ok: false; why: string } {
   // **A module, so strict.** nts compiles every case strict, and node ran an

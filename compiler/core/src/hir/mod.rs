@@ -6233,7 +6233,7 @@ enum Moved {
 /// nothing.
 ///
 /// That is a fact about the *checker's* order and not about the pass, which is
-/// why the pass stays: `docs/conformance/nodejs.md` records that tsgo lists a
+/// why the pass stays: `docs/conformance/nodejs.md` records the pre-switch tsgo listing a
 /// type's own members before its inherited ones for an **interface**, so
 /// `interface Wide extends Narrow` is not laid out with `Narrow` as a prefix --
 /// and classes escape that only because their instance type arrives the other

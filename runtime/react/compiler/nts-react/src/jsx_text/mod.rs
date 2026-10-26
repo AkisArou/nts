@@ -1,6 +1,9 @@
 //! JSX text as TypeScript reads it (tsgo's `jsxtransforms/jsx.go`): HTML
 //! entities, and the whitespace rules that turn a text child into a string.
 //!
+//! The tsgo function names below record pre-switch algorithm provenance; this
+//! implementation reads native syntax views and never starts a Go frontend.
+//!
 //! The converter decodes a text's entities, as Babel does, because that is
 //! the string the compiler reasons about: it moves a text containing `&` or
 //! `<` into a JavaScript string literal, where nothing decodes it again. The
