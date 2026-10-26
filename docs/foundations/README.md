@@ -40,7 +40,7 @@ means it is on main.
 | **Arrays** | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
 | **Functions as values** | closures, indirect calls | A closure is an object with one method; known-class calls are direct. | Sets of classes for fields and return values, splitting call sites, typed adapters: designed, not built. |
 | **Dynamic values** | `any`, `unknown`, unions: a value carrying its type at run time | A 16-byte tagged value ([`../any-unknown.md`](../any-unknown.md)). | Revisit with untyped JSON, which needs a new representation for it. |
-| **Memory management** | reference counting, cycles, stack frames, regions, reuse | One ownership answer per value, borrowed calls, objects placed in the frame, counts elided, an inline retain/release fast path, a cycle collector that skips acyclic types, call regions. | No single design ties these together; regions (stage C) stalled; reusing a value's memory in place (Perceus) is not built. *Study in progress.* |
+| **Memory management** ([design](memory.md)) | reference counting, cycles, stack frames, regions, reuse | One ownership answer per value, borrowed calls, objects placed in the frame, counts elided, an inline retain/release fast path, a cycle collector that skips acyclic types, call regions. | Designed: one analysis gives every allocation site one home (frame, region or counted heap); then reuse for arrays and objects and a page allocator. Waiting for the user's decisions M1–M5. |
 | **Control flow** | exceptions, generators, async/await, the event loop | Mostly built ([`../async.md`](../async.md)); the event loop is chosen per platform. | Gaps such as `next()` on an async generator. |
 | **RegExp** | the regular-expression engine | Not provided. | Decided: matchers generated at compile time for literal patterns, plus the TypeScript interpreter in `runtime/ecmascript` for dynamic ones. Needs the Unicode data. |
 | **JSON** | parse and stringify | `JSON.stringify` writes each layout through a writer the compiler generates. `JSON.parse` is not provided (NTS1100). | Designed: a parser generated per static type for `JSON.parse(text) as T`, simdjson's scanner on native, a new representation for untyped values. |
@@ -91,4 +91,4 @@ the benchmark rows it is held to, and what is still open.
 | page | status |
 |---|---|
 | [Unicode and text data](unicode.md) | designed 2026-10-27; waiting for the user's decisions |
-| Memory management | study in progress |
+| [Memory management](memory.md) | designed 2026-10-27; waiting for the user's decisions |
