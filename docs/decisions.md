@@ -174,7 +174,10 @@ From [`foundations/unicode.md`](foundations/unicode.md):
 - **D3:** Intl on native uses ICU4C, with a static C++ standard library only in
   programs that use Intl.
 - **D4:** the JVM uses nts's tables.
-- **D5:** word-break dictionaries only for declared locales.
+- **D5 (amended the same day):** the word-break dictionaries ship whenever a
+  program uses word segmentation, unless its input is proved free of those
+  scripts, because ICU picks a dictionary from the text, not the locale.
+  *Superseded:* "word-break dictionaries only for declared locales".
 - **D6:** no Intl on standalone Wasm for now.
 
 QuickJS goes entirely (10-22).

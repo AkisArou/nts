@@ -66,6 +66,20 @@ until when" with their own model. R4(b) works on code after counts are
 inserted and reconstructs ownership from them; after 5,800 lines, all 372
 allocation sites in json-parse are still undecided.
 
+**Known defects (found by an outside review on 2026-10-27, reproduced on
+main, being fixed first):**
+
+| defect | effect |
+|---|---|
+| a region clone is compiled without counting, but the array and map helpers it may call keep their counting contracts: a push stores without a retain, a truncation releases | memory corruption: a `build(s)` that pushes the caller's string and then sets `a.length = 0` double-frees it |
+| `escape.rs` and `regions.rs` start optimistic and stop after a round cap (32, 256) without checking that they converged | an object passed down a call chain longer than the cap and stored in a global is put in the caller's frame: a dangling stack pointer |
+| an allocation inside a loop may share one frame slot when its container is also allocated in a loop, though their instances overlap | a wrong answer: an inner loop's objects stored into an outer loop's array all become the last one |
+
+These shape the rules below: no analysis publishes an unfinished answer, a
+frame slot needs a proof that instances never overlap, and every runtime
+helper a region calls has an ownership contract for references from outside
+it.
+
 ## Against the state of the art
 
 | system | strengths | what it relies on that TypeScript lacks |
@@ -76,6 +90,10 @@ allocation sites in json-parse are still undecided.
 | **Swift** | ownership SSA, copy-on-write, stack promotion | atomic counts everywhere; no cycle collection |
 | **Lobster** | single owner chosen at the first store; ~95% of counts removed | single-threaded; cycles only reported |
 | **High-performance RC runtimes** (RC Immix, LXR) | deferred and coalesced counting | stack maps and write barriers, which a C backend cannot provide cheaply |
+| **MLKit and later region inference** (Tofte–Talpin; Aiken, Fähndrich and Levien) | regions inferred by the compiler, with multiplicity and allocation/reset placement | ML's types and effects; the MLKit team found regions without a collector fragile under program change |
+| **Elsman, PLDI 2023** ("Garbage-Collection Safety for Region-Based Type-Polymorphic Programs") | shows a real unsoundness: a collector following a pointer into a reclaimed region that the program itself never reads again | — it applies to nts directly: the cycle collector walks references |
+| **Oxidizing OCaml** (ICFP 2024) | locality, uniqueness and affinity inferred as separate properties | a modal type system |
+| **Iso** (PLDI 2025) | request-private collection by tracking visibility at run time | a tracing collector; a possible hybrid if static cohorts stall |
 
 How nts compares:
 
@@ -114,8 +132,12 @@ that could prove.**
    instances.
 5. **A mechanism no site selects costs nothing.**
 6. **The cycle collector is the backstop,** seeing only what can form cycles.
-7. **Frame-limited:** no transformation may hold memory longer than a constant
-   per stack frame (the criterion from Lorenzen and Leijen).
+7. **Frame-limited:** a transformation may keep extra memory alive only up to
+   a bound per active call (Lorenzen and Leijen's frame-limited criterion);
+   reuse, borrows and anchors included.
+8. **Fail closed:** an analysis that runs out of rounds or budget answers
+   "heap" (with a named reason) for everything it did not finish. It never
+   publishes an unfinished optimistic answer.
 
 ### The ladder of homes
 
@@ -145,9 +167,32 @@ as Go's and HotSpot's escape analyses do. It produces, once:
   which fields it writes;
 - **the home of each site**, per calling context.
 
-It lands without a flag day: computed but unused first, then checked equal to
-today's frame placement on every program, then read by frame placement, then by
-regions, then the duplicated logic is deleted.
+**How it is formulated** (the review of 2026-10-27 showed that naming the
+outputs is not enough):
+
+| part | treatment |
+|---|---|
+| aliases | inclusion-based may-point-to (directional); unification only as the fallback when a budget runs out |
+| locals | flow-sensitive, over SSA |
+| object fields | field-sensitive edges; a strong update only for an object proved to be a single instance |
+| arrays and maps | one summary element at first, refined only where a row needs it |
+| dynamic instances | a site's most recent instance tracked apart from its summary; repetition domains and multiplicity, so that "allocated in a loop" says how many instances can be live at once |
+| calls | parametric summaries: returned aliases, stores, captures, callbacks, exceptions, suspension, reentrancy |
+| context | bounded and selective; one shared summary per recursive component, solved bottom-up over the call graph's strongly connected components |
+| roots and continuations | closure environments, generator and async frames, promise reactions, module slots, erased payloads, raised values, and the runtime's own roots (cycle candidates, weak structures) are graph nodes with their real lifetimes |
+| placement | derived from reachability, lifetime, multiplicity and the runtime contracts together; **one site can have short-lived instances and one survivor** (a loop that keeps its last match), and such a site stays on the heap unless a proof splits its instances |
+| budgets | every budget fails closed to the heap, with the reason in the report |
+
+It runs after the transformations that create closures and coroutine frames,
+and a later rewrite that changes them invalidates its facts.
+
+It lands without a flag day: computed but unused first, then compared with
+today's placement on every program, then read by frame placement, then by
+regions, then the duplicated logic is deleted. **The comparison is a
+migration check, not the definition of right:** today's placement has the
+defects above, so each difference is explained, and the new answer must stand
+on its own proof. The first slice is narrow: a parser-shaped workload and an
+ordinary tree or list builder, end to end, before generalizing.
 
 **R4(b) is redirected into it:** its result types, report, budgets, fixtures and
 reset audits are kept; its analysis of already-counted code is not.
@@ -163,16 +208,50 @@ reset audits are kept; its analysis of already-counted code is not.
   last borrow instead of at function exit (today a list built, walked and then
   idle stays alive to the end of the function).
 - **Reuse for arrays and objects:** `xs = xs.toSorted(c)`, `xs = xs.map(f)`,
-  `xs = [...xs, v]` and `state = { ...state, k: v }` update in place when the old
-  value is unique and dies. TypeScript's immutable-update style gets C-like
-  cost.
+  `xs = [...xs, v]` and `state = { ...state, k: v }` can reuse the old value's
+  storage. TypeScript's immutable-update style gets C-like cost. Being the only
+  counted reference is **not** enough to overwrite the source while the
+  operation runs:
+  - `map`'s callback receives the original array and can read it
+    (`xs.map((x, i, o) => o[0])`);
+  - a comparator or callback can read `xs` through a closure;
+  - getters run during an object spread;
+  - a throw part-way must leave `xs` holding its old value
+    (`try { xs = xs.map(...throws...) } catch {}`).
+
+  So there are two mechanisms. **Overwriting in place** applies only where no
+  callback, getter or iterator can observe the source and no throw can expose
+  a half-updated value. **Recycling the storage** of a value proved dead after
+  the operation into the next allocation of its size class is Perceus's reuse
+  token, and is always safe. Start with the proved subset.
 - **A page-based allocator** (try vendored mimalloc first, as Koka, Lean and
   CPython ship): one size per page, empty pages shared by all sizes, which
   removes the cause of the `realloc` failures; then a 16-byte header instead of
   40 bytes of overhead.
 - **Weak references:** `WeakRef`, `WeakMap`, `WeakSet` and
   `FinalizationRegistry`, as decided, including the cycles that run through a
-  `WeakMap` (ephemerons).
+  `WeakMap` (ephemerons). Their rules constrain everything before them, so
+  they are in the contract from stage 0:
+  - a target made or read through `WeakRef` stays alive until the current job
+    ends (the specification's kept list);
+  - cleanup callbacks run as jobs, never inside a release or a collection;
+  - a registry's held values are strong;
+  - a value's reference back to its own `WeakMap` key does not keep the entry
+    alive;
+  - an object that can be weakly observed is always on the heap, never in a
+    frame or region, and its storage is never reused while a weak reference
+    can still name it;
+  - the object header and the allocator leave room for a weak flag and a side
+    table.
+
+### Resetting a region is safe only if nothing can still walk into it
+
+Elsman (PLDI 2023) found the failure that region schemes over a collector hit:
+the program never reads a pointer again, but the collector follows it into
+reclaimed memory. nts's cycle collector walks references, so a reset proof must
+cover the runtime too: no cycle candidate, collector work list, weak structure
+or traced field can reach reclaimed storage, or those edges are cleared first.
+Source-level last use alone is not a proof.
 
 ### How small the dynamic part can get
 
@@ -193,9 +272,12 @@ rare and cheap:
   a cycle, after a decrement that left them alive.
   - Whole-program type analysis already removes most types (nts sees every
     class, so it needs none of Nim's "any subclass may close a cycle").
-  - Stage 8 proves trees from how they are built: a type whose reference fields
-    are written only while the object is still unpublished cannot close a
-    cycle.
+  - Stage 8 proves trees from how they are built. Being unpublished is not
+    enough: `x.next = x`, or two fresh objects linked both ways, closes a
+    cycle before either escapes. The proof is an order: every reference
+    stored into a field points to an object created strictly earlier, with no
+    field rewritten afterwards, covering self-edges, aliases, erased stores and
+    calls made during construction.
   - A cyclic structure in a cohort region needs no collector at all: the reset
     frees it whole.
 
@@ -229,7 +311,10 @@ that does not follow that flag can tell those pushes from pushes into a global.
 The fix is in our own code: `null` instead of the shared arrays, which saves
 the same allocation. nts and node run the same changed source, so the
 comparison stays fair; the analysis's report names such stores by site, so a
-user's code written the same way can be fixed the same way.
+user's code written the same way can be fixed the same way. It is not the whole
+story: the parser also reuses frames across containers and shares key
+templates between results, and the analysis must still tell those lifetimes
+apart.
 
 ## Build order
 
@@ -238,19 +323,25 @@ node and Bun in the same sitting.
 
 | stage | work | rows it must move |
 |---|---|---|
-| 0 | the runtime contract as a record; a memory census (sites by home and reason, counts by site, region bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `immutable-update`, `array-copying-methods`, `cyclic-churn`, `weak-cache`) | none: instruments |
+| 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`) | none: instruments and fixes |
 | 1 | release specialized by type; count-free sort; erased-value releases; one count per map key; anchors held only to the last borrow | `map-entries-top-k` about −5% more; `awfy-towers` below Bun |
-| 2 | the one memory analysis, facts only, checked equal to today's frame placement | none may move; compiled output identical on four backends |
+| 2 | the one memory analysis, facts only, as formulated above; its first slice end to end (a parser-shaped workload and a tree or list builder) | none may move; each difference from today's placement explained |
 | 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `json-build-append` must not regress |
 | 4 | borrowed region inputs | `record-word-counts` and `json-stringify-doc` a few percent |
 | 5 | reuse for arrays and objects | `immutable-update`, `array-copying-methods` below node and Bun; stop if they don't move |
-| 6 | page allocator; 16-byte header; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row |
-| 7 | weak references (independent; may start any time) | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry` |
+| 6 | page allocator, tried with today's object layout first; then the 16-byte header, measured separately; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row |
+| 7 | weak references, on the contract fixed in stage 0 | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry` |
 | 8 | proving types acyclic from how they are built, only if a row needs it | cycle-candidate traffic |
 | 9 | workers as isolated heaps | a message row against node's `worker_threads` |
 
-Stages 1 and 2 run side by side; 3 needs 2; 4 needs 3; 5, 6 and 7 are
-independent.
+Stages 1 and 2 run side by side; 3 needs 2; 4 needs 3; 5 and 6 are
+independent; 7 needs the stage 0 contract.
+
+**The riskiest stage is 3, general per-site cohorts:** the most work for the
+least certain payoff. Next is 5, because callbacks and observable sources
+narrow what may be overwritten. Stage 3 succeeds when its rows move; when a
+cohort would hold too much memory, the heap is a successful answer, not a
+failure.
 
 ## Decisions (2026-10-27)
 

@@ -96,13 +96,18 @@ the benchmark rows it is held to, and what is still open.
 
 ## What is still open for native
 
-No other foundation needs a new study. These need a decision or a measurement:
+No other foundation needs a new study. These need a fix, a decision or a
+measurement:
 
+- **Three memory defects on main** (memory corruption in regions, a dangling
+  stack pointer from an unfinished escape analysis, and loop objects sharing a
+  frame slot), found by an outside review on 2026-10-27 and reproduced. They
+  are being fixed before any memory stage; see [memory](memory.md).
 - **Hashing:** a seeded hash function that is fast on long keys, and literal
   hashes computed without fixing the seed at compile time. Settles the
-  contradiction in the map.
-- **`case-convert`:** measured 2.49 µs in record 0045 and 3.90 µs in the last
-  full run; re-measure to rule out a regression.
+  contradiction in the map. A research request is out.
+- *Resolved 2026-10-27:* `case-convert` is not a regression. It is 0.50x node
+  and 0.48x Bun on main; the 3.90 µs full-run row was stale.
 
 ## Order of work
 
