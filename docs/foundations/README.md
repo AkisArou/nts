@@ -34,7 +34,7 @@ means it is on main.
 |---|---|---|---|
 | **Numbers** | integers proved from doubles, BigInt, `Math`, number ↔ text | Built: integer specialization, zmij for number → text, ffc for text → number, x86-64-v3 builds, ThinLTO, aligned hot loops. | `Math` bit-identical to node (V8's fdlibm): decided, not built. BigInt past 64 bits: wraps today, real bignums later. |
 | **Strings** | layout, building, slicing, comparing, hashing, UTF-8 | One or two bytes per character, inline, with a cached hash. Built: in-place append, strings written where they are appended, SIMD JSON quoting, literal hashes. | simdutf for UTF-8: prototyped, not built. Header flags (ASCII, escape-free) and one data pointer for every string kind: designed, not built. |
-| **Unicode and text data** | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion. | The compiler carries the Unicode data and emits only the tables a program uses. *Study in progress.* |
+| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Designed: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Waiting for the user's decisions D1–D6. |
 | **Hash tables** | `Map`, `Set`, objects used as dictionaries | Insertion-ordered tables of 16-byte tagged keys and values; the static key type picks the hash and comparison, and the index keeps each entry's hash so growth never rehashes. | **Contradicts a decision:** hashing was to take a random seed per process (against hash flooding); main's hash is unseeded FNV-1a, and literal hashes are fixed at compile time. It also reads one character at a time. |
 | **Objects and classes** | layouts, field access, interfaces, method calls | Fixed layouts per class, interfaces satisfied by shape, and a call through a value with at most two known classes becomes a direct call. | `instanceof` as a class-id range test, nullable fields: designed, not built. |
 | **Arrays** | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
@@ -62,7 +62,8 @@ only where used. nts never depends on a system package.
 | simdjson (its scanner only) | JSON parsing | decided |
 | V8's fdlibm | `Math` matching node bit for bit | decided |
 | libuv, zlib, brotli, zstd, OpenSSL | I/O, compression, crypto | decided |
-| QuickJS `libunicode` | case conversion | to be replaced |
+| QuickJS `libunicode` | case conversion | to be replaced by the compiler's own Unicode data ([design](unicode.md)) |
+| ICU4C 78.3 (node's version) | locale services only: collation, word breaking, Intl formatting | proposed ([design](unicode.md), decision D3) |
 
 ## Keep in mind: the JVM and Wasm
 
@@ -85,5 +86,9 @@ Not designed yet. What is already known:
 
 Each foundation gets its own page when it is designed: what it is, its
 representation per backend, what each operation costs, the decisions and why,
-the benchmark rows it is held to, and what is still open. Memory management and
-Unicode come first, from the two studies now running.
+the benchmark rows it is held to, and what is still open.
+
+| page | status |
+|---|---|
+| [Unicode and text data](unicode.md) | designed 2026-10-27; waiting for the user's decisions |
+| Memory management | study in progress |
