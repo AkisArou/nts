@@ -1,7 +1,7 @@
 # Unicode and text data
 
-**Status:** designed 2026-10-27, waiting for the user's decisions (below). Nothing
-is built yet.
+**Status:** designed and decided 2026-10-27: the user agreed to every
+recommendation (D1–D6 below). Nothing is built yet.
 
 JavaScript needs Unicode knowledge in more places than it looks:
 `toLowerCase`/`toUpperCase`, `normalize`, RegExp's `i`, `u` and `v` flags and
@@ -154,9 +154,11 @@ on four backends, its fixtures with controls, and its test262 records.
 | 5. ICU for locale services | ICU4C 78.3 with per-program data; collator fast paths | sorting and comparing strings, number and date formatting, word segmentation |
 | 6. Unicode 18 | with the next node pin | every row above, against the previous run |
 
-## Decisions for the user
+## Decisions (2026-10-27)
 
-| # | decision | recommendation |
+The user agreed to each recommendation as written.
+
+| # | question | decision |
 |---|---|---|
 | D1 | Who owns the Unicode data | **Our own generator from the UCD, in the compiler.** Exact to node's version, the smallest cost per program, one source for four backends. ICU4X becomes a second oracle in the tests. The 10-22 rule "whichever measures faster" is honoured by an A/B on `case-convert-greek` in stage 1. |
 | D2 | Which Unicode version | **Node's, moved in lockstep with the pinned node,** not the latest. |

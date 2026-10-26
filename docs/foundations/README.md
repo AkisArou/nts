@@ -34,13 +34,13 @@ means it is on main.
 |---|---|---|---|
 | **Numbers** | integers proved from doubles, BigInt, `Math`, number ↔ text | Built: integer specialization, zmij for number → text, ffc for text → number, x86-64-v3 builds, ThinLTO, aligned hot loops. | `Math` bit-identical to node (V8's fdlibm): decided, not built. BigInt past 64 bits: wraps today, real bignums later. |
 | **Strings** | layout, building, slicing, comparing, hashing, UTF-8 | One or two bytes per character, inline, with a cached hash. Built: in-place append, strings written where they are appended, SIMD JSON quoting, literal hashes. | simdutf for UTF-8: prototyped, not built. Header flags (ASCII, escape-free) and one data pointer for every string kind: designed, not built. |
-| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Designed: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Waiting for the user's decisions D1–D6. |
+| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Decided 2026-10-27: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Not built. |
 | **Hash tables** | `Map`, `Set`, objects used as dictionaries | Insertion-ordered tables of 16-byte tagged keys and values; the static key type picks the hash and comparison, and the index keeps each entry's hash so growth never rehashes. | **Contradicts a decision:** hashing was to take a random seed per process (against hash flooding); main's hash is unseeded FNV-1a, and literal hashes are fixed at compile time. It also reads one character at a time. |
 | **Objects and classes** | layouts, field access, interfaces, method calls | Fixed layouts per class, interfaces satisfied by shape, and a call through a value with at most two known classes becomes a direct call. | `instanceof` as a class-id range test, nullable fields: designed, not built. |
 | **Arrays** | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
 | **Functions as values** | closures, indirect calls | A closure is an object with one method; known-class calls are direct. | Sets of classes for fields and return values, splitting call sites, typed adapters: designed, not built. |
 | **Dynamic values** | `any`, `unknown`, unions: a value carrying its type at run time | A 16-byte tagged value ([`../any-unknown.md`](../any-unknown.md)). | Revisit with untyped JSON, which needs a new representation for it. |
-| **Memory management** ([design](memory.md)) | reference counting, cycles, stack frames, regions, reuse | One ownership answer per value, borrowed calls, objects placed in the frame, counts elided, an inline retain/release fast path, a cycle collector that skips acyclic types, call regions. | Designed: one analysis gives every allocation site one home (frame, region or counted heap); then reuse for arrays and objects and a page allocator. Waiting for the user's decisions M1–M5. |
+| **Memory management** ([design](memory.md)) | reference counting, cycles, stack frames, regions, reuse | One ownership answer per value, borrowed calls, objects placed in the frame, counts elided, an inline retain/release fast path, a cycle collector that skips acyclic types, call regions. | Decided 2026-10-27: one analysis gives every allocation site one home (frame, region or counted heap); then reuse for arrays and objects and a page allocator. Not built. |
 | **Control flow** | exceptions, generators, async/await, the event loop | Mostly built ([`../async.md`](../async.md)); the event loop is chosen per platform. | Gaps such as `next()` on an async generator. |
 | **RegExp** | the regular-expression engine | Not provided. | Decided: matchers generated at compile time for literal patterns, plus the TypeScript interpreter in `runtime/ecmascript` for dynamic ones. Needs the Unicode data. |
 | **JSON** | parse and stringify | `JSON.stringify` writes each layout through a writer the compiler generates. `JSON.parse` is not provided (NTS1100). | Designed: a parser generated per static type for `JSON.parse(text) as T`, simdjson's scanner on native, a new representation for untyped values. |
@@ -90,5 +90,25 @@ the benchmark rows it is held to, and what is still open.
 
 | page | status |
 |---|---|
-| [Unicode and text data](unicode.md) | designed 2026-10-27; waiting for the user's decisions |
-| [Memory management](memory.md) | designed 2026-10-27; waiting for the user's decisions |
+| [Unicode and text data](unicode.md) | decided 2026-10-27 |
+| [Memory management](memory.md) | decided 2026-10-27 |
+| Strings, numbers, hash tables, JSON | designs exist from the 2026-10-22 studies; to be written here as pages |
+
+## What is still open for native
+
+No other foundation needs a new study. These need a decision or a measurement:
+
+- **Hashing:** a seeded hash function that is fast on long keys, and literal
+  hashes computed without fixing the seed at compile time. Settles the
+  contradiction in the map.
+- **`case-convert`:** measured 2.49 µs in record 0045 and 3.90 µs in the last
+  full run; re-measure to rule out a regression.
+
+## Order of work
+
+1. Main settles first: the tsrs switch lands, then these docs and the work
+   already on agents' branches that is worth keeping.
+2. Instruments before mechanisms: the memory census and new rows, the six Are
+   We Fast Yet ports, the Unicode rows and fixtures (stage 0 of both pages).
+3. Then the build orders of [memory](memory.md) and [Unicode](unicode.md), with
+   the strings, numbers and hashing work from their pages.

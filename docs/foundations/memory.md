@@ -1,7 +1,8 @@
 # Memory management (native)
 
-**Status:** designed 2026-10-27, waiting for the user's decisions (below). This
-page covers C and LLVM. The JVM and Wasm use their host's garbage collector.
+**Status:** designed and decided 2026-10-27: the user agreed to every
+recommendation (M1–M5 below). Nothing new is built yet. This page covers C and
+LLVM. The JVM and Wasm use their host's garbage collector.
 
 How nts decides where every object lives and when its memory comes back, so
 that compiled TypeScript allocates less, frees faster and stays smaller than
@@ -84,9 +85,11 @@ How nts compares:
 - **Reuse: behind.** Perceus reuses any dying value of the right size; nts
   reuses only strings.
 - **nts can never be as simple:** TypeScript objects are mutable, shared and
-  can form cycles, so uniqueness is checked at run time and a cycle collector
-  is required. The realistic floor is what C++ pays with `shared_ptr`: counts
-  only on references that are genuinely shared and long-lived.
+  can form cycles, so some uniqueness checks stay at run time and a cycle
+  collector stays as a backstop. The realistic floor is what C++ pays with
+  `shared_ptr`: counts only on references that are genuinely shared and
+  long-lived. How far static analysis shrinks both is in
+  [How small the dynamic part can get](#how-small-the-dynamic-part-can-get).
 - **Influences:** record 0024 names Perceus's reuse as the next step; the code
   cites Swift's ownership model, Lobster and Bacon–Rajan. Lean, Nim, Koka and
   Roc were not used.
@@ -171,11 +174,52 @@ reset audits are kept; its analysis of already-counted code is not.
   `FinalizationRegistry`, as decided, including the cycles that run through a
   `WeakMap` (ephemerons).
 
+### How small the dynamic part can get
+
+Static analysis cannot remove the run-time checks and the cycle collector for
+every program: whether two references can denote the same object is
+undecidable in general, so any analysis must answer "maybe" somewhere, and
+"maybe" needs a run-time answer. Languages that avoid both do it by
+restricting the language (Rust's ownership types, Koka's and Lean's immutable
+data), which TypeScript does not allow. What the compiler can do is make both
+rare and cheap:
+
+- **Uniqueness:** a value the program has not yet stored, captured or passed to
+  unknown code is unique by construction; the memory analysis reports it, and
+  its in-place updates skip the test. The test remains only where a value came
+  from a container or a caller, and there it is one comparison (Koka measured
+  about 1%).
+- **Cycles:** the collector only ever sees heap objects of a type that can form
+  a cycle, after a decrement that left them alive.
+  - Whole-program type analysis already removes most types (nts sees every
+    class, so it needs none of Nim's "any subclass may close a cycle").
+  - Stage 8 proves trees from how they are built: a type whose reference fields
+    are written only while the object is still unpublished cannot close a
+    cycle.
+  - A cyclic structure in a cohort region needs no collector at all: the reset
+    frees it whole.
+
+  What remains is a program that genuinely builds cycles on the long-lived heap
+  (doubly linked lists, parent pointers, graphs), and there the collector is
+  the right tool.
+
 ### Threads
 
 One heap per thread, with plain (non-atomic) counts permanently. JavaScript
 workers share no objects, only `SharedArrayBuffer` bytes, so no program can
 tell. Atomic counts cost 5–59% in Koka and 1.13–2.31x in Lean.
+
+Later, sending can avoid the structured clone where the compiler proves it
+safe:
+
+- **A move:** the sender never touches the sent graph again, so the whole graph
+  changes owner in one step, as Nim's `Isolated[T]`, Pony's `iso` and Verona's
+  regions do.
+- **Frozen sharing:** the graph is never written after it is sent, so both
+  sides read one copy. It cannot carry per-object counts then; it is shared as
+  one unit with one count, or as immortal data.
+
+Both wait for workers (stage 9).
 
 ### Our own JSON parser needs one change
 
@@ -208,15 +252,17 @@ node and Bun in the same sitting.
 Stages 1 and 2 run side by side; 3 needs 2; 4 needs 3; 5, 6 and 7 are
 independent.
 
-## Decisions for the user
+## Decisions (2026-10-27)
 
-| # | decision | recommendation |
+The user agreed to each recommendation as written.
+
+| # | decision | why |
 |---|---|---|
-| M1 | **Redirect R4(b)** into the one pre-counting analysis, keeping its types, report, budgets and fixtures, and change our JSON parser's shared placeholder arrays to `null` | **Yes.** It shelves reviewed work, so it is yours to decide. It matches your 2026-10-23 rule that json-parse is fixed at the general cause, not by the JSON builtin. |
-| M2 | **Workers are isolated heaps with non-atomic counts, permanently** | **Yes.** Node and browsers behave the same, so no program can tell. |
-| M3 | **Weak references follow the specification exactly,** with finalization that can run earlier than in node | **Yes.** The alternative is a `WeakMap` that leaks whenever a value refers to its key. The specification allows the earlier timing. |
-| M4 | **Vendor mimalloc for the native heap if it wins the rows,** otherwise our own page allocator | **Try mimalloc first,** in stage 6. |
-| M5 | **No memory annotations in the language:** no user-visible arena, unique or acyclic markers | **Confirm.** It extends decision 12; Go's explicit arenas stalled because they "do not compose well". |
+| M1 | **Redirect R4(b)** into the one pre-counting analysis, keeping its types, report, budgets and fixtures, and change our JSON parser's shared placeholder arrays to `null` | Placement must be decided before counting, from one model of aliasing. It matches the user's 2026-10-23 rule that json-parse is fixed at the general cause, not by the JSON builtin. |
+| M2 | **Workers are isolated heaps with non-atomic counts, permanently** | Node and browsers behave the same, so no program can tell. Sending without a copy, by a proved move or frozen sharing, is a later refinement. |
+| M3 | **Weak references follow the specification exactly,** with finalization that can run earlier than in node | The alternative is a `WeakMap` that leaks whenever a value refers to its key. The specification allows the earlier timing. |
+| M4 | **Vendor mimalloc for the native heap if it wins the rows,** otherwise our own page allocator | Tried first in stage 6. Koka, Lean and CPython ship it. |
+| M5 | **No memory annotations in the language:** no user-visible arena, unique or acyclic markers | It extends decision 12. Go's explicit arenas stalled because they "do not compose well". |
 
 ## Evidence
 
