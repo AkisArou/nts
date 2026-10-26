@@ -219,7 +219,8 @@ impl Driver {
                             )
                         })?
                         .to_owned();
-                    let mut snapshot = Capture::syntax(&cwd, files)?.finish()?;
+                    let mut snapshot =
+                        Capture::syntax(&cwd, files, project.semantics())?.finish()?;
                     let finished = checked.finish();
                     let project = finished.projects().next().ok_or_else(|| {
                         SnapshotError::Project("the requested native program is missing".into())

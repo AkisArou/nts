@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "types": [],
+    "noEmit": true,
+    "useDefineForClassFields": true
+  },
+  "files": [
+    "src/main.ts"
+  ]
+}

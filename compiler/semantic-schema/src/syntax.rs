@@ -199,6 +199,7 @@ pub const COMPUTED_PROPERTY_NAME: u16 = 168;
 /// module itself rather than to anything in it.
 pub const NAMESPACE_IMPORT: u16 = 275;
 pub const PARAMETER: u16 = 170;
+pub const DECORATOR: u16 = 171;
 pub const PROPERTY_DECLARATION: u16 = 173;
 pub const METHOD_DECLARATION: u16 = 175;
 /// `` `abc` `` with no `${}` in it. Its text is the whole of the string.

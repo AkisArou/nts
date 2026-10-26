@@ -7834,7 +7834,11 @@ fn prepare_lowered(
     lowered.program.roots = Some(options.roots.to_owned());
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
-    let rejected = obligations::take_checked(&mut lowered.program, &lowered.arrivals.at_signature);
+    let mut rejected = std::mem::take(&mut lowered.rejected);
+    rejected.extend(obligations::take_checked(
+        &mut lowered.program,
+        &lowered.arrivals.at_signature,
+    ));
     // Before `settle`, whose callback check reads it.
     lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for

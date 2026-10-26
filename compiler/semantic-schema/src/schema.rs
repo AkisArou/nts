@@ -62,7 +62,8 @@ use crate::origin::Origin;
 /// library a symbol the program does not declare comes from. 47: the atomic
 /// native frontend switch: nts-owned semantic facts, exact property keys,
 /// lossless JavaScript text, and removal of unused predicate-subject fields.
-pub const SCHEMA_VERSION: u32 = 47;
+/// 48: effective project settings and governed-construct lowering checks.
+pub const SCHEMA_VERSION: u32 = 48;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -84,6 +85,34 @@ pub struct NodeId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ModuleId(pub u32);
 
+/// Effective project settings that govern emitted runtime semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "six independent effective TypeScript settings"
+)]
+pub struct ProjectSemantics {
+    pub use_define_for_class_fields: bool,
+    pub experimental_decorators: bool,
+    pub emit_decorator_metadata: bool,
+    pub verbatim_module_syntax: bool,
+    pub preserve_const_enums: bool,
+    pub isolated_modules: bool,
+}
+
+impl Default for ProjectSemantics {
+    fn default() -> Self {
+        Self {
+            use_define_for_class_fields: true,
+            experimental_decorators: false,
+            emit_decorator_metadata: false,
+            verbatim_module_syntax: false,
+            preserve_const_enums: false,
+            isolated_modules: false,
+        }
+    }
+}
+
 /// The complete semantic view of one compilation.
 ///
 /// Produced by the native frontend; consumed by `nts-core`. Nothing
@@ -92,6 +121,7 @@ pub struct ModuleId(pub u32);
 pub struct SemanticSnapshot {
     /// Must equal [`SCHEMA_VERSION`]; checked by [`SemanticSnapshot::validate`].
     pub schema_version: u32,
+    pub semantics: ProjectSemantics,
     /// Indexed by `nts_diagnostics::SourceId`.
     pub sources: Vec<SourceFile>,
     /// Indexed by [`ModuleId`].
@@ -1389,6 +1419,7 @@ impl SemanticSnapshot {
     pub fn digest(&self) -> Result<[u8; 16], SnapshotError> {
         let Self {
             schema_version,
+            semantics,
             sources,
             modules,
             symbols,
@@ -1408,6 +1439,7 @@ impl SemanticSnapshot {
         } = self;
         let mut bytes = Vec::new();
         encode(&mut bytes, schema_version)?;
+        encode(&mut bytes, semantics)?;
         encode(&mut bytes, sources)?;
         encode(&mut bytes, modules)?;
         encode(&mut bytes, symbols)?;

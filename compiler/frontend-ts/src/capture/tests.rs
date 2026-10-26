@@ -52,7 +52,10 @@ fn capture_project_and_diagnostics(
             .files()
             .filter(|file| !file.is_default_library() && !file.is_external_library());
         let cwd = project.cwd().to_owned();
-        let mut snapshot = Capture::syntax(&cwd, files).unwrap().finish().unwrap();
+        let mut snapshot = Capture::syntax(&cwd, files, project.semantics())
+            .unwrap()
+            .finish()
+            .unwrap();
         let finished = checked.finish();
         append_diagnostics(
             &mut snapshot,

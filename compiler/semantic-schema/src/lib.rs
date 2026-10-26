@@ -41,8 +41,8 @@ pub use schema::{
     Accessor, BuiltinBinding, CallTarget, ConstantValue, DeclarationModifiers, HeritageKind,
     ImportPhase, IndexSignature, JvmAttributes, Library, LiteralValue, MemberKind, ModuleId,
     ModuleRecord, NativeAttributes, NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord,
-    PropertyKey, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId, SignatureRecord,
-    SnapshotError, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind, TypePredicate,
-    TypeRecord, VariableKind,
+    ProjectSemantics, PropertyKey, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId,
+    SignatureRecord, SnapshotError, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind,
+    TypePredicate, TypeRecord, VariableKind,
 };
 pub use text::JsText;

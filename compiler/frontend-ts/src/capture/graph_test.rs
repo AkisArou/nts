@@ -35,6 +35,7 @@ fn with_capture(count: u16, check: impl FnOnce(&mut Capture<'_, '_>) + Send) {
             project
                 .files()
                 .filter(|file| paths.contains(&file.path().to_owned())),
+            project.semantics(),
         )
         .unwrap();
         check(&mut capture);

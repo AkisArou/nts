@@ -2972,7 +2972,8 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         }
         (prepared.program, prepared.diagnostics)
     } else {
-        let lowered = hir::lower::lower(&snapshot);
+        let mut lowered = hir::lower::lower(&snapshot);
+        lowered.diagnostics.extend(lowered.rejected);
         (lowered.program, lowered.diagnostics)
     };
     print_program(&program, &mut locations);

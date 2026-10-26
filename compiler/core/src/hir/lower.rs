@@ -291,6 +291,9 @@ pub struct Arrival {
 #[derive(Debug, Clone, Default)]
 pub struct Lowered {
     pub program: Program,
+    /// Whole-program semantic contradictions. Preparation rejects these before
+    /// a backend can emit a partial program under incompatible project options.
+    pub rejected: Vec<Diagnostic>,
     /// Constructs the lowering did not understand.
     ///
     /// Collected rather than returned as an error so one run reports every
@@ -16613,6 +16616,13 @@ pub fn lower_with(
     entry: &[String],
     foreign: &super::runtime::ForeignTable,
 ) -> Lowered {
+    let rejected = project_semantics::rejections(snapshot);
+    if !rejected.is_empty() {
+        return Lowered {
+            rejected,
+            ..Lowered::default()
+        };
+    }
     // NTS_TRACE_LOWERING is a test instrument counting actual raw lowerings.
     // It appends one line per invocation so sharing guards measure work done.
     // Unset by default; ordinary compilation opens no trace file.
@@ -88485,6 +88495,7 @@ mod native_memory;
 mod numeric_arguments;
 mod parameter_entries;
 mod printed;
+mod project_semantics;
 mod property_keys;
 mod typed_signatures;
 mod uniform_inputs;

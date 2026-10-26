@@ -51,10 +51,19 @@ impl<'p, 'r> Capture<'p, 'r> {
     pub(crate) fn syntax(
         cwd: &'r Utf8Path,
         files: impl IntoIterator<Item = File<'p>>,
+        semantics: nts_frontend_tsrs::ProjectSemantics,
     ) -> Result<Self, SnapshotError> {
         let mut capture = Self {
             snapshot: SemanticSnapshot {
                 schema_version: SCHEMA_VERSION,
+                semantics: nts_semantic_schema::ProjectSemantics {
+                    use_define_for_class_fields: semantics.use_define_for_class_fields,
+                    experimental_decorators: semantics.experimental_decorators,
+                    emit_decorator_metadata: semantics.emit_decorator_metadata,
+                    verbatim_module_syntax: semantics.verbatim_module_syntax,
+                    preserve_const_enums: semantics.preserve_const_enums,
+                    isolated_modules: semantics.isolated_modules,
+                },
                 ..SemanticSnapshot::default()
             },
             cwd,
