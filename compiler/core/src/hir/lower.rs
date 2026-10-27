@@ -9476,7 +9476,7 @@ fn collect_module_scope(
         // population -- and they rank under *two* headings, because the read
         // that follows the missing global refuses again as `reading a name
         // before it is bound`, which is the cascade rather than the cause.
-        let Some(ty) = settled_global_type(&probe, *name_node) else {
+        let Some(ty) = settled_global_type(&probe, *name_node, initializer.is_some()) else {
             // **Named, because a refusal that does not name its type cannot be
             // counted by kind.** That is `describe_node`'s whole reason for
             // existing, and this message predated it: 29 files of the slice-1
@@ -10019,8 +10019,30 @@ fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<Hi
 /// were this took correcting the message first: they all read "a module-scope
 /// variable holding a reference", which is the opposite of the condition and
 /// gave no hint they were the `var g;` case one scope out.
-fn settled_global_type(probe: &FuncBuilder, name_node: NodeId) -> Option<HirType> {
-    settled_declaration_type(probe, name_node).map(in_a_slot)
+fn settled_global_type(
+    probe: &FuncBuilder,
+    name_node: NodeId,
+    initialized: bool,
+) -> Option<HirType> {
+    settled_declaration_type(probe, name_node)
+        .map(in_a_slot)
+        .or_else(|| {
+            // An ambient declaration supplies no value. Giving it a slot
+            // would invent an undefined instead of the missing binding.
+            if !initialized {
+                return None;
+            }
+            // A null-only global is a slot too. Its declared type has no
+            // ordinary representation, so it never reaches `in_a_slot`.
+            // Answer only for this storage position: a narrowed nullable
+            // field read still uses its declared pointer representation.
+            probe
+                .snapshot
+                .node_types
+                .get(&name_node)
+                .filter(|ty| holds_only_absences(probe.snapshot, **ty))
+                .map(|_| HirType::Erased)
+        })
 }
 
 /// Are this name's indexed writes `[0]`, `[1]`, ... in that order?
@@ -86117,6 +86139,14 @@ impl<'a> FuncBuilder<'a> {
         self.bindings
             .get(&symbol.0)
             .map(|value| self.values[value.0 as usize].ty.clone())
+            .or_else(|| {
+                // A global read uses its declared storage representation too.
+                // In particular, `null | undefined` has no pointer type, but
+                // the global's tagged slot distinguishes both absences.
+                let symbol = self.denoted_symbol(symbol);
+                let global = self.module.variables.get(&symbol.0)?;
+                self.module.types.get(*global as usize).cloned()
+            })
     }
 
     /// `pointer === undefined` (or `null`, `!==`, `==`) where the pointer's

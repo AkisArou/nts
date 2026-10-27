@@ -53,11 +53,11 @@
 
 // # The position still refused, and why it is not the same one line
 //
-// A **bare binding** typed exactly `null` --- `const n: null = null`, local or
-// module-scope --- is still refused as ``null` or `undefined` where what it
-// stands in for is not a reference``, and its `undefined` spelling compiles.
-// That is the same asymmetry this file exists about, in the one position it
-// does not close.
+// A **bare local binding** typed exactly `null` --- `const n: null = null` ---
+// is still refused as ``null` or `undefined` where what it stands in for is
+// not a reference``. Initialized module bindings now get their storage width
+// separately, covered by `a-binding-that-only-holds-null`; that rule does not
+// change a local declaration's contextual type.
 //
 // It looks like a one-line fix: have `what_the_declaration_holds` answer
 // `Erased` when the annotation `holds_only_absences`, so `lower_absent` takes

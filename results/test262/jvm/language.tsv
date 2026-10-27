@@ -2616,10 +2616,8 @@ test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-exp
 test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-template-literal.js	pass	
 test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-this.js	pass	
 test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-func-expression.js	pass	
-test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-null.js	pass	
 test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-regexp.js	pass	
 test/language/module-code/top-level-await/syntax/export-var-await-expr-func-expression.js	pass	
-test/language/module-code/top-level-await/syntax/export-var-await-expr-null.js	pass	
 test/language/module-code/top-level-await/syntax/export-var-await-expr-regexp.js	pass	
 test/language/reserved-words/await-script.js	pass	
 test/language/rest-parameters/rest-index.js	pass	
