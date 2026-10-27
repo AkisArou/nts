@@ -10,6 +10,8 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+nts_jvm_flags=$(cat "$root/runtime/jvm/test-vm-flags.txt")
+nts_jdk_flags=$(sed 's/^/-J/' "$root/runtime/jvm/test-vm-flags.txt")
 out=${1:-"$root/target/interop-ts-from-java"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 
@@ -52,7 +54,7 @@ capture="$here/target/Api.javap"
   # Byte order makes this API record independent of the caller's locale.
   for c in $(find "$classes/nts/gen" -name '*.class' | LC_ALL=C sort); do
     n=$(echo "$c" | sed "s|$classes/||; s|/|.|g; s|\.class\$||")
-    javap -p -cp "$classes" "$n"
+    javap $nts_jdk_flags -p -cp "$classes" "$n"
   done
 } > "$capture"
 
@@ -65,6 +67,6 @@ elif ! diff -u "$here/expected/Api.javap" "$capture"; then
   exit 1
 fi
 
-javac --release 8 -Xlint:all,-options -cp "$classes:$classes/nts-runtime.jar" \
+javac $nts_jdk_flags --release 8 -Xlint:all,-options -cp "$classes:$classes/nts-runtime.jar" \
   -d "$here/target/java" "$here"/java/Main.java
-java -Xverify:all -cp "$here/target/java:$classes:$classes/nts-runtime.jar" Main
+java $nts_jvm_flags -Xverify:all -cp "$here/target/java:$classes:$classes/nts-runtime.jar" Main

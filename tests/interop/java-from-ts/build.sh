@@ -13,6 +13,8 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+nts_jvm_flags=$(cat "$root/runtime/jvm/test-vm-flags.txt")
+nts_jdk_flags=$(sed 's/^/-J/' "$root/runtime/jvm/test-vm-flags.txt")
 nts=${NTS_BIN:-"$root/target/release/nts"}
 
 
@@ -87,8 +89,8 @@ public final class Driver {
     public static void main(String[] a) { System.out.println(nts.gen.Program.main()); }
 }
 DRIVER
-javac -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
-answer=$(java -Xverify:all -cp "$out:$emitted:$emitted/nts-runtime.jar" Driver)
+javac $nts_jdk_flags -cp "$emitted:$emitted/nts-runtime.jar" -d "$out" "$out/Driver.java"
+answer=$(java $nts_jvm_flags -Xverify:all -cp "$out:$emitted:$emitted/nts-runtime.jar" Driver)
 echo "java-from-ts: $answer"
 
 

@@ -8,6 +8,8 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
+nts_jvm_flags=$(cat "$root/runtime/jvm/test-vm-flags.txt")
+nts_jdk_flags=$(sed 's/^/-J/' "$root/runtime/jvm/test-vm-flags.txt")
 out=${1:-"$root/target/interop-android-shape"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 
@@ -39,12 +41,12 @@ built="$here/target/build/api/java-8"
 
 # `Demo` is a consumer in the default package rather than part of the library,
 # so the build does not see it and this compiles it against what the build made.
-javac --release 8 -Xlint:all,-options -cp "$built" -d "$here/target/classes" \
+javac $nts_jdk_flags --release 8 -Xlint:all,-options -cp "$built" -d "$here/target/classes" \
   "$here"/java/Demo.java
 
 # The demonstration. Its output is the evidence for the sharpest constraint in
 # the interop plan, and it is four lines rather than an argument.
-java -Xverify:all -cp "$here/target/classes:$built" Demo
+java $nts_jvm_flags -Xverify:all -cp "$here/target/classes:$built" Demo
 
 # One declaration file contains both TypeScript types and JVM contracts.
 generated="$here/target/com.example.ui.d.ts"
@@ -68,9 +70,9 @@ fi
 # that was luck rather than evidence, and two of its claims were false when
 # finally run.
 emitted="$built"
-javac --release 8 -Xlint:all,-options -cp "$emitted:$here/target/classes:$emitted/nts-runtime.jar" \
+javac $nts_jdk_flags --release 8 -Xlint:all,-options -cp "$emitted:$here/target/classes:$emitted/nts-runtime.jar" \
   -d "$here/target/classes" "$here/java/Run.java"
-got=$(java -Xverify:all -cp "$here/target/classes:$emitted:$emitted/nts-runtime.jar" Run)
+got=$(java $nts_jvm_flags -Xverify:all -cp "$here/target/classes:$emitted:$emitted/nts-runtime.jar" Run)
 want="100 1 1 1 10 4"  # the 4 is the loader's callback, posted from its thread and run on ours
 if [ "$got" != "$want" ]; then
   echo "android-shape: the TypeScript printed"

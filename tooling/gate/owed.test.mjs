@@ -32,6 +32,14 @@ const superset = (got, want, what) => {
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
 
+test("the standalone ICU driver has an explicit validation obligation", () => {
+  const rules = owed([{path:"runtime/ecmascript/tools/icu.ts",added:false}]);
+  assert.ok(!rules.some(r => r.full));
+  superset(gateSteps(rules), ["tooling", "licenses"], "the standalone ICU validator");
+  const driver = rules.find(r => r.name === "the standalone ICU validation driver");
+  assert.ok(driver?.arms.some(a => a.run.includes("icu.ts --string-case")));
+});
+
 test("verdict machinery and every verifier entry point stay strict", () => {
   for (const path of ["tooling/gate/run.mjs", "tooling/lanes/land.ts", "tooling/lanes/verify.ts", "tooling/lanes/verify-unit.ts", "tooling/lanes/gate-resource.ts", "tooling/lanes/verification-ledger.ts",
     "tooling/lanes/revert.ts", "tooling/lanes/notify.ts", "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",

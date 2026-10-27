@@ -224,6 +224,17 @@ const COMPARE = [
  */
 export const RULES = [
   {
+    // This is a standalone validation driver, not an input to a gate step.
+    // Its command policy is covered by the tracked-launch tooling audit;
+    // execute its provider witness explicitly when changing the driver.
+    name: "the standalone ICU validation driver",
+    when: p => p === "runtime/ecmascript/tools/icu.ts",
+    steps: ["tooling", "licenses"],
+    arms: [
+      { kind: "answers", asks: "does the changed ICU witness still validate", run: "NTS_BIN=<pinned compiler> node runtime/ecmascript/tools/icu.ts --string-case; run other affected witness modes explicitly" },
+    ],
+  },
+  {
     name: "compiler dependency notices",
     when: (p) => p === "Cargo.lock" || p === "NOTICE" || /(^|\/)Cargo\.toml$/.test(p) || /^(third_party|licenses|tooling\/licenses)\//.test(p),
     steps: ["licenses"],

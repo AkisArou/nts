@@ -1,3 +1,4 @@
+import { vmToolFlags } from "../../../tooling/jvm/vm-flags.ts";
 // Reproducible provider/ABI validation, independent of the Java-8 core runtime.
 // node runtime/ecmascript/tools/icu.ts [--regenerate-bindings] [--all-backends] [--sanitize] [--duration|--calendar|--date-fields|--string-case]
 // --android packages dex/resources; --android-device SERIAL also runs the selected witness on ART.
@@ -171,7 +172,7 @@ mkdirSync(java, { recursive: true });
 const sources = readdirSync(resolve(provider, "java/nts/intl"))
   .filter((name) => name.endsWith(".java"))
   .map((name) => resolve(provider, "java/nts/intl", name));
-run("javac", ["--release", "11", "-cp", jar, "-d", java, ...sources]);
+run("javac", [...vmToolFlags("javac"), "--release", "11", "-cp", jar, "-d", java, ...sources]);
 const generated = resolve(out, "bindings");
 run(nts, [
   "bind",
@@ -223,7 +224,7 @@ if (calendar) {
 const classpath = [jvm, resolve(jvm, "nts-runtime.jar"), java, jar].join(
   process.platform === "win32" ? ";" : ":",
 );
-run("javac", [
+run("javac", [...vmToolFlags("javac"),
   "--release",
   "11",
   "-cp",
@@ -235,7 +236,7 @@ run("javac", [
 ]);
 const jvmResult = run(
   "java",
-  ["-Xverify:all", "-cp", classpath, javaDriver],
+  [...vmToolFlags("java"), "-Xverify:all", "-cp", classpath, javaDriver],
   root,
   env,
   resolve(jvm, "result.log"),
@@ -651,26 +652,26 @@ if (process.argv.includes("--bench")) {
     console.log("C", run(executable, ["250000", "display", kind]));
     console.log(
       "JVM",
-      run("java", ["-Xverify:all", "-cp", classpath, javaDriver, "250000", "display", kind]),
+      run("java", [...vmToolFlags("java"), "-Xverify:all", "-cp", classpath, javaDriver, "250000", "display", kind]),
     );
   }
   for (const key of ["numberingSystem", "timeZone"]) {
     const arguments_ = ["100000", "supported", key];
     console.log(run(executable, arguments_));
-    console.log(run("java", ["-Xverify:all", "-cp", classpath, "Drive", ...arguments_]));
+    console.log(run("java", [...vmToolFlags("java"), "-Xverify:all", "-cp", classpath, "Drive", ...arguments_]));
   }
   for (const mode of ["scalar", "range"]) {
     const arguments_ = [mode === "scalar" ? "500000" : "100000", "plural", mode];
     console.log(run(executable, arguments_));
-    console.log(run("java", ["-Xverify:all", "-cp", classpath, "Drive", ...arguments_]));
+    console.log(run("java", [...vmToolFlags("java"), "-Xverify:all", "-cp", classpath, "Drive", ...arguments_]));
   }
   console.log(run(executable, ["50000"]));
-  console.log(run("java", ["-Xverify:all", "-cp", classpath, "Drive", "50000"]));
+  console.log(run("java", [...vmToolFlags("java"), "-Xverify:all", "-cp", classpath, "Drive", "50000"]));
   for (const count of [3, 100, 1000]) {
     const iterations = count === 3 ? "50000" : "2000";
     console.log(run(executable, [iterations, String(count)]));
     console.log(
-      run("java", ["-Xverify:all", "-cp", classpath, "Drive", iterations, String(count)]),
+      run("java", [...vmToolFlags("java"), "-Xverify:all", "-cp", classpath, "Drive", iterations, String(count)]),
     );
   }
 }
@@ -686,11 +687,11 @@ if (process.argv.includes("--android") || androidDevice !== undefined) {
   if (!newest) throw new Error("--android requires Android build-tools");
   const adapterJar = resolve(out, "adapter.jar");
   const programJar = resolve(out, "program.jar");
-  run("jar", ["--create", "--file", adapterJar, "-C", java, "."]);
+  run("jar", [...vmToolFlags("jar"), "--create", "--file", adapterJar, "-C", java, "."]);
   const driverClasses = readdirSync(jvm)
     .filter((name) => name.endsWith(".class"))
     .flatMap((name) => ["-C", jvm, name]);
-  run("jar", ["--create", "--file", programJar, "-C", jvm, "nts", ...driverClasses]);
+  run("jar", [...vmToolFlags("jar"), "--create", "--file", programJar, "-C", jvm, "nts", ...driverClasses]);
   const dex = resolve(out, "dex");
   rmSync(dex, { force: true, recursive: true });
   mkdirSync(dex, { recursive: true });
@@ -711,7 +712,7 @@ if (process.argv.includes("--android") || androidDevice !== undefined) {
   const resources = resolve(out, "android-resources");
   rmSync(resources, { force: true, recursive: true });
   mkdirSync(resources, { recursive: true });
-  run("jar", ["--extract", "--file", jar], resources);
+  run("jar", [...vmToolFlags("jar"), "--extract", "--file", jar], resources);
   function removeBytecode(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = resolve(directory, entry.name);
@@ -727,8 +728,8 @@ if (process.argv.includes("--android") || androidDevice !== undefined) {
     readFileSync(resolve(root, "runtime/ecmascript/third_party/ICU-LICENSE")),
   );
   const artifact = resolve(out, "nts-icu-android-probe.jar");
-  run("jar", ["--create", "--file", artifact, "-C", dex, ".", "-C", resources, "."]);
-  const entries = run("jar", ["--list", "--file", artifact]).split("\n");
+  run("jar", [...vmToolFlags("jar"), "--create", "--file", artifact, "-C", dex, ".", "-C", resources, "."]);
+  const entries = run("jar", [...vmToolFlags("jar"), "--list", "--file", artifact]).split("\n");
   if (
     !entries.includes("classes.dex") ||
     !entries.some((name) => name.endsWith("/zoneinfo64.res")) ||
