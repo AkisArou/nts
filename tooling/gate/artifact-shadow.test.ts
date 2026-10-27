@@ -23,7 +23,8 @@ test("every fresh run executes, matching hits compare results, and mismatches ke
   assert.equal(fresh("changed")!.status, "hit-mismatch");
   assert.equal(fresh("same")!.status, "hit-match", "a mismatch must not overwrite its comparison baseline");
   assert.equal(runs, 4);
-  assert.equal(readdirSync(costs).length, 4);
+  assert.equal(readdirSync(costs).filter(f => /^shadow-\d+-\d+\.jsonl$/.test(f)).length, 4);
+  assert.equal(readdirSync(costs).filter(f => f.startsWith("shadow-mismatch-")).length, 1);
 });
 
 test("keys follow bytes, tool/driver identity and flags, independently of artifact directory", t => {
@@ -74,4 +75,40 @@ test("a prepared key and absent package observations are rechecked after fresh e
   const current = artifactShadow("assemble", inputs, env);
   writeFileSync(absent, "{}");
   assert.equal(current({ status: 0 })!.status, "unavailable");
+});
+
+test("mismatch evidence preserves the canonical baseline, fresh log and separate DEX digests", t => {
+  const { root, env, costs } = fixture(t), file = join(root, "A.class"); writeFileSync(file, "class");
+  const inputs = () => ({ files: [{ name: "A.class", path: file }] });
+  const baseline = { status: 0, log: "first log", outputs: [{ name: "classes.dex", sha256: "a".repeat(64) }] };
+  const first = artifactShadow("dex", inputs, env, undefined, "project-a")(baseline)!;
+  const matched = artifactShadow("dex", inputs, env, undefined, "project-b")(baseline)!;
+  assert.equal(matched.key, first.key, "context does not enter the artifact key");
+  assert.equal(matched.status, "hit-match");
+  assert.equal(readdirSync(costs).filter(f => f.startsWith("shadow-mismatch-")).length, 0);
+  const changed = { ...baseline, log: "second log" };
+  const mismatch = artifactShadow("dex", inputs, env, undefined, "project-c")(changed)!;
+  assert.equal(mismatch.status, "hit-mismatch");
+  const evidence = JSON.parse(readFileSync(mismatch.evidence!, "utf8"));
+  assert.deepEqual(evidence.changed_components, ["log"]);
+  assert.equal(evidence.context, "project-c");
+  assert.equal(evidence.baseline.context, "project-a");
+  assert.deepEqual(evidence.baseline.result, baseline);
+  assert.deepEqual(evidence.fresh.result, changed);
+  assert.deepEqual(evidence.fresh.result.outputs, baseline.outputs);
+});
+
+test("a legacy baseline payload is recovered only from a proven matching hit", t => {
+  const { root, cache, env } = fixture(t), file = join(root, "A.class"); writeFileSync(file, "class");
+  const inputs = () => ({ files: [{ name: "A.class", path: file }] });
+  const first = artifactShadow("dex", inputs, env)({ status: 0, log: "original", outputs: [] })!;
+  const path = join(cache, "dex", `${first.key}.json`), legacy = JSON.parse(readFileSync(path, "utf8"));
+  delete legacy.result; delete legacy.context; writeFileSync(path, JSON.stringify(legacy));
+  const saved = readFileSync(path, "utf8");
+  const mismatch = artifactShadow("dex", inputs, env)({ status: 0, log: "different", outputs: [] })!;
+  assert.equal(JSON.parse(readFileSync(mismatch.evidence!, "utf8")).baseline.available, false);
+  assert.equal(artifactShadow("dex", inputs, env)({ status: 0, log: "original", outputs: [] })!.status, "hit-match");
+  const later = artifactShadow("dex", inputs, env)({ status: 0, log: "different", outputs: [] })!;
+  assert.equal(JSON.parse(readFileSync(later.evidence!, "utf8")).baseline.result.log, "original");
+  assert.equal(readFileSync(path, "utf8"), saved, "the original comparison entry stays immutable");
 });

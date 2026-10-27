@@ -179,7 +179,7 @@ test("artifact shadow counts distinguish cross-train matches, mismatches, misses
   writeFileSync(join(dir, "shadow-1-0.jsonl"), rows.map(row => JSON.stringify({ event: "artifact.shadow", kind: "assemble", step: "examples", ...row })).join("\n") + "\n");
   const result = summarizeCosts(dir, [], [step]);
   assert.deepEqual((result.steps.examples as any).artifact_shadow, {
-    observations: 5, skipped_runs: 0, kinds: { assemble: {
+    observations: 5, skipped_runs: 0, eligible_for_skipping: false, mismatch_evidence: [], kinds: { assemble: {
       observations: 5, misses: 1, matching_hits: 2, mismatching_hits: 1, unavailable: 1, cross_train_hits: 2,
     } },
   });

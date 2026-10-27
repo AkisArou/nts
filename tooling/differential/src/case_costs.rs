@@ -14,6 +14,10 @@ thread_local! {
 }
 static CASES: AtomicU64 = AtomicU64::new(0);
 
+pub(crate) fn project_context() -> Option<String> {
+    CONTEXT.with_borrow(|context| context.as_ref().map(|value| value.project.clone()))
+}
+
 #[derive(Debug)]
 struct Context {
     file: std::fs::File,

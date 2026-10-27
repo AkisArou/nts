@@ -32,7 +32,7 @@ fn begin(
     if !enabled() {
         return None;
     }
-    let mut request = json!({"kind":kind,"mode":"prepare",
+    let mut request = json!({"kind":kind,"mode":"prepare","context":super::case_costs::project_context(),
         "files":files.into_iter().map(|(name,path)| json!({"name":name,"path":path})).collect::<Vec<_>>(),
         "values":{"differential_harness":include_str!("lib.rs"),"cwd":std::env::current_dir().ok()}});
     request["absent"] = Value::Array(absent.into_iter().map(|path| json!(path)).collect());

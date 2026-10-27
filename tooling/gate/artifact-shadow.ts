@@ -10,6 +10,7 @@ type Inputs = { files: File[]; absent?: string[]; values?: unknown };
 type Status = "miss" | "hit-match" | "hit-mismatch" | "unavailable";
 export type ShadowRow = { event: "artifact.shadow"; kind: string; step: string; epoch: number;
   status: Status; key: string | null; run: string | null; baseline_run?: string | null;
+  context: string | null; runtime_inputs?: "unreviewed"; evidence?: string; evidence_error?: string;
   result_sha256?: string; previous_sha256?: string; error?: string };
 let counter = 0;
 const canonical = (value: any): any => Array.isArray(value) ? value.map(canonical)
@@ -49,7 +50,7 @@ function publish(path: string, value: unknown): boolean {
   } finally { rmSync(temporary, { force: true }); }
 }
 
-export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.ProcessEnv = process.env, expectedKey?: string | null) {
+export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.ProcessEnv = process.env, expectedKey?: string | null, context: string | null = null) {
   if (!env.NTS_GATE_SHADOW_DIR || !env.NTS_GATE_CASE_COSTS_DIR || !env.NTS_GATE_STEP) return Object.assign((_result: unknown): ShadowRow | null => null, { key: null });
   let key: string | null = null, error: string | undefined;
   try {
@@ -58,7 +59,8 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
   } catch (e) { error = String(e); }
   return Object.assign((result: unknown): ShadowRow => {
     const row: ShadowRow = { event: "artifact.shadow", kind, step: env.NTS_GATE_STEP!, epoch: Date.now() / 1000,
-      status: "unavailable", key, run: env.NTS_GATE_RUN_DIR ?? null };
+      status: "unavailable", key, run: env.NTS_GATE_RUN_DIR ?? null, context,
+      ...(kind.startsWith("bench-") ? { runtime_inputs: "unreviewed" as const } : {}) };
     try {
       if (!key || error) throw new Error(error ?? "no artifact key");
       if (expectedKey !== undefined && expectedKey !== key) throw new Error("artifact inputs changed during fresh execution");
@@ -66,13 +68,36 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
       const resultHash = digest(json(result));
       const path = join(env.NTS_GATE_SHADOW_DIR!, kind, `${key}.json`);
       row.result_sha256 = resultHash;
-      if (publish(path, { version: 1, key, result_sha256: resultHash, run: row.run })) row.status = "miss";
+      if (publish(path, { version: 1, key, result_sha256: resultHash, run: row.run, context, result })) row.status = "miss";
       else {
         const previous = JSON.parse(readFileSync(path, "utf8"));
         if (previous.version !== 1 || previous.key !== key || !/^[a-f0-9]{64}$/.test(previous.result_sha256)) throw new Error("invalid shadow entry");
         row.previous_sha256 = previous.result_sha256;
         row.baseline_run = previous.run ?? null;
         row.status = previous.result_sha256 === resultHash ? "hit-match" : "hit-mismatch";
+        try {
+          // Upgrade digest-only entries only after proving the payload matches
+          // the original digest. Never replace that immutable comparison point.
+          if (row.status === "hit-match" && !Object.hasOwn(previous, "result")) {
+            publish(`${path}.result.json`, { result_sha256: resultHash, context, result });
+          }
+          if (row.status === "hit-mismatch") {
+            let baseline = previous;
+            if (!Object.hasOwn(baseline, "result")) {
+              try { baseline = JSON.parse(readFileSync(`${path}.result.json`, "utf8")); }
+              catch { baseline = {}; }
+            }
+            const available = Object.hasOwn(baseline, "result") && digest(json(baseline.result)) === previous.result_sha256;
+            const fields = available && result && typeof result === "object" && baseline.result && typeof baseline.result === "object"
+              ? [...new Set([...Object.keys(result), ...Object.keys(baseline.result)])].sort() : null;
+            const evidence = join(env.NTS_GATE_CASE_COSTS_DIR!, `shadow-mismatch-${process.pid}-${counter++}.json`);
+            writeFileSync(evidence, json({ version: 1, kind, key, context,
+              changed_components: fields?.filter(field => json((result as any)[field]) !== json(baseline.result[field])) ?? null,
+              baseline: { available, context: baseline.context ?? null, result_sha256: previous.result_sha256, result: available ? baseline.result : null },
+              fresh: { result_sha256: resultHash, result } }), { flag: "wx" });
+            row.evidence = evidence;
+          }
+        } catch (e) { row.evidence_error = String(e); }
       }
     } catch (e) { row.error = String(e); }
     try { appendFileSync(join(env.NTS_GATE_CASE_COSTS_DIR!, `shadow-${process.pid}-${counter++}.jsonl`), json(row) + "\n"); }
@@ -107,14 +132,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       const request = JSON.parse(readFileSync(flag("--request"), "utf8"));
       const observe = artifactShadow(request.kind, () => ({ files: request.files, absent: request.absent,
         values: { ...request.values, tools: request.tools.map(toolIdentity) } }), process.env,
-        request.mode === "finish" ? request.expected_key : undefined);
+        request.mode === "finish" ? request.expected_key : undefined,
+        typeof request.context === "string" ? request.context : null);
       process.stdout.write(JSON.stringify(request.mode === "prepare" ? { key: observe.key } : observe(request.result)) + "\n");
     } else {
       const root = flag("--inputs"), output = flag("--result");
       const observe = artifactShadow(flag("--kind"), () => ({ files: [
         ...artifactFiles(root), { name: "step-script", path: flag("--script") },
         { name: "tool-library", path: flag("--tool-library") },
-      ], values: { tool: toolIdentity(flag("--tool")), java: toolIdentity(flag("--java")), flags: ["--min-api", "29"] } }));
+      ], values: { tool: toolIdentity(flag("--tool")), java: toolIdentity(flag("--java")), flags: ["--min-api", "29"] } }), process.env, undefined,
+        process.argv.includes("--context") ? flag("--context") : null);
       observe({ status: Number(flag("--status")), log: readFileSync(output, "utf8"), outputs: artifactFiles(flag("--outputs")).map(f => ({ name: f.name, sha256: fileDigest(f.path) })) });
     }
   } catch { /* A failed shell observation never changes the tool's verdict. */ }

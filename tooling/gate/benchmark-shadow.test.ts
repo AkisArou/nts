@@ -29,6 +29,8 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
     assert.match(result.stdout, /agreed on every case/);
     const rows = readdirSync(costs).filter(f => /^shadow-\d+-\d+\.jsonl$/.test(f)).flatMap(f => readFileSync(join(costs, f), "utf8").trim().split("\n").map(line => JSON.parse(line)));
     assert.equal(rows.length, 2, "each fresh check must observe both actual executions");
+    assert.ok(rows.every(r => r.context === config), "shadow context must identify the captured project");
+    assert.ok(rows.every(r => r.runtime_inputs === "unreviewed"), "shadow agreement cannot imply runtime-input eligibility");
     assert.deepEqual(rows.map(r => r.kind).sort(), ["bench-oracle-node", "bench-program-jvm"]);
     return rows;
   };

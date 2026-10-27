@@ -124,7 +124,7 @@ async function check(project, slot) {
   }
   bytes += size;
   const observe = artifactShadow("assembles", () => ({ files: [{ name: "module.ll", path: ir }],
-    values: { tool: toolIdentity(LLVM_AS), flags: ["-o", "/dev/null"], script: fileDigest(fileURLToPath(import.meta.url)) } }));
+    values: { tool: toolIdentity(LLVM_AS), flags: ["-o", "/dev/null"], script: fileDigest(fileURLToPath(import.meta.url)) } }), process.env, undefined, project);
   const as = await run(LLVM_AS, [ir, "-o", "/dev/null"]);
   observe({ status: as.status ?? null, signal: as.signal ?? null, error: as.error?.message ?? null, out: as.out });
   if (as.error) {

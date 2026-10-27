@@ -248,7 +248,8 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
     const shadowRows = shadows.filter(row => row.step === step.name);
     const shadowKinds = [...new Set(shadowRows.map(row => String(row.kind)))];
     byStep[step.name] = {
-      artifact_shadow: { observations: shadowRows.length, skipped_runs: 0,
+      artifact_shadow: { observations: shadowRows.length, skipped_runs: 0, eligible_for_skipping: false,
+        mismatch_evidence: shadowRows.flatMap(row => typeof row.evidence === "string" ? [row.evidence] : []),
         kinds: Object.fromEntries(shadowKinds.map(kind => {
           const rows = shadowRows.filter(row => row.kind === kind);
           return [kind, { observations: rows.length,
