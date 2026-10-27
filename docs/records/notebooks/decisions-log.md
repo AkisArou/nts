@@ -220,6 +220,12 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   loading each dying object's header and descriptor, and the explicit list
   work is about 6% of the run, so no drain change closes its gap with node.
   The profile is in `~/.cache/nts-scratch/runtime-20261027/typed-release-ab/profile/split.md`.
+- **M6** (the user, on MainClaude's recommendation): the cycle collector stays
+  trial deletion; its next step is measurement only, and an exact tracing
+  backstop waits until stages 2 and 3. After typed visitors, `cyclic-churn`'s
+  collection pass is 42–46% of its cycles, and even removing all attributed
+  collector work would leave it about 3× node. The options page is
+  `~/.cache/nts-scratch/runtime-20261027/m3-collector-options.md`.
 
 ## Language and hosts (10-27)
 

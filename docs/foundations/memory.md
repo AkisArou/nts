@@ -418,6 +418,7 @@ never declared.
 | M3 | **Weak references follow the specification exactly,** with finalization that can run earlier than in node | The alternative is a `WeakMap` that leaks whenever a value refers to its key. The specification allows the earlier timing. |
 | M4 | **Vendor mimalloc for the native heap if it wins the rows,** otherwise our own page allocator | Tried first in stage 6. Koka, Lean and CPython ship it. |
 | M5 | **No memory annotations in the language:** no user-visible arena, unique or acyclic markers | It extends decision 12. Go's explicit arenas stalled because they "do not compose well". |
+| M6 | **The cycle collector stays trial deletion for now.** Its next step is measurement only (per-phase counters, pause and retained-memory distributions, batch-size and candidate-filter controls); an exact tracing backstop waits until stages 2 and 3 have moved the allocation side | Even removing all collector work would leave the cycle-heavy row well behind node, because allocation and the program's own work remain. An exact tracing backstop needs precise roots for C and LLVM frames and a heap registry, the largest architecture change on offer. |
 
 ## Evidence
 
