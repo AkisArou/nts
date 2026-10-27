@@ -1,3 +1,4 @@
+import { vmToolFlags } from "../jvm/vm-flags.ts";
 // Observe prospective cache hits. This module never executes or skips work.
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -129,11 +130,11 @@ export function toolIdentity(command: string): unknown {
   if (!located) throw new Error(`tool not found: ${command}`);
   const executable = realpathSync(located);
   const environment = Object.fromEntries(["LANG", "LC_ALL", "TZ", "JAVA_HOME", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "LD_LIBRARY_PATH", "LD_PRELOAD", "NODE_OPTIONS"].map(k => [k, process.env[k] ?? null]));
-  const identity = { executable_sha256: fileDigest(executable), environment };
+  const identity = { executable_sha256: fileDigest(executable), environment, vm_flags: vmToolFlags(command) };
   const versionKey = digest(json(identity));
   const saved = process.env.NTS_GATE_RUN_DIR ? join(process.env.NTS_GATE_RUN_DIR, "share/shadow-tools", `${versionKey}.json`) : null;
   if (saved) { try { return JSON.parse(readFileSync(saved, "utf8")); } catch { /* Discover below. */ } }
-  const version = spawnSync(executable, ["--version"], { encoding: "utf8", timeout: 10_000 });
+  const version = spawnSync(executable, [...vmToolFlags(command), "--version"], { encoding: "utf8", timeout: 10_000 });
   if (version.error || version.status !== 0) throw new Error(`cannot identify ${command}: ${version.error ?? version.stderr}`);
   const value = { ...identity, version: version.stdout + version.stderr };
   if (saved) publish(saved, value);

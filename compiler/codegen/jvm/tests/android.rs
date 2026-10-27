@@ -27,7 +27,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -40,7 +39,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -113,7 +112,7 @@ fn sources(root: &Path) -> Vec<PathBuf> {
 /// Compile `src/main` and `src/test` into `dir`. `src/android` is left out --
 /// it is the one file that needs the SDK.
 fn build(javac: &Path, dir: &Path) -> Result<(), String> {
-    let mut compile = Command::new(javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(javac);
     compile
         .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-d"])
         .arg(dir);
@@ -143,7 +142,7 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
 
     let store = dir.join("store.p12");
-    let made = Command::new(&keytool)
+    let made = nts_codegen_jvm::toolchain::command(&keytool)
         .args([
             "-genkeypair",
             "-alias",
@@ -179,7 +178,7 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
         String::from_utf8_lossy(&made.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(&dir)
@@ -223,7 +222,7 @@ fn a_handover_sweeps_the_sockets_and_nothing_else_does() {
     std::fs::create_dir_all(&dir).unwrap();
     build(&javac, &dir)
         .unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(&dir)
@@ -301,7 +300,7 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
     // boot classes, which is what AGP does. Putting `android.jar` on the boot
     // classpath instead fails on `LambdaMetafactory`, which the SDK does not
     // ship because D8 is what removes the need for it.
-    let mut compile = Command::new(&javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(&javac);
     compile
         .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
         .arg(&platform)
@@ -332,7 +331,7 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
         ("nts-runtime.jar", dir.join("runtime"), vec![jar.clone()]),
     ] {
         std::fs::create_dir_all(&out).unwrap();
-        let mut dex = Command::new(tools.join("d8"));
+        let mut dex = nts_codegen_jvm::toolchain::command(tools.join("d8"));
         dex.args(["--min-api", "26", "--lib"])
             .arg(&platform)
             .arg("--output")
@@ -349,7 +348,7 @@ fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
         let produced = out.join("classes.dex");
         assert!(produced.exists(), "d8 produced no dex for {what}");
 
-        let dumped = Command::new(tools.join("dexdump"))
+        let dumped = nts_codegen_jvm::toolchain::command(tools.join("dexdump"))
             .arg("-d")
             .arg(&produced)
             .output()
@@ -420,7 +419,7 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
             // absent or complete. The temporary is per-process so two binaries
             // do not collide on it either.
             let partial = cache.join(format!(".{name}.{}", std::process::id()));
-            let fetched = Command::new(&curl)
+            let fetched = nts_codegen_jvm::toolchain::command(&curl)
                 .args(["-sSfL", "--max-time", "120", "-o"])
                 .arg(&partial)
                 .arg(&url)
@@ -485,7 +484,7 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     let compile_path = std::iter::once(platform.display().to_string())
         .collect::<Vec<_>>()
         .join(":");
-    let mut compile = Command::new(&javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(&javac);
     compile
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&compile_path)
@@ -513,7 +512,7 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         String::from_utf8_lossy(&built.stderr)
     );
 
-    let mut shrink = Command::new(&java);
+    let mut shrink = nts_codegen_jvm::toolchain::command(&java);
     shrink
         .arg("-cp")
         .arg(&r8)
@@ -575,7 +574,7 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         missing.join("\n")
     );
 
-    let dumped = Command::new(tools.join("dexdump"))
+    let dumped = nts_codegen_jvm::toolchain::command(tools.join("dexdump"))
         .arg("-d")
         .arg(out.join("classes.dex"))
         .output()
@@ -715,7 +714,10 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
             trust.to_str().unwrap(),
         ],
     ] {
-        let ran = Command::new(&keytool).args(&args).output().unwrap();
+        let ran = nts_codegen_jvm::toolchain::command(&keytool)
+            .args(&args)
+            .output()
+            .unwrap();
         assert!(
             ran.status.success(),
             "keytool: {}",
@@ -724,7 +726,7 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
     }
 
     let classpath = format!("{}:{}", mine.display(), dir.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&classpath)
         .arg("-d")
@@ -738,7 +740,7 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
         .arg("-Djavax.net.ssl.keyStorePassword=changeit")
@@ -795,7 +797,7 @@ fn both_adapters_negotiate_the_same_application_protocol() {
     // are handed it explicitly rather than through system properties -- which
     // is also the only arrangement that would work unchanged on a device.
     let store = dir.join("server.p12");
-    let ran = Command::new(&keytool)
+    let ran = nts_codegen_jvm::toolchain::command(&keytool)
         .args([
             "-genkeypair",
             "-alias",
@@ -828,7 +830,7 @@ fn both_adapters_negotiate_the_same_application_protocol() {
     );
 
     let classpath = format!("{}:{}", mine.display(), dir.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&classpath)
         .arg("-d")
@@ -848,7 +850,7 @@ fn both_adapters_negotiate_the_same_application_protocol() {
     // be told through system properties -- the same asymmetry a device hits,
     // where the properties are ignored and only the injected factory works.
     // Both end up trusting the same self-signed certificate.
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg(format!("-Djavax.net.ssl.keyStore={}", store.display()))
         .arg("-Djavax.net.ssl.keyStorePassword=changeit")
@@ -912,7 +914,7 @@ fn the_library_compiles_against_the_api_level_it_declares() {
         .collect::<Vec<_>>()
         .join(":");
 
-    let mut compile = Command::new(&javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(&javac);
     compile
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&classpath)
@@ -965,7 +967,7 @@ fn the_device_cases_compile_against_api_29() {
     // against a shape that no longer exists.
     let library = dir.join("library");
     std::fs::create_dir_all(&library).unwrap();
-    let mut first = Command::new(&javac);
+    let mut first = nts_codegen_jvm::toolchain::command(&javac);
     first
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&floor)
@@ -981,7 +983,7 @@ fn the_device_cases_compile_against_api_29() {
         String::from_utf8_lossy(&built.stderr)
     );
 
-    let mut compile = Command::new(&javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(&javac);
     compile
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(format!("{}:{}", floor.display(), library.display()))

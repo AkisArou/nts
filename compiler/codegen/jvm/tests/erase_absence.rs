@@ -7,8 +7,6 @@
 //! and a symbol, each erased with each absence; the `null` arms are the controls.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::process::Command;
-
 use nts_core::hir::{self, Absent, HirType, ManagedType, OpKind, ValueId};
 
 mod common;
@@ -121,7 +119,7 @@ public class Drive {
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["-cp", &cp, "-d"])
         .arg(&out)
         .arg(out.join("Drive.java"))
@@ -132,7 +130,7 @@ public class Drive {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .args(["-Xverify:all", "-cp", &cp, "Drive"])
         .output()
         .unwrap();

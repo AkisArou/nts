@@ -1426,7 +1426,8 @@ pub fn verifies(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
     let loaded = std::process::Command::new("timeout")
         .arg(TIMEOUT)
         .arg(java)
-        .args(["-Xmx256m", "-XX:-UsePerfData"])
+        .arg("-Xmx256m")
+        .args(nts_codegen_jvm::toolchain::vm_flags())
         .arg("-cp")
         .arg(format!("{dir}:{jar}"))
         .arg("nts.rt.Verify")
@@ -2309,7 +2310,7 @@ fn bounded_jvm() -> std::process::Command {
         .arg("-Xmx512m")
         .arg("-XX:MaxMetaspaceSize=128m")
         .arg("-XX:TieredStopAtLevel=1")
-        .arg("-XX:-UsePerfData");
+        .args(nts_codegen_jvm::toolchain::vm_flags());
     command
 }
 

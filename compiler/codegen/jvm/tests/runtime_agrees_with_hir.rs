@@ -18,7 +18,6 @@
 //! that exists and is unreachable, which no other test in this crate looks for.
 
 use std::collections::BTreeSet;
-use std::process::Command;
 
 fn root() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -45,7 +44,7 @@ fn published() -> Option<BTreeSet<String>> {
     // jar's contents. It reported sixteen missing methods on its first run,
     // every one of them in a class the list did not mention. The instrument
     // found itself before it found anything else.
-    let listing = Command::new(tool("jar")?)
+    let listing = nts_codegen_jvm::toolchain::command(tool("jar")?)
         .args(["--list", "--file"])
         .arg(&jar)
         .output()
@@ -58,7 +57,7 @@ fn published() -> Option<BTreeSet<String>> {
         .collect();
     let mut out = BTreeSet::new();
     for class in &classes {
-        let listing = Command::new(&javap)
+        let listing = nts_codegen_jvm::toolchain::command(&javap)
             .args(["-p", "-s", "-cp"])
             .arg(&jar)
             .arg(class.as_str())

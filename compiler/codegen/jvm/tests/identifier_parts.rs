@@ -7,7 +7,6 @@
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::process::Command;
 
 use camino::Utf8Path;
 use nts_core::hir::{self, HirType, OpKind, ValueId};
@@ -183,7 +182,7 @@ fn run_java(emitted: &nts_codegen_jvm::Emitted, source: &str) -> Option<String> 
     let driver = dir.join("Drive.java");
     std::fs::write(&driver, source).unwrap();
     let cp = std::env::join_paths([&dir, &jar]).unwrap();
-    let compiled = Command::new(javac)
+    let compiled = nts_codegen_jvm::toolchain::command(javac)
         .args([
             "--release",
             "8",
@@ -204,7 +203,7 @@ fn run_java(emitted: &nts_codegen_jvm::Emitted, source: &str) -> Option<String> 
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(java)
+    let ran = nts_codegen_jvm::toolchain::command(java)
         .args(["-Xverify:all", "-cp"])
         .arg(&cp)
         .arg("Drive")

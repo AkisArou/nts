@@ -36,6 +36,10 @@
 # `shutil.copymode(path, tmp)` before the replace is the whole fix, and `ls -l`
 # after editing anything the gate executes is the check.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # Work on disk, and deliberately NOT through `TMPDIR`.
@@ -146,13 +150,13 @@ JSON
     # shellcheck disable=SC2086
     printf '%s\000' "$out/classes/nts-runtime.jar" $classes > "$out/d8.inputs" || :
   fi
-  if "$tools/d8" --min-api 29 --lib "$out/classes/nts-runtime.jar" \
+  if "$tools/d8" $nts_android_flags --min-api 29 --lib "$out/classes/nts-runtime.jar" \
        --output "$out/dex" $classes > "$out/d8.log" 2>&1; then
     d8_status=0
     dexed=1
     names=$(echo "$classes" | sed "s|$out/classes/||g;s|\.class||g;s|/|.|g")
     # shellcheck disable=SC2086
-    n=$(javap -p -cp "$out/classes" $names 2>/dev/null | grep -cE "^  .*\(.*\);")
+    n=$(javap $nts_jdk_flags -p -cp "$out/classes" $names 2>/dev/null | grep -cE "^  .*\(.*\);")
     methods=$n
   else
     d8_status=$?

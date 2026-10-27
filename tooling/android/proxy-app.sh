@@ -39,6 +39,10 @@
 # second leaves the list empty, and the empty list then looks like a platform
 # finding rather than a configuration mistake. The list is set second here.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
@@ -58,9 +62,9 @@ rm -rf "$work"
 mkdir -p "$work/classes" "$work/dex"
 "$tools/aapt2" link -I "$plat" --manifest "$app/AndroidManifest.xml" \
   --min-sdk-version 29 --target-sdk-version 29 -o "$work/base.apk"
-javac --release 8 -Xlint:-options -cp "$plat" -d "$work/classes" \
+javac $nts_jdk_flags --release 8 -Xlint:-options -cp "$plat" -d "$work/classes" \
   $(find "$app/java" -name '*.java')
-"$tools/d8" --min-api 29 --lib "$plat" --output "$work/dex" \
+"$tools/d8" $nts_android_flags --min-api 29 --lib "$plat" --output "$work/dex" \
   $(find "$work/classes" -name '*.class')
 # `python3` rather than `zip`, which is not installed here and is one more thing
 # a fresh machine would have to have.
@@ -71,10 +75,10 @@ shutil.copy(work + "/base.apk", work + "/with-dex.apk")
 with zipfile.ZipFile(work + "/with-dex.apk", "a", zipfile.ZIP_DEFLATED) as apk:
     apk.write(work + "/dex/classes.dex", "classes.dex")
 PY
-keytool -genkeypair -alias probe -keyalg RSA -keysize 2048 -validity 1 \
+keytool $nts_jdk_flags -genkeypair -alias probe -keyalg RSA -keysize 2048 -validity 1 \
   -dname CN=probe -keystore "$work/ks.p12" -storetype PKCS12 \
   -storepass android -keypass android > /dev/null 2>&1
-"$tools/apksigner" sign --ks "$work/ks.p12" --ks-pass pass:android \
+"$tools/apksigner" $nts_android_flags sign --ks "$work/ks.p12" --ks-pass pass:android \
   --key-pass pass:android --out "$work/probe.apk" "$work/with-dex.apk"
 # Uninstalled first: the keystore is generated per run, so a probe left over
 # from a previous one is signed by a different key and `install -r` refuses it.

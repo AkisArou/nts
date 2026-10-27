@@ -28,6 +28,9 @@
 # stable. That one was found by another session losing a run to it, and so was
 # this.
 set -e
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
 
 edit=$1
 driver=$2
@@ -50,10 +53,10 @@ export src
 sh "$edit"
 
 mkdir -p "$work/rt" "$work/test"
-javac --release 8 -Xlint:-options -d "$work/rt" "$src"/nts/rt/*.java
+javac $nts_jdk_flags --release 8 -Xlint:-options -d "$work/rt" "$src"/nts/rt/*.java
 
 found=$(find "$here/compiler/codegen/jvm/tests" -name "$driver.java" | head -1)
 [ -n "$found" ] || { echo "no driver named $driver" >&2; exit 2; }
-javac --release 8 -Xlint:-options -cp "$work/rt" -d "$work/test" "$found"
+javac $nts_jdk_flags --release 8 -Xlint:-options -cp "$work/rt" -d "$work/test" "$found"
 
-java -Xverify:all -cp "$work/rt:$work/test" "$driver" "$@"
+java $nts_jvm_flags -Xverify:all -cp "$work/rt:$work/test" "$driver" "$@"

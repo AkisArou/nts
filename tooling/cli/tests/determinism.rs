@@ -37,7 +37,7 @@ fn all_backends_build_identical_bytes_in_different_environments() {
         ("jar", "--version"),
         ("javac", "-version"),
     ] {
-        if !Command::new(tool)
+        if !nts_codegen_jvm::toolchain::command(tool)
             .arg(flag)
             .output()
             .is_ok_and(|out| out.status.success())

@@ -1,3 +1,4 @@
+import { vmToolFlags } from "../jvm/vm-flags.ts";
 // The minimal reproductions, re-measured against whatever compiler is current.
 //
 //   node tooling/conformance/blockers-check.mjs
@@ -165,7 +166,7 @@ function emittedInterfaces(output, className) {
   if (m === null) return "emit-jvm wrote no classes";
   const file = join(m[1], ...className.split(".")) + ".class";
   if (!existsSync(file)) return `emit-jvm wrote no ${className}`;
-  const listed = spawnSync(javap, ["-cp", m[1], className], { encoding: "utf8" });
+  const listed = spawnSync(javap, [...vmToolFlags(javap), "-cp", m[1], className], { encoding: "utf8" });
   const header = (listed.stdout ?? "")
     .split("\n")
     .find((line) => /\b(class|interface)\s/.test(line) && line.includes(className));

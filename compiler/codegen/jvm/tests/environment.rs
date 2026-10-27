@@ -16,7 +16,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -59,7 +58,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -80,7 +79,7 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
 
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .arg("--release")
         .arg("8")
         .arg("-Xlint:-options")
@@ -97,7 +96,7 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -139,7 +138,7 @@ fn a_rejection_keeps_the_tag_it_arrived_with() {
     let jar = runtime_jar();
     let dir = std::env::temp_dir().join(format!("nts-reject-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&jar)
         .arg("-d")
@@ -152,7 +151,7 @@ fn a_rejection_keeps_the_tag_it_arrived_with() {
         "the reject driver did not compile:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -192,7 +191,7 @@ fn one_default_environment_and_one_lane_owns_it() {
     let jar = runtime_jar();
     let dir = std::env::temp_dir().join(format!("nts-default-lane-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&jar)
         .arg("-d")
@@ -205,7 +204,7 @@ fn one_default_environment_and_one_lane_owns_it() {
         "the default-lane driver did not compile:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -245,7 +244,7 @@ fn closing_under_arriving_completions_loses_nothing() {
     let dir = std::env::temp_dir().join(format!("nts-close-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .arg("--release")
         .arg("8")
         .arg("-Xlint:-options")
@@ -261,7 +260,7 @@ fn closing_under_arriving_completions_loses_nothing() {
         "the close-race driver did not compile:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -294,7 +293,7 @@ fn close_waits_for_delayed_credits_without_losing_notifications() {
     let jar = runtime_jar();
     let dir = std::env::temp_dir().join(format!("nts-close-delay-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&jar)
         .arg("-d")
@@ -317,7 +316,7 @@ fn close_waits_for_delayed_credits_without_losing_notifications() {
             "14 checks, 0 failures",
         ),
     ] {
-        let ran = Command::new(&java)
+        let ran = nts_codegen_jvm::toolchain::command(&java)
             .arg("-Xverify:all")
             .arg("-cp")
             .arg(format!("{}:{}", jar.display(), dir.display()))

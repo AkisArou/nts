@@ -20,7 +20,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use nts_diagnostics::{Location, SourceId, Span};
 use nts_jvm_emitter::class::access;
@@ -45,7 +44,7 @@ fn java_home_bin(tool: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_jvm_emitter::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {tool}"))
         .output()
@@ -101,14 +100,13 @@ fn run_main(
 
     let dir = work_dir(name);
     std::fs::write(dir.join(built.path()), &built.bytes).expect("write the class");
-    let output = Command::new(java)
+    let output = nts_jvm_emitter::toolchain::command(java)
         .arg("-Xverify:all")
         // Two JVMs starting at once contend for the hsperfdata file and the
         // loser prints a warning -- on *stdout*, which is what this test
         // compares. The program was right and the capture was wrong. Killing
         // the contention at the source beats trimming the output, which would
         // make the test tolerant of anything else the JVM decides to say.
-        .arg("-XX:-UsePerfData")
         // `System.out` encodes with the caller's locale, so under `LC_ALL=C`
         // the literal test's `é` and astral character came out as `?` and it
         // failed in a gate run that had exported the locale. The program was
@@ -556,14 +554,13 @@ fn a_generated_class_with_a_field() {
     for class in [&point, &main] {
         std::fs::write(dir.join(class.path()), &class.bytes).expect("write");
     }
-    let output = Command::new(java)
+    let output = nts_jvm_emitter::toolchain::command(java)
         .arg("-Xverify:all")
         // Two JVMs starting at once contend for the hsperfdata file and the
         // loser prints a warning -- on *stdout*, which is what this test
         // compares. The program was right and the capture was wrong. Killing
         // the contention at the source beats trimming the output, which would
         // make the test tolerant of anything else the JVM decides to say.
-        .arg("-XX:-UsePerfData")
         .arg("-cp")
         .arg(&dir)
         .arg("UsePoint")
@@ -621,7 +618,7 @@ fn the_listing_agrees_with_javap() {
     let dir = work_dir("Listing");
     std::fs::write(dir.join(built.path()), &built.bytes).expect("write");
 
-    let output = Command::new(javap)
+    let output = nts_jvm_emitter::toolchain::command(javap)
         .arg("-c")
         .arg("-p")
         .arg(dir.join("Listing.class"))
@@ -770,9 +767,8 @@ fn a_call_through_an_interface_reaches_two_implementations() {
     for class in [&sink, &implementers[0], &implementers[1], &main] {
         std::fs::write(dir.join(class.path()), &class.bytes).expect("write");
     }
-    let output = Command::new(java)
+    let output = nts_jvm_emitter::toolchain::command(java)
         .arg("-Xverify:all")
-        .arg("-XX:-UsePerfData")
         .arg("-cp")
         .arg(&dir)
         .arg("Main")
@@ -867,8 +863,8 @@ fn a_class_file_may_implement_both_map_and_set() {
     let dir = work_dir("both-map-and-set");
     std::fs::write(dir.join(built.path()), &built.bytes).expect("write Both");
     std::fs::write(dir.join(runner.path()), &runner.bytes).expect("write LoadsBoth");
-    let output = Command::new(java)
-        .args(["-Xverify:all", "-XX:-UsePerfData", "-cp"])
+    let output = nts_jvm_emitter::toolchain::command(java)
+        .args(["-Xverify:all", "-cp"])
         .arg(&dir)
         .arg("LoadsBoth")
         .output()
@@ -910,7 +906,7 @@ fn both_clashing_methods_are_callable_through_their_own_interfaces() {
          }\n",
     )
     .expect("write");
-    let built = Command::new(&javac)
+    let built = nts_jvm_emitter::toolchain::command(&javac)
         .args(["--release", "8", "-d"])
         .arg(&dir)
         .arg(dir.join("Pair.java"))
@@ -1041,8 +1037,8 @@ fn both_clashing_methods_are_callable_through_their_own_interfaces() {
 
     std::fs::write(dir.join(clash.path()), &clash.bytes).expect("write Clash");
     std::fs::write(dir.join(runner.path()), &runner.bytes).expect("write CallsBoth");
-    let output = Command::new(java)
-        .args(["-Xverify:all", "-XX:-UsePerfData", "-cp"])
+    let output = nts_jvm_emitter::toolchain::command(java)
+        .args(["-Xverify:all", "-cp"])
         .arg(&dir)
         .arg("CallsBoth")
         .output()

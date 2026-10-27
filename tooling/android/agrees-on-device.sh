@@ -29,6 +29,10 @@
 # deterministic, and *whether the program is correct*, which is what this asks.
 # See `benchmarks/jvm-rows.md` for what ART's missing C2 does to the numbers.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # Work on disk rather than in the tmpfs.
@@ -189,7 +193,7 @@ JSON
   # The flag is repeated rather than comma-joined: `named_entry()` collects
   # every `--entry` occurrence and does not split on commas, unlike
   # `requested_entry()` twenty lines above it, which does.
-  if javap -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
+  if javap $nts_jdk_flags -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
     init='static { nts.gen.Program.module$init(); }'
   else
     init=''
@@ -226,13 +230,13 @@ JAVA
     sources=$out/Main.java
   fi
   # shellcheck disable=SC2086
-  javac -nowarn -cp "$out/classes:$out/classes/nts-runtime.jar" -d "$out/classes" \
+  javac $nts_jdk_flags -nowarn -cp "$out/classes:$out/classes/nts-runtime.jar" -d "$out/classes" \
     $sources 2> /dev/null || { printf "%-22s javac failed\n" "$case"; noted=$((noted + 1)); continue; }
 
-  jvm=$(java -cp "$out/classes:$out/classes/nts-runtime.jar" "$main" 2>&1 | tail -1)
+  jvm=$(java $nts_jvm_flags -cp "$out/classes:$out/classes/nts-runtime.jar" "$main" 2>&1 | tail -1)
   # The runtime jar goes to `d8` whole: it is the artefact the ratchets are
   # about, and dexing the classes without it would test the wrong thing.
-  if ! "$tools/d8" --min-api "$MIN_API" --output "$out/dex" \
+  if ! "$tools/d8" $nts_android_flags --min-api "$MIN_API" --output "$out/dex" \
     $(find "$out/classes" -name '*.class') "$out/classes/nts-runtime.jar" > /dev/null 2>&1; then
     printf "%-22s d8 refused it\n" "$case"
     noted=$((noted + 1))

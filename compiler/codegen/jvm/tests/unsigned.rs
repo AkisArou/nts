@@ -13,8 +13,6 @@
 //! 2^31 and 2^63, in both the value and the branch forms of a comparison.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::process::Command;
-
 use nts_core::hir::{self, BinOp, BlockId, HirType, OpKind, ValueId};
 
 mod common;
@@ -272,7 +270,7 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["-cp", &cp, "-d"])
         .arg(&out)
         .arg(out.join("Drive.java"))
@@ -283,7 +281,7 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .args(["-Xverify:all", "-cp", &cp, "Drive"])
         .output()
         .unwrap();

@@ -82,7 +82,7 @@ pub(crate) fn jvm(
         files,
         Vec::new(),
         vec![java, "timeout".into()],
-        json!({"timeout":super::TIMEOUT,"flags":["-Xmx512m","-XX:MaxMetaspaceSize=128m","-XX:TieredStopAtLevel=1","-XX:-UsePerfData"]}),
+        json!({"timeout":super::TIMEOUT,"flags":(["-Xmx512m","-XX:MaxMetaspaceSize=128m","-XX:TieredStopAtLevel=1"].into_iter().chain(nts_codegen_jvm::toolchain::vm_flags()).collect::<Vec<_>>())}),
     )
 }
 

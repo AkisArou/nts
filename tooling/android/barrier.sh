@@ -56,6 +56,10 @@
 # script says which method produced its answer, because the two are not equally
 # strong evidence and a reader should not have to guess.
 set -e
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 here=$(cd "$(dirname "$0")/../.." && pwd)
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
@@ -111,7 +115,7 @@ code_of() {
 
 if [ -n "$compiler" ]; then
   method="our own probe, compiled on the device by $compiler"
-  javac --release 8 -Xlint:-options -d "$work/classes" \
+  javac $nts_jdk_flags --release 8 -Xlint:-options -d "$work/classes" \
     "$here/compiler/codegen/jvm/tests/barrier/Barrier.java"
   # **The device's level, not the library's floor.** This probe is a test class
   # that has to load on whatever is attached; it ships nowhere. Dexing it at 29
@@ -119,7 +123,7 @@ if [ -n "$compiler" ]; then
   # and that is the one device where the strong method still works, so the
   # number that is about our floor was quietly disabling the better evidence.
   # shellcheck disable=SC2046
-  "$tools/d8" --min-api "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" \
+  "$tools/d8" $nts_android_flags --min-api "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" \
     --output "$work/dex" $(find "$work/classes" -name '*.class')
   adb push "$work/dex/classes.dex" /data/local/tmp/barrier.dex > /dev/null
   adb shell "$compiler \

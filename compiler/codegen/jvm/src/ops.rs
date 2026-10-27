@@ -8469,7 +8469,7 @@ mod signatures {
     fn declared(javap: &PathBuf, jar: &PathBuf, classes: &BTreeSet<String>) -> BTreeSet<String> {
         let mut out = BTreeSet::new();
         let named: Vec<String> = classes.iter().map(|c| c.replace('/', ".")).collect();
-        let Ok(dump) = Command::new(javap)
+        let Ok(dump) = crate::toolchain::command(javap)
             .arg("-p")
             .arg("-s")
             .arg("-cp")

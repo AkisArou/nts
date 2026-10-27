@@ -19,6 +19,8 @@ set -eu
 LC_ALL=C
 export LC_ALL
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+nts_jvm_flags=$(cat "$root/test-vm-flags.txt")
+nts_jdk_flags=$(sed 's/^/-J/' "$root/test-vm-flags.txt")
 jar_date=$(cat "$root/jar-date.txt")
 jar_path=${1:-$root/nts-runtime.jar}
 # **The classes go to a directory of this run's own.** They went to
@@ -29,12 +31,12 @@ jar_path=${1:-$root/nts-runtime.jar}
 out=$(mktemp -d "${TMPDIR:-/tmp}/nts-jvm-classes.XXXXXX")
 trap 'rm -rf "$out" "$out.list"' EXIT
 find "$root/src" -name '*.java' | sort > "$out/sources.txt"
-javac --release 8 -Xlint:-options -d "$out" @"$out/sources.txt"
+javac $nts_jdk_flags --release 8 -Xlint:-options -d "$out" @"$out/sources.txt"
 rm -f "$out/sources.txt"
 (
   cd "$out"
   find . -name '*.class' | sed 's|^\./||' | sort > "$out.list"
-  jar --create --file "$jar_path" \
+  jar $nts_jdk_flags --create --file "$jar_path" \
       --date="$jar_date" \
       $(cat "$out.list")
   rm -f "$out.list"

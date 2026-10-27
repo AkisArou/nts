@@ -30,7 +30,8 @@ test("gate CPU sets are intersections, and an empty intersection is refused", ()
 test("counted.sh's default perf child inherits the restriction, with an explicit override kept", { skip: process.platform !== "linux" }, () => {
   const dir = mkdtempSync(join(tmpdir(), "nts-counted-affinity-test-"));
   try {
-    for (const path of ["tooling/bench", "tooling/gate", "target/bench/probe.jvm/nts", "bin"]) mkdirSync(join(dir, path), { recursive: true });
+    for (const path of ["tooling/bench", "tooling/gate", "runtime/jvm", "target/bench/probe.jvm/nts", "bin"]) mkdirSync(join(dir, path), { recursive: true });
+    copyFileSync(new URL("../../runtime/jvm/test-vm-flags.txt", import.meta.url), join(dir, "runtime/jvm/test-vm-flags.txt"));
     const counted = join(dir, "tooling/bench/counted.sh");
     copyFileSync(new URL("../bench/counted.sh", import.meta.url), counted);
     copyFileSync(new URL("../gate/affinity.ts", import.meta.url), join(dir, "tooling/gate/affinity.ts"));

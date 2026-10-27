@@ -71,7 +71,7 @@ fn skip(needs: &str) {
 
 fn available() -> bool {
     let tool = |name: &str, arg: &str| {
-        Command::new(name)
+        nts_codegen_jvm::toolchain::command(name)
             .arg(arg)
             .output()
             .is_ok_and(|o| o.status.success())
@@ -973,7 +973,7 @@ fn a_jar_is_packaged_in_the_package_its_config_names() {
         eprintln!("skipping: needs node, clang and nm");
         return;
     }
-    let jdk = Command::new("jar")
+    let jdk = nts_codegen_jvm::toolchain::command("jar")
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success());
@@ -1041,7 +1041,7 @@ export default defineConfig({{
 
     // **`-Xverify:all`**, because a class file that loads is the assertion and a
     // verifier rejection is the characteristic failure of a bytecode emitter.
-    let listed = Command::new("javap")
+    let listed = nts_codegen_jvm::toolchain::command("javap")
         .arg("-cp")
         .arg(&jar)
         .arg("nts.gen.Program")
@@ -1378,7 +1378,7 @@ fn an_aar_carries_its_manifest_and_rules() {
         eprintln!("skipping: needs node, clang and nm");
         return;
     }
-    if !Command::new("jar")
+    if !nts_codegen_jvm::toolchain::command("jar")
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success())
@@ -1418,7 +1418,7 @@ export default defineConfig({
     let aar = project.join(".nts/build/sdk/android-29-aarch64/sdk.aar");
     assert!(aar.exists(), "no AAR at {}", aar.display());
 
-    let listed = Command::new("jar")
+    let listed = nts_codegen_jvm::toolchain::command("jar")
         .arg("--list")
         .arg("--file")
         .arg(&aar)
@@ -1626,7 +1626,7 @@ fn an_android_application_is_a_signed_installable_apk() {
 
     // The signature, which is what makes it installable rather than merely
     // well formed. `apksigner verify` exits non-zero on an unsigned APK.
-    let verified = Command::new(tools.join("apksigner"))
+    let verified = nts_codegen_jvm::toolchain::command(tools.join("apksigner"))
         .arg("verify")
         .arg(&artifact)
         .output()
@@ -1801,7 +1801,7 @@ export default defineConfig({
 #[test]
 fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
     let tool = |name: &str| {
-        Command::new(name)
+        nts_codegen_jvm::toolchain::command(name)
             .arg("-version")
             .output()
             .is_ok_and(|o| o.status.success())
@@ -1836,7 +1836,7 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
         run.stdout
     );
 
-    let ran = Command::new("java")
+    let ran = nts_codegen_jvm::toolchain::command("java")
         .arg("-jar")
         .arg(&artifact)
         .output()
@@ -1865,7 +1865,7 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
     let run = build(&quiet, &[]);
     assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
     let empty = quiet.join(".nts/build/tool/java-17/tool.jar");
-    let ran = Command::new("java")
+    let ran = nts_codegen_jvm::toolchain::command("java")
         .arg("-jar")
         .arg(&empty)
         .output()
@@ -1927,7 +1927,7 @@ if (ASYNC) {
             "the {arm} build refused code:\n{}",
             run.stderr
         );
-        let ran = Command::new("java")
+        let ran = nts_codegen_jvm::toolchain::command("java")
             .arg("-Xverify:all")
             .arg("-jar")
             .arg(project.join(".nts/build/tool/java-17/tool.jar"))
@@ -2010,7 +2010,7 @@ export default defineConfig({
 /// without it. Everything on disk looked right.
 #[test]
 fn java_a_package_contributes_is_compiled_into_the_jar() {
-    let javac = Command::new("javac")
+    let javac = nts_codegen_jvm::toolchain::command("javac")
         .arg("-version")
         .output()
         .is_ok_and(|o| o.status.success());
@@ -2564,7 +2564,7 @@ fn build_for_apple(project: &Path, root: &Path) -> Run {
 #[test]
 fn a_macos_target_produces_a_mach_o_dylib() {
     let tool = |name: &str, arg: &str| {
-        Command::new(name)
+        nts_codegen_jvm::toolchain::command(name)
             .arg(arg)
             .output()
             .is_ok_and(|o| o.status.success())
@@ -3128,7 +3128,7 @@ fn the_workspace_fixture_still_builds() {
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_java_package_moves_the_classes_and_they_still_link() {
     let tool = |n: &str| {
-        Command::new(n)
+        nts_codegen_jvm::toolchain::command(n)
             .arg("-version")
             .output()
             .is_ok_and(|o| o.status.success())
@@ -3214,7 +3214,7 @@ export default defineConfig({
     )
     .expect("consumer");
     let classes = project.join("use");
-    let compiled = Command::new("javac")
+    let compiled = nts_codegen_jvm::toolchain::command("javac")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), runtime.display()))
         .arg("-d")
@@ -3227,7 +3227,7 @@ export default defineConfig({
         "a consumer could not compile against it:\n{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new("java")
+    let ran = nts_codegen_jvm::toolchain::command("java")
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!(
@@ -3761,7 +3761,7 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
          public static String greet(String who) { return \"hello, \" + who; }\n}\n",
     )
     .expect("the library source");
-    let compiled = Command::new("javac")
+    let compiled = nts_codegen_jvm::toolchain::command("javac")
         .args(["--release", "8", "-nowarn"])
         .arg(lib.join("Greeter.java"))
         .status()
@@ -3769,7 +3769,7 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
     if !compiled {
         return false;
     }
-    let packaged = Command::new("jar")
+    let packaged = nts_codegen_jvm::toolchain::command("jar")
         .arg("--create")
         .arg("--file")
         .arg(project.join("deps/greeter-1.0.0.jar"))
@@ -3800,7 +3800,7 @@ fn vendored_jar(project: &Path, digest: &str) -> bool {
 
 fn jdk() -> bool {
     let tool = |name: &str, arg: &str| {
-        Command::new(name)
+        nts_codegen_jvm::toolchain::command(name)
             .arg(arg)
             .output()
             .is_ok_and(|o| o.status.success())
@@ -3835,7 +3835,7 @@ fn a_pinned_jar_ships_inside_the_executable() {
         artifact.display(),
         run.stdout
     );
-    let listed = Command::new("jar")
+    let listed = nts_codegen_jvm::toolchain::command("jar")
         .arg("--list")
         .arg("--file")
         .arg(&artifact)
@@ -3863,7 +3863,7 @@ fn a_pinned_jar_ships_inside_the_executable() {
         "the control build failed:\n{}{}",
         run.stdout, run.stderr
     );
-    let listed = Command::new("jar")
+    let listed = nts_codegen_jvm::toolchain::command("jar")
         .arg("--list")
         .arg("--file")
         .arg(bare.join(".nts/build/tool/java-17/tool.jar"))
@@ -4363,7 +4363,7 @@ fn a_pin_is_found_in_a_gradle_cache_and_not_only_beside_the_lockfile() {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    let listed = Command::new("jar")
+    let listed = nts_codegen_jvm::toolchain::command("jar")
         .arg("--list")
         .arg("--file")
         .arg(project.join(".nts/build/tool/java-17/tool.jar"))
@@ -4629,7 +4629,7 @@ fn an_aar_carries_its_pinned_jars_in_libs() {
         artifact.display(),
         run.stdout
     );
-    let listed = Command::new("jar")
+    let listed = nts_codegen_jvm::toolchain::command("jar")
         .arg("--list")
         .arg("--file")
         .arg(&artifact)
@@ -4748,7 +4748,7 @@ fn an_apk_dexes_its_pinned_jars_into_itself() {
         "dependency resources were dropped from the APK"
     );
     assert_eq!(resource.stdout, b"pinned locale resource\n");
-    let listed = Command::new("jar")
+    let listed = nts_codegen_jvm::toolchain::command("jar")
         .arg("--list")
         .arg("--file")
         .arg(&apk)

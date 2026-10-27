@@ -2791,7 +2791,7 @@ fn run_driver(
     driver_path: &Utf8Path,
 ) -> Result<Measured> {
     let javac = java_tool("javac");
-    let built = std::process::Command::new(javac)
+    let built = nts_codegen_jvm::toolchain::command(javac)
         .arg("-cp")
         .arg(dir)
         .arg("-d")
@@ -2806,11 +2806,11 @@ fn run_driver(
 
     let java = java_tool("java");
     measure(
-        std::process::Command::new(java)
+        nts_codegen_jvm::toolchain::command(java)
             // Explicit rather than ergonomic: the default collector changes with
             // the host, and a column that changes meaning with the machine is
             // not an instrument. Equal bounds so no resizing happens mid-run.
-            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
+            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m"])
             .arg("-cp")
             .arg(format!("{dir}:{jar}"))
             .arg("Case"),
@@ -2878,7 +2878,7 @@ fn handwritten_java(
     if let Some(ref classes) = awfy {
         classpath = format!("{classes}:{classpath}");
     }
-    let mut javac = std::process::Command::new(java_tool("javac"));
+    let mut javac = nts_codegen_jvm::toolchain::command(java_tool("javac"));
     javac.arg("-nowarn");
     if let Some(ref classes) = awfy {
         javac.arg("-cp").arg(classes.as_str());
@@ -2896,8 +2896,8 @@ fn handwritten_java(
     }
 
     measure(
-        std::process::Command::new(java_tool("java"))
-            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m", "-XX:-UsePerfData"])
+        nts_codegen_jvm::toolchain::command(java_tool("java"))
+            .args(["-XX:+UseG1GC", "-Xms512m", "-Xmx512m"])
             .arg("-cp")
             .arg(&classpath)
             .arg("Case"),
@@ -2923,7 +2923,7 @@ fn awfy_classes(root: &Utf8Path, out: &Utf8Path) -> Result<Option<Utf8PathBuf>> 
     std::fs::create_dir_all(&built)?;
     let mut listing = Vec::new();
     collect_java(&sources, &mut listing)?;
-    let compiled = std::process::Command::new(java_tool("javac"))
+    let compiled = nts_codegen_jvm::toolchain::command(java_tool("javac"))
         .arg("-nowarn")
         .arg("-d")
         .arg(built.as_str())

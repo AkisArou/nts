@@ -29,7 +29,6 @@
 use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 mod common;
 
@@ -45,7 +44,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -119,7 +118,7 @@ fn run(example: &str, body: &str) -> Option<String> {
         format!("public class Drive {{ public static void main(String[] a) {{\n{body}\n}} }}\n"),
     )
     .expect("write the driver");
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
         .arg(format!("{}:{}", dir.display(), jar.display()))
         .arg("-d")
@@ -136,7 +135,7 @@ fn run(example: &str, body: &str) -> Option<String> {
     // `-Xverify:all`, because the verifier is a free second opinion on the
     // StackMapTable and these classes are the ones in the path that `javac`
     // never saw.
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", dir.display(), jar.display()))

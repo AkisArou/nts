@@ -20,7 +20,6 @@
 use camino::Utf8Path;
 use nts_core::hir::Program;
 use nts_frontend_ts::Frontend;
-use std::process::Command;
 use std::time::Instant;
 
 mod common;
@@ -108,7 +107,7 @@ fn a_body_past_the_method_limit_is_split_into_private_helpers() {
     let classpath = format!("{}:{}", dir.display(), jar.display());
 
     // `-v` prints each method's flags beneath it.
-    let listed = Command::new(&disassembler)
+    let listed = nts_codegen_jvm::toolchain::command(&disassembler)
         .args(["-p", "-v", "-cp", &classpath, "nts.gen.Program"])
         .output()
         .unwrap();
@@ -131,7 +130,7 @@ fn a_body_past_the_method_limit_is_split_into_private_helpers() {
          } }\n",
     )
     .unwrap();
-    let built = Command::new(&compiler)
+    let built = nts_codegen_jvm::toolchain::command(&compiler)
         .args(["-cp", &classpath, "-d"])
         .arg(&dir)
         .arg(dir.join("Drive.java"))
@@ -142,7 +141,7 @@ fn a_body_past_the_method_limit_is_split_into_private_helpers() {
         "{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let ran = Command::new(&vm)
+    let ran = nts_codegen_jvm::toolchain::command(&vm)
         .args(["-Xverify:all", "-cp", &classpath, "Drive"])
         .output()
         .unwrap();

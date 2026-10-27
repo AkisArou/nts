@@ -27,7 +27,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -70,7 +69,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -97,7 +96,7 @@ fn run(driver: &str) -> Option<String> {
     let jar = runtime_jar();
 
     let vectors = dir.join("vectors.txt");
-    let generated = Command::new(&node)
+    let generated = nts_codegen_jvm::toolchain::command(&node)
         .arg(here.join("vectors.mjs"))
         .output()
         .unwrap();
@@ -108,7 +107,7 @@ fn run(driver: &str) -> Option<String> {
     );
     std::fs::write(&vectors, &generated.stdout).unwrap();
 
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .arg("--release")
         .arg("8")
         .arg("-Xlint:-options")
@@ -125,7 +124,7 @@ fn run(driver: &str) -> Option<String> {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))

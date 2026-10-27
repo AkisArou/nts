@@ -57,6 +57,10 @@
 # agree differ by 40% on that row, reproducibly, and this file is not adding a
 # third. What is measured here is the same loop in a different execution mode.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 work=${NTS_AOT_WORK:-$HOME/.cache/nts-android}/aot.$$
@@ -157,7 +161,7 @@ NTS_CHECKERS=1 "$nts" emit-jvm "$work/tsconfig.json" \
   --out "$work/nts-classes" --entry "${entry:-module#init}" --entry "module#init" \
   > "$work/emit.log" 2>&1 || { echo "the backend declined $case" >&2; exit 1; }
 
-if javap -p -cp "$work/nts-classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
+if javap $nts_jdk_flags -p -cp "$work/nts-classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
   init='static { nts.gen.Program.module$init(); }'
 else
   init=''
@@ -216,7 +220,7 @@ build_and_run() {
   # No `-bootclasspath` beside `--release 8`: javac refuses the pair. The
   # platform jar goes on the classpath, which is what `proxy-app.sh` does.
   # shellcheck disable=SC2086
-  javac --release 8 -nowarn -Xlint:-options \
+  javac $nts_jdk_flags --release 8 -nowarn -Xlint:-options \
     -cp "$plat:$work/nts-classes:$work/nts-classes/nts-runtime.jar" \
     -d "$work/build/classes" \
     $(find "$work/src-$side" "$work/probe" -name '*.java') $extra \
@@ -240,7 +244,7 @@ build_and_run() {
   # debug and 51 in release, where the reference's is 27 and 25. Same flag,
   # different penalty.
   # shellcheck disable=SC2086
-  "$tools/d8" ${NTS_D8_RELEASE:+--release} --min-api 29 --lib "$plat" --output "$work/build/dex" "$@" \
+  "$tools/d8" $nts_android_flags ${NTS_D8_RELEASE:+--release} --min-api 29 --lib "$plat" --output "$work/build/dex" "$@" \
     > "$work/d8-$side.log" 2>&1 || { echo "$side: d8"; sed -n 1,3p "$work/d8-$side.log"; return 1; }
 
   # The JIT number first, from the same dex, so the two modes differ in nothing
@@ -260,10 +264,10 @@ shutil.copy(build + "/base.apk", build + "/with-dex.apk")
 with zipfile.ZipFile(build + "/with-dex.apk", "a", zipfile.ZIP_DEFLATED) as apk:
     apk.write(build + "/dex/classes.dex", "classes.dex")
 PY
-  keytool -genkeypair -alias probe -keyalg RSA -keysize 2048 -validity 1 \
+  keytool $nts_jdk_flags -genkeypair -alias probe -keyalg RSA -keysize 2048 -validity 1 \
     -dname CN=probe -keystore "$work/build/ks.p12" -storetype PKCS12 \
     -storepass android -keypass android > /dev/null 2>&1
-  "$tools/apksigner" sign --ks "$work/build/ks.p12" --ks-pass pass:android \
+  "$tools/apksigner" $nts_android_flags sign --ks "$work/build/ks.p12" --ks-pass pass:android \
     --key-pass pass:android --out "$work/build/probe.apk" "$work/build/with-dex.apk" \
     > /dev/null 2>&1 || { echo "$side: apksigner"; return 1; }
 

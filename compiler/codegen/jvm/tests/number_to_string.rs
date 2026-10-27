@@ -28,7 +28,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// How many doubles. Large enough that a one-in-ten-thousand rule error shows,
 /// small enough that the whole test is a few seconds.
@@ -79,7 +78,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -145,7 +144,7 @@ fn every_double_prints_the_characters_node_prints() {
     )
     .unwrap();
 
-    let built = Command::new(&javac)
+    let built = nts_codegen_jvm::toolchain::command(&javac)
         .arg("-cp")
         .arg(&jar)
         .arg("-d")
@@ -159,7 +158,7 @@ fn every_double_prints_the_characters_node_prints() {
         String::from_utf8_lossy(&built.stderr)
     );
 
-    let swept = Command::new(&java)
+    let swept = nts_codegen_jvm::toolchain::command(&java)
         .arg("-cp")
         .arg(format!("{}:{}", dir.display(), jar.display()))
         .arg("Sweep")
@@ -195,7 +194,7 @@ for (const b of bad.slice(0, 10)) console.log(b);
     )
     .unwrap();
 
-    let compared = Command::new(&node)
+    let compared = nts_codegen_jvm::toolchain::command(&node)
         .arg(&checker)
         .arg(&ours)
         .output()

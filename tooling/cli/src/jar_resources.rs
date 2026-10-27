@@ -13,7 +13,7 @@ pub(super) fn unpack_resources(
         let extracted = scratch.join(index.to_string());
         std::fs::create_dir_all(&extracted).with_context(|| format!("creating {extracted}"))?;
         let archive = super::absolute(jar);
-        let mut unpack = std::process::Command::new("jar");
+        let mut unpack = nts_codegen_jvm::toolchain::command("jar");
         unpack
             .arg("--extract")
             .arg("--file")

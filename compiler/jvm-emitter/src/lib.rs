@@ -58,3 +58,6 @@ pub use code::{Body, Code, Error, Label};
 pub use frames::VType;
 pub use insn::{Compare, Kind};
 pub use pool::Pool;
+
+/// Shared JDK launch policy for tests and tooling.
+pub mod toolchain;

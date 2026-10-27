@@ -8,8 +8,6 @@
 //! ends, each against the exit status the C lane gives: 0 for a clean run, 1
 //! for an uncaught throw, 134 (C's `abort`) for a run-time refusal.
 
-use std::process::Command;
-
 use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
 
@@ -75,7 +73,7 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
     }
     let jar = out.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).expect("write the jar");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", out.display(), jar.display()))

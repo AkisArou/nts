@@ -39,6 +39,9 @@
 # rows is the instrument, every time. The control is the five rows whose answers
 # `benchmarks/jvm-rows.md` already records.
 set -u
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 nts=${NTS_BIN:-$root/target-jvm/release/nts}
 awfy=${NTS_AWFY:-$root/third_party/are-we-fast-yet/benchmarks/Java}
@@ -83,7 +86,7 @@ JSON
        > "$out/emit.log" 2>&1; then
     cls=$(find "$out/ours" -name '*.class' | sed "s|$out/ours/||g;s|\.class||g;s|/|.|g")
     # shellcheck disable=SC2086
-    ours=$(javap -c -p -cp "$out/ours" $cls 2>/dev/null | kinds)
+    ours=$(javap $nts_jdk_flags -c -p -cp "$out/ours" $cls 2>/dev/null | kinds)
     [ -n "$ours" ] || ours="(none)"
   else
     ours="(declined)"
@@ -103,7 +106,7 @@ JSON
       sources="$sources $theirs" ;;
   esac
   # shellcheck disable=SC2086
-  if javac -nowarn -d "$out/ref/classes" $sources > "$out/javac.log" 2>&1; then
+  if javac $nts_jdk_flags -nowarn -d "$out/ref/classes" $sources > "$out/javac.log" 2>&1; then
     # The reference's OWN classes only. The AWFY sources are on the classpath
     # the way `ref.cpp` puts their headers on the include path, and counting
     # every class in `third_party` would measure their whole suite per row.
@@ -118,7 +121,7 @@ JSON
              fi
            done)
     # shellcheck disable=SC2086
-    ref=$([ -n "$keep" ] && javap -c -p $keep 2>/dev/null | kinds)
+    ref=$([ -n "$keep" ] && javap $nts_jdk_flags -c -p $keep 2>/dev/null | kinds)
     [ -n "$ref" ] || ref="(none)"
   else
     ref="(javac)"

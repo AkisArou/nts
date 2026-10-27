@@ -1,3 +1,4 @@
+import { vmToolFlags } from "../jvm/vm-flags.ts";
 // Does what `emit-jvm` emits for the runtime pass the JVM's verifier?
 //
 //   node tooling/conformance/jvm-verifies.ts [project ...]   (default: runtime/node/*, runtime/web-platform)
@@ -512,10 +513,11 @@ async function check(project, slot) {
     retainFailure(project, out, emit, null, "emit did not supply a verifiable output");
     return;
   }
+  const flags = [...vmToolFlags(JAVA), "-Xverify:all"];
   const observe = artifactShadow("jvm-verifies", () => ({ files: [
     ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
-  ], values: { tool: toolIdentity(JAVA), flags: ["-Xverify:all"], script: fileDigest(fileURLToPath(import.meta.url)) } }), process.env, undefined, project);
-  const v = await run(JAVA, ["-Xverify:all", "-cp", `${out}:${jar}`, DRIVER, out]);
+  ], values: { tool: toolIdentity(JAVA), flags, script: fileDigest(fileURLToPath(import.meta.url)) } }), process.env, undefined, project);
+  const v = await run(JAVA, [...flags, "-cp", `${out}:${jar}`, DRIVER, out]);
   observe({ status: v.status ?? null, signal: v.signal ?? null, error: v.error?.message ?? null, stdout: v.stdout, stderr: v.stderr });
   const read = readVerify(v.out);
   const failure = verifierFailure(v, read);

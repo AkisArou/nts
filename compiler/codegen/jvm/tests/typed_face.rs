@@ -26,7 +26,6 @@
 
 use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
-use std::process::Command;
 
 mod common;
 
@@ -110,7 +109,7 @@ fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).unwrap();
     std::fs::write(out.join("Drive.java"), DRIVE).unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["-cp", &cp, "-d"])
         .arg(&out)
         .arg(out.join("Drive.java"))
@@ -121,7 +120,7 @@ fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .args(["-Xverify:all", "-cp", &cp, "Drive"])
         .output()
         .unwrap();

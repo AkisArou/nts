@@ -27,7 +27,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -70,7 +69,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -96,7 +95,7 @@ fn the_runtime_passes_its_own_tests() {
     let dir = std::env::temp_dir().join(format!("nts-jvm-regression-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
 
-    let mut compile = Command::new(&javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(&javac);
     compile
         .arg("-nowarn")
         .arg("-cp")
@@ -116,7 +115,7 @@ fn the_runtime_passes_its_own_tests() {
         String::from_utf8_lossy(&built.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         // Assertions on: the suite says it runs either way, and a `-ea` run is
         // the one that also exercises the JDK's own invariants.
         .arg("-ea")

@@ -20,7 +20,6 @@
 #![allow(dead_code, unreachable_pub, clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// `snapshot` prepared as `nts emit-jvm` prepares it.
 ///
@@ -54,7 +53,7 @@ pub fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_jvm_emitter::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -145,7 +144,7 @@ pub fn with_sabotage(
     std::fs::write(&target, text).unwrap();
 
     let classes = dir.join("classes");
-    let mut compile = Command::new(javac);
+    let mut compile = nts_jvm_emitter::toolchain::command(javac);
     compile
         .args(["--release", "8", "-Xlint:-options", "-d"])
         .arg(&classes);
@@ -158,7 +157,7 @@ pub fn with_sabotage(
         "`{name}` did not compile:\n{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let built = Command::new(javac)
+    let built = nts_jvm_emitter::toolchain::command(javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&classes)
         .arg("-d")
@@ -173,7 +172,7 @@ pub fn with_sabotage(
     );
 
     let stem = driver.file_stem().unwrap().to_string_lossy().into_owned();
-    let mut run = Command::new(java);
+    let mut run = nts_jvm_emitter::toolchain::command(java);
     run.arg("-cp").arg(&classes).arg(&stem);
     for arg in args {
         run.arg(arg);

@@ -80,7 +80,7 @@ public final class Probe {
     )
     .expect("Java");
     success(&output(
-        Command::new("javac")
+        nts_codegen_jvm::toolchain::command("javac")
             .arg("--release")
             .arg("8")
             .arg("-d")
@@ -143,7 +143,7 @@ export function run(): string {
             root.join("java").display()
         );
         success(&output(
-            Command::new("javac")
+            nts_codegen_jvm::toolchain::command("javac")
                 .arg("-cp")
                 .arg(&classpath)
                 .arg("-d")
@@ -151,7 +151,7 @@ export function run(): string {
                 .arg(root.join("Driver.java")),
         ));
         let result = output(
-            Command::new("java")
+            nts_codegen_jvm::toolchain::command("java")
                 .arg("-Xverify:all")
                 .arg("-cp")
                 .arg(classpath)

@@ -14,10 +14,11 @@ const names = ["a-slow", "b-fast", "c-middle"];
 function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
   const root = mkdtempSync(join(tmpdir(), "nts-blockers-pool-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const path of ["tooling/conformance", "tooling/gate", "napi", "tmp"]) mkdirSync(join(root, path), {recursive:true});
-  for (const path of ["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "gate/tokens.mjs"]) {
+  for (const path of ["tooling/conformance", "tooling/gate", "tooling/jvm", "runtime/jvm", "napi", "tmp"]) mkdirSync(join(root, path), {recursive:true});
+  for (const path of ["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"]) {
     copyFileSync(join(HERE, "..", path), join(root, "tooling", path));
   }
+  copyFileSync(join(HERE, "../../runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
   writeFileSync(join(root, "napi/node_api.h"), "");
   const trace = join(root, "trace.jsonl");
   writeFileSync(trace, "");

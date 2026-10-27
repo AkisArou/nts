@@ -29,7 +29,6 @@ mod common;
 
 use common::copy_tree;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -72,7 +71,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -85,7 +84,7 @@ fn tool(name: &str) -> Option<PathBuf> {
 
 fn compile(javac: &Path, jar: &Path, dir: &Path, driver: &str) {
     let source = repository().join(format!("compiler/codegen/jvm/tests/socket/{driver}.java"));
-    let compiled = Command::new(javac)
+    let compiled = nts_codegen_jvm::toolchain::command(javac)
         .arg("--release")
         .arg("8")
         .arg("-Xlint:-options")
@@ -116,7 +115,7 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
     let dir = std::env::temp_dir().join(format!("nts-socket-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     compile(&javac, &jar, &dir, "SocketTest");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -157,7 +156,7 @@ fn a_full_io_queue_refuses_at_submission_and_gives_the_credit_back() {
     let dir = std::env::temp_dir().join(format!("nts-saturate-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     compile(&javac, &jar, &dir, "SaturateTest");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -190,7 +189,7 @@ fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
     let server = dir.join("server.p12");
     let cert = dir.join("nts.cer");
     let trust = dir.join("trust.p12");
-    let made = Command::new(keytool)
+    let made = nts_codegen_jvm::toolchain::command(keytool)
         .args([
             "-genkeypair",
             "-alias",
@@ -225,7 +224,7 @@ fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
         "keytool: {}",
         String::from_utf8_lossy(&made.stderr)
     );
-    let exported = Command::new(keytool)
+    let exported = nts_codegen_jvm::toolchain::command(keytool)
         .args([
             "-exportcert",
             "-alias",
@@ -246,7 +245,7 @@ fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
         "keytool: {}",
         String::from_utf8_lossy(&exported.stderr)
     );
-    let imported = Command::new(keytool)
+    let imported = nts_codegen_jvm::toolchain::command(keytool)
         .args([
             "-importcert",
             "-noprompt",
@@ -319,7 +318,7 @@ fn dropping_endpoint_identification_lets_a_wrong_name_through() {
     .unwrap();
 
     let classes = dir.join("classes");
-    let mut compile = Command::new(&javac);
+    let mut compile = nts_codegen_jvm::toolchain::command(&javac);
     compile
         .args(["--release", "8", "-Xlint:-options", "-d"])
         .arg(&classes);
@@ -332,7 +331,7 @@ fn dropping_endpoint_identification_lets_a_wrong_name_through() {
         "the sabotaged runtime did not compile:\n{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let built = Command::new(&javac)
+    let built = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:-options", "-cp"])
         .arg(&classes)
         .arg("-d")
@@ -346,7 +345,7 @@ fn dropping_endpoint_identification_lets_a_wrong_name_through() {
         String::from_utf8_lossy(&built.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
         .arg("-Djavax.net.ssl.keyStorePassword=changeit")
         .arg("-Djavax.net.ssl.keyStoreType=PKCS12")
@@ -389,7 +388,7 @@ fn a_tunnel_carries_bytes_and_keeps_the_targets_name() {
     std::fs::create_dir_all(&dir).unwrap();
     let (server, trust) = keystores(&keytool, &dir);
     compile(&javac, &jar, &dir, "ProxyTest");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
         .arg("-Djavax.net.ssl.keyStorePassword=changeit")
@@ -428,7 +427,7 @@ fn tls_refuses_a_certificate_that_names_another_host() {
     let (server, trust) = keystores(&keytool, &dir);
 
     compile(&javac, &jar, &dir, "TlsTest");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
         .arg("-Djavax.net.ssl.keyStorePassword=changeit")
@@ -473,7 +472,7 @@ fn alpn_negotiates_and_the_servers_order_is_the_one_that_counts() {
     let (server, trust) = keystores(&keytool, &dir);
 
     compile(&javac, &jar, &dir, "AlpnTest");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
         .arg("-Djavax.net.ssl.keyStorePassword=changeit")
@@ -519,7 +518,7 @@ fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
     let dir = std::env::temp_dir().join(format!("nts-httpgzip-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     compile(&javac, &jar, &dir, "HttpGzipTest");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))

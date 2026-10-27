@@ -22,7 +22,6 @@ use nts_core::hir::Program;
 use nts_frontend_ts::Frontend;
 use nts_semantic_schema::TypeId;
 use std::path::Path;
-use std::process::Command;
 
 mod common;
 
@@ -64,7 +63,7 @@ fn written(emitted: &nts_codegen_jvm::Emitted, dir: &Path) -> String {
 
 /// `javap -c`'s listing of one method of `nts.gen.Program`.
 fn disassembled(disassembler: &Path, classpath: &str, signature: &str) -> String {
-    let listed = Command::new(disassembler)
+    let listed = nts_codegen_jvm::toolchain::command(disassembler)
         .args(["-c", "-p", "-cp", classpath, "nts.gen.Program"])
         .output()
         .unwrap();
@@ -164,7 +163,7 @@ fn a_store_into_an_empty_face_is_a_verified_upcast() {
          } }\n",
     )
     .unwrap();
-    let built = Command::new(&compiler)
+    let built = nts_codegen_jvm::toolchain::command(&compiler)
         .args(["-cp", &classpath, "-d"])
         .arg(&dir)
         .arg(dir.join("Drive.java"))
@@ -175,7 +174,7 @@ fn a_store_into_an_empty_face_is_a_verified_upcast() {
         "{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let ran = Command::new(&vm)
+    let ran = nts_codegen_jvm::toolchain::command(&vm)
         .args(["-Xverify:all", "-cp", &classpath, "Drive"])
         .output()
         .unwrap();
@@ -233,7 +232,7 @@ fn a_store_out_of_an_empty_face_into_a_class_declines() {
          } }\n",
     )
     .unwrap();
-    let built = Command::new(&compiler)
+    let built = nts_codegen_jvm::toolchain::command(&compiler)
         .args(["-cp", &classpath, "-d"])
         .arg(&dir)
         .arg(dir.join("Drive.java"))
@@ -244,7 +243,7 @@ fn a_store_out_of_an_empty_face_into_a_class_declines() {
         "{}",
         String::from_utf8_lossy(&built.stderr)
     );
-    let ran = Command::new(&vm)
+    let ran = nts_codegen_jvm::toolchain::command(&vm)
         .args(["-Xverify:all", "-cp", &classpath, "Drive"])
         .output()
         .unwrap();

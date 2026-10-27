@@ -212,6 +212,12 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
     )
     .unwrap();
 
+    std::fs::copy(
+        root.join("runtime/jvm/test-vm-flags.txt"),
+        runtime.join("test-vm-flags.txt"),
+    )
+    .unwrap();
+
     for sabotage in SABOTAGES {
         let source_path = runtime.join("src").join(sabotage.file);
         let original = std::fs::read_to_string(&source_path)

@@ -18,6 +18,10 @@
 # `dalvikvm` does not link, so every TLS case dies on a stack trace about
 # statistics. `app_process` loads the framework and they pass.
 set -e
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 here=$(cd "$(dirname "$0")/../.." && pwd)
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
@@ -47,7 +51,7 @@ jar="$here/runtime/jvm/nts-runtime.jar"
 # dex and in the R8 input by construction.
 sets=$(find "$here"/runtime/jvm/web-platform/android/src -name '*.java' | sort)
 # shellcheck disable=SC2086
-javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
+javac $nts_jdk_flags --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
   $sets \
   "$here"/compiler/codegen/jvm/tests/env/RejectTest.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
@@ -58,7 +62,7 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
 
 # shellcheck disable=SC2046
 # shellcheck disable=SC2086
-"$tools/d8" --min-api 29 --lib "$platform" --output "$work/dex" \
+"$tools/d8" $nts_android_flags --min-api 29 --lib "$platform" --output "$work/dex" \
   "$jar" $(find "$work/classes" -name '*.class')
 
 # The certificate names the *address*, because the imported suite connects to
@@ -79,7 +83,7 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
 #
 # These three are what API 29 accepts. They are weak, and that is fine for a
 # certificate generated per run, valid for one day, for a loopback peer.
-keytool -genkeypair -alias nts-web -keyalg RSA -keysize 2048 -validity 1 \
+keytool $nts_jdk_flags -genkeypair -alias nts-web -keyalg RSA -keysize 2048 -validity 1 \
   -J-Dkeystore.pkcs12.macAlgorithm=HmacPBESHA1 \
   -J-Dkeystore.pkcs12.keyProtectionAlgorithm=PBEWithSHA1AndDESede \
   -J-Dkeystore.pkcs12.certProtectionAlgorithm=PBEWithSHA1AndRC2_40 \
@@ -148,7 +152,7 @@ if [ -n "$r8" ]; then
   # artifact, which `the_pinned_dependencies_dex_at_the_same_api_floor` already
   # does on its own terms.
   # shellcheck disable=SC2086
-  java -cp "$r8" com.android.tools.r8.R8 --release --min-api 29 --lib "$platform" \
+  java $nts_jvm_flags -cp "$r8" com.android.tools.r8.R8 --release --min-api 29 --lib "$platform" \
     \
     --pg-conf "$here/runtime/jvm/web-platform/android/consumer-rules.pro" \
     --output "$work/shrunk" \
@@ -159,11 +163,11 @@ if [ -n "$r8" ]; then
     grep -A 2 "does not match anything" "$work/r8.log" >&2
     exit 1
   fi
-  javac --release 8 -Xlint:-options -cp "$platform:$work/classes" -d "$work/testonly" \
+  javac $nts_jdk_flags --release 8 -Xlint:-options -cp "$platform:$work/classes" -d "$work/testonly" \
     "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java \
     "$here"/runtime/jvm/web-platform/android/src/androidTest/java/org/nts/web/*.java
   # shellcheck disable=SC2046
-  "$tools/d8" --min-api 29 --lib "$platform" --output "$work/testonly" \
+  "$tools/d8" $nts_android_flags --min-api 29 --lib "$platform" --output "$work/testonly" \
     $(find "$work/testonly" -name '*.class')
   adb push "$work/shrunk/classes.dex" /data/local/tmp/nts-shrunk.dex > /dev/null
   adb push "$work/testonly/classes.dex" /data/local/tmp/nts-testonly.dex > /dev/null
@@ -247,7 +251,7 @@ esac
 # that normalises it **only ever executes here**.
 echo "--- ALPN on ART, against a server on the host"
 alpn_log=$work/alpn-server.log
-java -cp "$jar:$work/classes" BothAlpn server "$work/store.p12" test-only h2,http/1.1 \
+java $nts_jvm_flags -cp "$jar:$work/classes" BothAlpn server "$work/store.p12" test-only h2,http/1.1 \
   > "$alpn_log" 2>&1 &
 alpn_server=$!
 alpn_port=""

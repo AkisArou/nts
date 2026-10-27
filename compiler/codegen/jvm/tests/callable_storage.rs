@@ -4,7 +4,6 @@
 use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
-use std::process::Command;
 
 mod common;
 
@@ -140,7 +139,7 @@ fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {
           {drive}\n\
         }} }}\n")).unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["-cp", &cp, "-d"])
         .arg(&out)
         .arg(out.join("Drive.java"))
@@ -151,7 +150,7 @@ fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .args(["-Xverify:all", "-cp", &cp, "Drive"])
         .output()
         .unwrap();

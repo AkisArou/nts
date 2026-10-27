@@ -5112,7 +5112,7 @@ fn compile_java_roots(
     // package contributes is what calls into them -- the emitted classes do
     // not, since nothing in HIR can name a type this compiler did not read.
     classpath.extend(depends.iter().map(ToString::to_string));
-    let mut javac = std::process::Command::new("javac");
+    let mut javac = nts_codegen_jvm::toolchain::command("javac");
     javac
         .arg("--release")
         .arg("8")
@@ -5639,7 +5639,7 @@ const REPRODUCIBLE_JAR_DATE: &str = include_str!(concat!(
 
 /// Use the runtime jar's fixed entry date for every JVM archive we create.
 fn create_jar() -> std::process::Command {
-    let mut command = std::process::Command::new("jar");
+    let mut command = nts_codegen_jvm::toolchain::command("jar");
     command
         .arg("--create")
         .arg(format!("--date={}", REPRODUCIBLE_JAR_DATE.trim()));
@@ -5814,7 +5814,7 @@ struct AndroidSdk {
 
 impl AndroidSdk {
     fn tool(&self, name: &str) -> std::process::Command {
-        std::process::Command::new(self.build_tools.join(name))
+        nts_codegen_jvm::toolchain::command(self.build_tools.join(name))
     }
 }
 
@@ -6070,7 +6070,7 @@ fn package_apk(
     if dex_count == 0 {
         bail!("`d8` produced no dex files for product `{name}`");
     }
-    let mut add = std::process::Command::new("jar");
+    let mut add = nts_codegen_jvm::toolchain::command("jar");
     add.arg("--update")
         .arg("--file")
         .arg(unsigned.as_str())
@@ -6166,7 +6166,7 @@ fn package_runnable_jar(
     let runtime = out.join(RUNTIME_JAR);
     let built = staged.join("classes");
     std::fs::create_dir_all(&built).with_context(|| format!("creating {built}"))?;
-    let mut javac = std::process::Command::new("javac");
+    let mut javac = nts_codegen_jvm::toolchain::command("javac");
     javac
         .arg("--release")
         .arg("8")
@@ -6205,7 +6205,7 @@ fn package_runnable_jar(
         .chain(depends.iter().map(|jar| absolute(jar)))
         .collect();
     for source in &unpacked {
-        let mut unpack = std::process::Command::new("jar");
+        let mut unpack = nts_codegen_jvm::toolchain::command("jar");
         unpack
             .arg("--extract")
             .arg("--file")
@@ -6434,7 +6434,7 @@ fn debug_keystore(out: &Utf8Path) -> Result<Utf8PathBuf> {
     if keystore.is_file() {
         return Ok(keystore);
     }
-    let mut keytool = std::process::Command::new("keytool");
+    let mut keytool = nts_codegen_jvm::toolchain::command("keytool");
     keytool
         .arg("-genkeypair")
         .arg("-keystore")

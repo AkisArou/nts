@@ -46,6 +46,10 @@
 #     JIT hoist the call out of the timed loop. This is what the C shim spells
 #     with the same keyword and what the node harness spells through `argv`.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # On disk and deliberately not through `TMPDIR`, which is `/tmp` here and `/tmp`
@@ -82,7 +86,7 @@ trap 'rm -rf "$work"' EXIT INT TERM
 # The same flags `tooling/bench` gives every JVM column: the default collector
 # changes with the host, and a column that changes meaning with the machine is
 # not an instrument. Equal bounds so no resizing happens mid-run.
-hotspot="-XX:+UseG1GC -Xms512m -Xmx512m -XX:-UsePerfData"
+hotspot="-XX:+UseG1GC -Xms512m -Xmx512m $nts_jvm_flags"
 
 mkdir -p "$work/common"
 cat > "$work/common/Bench.java" <<'JAVA'
@@ -175,7 +179,7 @@ JSON
     printf "%-24s %s\n" "$case" "the backend declined it"
     continue
   fi
-  if javap -p -cp "$out/nts/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
+  if javap $nts_jdk_flags -p -cp "$out/nts/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
     init='static { nts.gen.Program.module$init(); }'
   else
     init=''
@@ -204,7 +208,7 @@ public final class Case {
 JAVA
   fi
   cp "$work/common/Bench.java" "$out/nts/"
-  if ! javac -nowarn -cp "$out/nts/classes:$out/nts/classes/nts-runtime.jar" \
+  if ! javac $nts_jdk_flags -nowarn -cp "$out/nts/classes:$out/nts/classes/nts-runtime.jar" \
        -d "$out/nts/classes" "$out/nts/Bench.java" "$out/nts/Case.java" \
        > "$out/nts/javac.log" 2>&1; then
     printf "%-24s %s\n" "$case" "javac declined the generated driver"
@@ -226,7 +230,7 @@ JAVA
   # before this changed. **Every ART number in `benchmarks/jvm-rows.md` older than
   # 2026-09-12 is debug-dexed** and is pessimistic by about that much.
   # shellcheck disable=SC2046
-  if ! "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/nts/dex" \
+  if ! "$tools/d8" $nts_android_flags ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/nts/dex" \
        $(find "$out/nts/classes" -name '*.class') \
        "$out/nts/classes/nts-runtime.jar" > "$out/nts/d8.log" 2>&1; then
     printf "%-24s %s\n" "$case" "d8 refused it"
@@ -256,12 +260,12 @@ JAVA
   esac
   [ -n "$theirs" ] && sources="$sources $theirs"
   # shellcheck disable=SC2086
-  if ! javac -nowarn -d "$refcp" $sources > "$out/ref/javac.log" 2>&1; then
+  if ! javac $nts_jdk_flags -nowarn -d "$refcp" $sources > "$out/ref/javac.log" 2>&1; then
     printf "%-24s %s\n" "$case" "javac declined ref.java"
     continue
   fi
   # shellcheck disable=SC2046
-  if ! "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/ref/dex" \
+  if ! "$tools/d8" $nts_android_flags ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/ref/dex" \
        $(find "$refcp" -name '*.class') > "$out/ref/d8.log" 2>&1; then
     printf "%-24s %s\n" "$case" "d8 refused ref.java"
     continue

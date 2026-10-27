@@ -48,6 +48,10 @@
 # first and is a 64-bit counter, to keep the ART total under 1.5e9. A run that
 # still comes back negative prints `overflow` and not a number.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # Work on disk rather than in the tmpfs.
@@ -124,7 +128,7 @@ JSON
   # The flag is repeated rather than comma-joined: `named_entry()` collects
   # every `--entry` occurrence and does not split on commas, unlike
   # `requested_entry()` twenty lines above it, which does.
-  if javap -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
+  if javap $nts_jdk_flags -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
     init='static { nts.gen.Program.module$init(); }'
   else
     init=''
@@ -204,9 +208,9 @@ public final class Main {
 }
 JAVA
   cp="$out/classes:$out/classes/nts-runtime.jar"
-  javac -nowarn -cp "$cp" -d "$out/classes" "$out/H.java" "$out/Main.java" 2> /dev/null \
+  javac $nts_jdk_flags -nowarn -cp "$cp" -d "$out/classes" "$out/H.java" "$out/Main.java" 2> /dev/null \
     || { printf "%-24s %12s %12s\n" "$case" "javac" "javac"; continue; }
-  hotspot=$(java -cp "$cp" H "$runs" 2>&1 | tail -1)
+  hotspot=$(java $nts_jvm_flags -cp "$cp" H "$runs" 2>&1 | tail -1)
   # Scale the device run so the 32-bit counter cannot wrap. HotSpot's counter
   # is 64-bit and is measured first, so its answer sizes the other one.
   device_runs=$runs
@@ -235,7 +239,7 @@ JAVA
   # `NTS_D8_DEBUG=1` goes back, for a run being compared against a figure taken
   # before this changed. Every ART number in `benchmarks/jvm-rows.md` older than
   # 2026-09-12 is a debug-dexed one and is pessimistic by about that much.
-  "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
+  "$tools/d8" $nts_android_flags ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     "$out/classes/nts-runtime.jar" > /dev/null 2>&1 \
     || { printf "%-24s %12s %12s\n" "$case" "$hotspot" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/ab-$case.dex" > /dev/null 2>&1

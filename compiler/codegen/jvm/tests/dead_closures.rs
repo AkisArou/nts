@@ -9,8 +9,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::process::Command;
-
 use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
@@ -257,7 +255,7 @@ fn uncallable(name: &str, source: &str, raising: bool, entry: Entry) -> Option<S
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["-cp", &cp, "-d"])
         .arg(&out)
         .arg(out.join("Drive.java"))
@@ -268,7 +266,7 @@ fn uncallable(name: &str, source: &str, raising: bool, entry: Entry) -> Option<S
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .args(["-Xverify:all", "-cp", &cp, "Drive"])
         .output()
         .unwrap();

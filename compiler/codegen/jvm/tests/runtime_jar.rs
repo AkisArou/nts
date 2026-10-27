@@ -23,7 +23,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -39,7 +38,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -72,7 +71,7 @@ fn the_jar_matches_the_sources_it_was_built_from() {
         std::env::temp_dir().join(format!("nts-runtime-rebuilt-{}.jar", std::process::id()))
     };
 
-    let built = Command::new("sh")
+    let built = nts_codegen_jvm::toolchain::command("sh")
         .arg(root.join("runtime/jvm/build.sh"))
         .arg(&rebuilt)
         .output()
@@ -137,7 +136,7 @@ fn nothing_in_the_runtime_needs_a_feature_android_lacks() {
         return;
     };
     let jar = root().join("runtime/jvm/nts-runtime.jar");
-    let listed = Command::new(&javap)
+    let listed = nts_codegen_jvm::toolchain::command(&javap)
         .arg("-v")
         .arg("-p")
         .arg("-cp")
@@ -232,7 +231,7 @@ fn the_jar_names_no_method_android_spells_differently() {
         return;
     }
     let jar = root().join("runtime/jvm/nts-runtime.jar");
-    let names = Command::new("sh")
+    let names = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("unzip -Z1 '{}' '*.class'", jar.display()))
         .output()
@@ -247,7 +246,7 @@ fn the_jar_names_no_method_android_spells_differently() {
         classes.len()
     );
 
-    let listed = Command::new(&javap)
+    let listed = nts_codegen_jvm::toolchain::command(&javap)
         .arg("-v")
         .arg("-p")
         .arg("-cp")
@@ -337,7 +336,7 @@ fn d8_accepts_the_runtime_jar() {
     let out = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).expect("a directory to dex into");
-    let run = Command::new(&d8)
+    let run = nts_codegen_jvm::toolchain::command(&d8)
         .arg("--min-api")
         .arg("29")
         .arg("--output")

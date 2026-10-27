@@ -2,7 +2,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use nts_core::hir::{
     Absent, BinOp, Block, Callee, Field, Func, GuardedDispatch, HirType, Layout, ManagedType, Op,
@@ -738,7 +737,7 @@ fn write_classes(directory: &Path, program: &Program) {
 }
 
 fn command(tool: &Path, args: &[&str], directory: &Path, label: &str) {
-    let child = Command::new(tool)
+    let child = crate::toolchain::command(tool)
         .args(args)
         .current_dir(directory)
         .stdout(std::process::Stdio::piped())

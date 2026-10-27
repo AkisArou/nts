@@ -4,7 +4,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
@@ -31,7 +30,7 @@ fn materialise() -> PathBuf {
         path = materialiser.to_str().unwrap(),
         case = CASE,
     );
-    let ran = Command::new("node")
+    let ran = nts_codegen_jvm::toolchain::command("node")
         .args(["--input-type=module", "-e", &script])
         .arg(&scratch)
         .output()

@@ -39,6 +39,9 @@
 # and does not fail. Correcting a reference changes a published row, and that
 # is a decision with a measurement attached rather than a lint.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 bin=${NTS_BIN:-$root/target-jvm/release/nts}
@@ -68,7 +71,7 @@ JSON
   # The specialised path's return type is what the middle end proved. Without a
   # `$whole` path there is nothing to compare and the case is skipped rather
   # than guessed at.
-  ours=$(javap -p -cp "$work/$case" nts.gen.Program 2>/dev/null \
+  ours=$(javap $nts_jdk_flags -p -cp "$work/$case" nts.gen.Program 2>/dev/null \
     | grep -oE "(double|int|long|boolean) $entry\\\$whole\(" | head -1 | awk '{print $1}')
   ref=$(grep -v "^//" "$dir/ref.java" \
     | grep -oE "static (int|double|long) $entry\(" | head -1 | awk '{print $2}')

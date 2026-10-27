@@ -1,3 +1,4 @@
+import { vmToolFlags } from "../../jvm/vm-flags.ts";
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, openSync, readSync, writeSync, closeSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,6 +59,7 @@ export function icuHost(root: string) {
   const jar = resolve(providerOutput, "icu4j-78.3.jar");
   const classpath = [classes, jar].join(delimiter);
   execFileSync("javac", [
+    ...vmToolFlags("javac"),
     "--release",
     "11",
     "-cp",
@@ -68,7 +70,7 @@ export function icuHost(root: string) {
   ]);
   const child = spawn(
     "java",
-    ["-Xverify:all", "-cp", [directory, classpath].join(delimiter), "Host", input, output],
+    [...vmToolFlags("java"), "-Xverify:all", "-cp", [directory, classpath].join(delimiter), "Host", input, output],
     { stdio: "inherit" },
   );
   const writer = openSync(input, "w");

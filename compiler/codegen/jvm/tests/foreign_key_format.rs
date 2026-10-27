@@ -169,7 +169,7 @@ fn fixture_classes() -> Option<std::path::PathBuf> {
                 .filter_map(|it| it.ok().map(|e| e.path()))
                 .filter(|p| p.extension().is_some_and(|e| e == "java"))
                 .collect();
-            let built = std::process::Command::new(&javac)
+            let built = nts_codegen_jvm::toolchain::command(&javac)
                 .args(["--release", "8", "-nowarn", "-d"])
                 .arg(&out)
                 .args(&files)

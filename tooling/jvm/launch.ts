@@ -1,3 +1,4 @@
+import { VM_FLAGS, vmToolFlags } from "./vm-flags.ts";
 // How one program `emit-jvm` wrote is run, the way a runner of thousands of
 // them wants it run: `nts.rt.NtsMain` over its classes, started from a
 // class-data archive of the runtime jar.
@@ -57,7 +58,7 @@ export const FLAGS = [
   "-Xss512m",
   "-XX:TieredStopAtLevel=1",
   "-XX:+UseSerialGC",
-  "-XX:-UsePerfData",
+  ...VM_FLAGS,
 ];
 
 const MAIN = ["nts.rt.NtsMain", "nts.gen.Program"];
@@ -120,11 +121,11 @@ function build(dir: string, bytes: Buffer): Built {
   try {
     const jar = join(dir, "nts-runtime.jar");
     writeFileSync(jar, bytes);
-    execFileSync("javac", ["--release", "8", "-nowarn", "-d", work, join(HERE, "NtsCdsWarm.java")], {
+    execFileSync("javac", [...vmToolFlags("javac"), "--release", "8", "-nowarn", "-d", work, join(HERE, "NtsCdsWarm.java")], {
       stdio: ["ignore", "ignore", "pipe"],
     });
     const warm = join(dir, "warm.jar");
-    execFileSync("jar", ["cf", warm, "-C", work, "NtsCdsWarm.class"], { stdio: ["ignore", "ignore", "pipe"] });
+    execFileSync("jar", [...vmToolFlags("jar"), "cf", warm, "-C", work, "NtsCdsWarm.class"], { stdio: ["ignore", "ignore", "pipe"] });
     const partial = join(dir, `nts.jsa.${process.pid}`);
     execFileSync(
       "java",

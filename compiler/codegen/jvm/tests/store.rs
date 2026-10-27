@@ -19,7 +19,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -56,7 +55,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -78,7 +77,7 @@ fn a_value_is_whole_or_absent_and_a_name_cannot_escape() {
     std::fs::create_dir_all(&dir).unwrap();
     let jar = runtime_jar();
 
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .arg("--release")
         .arg("8")
         .arg("-Xlint:-options")
@@ -95,7 +94,7 @@ fn a_value_is_whole_or_absent_and_a_name_cannot_escape() {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", jar.display(), dir.display()))
@@ -147,7 +146,7 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
     let jar = runtime_jar();
 
     let shim = dir.join("shim.so");
-    let built = Command::new(&cc)
+    let built = nts_codegen_jvm::toolchain::command(&cc)
         .arg("-shared")
         .arg("-fPIC")
         .arg("-o")
@@ -167,7 +166,7 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
         return;
     }
 
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .arg("--release")
         .arg("8")
         .arg("-Xlint:-options")
@@ -185,7 +184,7 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
     );
 
     let store = dir.join("nts-durable-store");
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .env("LD_PRELOAD", &shim)
         .env("NTS_SHIM_MARK", "nts-durable-store")
         .arg("-cp")
@@ -346,7 +345,7 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
         std::fs::write(&store, text).unwrap();
 
         let classes = dir.join("classes");
-        let mut compile = Command::new(javac);
+        let mut compile = nts_codegen_jvm::toolchain::command(javac);
         compile
             .args(["--release", "8", "-Xlint:-options", "-d"])
             .arg(&classes);
@@ -359,7 +358,7 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
             "`{name}` did not compile:\n{}",
             String::from_utf8_lossy(&built.stderr)
         );
-        let built = Command::new(javac)
+        let built = nts_codegen_jvm::toolchain::command(javac)
             .args(["--release", "8", "-Xlint:-options", "-cp"])
             .arg(&classes)
             .arg("-d")
@@ -372,7 +371,7 @@ fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
             "the driver did not compile under `{name}`"
         );
 
-        let ran = Command::new(java)
+        let ran = nts_codegen_jvm::toolchain::command(java)
             .arg("-cp")
             .arg(&classes)
             .arg("StoreTest")

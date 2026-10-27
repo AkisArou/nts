@@ -4327,3 +4327,6 @@ mod dispatch_identity_tests;
 
 #[cfg(test)]
 mod guarded_member_tests;
+
+/// Shared JDK launch policy for tests and tooling.
+pub use nts_jvm_emitter::toolchain;

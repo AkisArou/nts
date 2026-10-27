@@ -15,7 +15,6 @@
 use nts_jvm_emitter::read;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -29,7 +28,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_jvm_emitter::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -74,7 +73,7 @@ fn build_fixture() -> Option<PathBuf> {
         .filter(|p| p.extension().is_some_and(|e| e == "java"))
         .collect();
 
-    let built = Command::new(&javac)
+    let built = nts_jvm_emitter::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:all,-options", "-d"])
         .arg(&out)
         .args(&files)
@@ -95,7 +94,7 @@ fn build_fixture() -> Option<PathBuf> {
 /// from them alone -- which is what makes this a comparison of two *readings*
 /// rather than of one reading and a regex.
 fn javap_descriptors(javap: &Path, classes: &Path, class: &str) -> BTreeSet<String> {
-    let listed = Command::new(javap)
+    let listed = nts_jvm_emitter::toolchain::command(javap)
         .args(["-p", "-s", "-cp"])
         .arg(classes)
         .arg(class)
@@ -173,7 +172,7 @@ fn the_kotlin_spelling_of_non_null_is_accepted() {
     )
     .expect("writes");
 
-    let built = Command::new(&javac)
+    let built = nts_jvm_emitter::toolchain::command(&javac)
         .args(["--release", "8", "-nowarn", "-d"])
         .arg(out.join("classes"))
         .arg(out.join("src/org/jetbrains/annotations/NotNull.java"))
@@ -420,7 +419,7 @@ fn android_view_carries_its_nullability_in_the_invisible_table() {
         return;
     };
 
-    let extracted = Command::new("unzip")
+    let extracted = nts_jvm_emitter::toolchain::command("unzip")
         .args(["-p"])
         .arg(jar)
         .arg("android/view/View.class")
@@ -928,7 +927,7 @@ fn android_shape() -> Option<PathBuf> {
                 .filter_map(|it| it.ok().map(|e| e.path()))
                 .filter(|p| p.extension().is_some_and(|e| e == "java"))
                 .collect();
-            let built = Command::new(&javac)
+            let built = nts_jvm_emitter::toolchain::command(&javac)
                 .args(["--release", "8", "-nowarn", "-d"])
                 .arg(&out)
                 .args(&files)
@@ -1049,7 +1048,7 @@ fn a_body_that_only_throws_is_not_evidence() {
         return;
     };
 
-    let extracted = Command::new("unzip")
+    let extracted = nts_jvm_emitter::toolchain::command("unzip")
         .arg("-p")
         .arg(jar)
         .arg("android/graphics/Rect.class")
@@ -1149,7 +1148,7 @@ fn an_unmodelled_instruction_fails_closed() {
         .exists()
     {
         let _ = std::fs::create_dir_all(&out);
-        let extracted = Command::new(&jmod)
+        let extracted = nts_jvm_emitter::toolchain::command(&jmod)
             .args(["extract", "--dir"])
             .arg(&out)
             .arg(java_home.join("jmods/java.base.jmod"))
@@ -1388,7 +1387,7 @@ fn java_base() -> Option<PathBuf> {
             let classes = out.join("classes");
             if !classes.exists() {
                 let _ = std::fs::create_dir_all(&out);
-                let ran = Command::new(tool("jmod")?)
+                let ran = nts_jvm_emitter::toolchain::command(tool("jmod")?)
                     .args(["extract", "--dir"])
                     .arg(&out)
                     .arg(&jmod)

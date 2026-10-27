@@ -31,7 +31,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use camino::Utf8PathBuf;
 use nts_frontend_ts::Frontend;
@@ -49,7 +48,7 @@ fn tool(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
-    let found = Command::new("sh")
+    let found = nts_codegen_jvm::toolchain::command("sh")
         .arg("-c")
         .arg(format!("command -v {name}"))
         .output()
@@ -163,7 +162,7 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).expect("write the jar");
 
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
         .arg(&jar)
         .arg("-d")
@@ -180,7 +179,7 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
     // `-Xverify:all` because the verifier is a free second opinion on the
     // StackMapTable, and because a class this backend wrote is the one in the
     // classpath that has not been through `javac`.
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .arg("-Xverify:all")
         .arg("-cp")
         .arg(format!("{}:{}", dir.display(), jar.display()))
@@ -434,7 +433,7 @@ fn the_declarations_the_table_and_the_jar_agree() {
 
     // `-s` prints descriptors, so this compares the emitted descriptor against
     // the shipped method's rather than against its Java signature reformatted.
-    let listed = Command::new(&javap)
+    let listed = nts_codegen_jvm::toolchain::command(&javap)
         .args(["-p", "-s", "-cp"])
         .arg(&jar)
         .args(owners.iter().map(|it| it.replace('/', ".")))

@@ -42,6 +42,9 @@
 # Requires `nts-bench` to have generated the case at least once, since the
 # drivers here are rewritten from the ones it wrote into `target/bench`.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
 case=${1:?usage: counted.sh <case> [reps]}
 reps=${2:-3}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -90,7 +93,7 @@ jar=$root/target/bench/$case.jvm/nts-runtime.jar
 mkdir -p "$work/ours"
 cp -r "$root/target/bench/$case.jvm/nts" "$work/ours/"
 emit "$work/ours" "$ours"
-javac -cp "$work/ours:$jar" -d "$work/ours" "$work/ours/Count.java"
+javac $nts_jdk_flags -cp "$work/ours:$jar" -d "$work/ours" "$work/ours/Count.java"
 
 # The reference's entry is its own `run`, which takes no argument -- `Ref`
 # extends `Bench.Work` and holds its input in a `volatile` of its own.
@@ -102,14 +105,14 @@ if [ -f "$root/benchmarks/cases/$case/ref.java" ]; then
   # AWFY references reach for classes on the vendored classpath.
   awfy=$root/target/bench/awfy-java
   emit "$work/ref" "ref.run()" "final Ref ref = new Ref();"
-  if javac -cp "$work/ref:$awfy" -d "$work/ref" "$work/ref"/*.java >/dev/null 2>&1; then
+  if javac $nts_jdk_flags -cp "$work/ref:$awfy" -d "$work/ref" "$work/ref"/*.java >/dev/null 2>&1; then
     have_ref=yes
     refpath="$work/ref:$awfy"
   fi
 fi
 
 count() { # classpath, event, n
-  taskset -c "$counted_cpus" perf stat -x, -e "$2" java -cp "$1" Count "$3" 2>&1 >/dev/null |
+  taskset -c "$counted_cpus" perf stat -x, -e "$2" java $nts_jvm_flags -cp "$1" Count "$3" 2>&1 >/dev/null |
     awk -F, -v e="$2" '$0 ~ ("cpu_core/" e) {print $1}'
 }
 
@@ -142,7 +145,7 @@ report() { # label, classpath, n
 # the marginal cost of one operation.
 elapsed() { # classpath, n
   start=$(date +%s%N)
-  java -cp "$1" Count "$2" >/dev/null 2>&1
+  java $nts_jvm_flags -cp "$1" Count "$2" >/dev/null 2>&1
   echo $(( ($(date +%s%N) - start) / 1000 ))
 }
 if [ -n "${NTS_COUNTED_N:-}" ]; then

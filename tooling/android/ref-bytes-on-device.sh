@@ -28,6 +28,10 @@
 # the rule this repository keeps for `ref.cpp` and has cost this lane twice
 # when it was broken.
 set -eu
+nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
+nts_jvm_flags=$(cat "$nts_jvm_flags_file")
+nts_jdk_flags=$(sed 's/^/-J/' "$nts_jvm_flags_file")
+nts_android_flags=$(sed 's/^-/-J/' "$nts_jvm_flags_file")
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 # On disk and deliberately not through `TMPDIR`, which is `/tmp` here and `/tmp`
@@ -156,7 +160,7 @@ for case in "$@"; do
   esac
   [ -n "$theirs" ] && sources="$sources $theirs"
   # shellcheck disable=SC2086
-  javac -nowarn -d "$out/classes" $sources 2> "$out/javac.log" \
+  javac $nts_jdk_flags -nowarn -d "$out/classes" $sources 2> "$out/javac.log" \
     || { printf "%-24s %14s %14s\n" "$case" "javac" "javac"; continue; }
   # `--release`, matching `bytes-on-device.sh`, and **not because it changes
   # this number**. Measured 2026-09-12 on four cases: `objects` 0/0,
@@ -170,7 +174,7 @@ for case in "$@"; do
   # difference between ours and the reference that no column would show --
   # which is the same shape as the missing fourth cell this script was just
   # given, and as `d8`'s debug default itself.
-  "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
+  "$tools/d8" $nts_android_flags ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     > /dev/null 2>&1 || { printf "%-24s %14s %14s\n" "$case" "d8" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/rb-$case.dex" > /dev/null 2>&1
   # `getGlobalAllocSize` is 32-bit and wraps, and there is no HotSpot figure to
@@ -194,6 +198,6 @@ for case in "$@"; do
   # The same reference, the same counter its compiled counterpart uses, on this
   # machine's JVM. No halve-and-retry: `getThreadAllocatedBytes` is a `long`,
   # and the 32-bit wrap the loop above exists for is `getGlobalAllocSize`'s.
-  hot=$(java -cp "$out/classes" RefH "$runs" 2>/dev/null | tr -d '\r' | tail -1)
+  hot=$(java $nts_jvm_flags -cp "$out/classes" RefH "$runs" 2>/dev/null | tr -d '\r' | tail -1)
   printf "%-24s %14s %14s\n" "$case" "${hot:-none}" "$got"
 done

@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::Output;
 
 mod common;
 
@@ -57,7 +57,7 @@ impl Fixture {
         let source = dir.join("Program.java");
         std::fs::write(&source, PROGRAM).unwrap();
         let classpath = std::env::join_paths([&dir, &jar]).unwrap();
-        let built = Command::new(javac)
+        let built = nts_codegen_jvm::toolchain::command(javac)
             .args([
                 "--release",
                 "8",
@@ -89,7 +89,7 @@ impl Fixture {
         let results = self.dir.join("results.txt");
         std::fs::write(&input, cases).unwrap();
         let _ = std::fs::remove_file(&results);
-        let mut command = Command::new(&self.java);
+        let mut command = nts_codegen_jvm::toolchain::command(&self.java);
         if let Some(encoding) = encoding {
             command.arg(format!("-Dfile.encoding={encoding}"));
         }

@@ -11,7 +11,6 @@
 
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
-use std::process::Command;
 
 mod common;
 
@@ -64,7 +63,7 @@ fn a_proven_view_access_takes_the_proved_accessor() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &class.bytes).unwrap();
     }
-    let listed = Command::new(&disassembler)
+    let listed = nts_codegen_jvm::toolchain::command(&disassembler)
         .args(["-c", "-p", "-cp"])
         .arg(&dir)
         .arg("nts.gen.Program")

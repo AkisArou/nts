@@ -7,8 +7,6 @@
 //! representation: a cast to any one of them would throw for the others.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::process::Command;
-
 use nts_core::hir::{self, HirType, OpKind, ValueId};
 
 mod common;
@@ -120,7 +118,7 @@ public class Drive { public static void main(String[] a) {
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
-    let compiled = Command::new(&javac)
+    let compiled = nts_codegen_jvm::toolchain::command(&javac)
         .args(["-cp", &cp, "-d"])
         .arg(&out)
         .arg(out.join("Drive.java"))
@@ -131,7 +129,7 @@ public class Drive { public static void main(String[] a) {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
-    let ran = Command::new(&java)
+    let ran = nts_codegen_jvm::toolchain::command(&java)
         .args(["-Xverify:all", "-cp", &cp, "Drive"])
         .output()
         .unwrap();
