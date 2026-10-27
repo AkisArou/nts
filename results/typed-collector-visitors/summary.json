@@ -1,0 +1,3078 @@
+{
+  "summaries": [
+    {
+      "name": "cyclic-churn",
+      "backend": "c",
+      "ratio": 0.8854717967082277,
+      "floor": 0.04236021285140512,
+      "instructions": 0.920894341528832,
+      "cycles": 0.8766798848467016,
+      "timeBase": 103866.34506023157,
+      "timeTyped": 94348.122146,
+      "nodeBase": 10.18820753392605,
+      "nodeTyped": 9.25456892030075,
+      "bunBase": 9.504407417132146,
+      "bunTyped": 8.633431660630082,
+      "rssBase": 4.75390625,
+      "rssTyped": 4.75390625,
+      "verdict": "improves",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 123174.70890442978,
+          "typed": 105320.988584,
+          "ratio": 0.855053683672333,
+          "floor": 0.04236021285140512,
+          "instructions": 0.9208943381847852,
+          "cycles": 0.8561234604569651,
+          "baseInstructions": 2568923.437785388,
+          "typedInstructions": 2365707.049086758,
+          "rssBaseMiB": 4.7265625,
+          "rssTypedMiB": 4.73046875,
+          "load": "11.40→11.40; 11.40→11.40; 11.40→11.40",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 107522.15774703147,
+          "typed": 94348.122146,
+          "ratio": 0.8774760860731035,
+          "floor": 0.022737320532364658,
+          "instructions": 0.920894341528832,
+          "cycles": 0.8766798848467016,
+          "baseInstructions": 2568923.430936073,
+          "typedInstructions": 2365707.051369863,
+          "rssBaseMiB": 4.75390625,
+          "rssTypedMiB": 4.57421875,
+          "load": "13.11→13.11; 13.11→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 103560.23950448817,
+          "typed": 96336.736301,
+          "ratio": 0.9302482956967755,
+          "floor": 0.009972871264224858,
+          "instructions": 0.9208943416216803,
+          "cycles": 0.886831774940757,
+          "baseInstructions": 2568923.419520548,
+          "typedInstructions": 2365707.0410958906,
+          "rssBaseMiB": 4.71875,
+          "rssTypedMiB": 4.70703125,
+          "load": "10.34→10.34; 10.34→10.34; 10.34→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 103866.34506023157,
+          "typed": 91970.719178,
+          "ratio": 0.8854717967082277,
+          "floor": 0.009613099702595163,
+          "instructions": 0.9208943411773102,
+          "cycles": 0.8812239043469754,
+          "baseInstructions": 2568923.419520548,
+          "typedInstructions": 2365707.0399543378,
+          "rssBaseMiB": 4.71875,
+          "rssTypedMiB": 4.57421875,
+          "load": "9.21→9.21; 9.21→9.21; 9.21→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 102375.87104438167,
+          "typed": 93777.115297,
+          "ratio": 0.9160079845019931,
+          "floor": 0.007570991182644038,
+          "instructions": 0.9208943424401159,
+          "cycles": 0.8753494766029525,
+          "baseInstructions": 2568923.417237443,
+          "typedInstructions": 2365707.0410958906,
+          "rssBaseMiB": 4.75,
+          "rssTypedMiB": 4.75390625,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "llvm",
+      "ratio": 0.9359314046849444,
+      "floor": 0.04680104564014509,
+      "instructions": 0.9209553886209515,
+      "cycles": 0.9300983170466403,
+      "timeBase": 106072.5804053582,
+      "timeTyped": 99243.889269,
+      "nodeBase": 10.404616261428673,
+      "nodeTyped": 9.734792725788191,
+      "bunBase": 9.70629147848042,
+      "bunTyped": 9.081424370197457,
+      "rssBase": 4.921875,
+      "rssTyped": 4.7578125,
+      "verdict": "improves",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 119261.01102310361,
+          "typed": 111620.125571,
+          "ratio": 0.9359314046849444,
+          "floor": 0.024557999075903725,
+          "instructions": 0.9209553886209515,
+          "cycles": 0.9361050467085267,
+          "baseInstructions": 2570907.4337899545,
+          "typedInstructions": 2367691.0547945206,
+          "rssBaseMiB": 4.7109375,
+          "rssTypedMiB": 4.71484375,
+          "load": "11.40→11.40; 11.40→11.40; 11.40→11.40",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 109174.22274758198,
+          "typed": 104898.640411,
+          "ratio": 0.9608370709772085,
+          "floor": 0.0035520917659448425,
+          "instructions": 0.9209553902856429,
+          "cycles": 0.9300983170466403,
+          "baseInstructions": 2570907.4229452056,
+          "typedInstructions": 2367691.049086758,
+          "rssBaseMiB": 4.703125,
+          "rssTypedMiB": 4.71484375,
+          "load": "13.11→13.11; 13.11→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 104714.38938259424,
+          "typed": 95593.710046,
+          "ratio": 0.9128994650079075,
+          "floor": 0.0010182558370684935,
+          "instructions": 0.9209553873468199,
+          "cycles": 0.9141211759505111,
+          "baseInstructions": 2570907.421232877,
+          "typedInstructions": 2367691.0399543378,
+          "rssBaseMiB": 4.703125,
+          "rssTypedMiB": 4.73046875,
+          "load": "10.34→10.34; 10.34→10.34; 10.34→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 106072.5804053582,
+          "typed": 96174.150685,
+          "ratio": 0.9066824839884994,
+          "floor": 0.04680104564014509,
+          "instructions": 0.9209553871774533,
+          "cycles": 0.9213454063984114,
+          "baseInstructions": 2570907.4229452056,
+          "typedInstructions": 2367691.0410958906,
+          "rssBaseMiB": 4.921875,
+          "rssTypedMiB": 4.72265625,
+          "load": "9.21→9.21; 9.21→9.21; 9.21→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 103014.70047901952,
+          "typed": 99243.889269,
+          "ratio": 0.9633954067479185,
+          "floor": 0.001047091884739726,
+          "instructions": 0.9209553903848136,
+          "cycles": 0.9367680442023885,
+          "baseInstructions": 2570907.4189497717,
+          "typedInstructions": 2367691.0456621004,
+          "rssBaseMiB": 4.7265625,
+          "rssTypedMiB": 4.7578125,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "c",
+      "ratio": 0.9933328852751384,
+      "floor": 0.0437697744566482,
+      "instructions": 1.0000175791771353,
+      "cycles": 0.9948298355200301,
+      "timeBase": 91744.48266902921,
+      "timeTyped": 92018.363378,
+      "nodeBase": 2.4917172397189247,
+      "nodeTyped": 2.4991556519734344,
+      "bunBase": 2.2378183092952457,
+      "bunTyped": 2.2444987684058892,
+      "rssBase": 3.98046875,
+      "rssTyped": 3.98828125,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 100838.7294687782,
+          "typed": 99741.416509,
+          "ratio": 0.9891181397707124,
+          "floor": 0.010524158137798167,
+          "instructions": 1.0000175770922084,
+          "cycles": 0.9869288760618685,
+          "baseInstructions": 1820335.5,
+          "typedInstructions": 1820367.4962049336,
+          "rssBaseMiB": 3.98046875,
+          "rssTypedMiB": 3.953125,
+          "load": "13.53→13.53; 13.53→13.53; 13.53→13.53",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 91223.8084860908,
+          "typed": 93398.617647,
+          "ratio": 1.0238403679587749,
+          "floor": 0.006486056818210795,
+          "instructions": 1.0000175820437633,
+          "cycles": 0.9948298355200301,
+          "baseInstructions": 1820335.4881404175,
+          "typedInstructions": 1820367.4933586337,
+          "rssBaseMiB": 3.98046875,
+          "rssTypedMiB": 3.98046875,
+          "load": "12.54→12.54; 12.54→12.54; 12.54→12.54",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 91744.48266902921,
+          "typed": 90813.616698,
+          "ratio": 0.9898537117007097,
+          "floor": 0.0437697744566482,
+          "instructions": 1.0000175791771353,
+          "cycles": 0.9879066392312053,
+          "baseInstructions": 1820335.4886148009,
+          "typedInstructions": 1820367.4886148009,
+          "rssBaseMiB": 3.95703125,
+          "rssTypedMiB": 3.984375,
+          "load": "10.34→10.34; 10.34→10.34; 10.34→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 92635.97807145213,
+          "typed": 92018.363378,
+          "ratio": 0.9933328852751384,
+          "floor": 0.022469078537725506,
+          "instructions": 1.0000175778740925,
+          "cycles": 1.0021228238851223,
+          "baseInstructions": 1820335.4919354839,
+          "typedInstructions": 1820367.4895635673,
+          "rssBaseMiB": 3.98046875,
+          "rssTypedMiB": 3.94921875,
+          "load": "9.21→9.21; 9.21→9.21; 9.21→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 88665.2107925141,
+          "typed": 90123.627135,
+          "ratio": 1.0164485746940675,
+          "floor": 0.010154235249733912,
+          "instructions": 1.0000175799589646,
+          "cycles": 1.0100650528036976,
+          "baseInstructions": 1820335.4862428843,
+          "typedInstructions": 1820367.4876660341,
+          "rssBaseMiB": 3.9765625,
+          "rssTypedMiB": 3.98828125,
+          "load": "7.08→7.08; 7.08→7.08; 7.08→7.08",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "llvm",
+      "ratio": 1.0213567944558688,
+      "floor": 0.013056828054381686,
+      "instructions": 1.000017580219553,
+      "cycles": 1.0238989905705522,
+      "timeBase": 92449.81171854018,
+      "timeTyped": 96013.77704,
+      "nodeBase": 2.510873493056591,
+      "nodeTyped": 2.6076683473616513,
+      "bunBase": 2.2550225946664715,
+      "bunTyped": 2.3419543274315684,
+      "rssBase": 4.015625,
+      "rssTyped": 3.98828125,
+      "verdict": "REGRESSES",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 99020.9353219233,
+          "typed": 100141.798861,
+          "ratio": 1.0113194602276043,
+          "floor": 0.009996089759388038,
+          "instructions": 1.0000175796982662,
+          "cycles": 1.0124437497143914,
+          "baseInstructions": 1820335.4962049336,
+          "typedInstructions": 1820367.4971537,
+          "rssBaseMiB": 3.9765625,
+          "rssTypedMiB": 3.94921875,
+          "load": "13.53→13.53; 13.53→13.53; 13.53→13.53",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 92449.81171854018,
+          "typed": 100652.588235,
+          "ratio": 1.0887268060797448,
+          "floor": 0.013056828054381686,
+          "instructions": 1.0000175846497754,
+          "cycles": 1.0334823299657363,
+          "baseInstructions": 1820335.489089184,
+          "typedInstructions": 1820367.4990512333,
+          "rssBaseMiB": 4.015625,
+          "rssTypedMiB": 3.9296875,
+          "load": "12.54→12.54; 12.54→12.54; 12.54→12.54",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 91290.44233871429,
+          "typed": 95528.956357,
+          "ratio": 1.0464288912366049,
+          "floor": 0.0008537809213088332,
+          "instructions": 1.0000175804801321,
+          "cycles": 1.0481674730709076,
+          "baseInstructions": 1820335.4900379507,
+          "typedInstructions": 1820367.4924098672,
+          "rssBaseMiB": 3.98046875,
+          "rssTypedMiB": 3.9765625,
+          "load": "10.34→10.34; 10.34→10.34; 10.34→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 94006.10791564925,
+          "typed": 96013.77704,
+          "ratio": 1.0213567944558688,
+          "floor": 0.0071419266155499095,
+          "instructions": 1.000017580219507,
+          "cycles": 1.0188718981849667,
+          "baseInstructions": 1820335.4924098672,
+          "typedInstructions": 1820367.4943074004,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 3.80859375,
+          "load": "9.21→9.21; 9.21→9.21; 9.21→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 89383.90827335491,
+          "typed": 91285.073055,
+          "ratio": 1.021269653770687,
+          "floor": 0.0060728315030336155,
+          "instructions": 1.000017580219553,
+          "cycles": 1.0238989905705522,
+          "baseInstructions": 1820335.4876660341,
+          "typedInstructions": 1820367.4895635673,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 3.98828125,
+          "load": "7.08→7.08; 7.08→7.08; 7.08→7.08",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sort-objects",
+      "backend": "c",
+      "ratio": 1.001421893461115,
+      "floor": 0.042165586037059444,
+      "instructions": 1.000024016676644,
+      "cycles": 1.00286623757307,
+      "timeBase": 54271.56803145014,
+      "timeTyped": 54487.638906,
+      "nodeBase": 1.2028149408256217,
+      "nodeTyped": 1.2076036964413654,
+      "bunBase": 1.9579202224368217,
+      "bunTyped": 1.965715271485628,
+      "rssBase": 3.9921875,
+      "rssTyped": 3.9765625,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 60188.06313349379,
+          "typed": 59577.458359,
+          "ratio": 0.989855051937134,
+          "floor": 0.03310896741233149,
+          "instructions": 1.0000240162471414,
+          "cycles": 0.990342082679901,
+          "baseInstructions": 1415670.3145896657,
+          "typedInstructions": 1415704.3136778115,
+          "rssBaseMiB": 3.97265625,
+          "rssTypedMiB": 3.96875,
+          "load": "13.53→13.53; 13.53→13.53; 13.53→13.53",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 54271.56803145014,
+          "typed": 54487.638906,
+          "ratio": 1.0039812904323062,
+          "floor": 0.0005262217441510675,
+          "instructions": 1.000024016676644,
+          "cycles": 1.00286623757307,
+          "baseInstructions": 1415670.309118541,
+          "typedInstructions": 1415704.3088145896,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 3.9453125,
+          "load": "12.54→12.54; 12.54→12.54; 12.54→12.54",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 53951.79003923373,
+          "typed": 53890.578116,
+          "ratio": 0.9988654329506171,
+          "floor": 0.032269807352590774,
+          "instructions": 1.0000240160325242,
+          "cycles": 1.000728225006001,
+          "baseInstructions": 1415670.3094224925,
+          "typedInstructions": 1415704.308206687,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 3.95703125,
+          "load": "9.67→9.67; 9.67→9.67; 9.67→9.67",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 56023.22761007567,
+          "typed": 56546.352584,
+          "ratio": 1.009337644335048,
+          "floor": 0.042165586037059444,
+          "instructions": 1.0000240173207329,
+          "cycles": 1.0076076645586207,
+          "baseInstructions": 1415670.3106382978,
+          "typedInstructions": 1415704.3112462007,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 3.9765625,
+          "load": "9.21→9.21; 9.21→9.21; 9.21→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 53433.84950678411,
+          "typed": 53509.826748,
+          "ratio": 1.001421893461115,
+          "floor": 0.01753766036141191,
+          "instructions": 1.0000240166766543,
+          "cycles": 1.0080025890982507,
+          "baseInstructions": 1415670.3085106383,
+          "typedInstructions": 1415704.308206687,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 3.8125,
+          "load": "7.08→7.08; 7.08→7.08; 7.08→7.08",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sort-objects",
+      "backend": "llvm",
+      "ratio": 0.9911933945872767,
+      "floor": 0.044825377751579465,
+      "instructions": 1.0000225693448275,
+      "cycles": 1.0087794765843836,
+      "timeBase": 58830.371965091086,
+      "timeTyped": 60525.599392,
+      "nodeBase": 1.3038512234054864,
+      "nodeTyped": 1.3414223670290093,
+      "bunBase": 2.1223852404113845,
+      "bunTyped": 2.1835428627386237,
+      "rssBase": 4.0234375,
+      "rssTyped": 3.984375,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 63539.748860272746,
+          "typed": 62603.767781,
+          "ratio": 0.985269361367307,
+          "floor": 0.02970764848056573,
+          "instructions": 1.0000225693448275,
+          "cycles": 0.9853727356336647,
+          "baseInstructions": 1506414.3179331308,
+          "typedInstructions": 1506448.3167173252,
+          "rssBaseMiB": 3.99609375,
+          "rssTypedMiB": 3.921875,
+          "load": "13.53→13.53; 13.53→13.53; 13.53→13.53",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 58830.371965091086,
+          "typed": 58245.348936,
+          "ratio": 0.9900557652527129,
+          "floor": 0.01434813859974926,
+          "instructions": 1.0000225691431153,
+          "cycles": 1.0103008316173379,
+          "baseInstructions": 1506414.3139817629,
+          "typedInstructions": 1506448.312462006,
+          "rssBaseMiB": 3.9609375,
+          "rssTypedMiB": 3.94921875,
+          "load": "12.54→12.54; 12.54→12.54; 12.54→12.54",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 58707.18489103274,
+          "typed": 61289.625532,
+          "ratio": 1.0439884938404143,
+          "floor": 0.044825377751579465,
+          "instructions": 1.000022572976786,
+          "cycles": 1.0225750446788875,
+          "baseInstructions": 1506414.3130699089,
+          "typedInstructions": 1506448.317325228,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 3.9140625,
+          "load": "9.67→9.67; 9.67→9.67; 9.67→9.67",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 60657.43918085316,
+          "typed": 60525.599392,
+          "ratio": 0.9978264860727127,
+          "floor": 0.024233782208965438,
+          "instructions": 1.0000225685377508,
+          "cycles": 1.0087794765843836,
+          "baseInstructions": 1506414.317325228,
+          "typedInstructions": 1506448.314893617,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 3.94921875,
+          "load": "9.21→9.21; 9.21→9.21; 9.21→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 58002.82808072901,
+          "typed": 57492.020061,
+          "ratio": 0.9911933945872767,
+          "floor": 0.03064203901362028,
+          "instructions": 1.000022570151986,
+          "cycles": 0.9942982025437601,
+          "baseInstructions": 1506414.3130699089,
+          "typedInstructions": 1506448.3130699089,
+          "rssBaseMiB": 4.0234375,
+          "rssTypedMiB": 3.984375,
+          "load": "7.08→7.08; 7.08→7.08; 7.08→7.08",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "c",
+      "ratio": 1.0386706004246116,
+      "floor": 0.10085021519488246,
+      "instructions": 0.9999999989128407,
+      "cycles": 1.051615402531602,
+      "timeBase": 29658.043925963484,
+      "timeTyped": 30804.938292,
+      "nodeBase": 0.6049986607591455,
+      "nodeTyped": 0.6283943222267876,
+      "bunBase": 0.6093636135754509,
+      "bunTyped": 0.6329280703893245,
+      "rssBase": 4.0703125,
+      "rssTyped": 4.06640625,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 31361.150361234002,
+          "typed": 33483.933745,
+          "ratio": 1.0676883137038877,
+          "floor": 0.04616612645163343,
+          "instructions": 0.9999999989128407,
+          "cycles": 1.0677427342019328,
+          "baseInstructions": 597485.1711594673,
+          "typedInstructions": 597485.1705099058,
+          "rssBaseMiB": 4.0703125,
+          "rssTypedMiB": 4.06640625,
+          "load": "13.53→13.53; 13.53→13.53; 13.53→13.53",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 28895.707704997378,
+          "typed": 27965.244885,
+          "ratio": 0.9677992721446148,
+          "floor": 0.010092540933959615,
+          "instructions": 0.9999999986410509,
+          "cycles": 0.9821887643569678,
+          "baseInstructions": 597485.1648262423,
+          "typedInstructions": 597485.1640142903,
+          "rssBaseMiB": 4.06640625,
+          "rssTypedMiB": 4.03515625,
+          "load": "12.54→12.54; 12.54→12.54; 12.54→12.54",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 29575.97452197116,
+          "typed": 32828.095161,
+          "ratio": 1.1099581904431561,
+          "floor": 0.06271717396684506,
+          "instructions": 1.0000000048922169,
+          "cycles": 1.1260071318515488,
+          "baseInstructions": 597485.1662877557,
+          "typedInstructions": 597485.1692107827,
+          "rssBaseMiB": 4.06640625,
+          "rssTypedMiB": 4.06640625,
+          "load": "9.67→9.67; 9.67→9.67; 9.67→9.67",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 29658.043925963484,
+          "typed": 30804.938292,
+          "ratio": 1.0386706004246116,
+          "floor": 0.035998523512274394,
+          "instructions": 1.0000000008153695,
+          "cycles": 1.051615402531602,
+          "baseInstructions": 597485.1661253654,
+          "typedInstructions": 597485.1666125365,
+          "rssBaseMiB": 4.06640625,
+          "rssTypedMiB": 4.0625,
+          "load": "8.63→8.63; 8.63→8.63; 8.63→8.63",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 29870.9153471518,
+          "typed": 26901.567392,
+          "ratio": 0.9005940085650932,
+          "floor": 0.10085021519488246,
+          "instructions": 0.9999999932052545,
+          "cycles": 0.8988324609053927,
+          "baseInstructions": 597485.1667749269,
+          "typedInstructions": 597485.1627151673,
+          "rssBaseMiB": 4.05078125,
+          "rssTypedMiB": 4.05859375,
+          "load": "7.08→7.08; 7.08→7.08; 7.08→7.08",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "llvm",
+      "ratio": 0.9944592217411349,
+      "floor": 0.153887151265645,
+      "instructions": 0.9999999997282106,
+      "cycles": 0.9953625099124224,
+      "timeBase": 31987.998274904352,
+      "timeTyped": 32042.094186,
+      "nodeBase": 0.6525277312621787,
+      "nodeTyped": 0.6536312414547966,
+      "bunBase": 0.6572355974824381,
+      "bunTyped": 0.6583470692958587,
+      "rssBase": 4.0625,
+      "rssTyped": 4.0703125,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 32220.621505122705,
+          "typed": 32042.094186,
+          "ratio": 0.9944592217411349,
+          "floor": 0.00596834257674328,
+          "instructions": 0.9999999997282106,
+          "cycles": 0.9953625099124224,
+          "baseInstructions": 597486.1690483923,
+          "typedInstructions": 597486.1688860019,
+          "rssBaseMiB": 4.03515625,
+          "rssTypedMiB": 4.0703125,
+          "load": "13.53→13.53; 13.53→13.53; 13.53→13.53",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 31987.998274904352,
+          "typed": 32175.309841,
+          "ratio": 1.0058556826371532,
+          "floor": 0.056045860350988796,
+          "instructions": 1.0000000002717893,
+          "cycles": 0.9957477627609408,
+          "baseInstructions": 597486.16807405,
+          "typedInstructions": 597486.1682364404,
+          "rssBaseMiB": 4.03515625,
+          "rssTypedMiB": 4.06640625,
+          "load": "12.54→12.54; 12.54→12.54; 12.54→12.54",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 30276.65117607953,
+          "typed": 32143.134784,
+          "ratio": 1.061647624007873,
+          "floor": 0.06419174127480654,
+          "instructions": 1.000000002989683,
+          "cycles": 1.0566089996615282,
+          "baseInstructions": 597486.1667749269,
+          "typedInstructions": 597486.1685612212,
+          "rssBaseMiB": 4.0625,
+          "rssTypedMiB": 4.0703125,
+          "load": "9.67→9.67; 9.67→9.67; 9.67→9.67",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 33601.35408964524,
+          "typed": 31780.744073,
+          "ratio": 0.9458173616519138,
+          "floor": 0.0012195798747344222,
+          "instructions": 0.9999999970103169,
+          "cycles": 0.9460482328639633,
+          "baseInstructions": 597486.1700227347,
+          "typedInstructions": 597486.1682364404,
+          "rssBaseMiB": 4.0625,
+          "rssTypedMiB": 4.046875,
+          "load": "8.63→8.63; 8.63→8.63; 8.63→8.63",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 31658.1267418489,
+          "typed": 29165.713543,
+          "ratio": 0.9212709829873106,
+          "floor": 0.153887151265645,
+          "instructions": 0.9999999959231595,
+          "cycles": 0.9236418017102249,
+          "baseInstructions": 597486.1677492693,
+          "typedInstructions": 597486.1653134135,
+          "rssBaseMiB": 4.0625,
+          "rssTypedMiB": 3.7890625,
+          "load": "7.08→7.08; 7.08→7.08; 7.08→7.08",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "immutable-update",
+      "backend": "c",
+      "ratio": 1.0009401257769823,
+      "floor": 0.01809561477389532,
+      "instructions": 0.9999999998101333,
+      "cycles": 0.9993265293408449,
+      "timeBase": 72603.0968217875,
+      "timeTyped": 72869.449153,
+      "nodeBase": 0.7319408378626443,
+      "nodeTyped": 0.7346260421722192,
+      "bunBase": 0.6497477312818233,
+      "bunTyped": 0.6521314012697818,
+      "rssBase": 3.95703125,
+      "rssTyped": 3.98828125,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 79497.14487837502,
+          "typed": 78409.57396,
+          "ratio": 0.9863193713429717,
+          "floor": 0.01809561477389532,
+          "instructions": 0.9999999979114668,
+          "cycles": 0.9869618656605313,
+          "baseInstructions": 2028834.404853621,
+          "typedInstructions": 2028834.400616333,
+          "rssBaseMiB": 3.81640625,
+          "rssTypedMiB": 3.98828125,
+          "load": "14.05→14.05; 14.05→14.05; 14.05→14.05",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 72603.0968217875,
+          "typed": 72869.449153,
+          "ratio": 1.0036686084047666,
+          "floor": 0.002508720796576047,
+          "instructions": 1.0000000001898666,
+          "cycles": 1.0021047679509685,
+          "baseInstructions": 2028834.3963790447,
+          "typedInstructions": 2028834.3967642528,
+          "rssBaseMiB": 3.95703125,
+          "rssTypedMiB": 3.9765625,
+          "load": "11.86→11.86; 11.86→11.86; 11.86→11.86",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 72366.28246347171,
+          "typed": 72434.315871,
+          "ratio": 1.0009401257769823,
+          "floor": 0.002948287245155279,
+          "instructions": 1,
+          "cycles": 0.9993265293408449,
+          "baseInstructions": 2028834.3952234206,
+          "typedInstructions": 2028834.3952234206,
+          "rssBaseMiB": 3.953125,
+          "rssTypedMiB": 3.82421875,
+          "load": "9.67→9.67; 9.67→9.67; 9.67→9.67",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 75036.12120042337,
+          "typed": 73589.161017,
+          "ratio": 0.9807164848039187,
+          "floor": 0.01265769463531119,
+          "instructions": 0.9999999988608,
+          "cycles": 0.9942696357174394,
+          "baseInstructions": 2028834.3983050848,
+          "typedInstructions": 2028834.3959938367,
+          "rssBaseMiB": 3.953125,
+          "rssTypedMiB": 3.9609375,
+          "load": "8.63→8.63; 8.63→8.63; 8.63→8.63",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 71596.56137698756,
+          "typed": 71863.874422,
+          "ratio": 1.003733601724319,
+          "floor": 0.010234044042292334,
+          "instructions": 0.9999999998101333,
+          "cycles": 0.9998415437831061,
+          "baseInstructions": 2028834.3948382125,
+          "typedInstructions": 2028834.3944530047,
+          "rssBaseMiB": 3.95703125,
+          "rssTypedMiB": 3.96875,
+          "load": "6.59→6.59; 6.59→6.59; 6.59→6.59",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "immutable-update",
+      "backend": "llvm",
+      "ratio": 0.9875530715827173,
+      "floor": 0.04000229206252359,
+      "instructions": 0.9999999996206487,
+      "cycles": 1.000636928791531,
+      "timeBase": 73482.18606185738,
+      "timeTyped": 72567.558552,
+      "nodeBase": 0.7408032878558201,
+      "nodeTyped": 0.731582562360591,
+      "bunBase": 0.6576149747512267,
+      "bunTyped": 0.649429688234365,
+      "rssBase": 4.10546875,
+      "rssTyped": 3.98046875,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 78482.02212625589,
+          "typed": 78920.486133,
+          "ratio": 1.0055868082251849,
+          "floor": 0.0020185619097066176,
+          "instructions": 1.000000000569027,
+          "cycles": 1.0043292289946577,
+          "baseInstructions": 2030877.4017719568,
+          "typedInstructions": 2030877.402927581,
+          "rssBaseMiB": 3.9609375,
+          "rssTypedMiB": 3.97265625,
+          "load": "14.05→14.05; 14.05→14.05; 14.05→14.05",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 73255.61355581447,
+          "typed": 72222.453005,
+          "ratio": 0.9858964999313358,
+          "floor": 0.030169300594101722,
+          "instructions": 0.999999998861946,
+          "cycles": 1.000636928791531,
+          "baseInstructions": 2030877.3959938367,
+          "typedInstructions": 2030877.3936825886,
+          "rssBaseMiB": 3.97265625,
+          "rssTypedMiB": 3.98046875,
+          "load": "11.86→11.86; 11.86→11.86; 11.86→11.86",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 73482.18606185738,
+          "typed": 72567.558552,
+          "ratio": 0.9875530715827173,
+          "floor": 0.03632074545413644,
+          "instructions": 0.9999999992412973,
+          "cycles": 0.9975856623623377,
+          "baseInstructions": 2030877.3967642528,
+          "typedInstructions": 2030877.3952234206,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 3.9609375,
+          "load": "9.67→9.67; 9.67→9.67; 9.67→9.67",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 74113.33525573176,
+          "typed": 75174.475347,
+          "ratio": 1.0143178024252548,
+          "floor": 0.003511978189758791,
+          "instructions": 1.0000000007587027,
+          "cycles": 1.003506005996281,
+          "baseInstructions": 2030877.3975346687,
+          "typedInstructions": 2030877.3990755007,
+          "rssBaseMiB": 3.81640625,
+          "rssTypedMiB": 3.953125,
+          "load": "8.63→8.63; 8.63→8.63; 8.63→8.63",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 72176.63596649464,
+          "typed": 71201.082435,
+          "ratio": 0.9864838043719923,
+          "floor": 0.04000229206252359,
+          "instructions": 0.9999999996206487,
+          "cycles": 0.9995019342463829,
+          "baseInstructions": 2030877.3952234206,
+          "typedInstructions": 2030877.3944530047,
+          "rssBaseMiB": 4.10546875,
+          "rssTypedMiB": 3.953125,
+          "load": "6.59→6.59; 6.59→6.59; 6.59→6.59",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "c",
+      "ratio": 1.001493017694963,
+      "floor": 0.025408197738858274,
+      "instructions": 0.9999999994827583,
+      "cycles": 1.0013936504281098,
+      "timeBase": 23263.176557140647,
+      "timeTyped": 22736.737144,
+      "nodeBase": 0.3666598575385926,
+      "nodeTyped": 0.35836244382337057,
+      "bunBase": 0.48917273123747296,
+      "bunTyped": 0.47810288422304975,
+      "rssBase": 3.7421875,
+      "rssTyped": 3.74609375,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 23773.858263676695,
+          "typed": 23842.736645,
+          "ratio": 1.0028972319326284,
+          "floor": 0.0019162178120707418,
+          "instructions": 0.9999999997413792,
+          "cycles": 1.002893114162697,
+          "baseInstructions": 482609.12843235146,
+          "typedInstructions": 482609.1283075387,
+          "rssBaseMiB": 3.7109375,
+          "rssTypedMiB": 3.71484375,
+          "load": "14.05→14.05; 14.05→14.05; 14.05→14.05",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 22702.841400063764,
+          "typed": 22736.737144,
+          "ratio": 1.001493017694963,
+          "floor": 0.00263849561816909,
+          "instructions": 0.9999999994827583,
+          "cycles": 1.0013936504281098,
+          "baseInstructions": 482609.12755866203,
+          "typedInstructions": 482609.12730903644,
+          "rssBaseMiB": 3.7421875,
+          "rssTypedMiB": 3.70703125,
+          "load": "11.86→11.86; 11.86→11.86; 11.86→11.86",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 23263.176557140647,
+          "typed": 22609.57339,
+          "ratio": 0.9719039587936231,
+          "floor": 0.025408197738858274,
+          "instructions": 0.9999999979310332,
+          "cycles": 0.9854693750670671,
+          "baseInstructions": 482609.12805791316,
+          "typedInstructions": 482609.1270594109,
+          "rssBaseMiB": 3.7109375,
+          "rssTypedMiB": 3.7109375,
+          "load": "9.67→9.67; 9.67→9.30; 9.30→9.30",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 23504.187740419216,
+          "typed": 22766.516725,
+          "ratio": 0.9686153368256725,
+          "floor": 0.02336246689474042,
+          "instructions": 0.9999999974137915,
+          "cycles": 0.9794387966502593,
+          "baseInstructions": 482609.1285571643,
+          "typedInstructions": 482609.12730903644,
+          "rssBaseMiB": 3.71875,
+          "rssTypedMiB": 3.703125,
+          "load": "8.63→8.63; 8.63→8.63; 8.63→8.63",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 22266.846581317037,
+          "typed": 22461.65327,
+          "ratio": 1.0087487326942115,
+          "floor": 0.006340350073413714,
+          "instructions": 1.0000000005172416,
+          "cycles": 1.0128693136832163,
+          "baseInstructions": 482609.1268097853,
+          "typedInstructions": 482609.1270594109,
+          "rssBaseMiB": 3.7421875,
+          "rssTypedMiB": 3.74609375,
+          "load": "6.59→6.59; 6.59→6.59; 6.59→6.59",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "llvm",
+      "ratio": 1.0274229600531262,
+      "floor": 0.054410573423497866,
+      "instructions": 1.0000000009269265,
+      "cycles": 1.0320208028977726,
+      "timeBase": 24058.284426907914,
+      "timeTyped": 24455.187469,
+      "nodeBase": 0.37919185795309285,
+      "nodeTyped": 0.3854475991891472,
+      "bunBase": 0.5058920768232793,
+      "bunTyped": 0.5142380627921238,
+      "rssBase": 3.75,
+      "rssTyped": 3.74609375,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 24661.667352201974,
+          "typed": 25390.65327,
+          "ratio": 1.029559474117752,
+          "floor": 0.004812019273957802,
+          "instructions": 1.0000000009269265,
+          "cycles": 1.0428091983584764,
+          "baseInstructions": 538609.1295556665,
+          "typedInstructions": 538609.1300549177,
+          "rssBaseMiB": 3.5703125,
+          "rssTypedMiB": 3.56640625,
+          "load": "14.05→14.05; 14.05→14.05; 14.05→14.05",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 23535.066849926803,
+          "typed": 24180.468048,
+          "ratio": 1.0274229600531262,
+          "floor": 0.0009307322049103561,
+          "instructions": 1.000000002549048,
+          "cycles": 1.0342421878341461,
+          "baseInstructions": 538609.1279331003,
+          "typedInstructions": 538609.1293060409,
+          "rssBaseMiB": 3.75,
+          "rssTypedMiB": 3.74609375,
+          "load": "11.86→11.86; 11.86→11.86; 11.86→11.86",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 24738.964108442975,
+          "typed": 24531.179231,
+          "ratio": 0.9916009063058521,
+          "floor": 0.054410573423497866,
+          "instructions": 0.9999999997682684,
+          "cycles": 1.029891284335336,
+          "baseInstructions": 538609.1291812281,
+          "typedInstructions": 538609.1290564154,
+          "rssBaseMiB": 3.5703125,
+          "rssTypedMiB": 3.72265625,
+          "load": "9.30→9.30; 9.30→9.30; 9.30→9.30",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 24058.284426907914,
+          "typed": 24455.187469,
+          "ratio": 1.0164975621307466,
+          "floor": 0.006831414107254186,
+          "instructions": 1.000000000695195,
+          "cycles": 1.0313901964856864,
+          "baseInstructions": 538609.128681977,
+          "typedInstructions": 538609.1290564154,
+          "rssBaseMiB": 3.72265625,
+          "rssTypedMiB": 3.703125,
+          "load": "8.63→8.63; 8.63→8.63; 8.63→8.63",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 23094.060622661775,
+          "typed": 23730.970794,
+          "ratio": 1.0275789598782483,
+          "floor": 0.0033426525190469736,
+          "instructions": 1.0000000009269265,
+          "cycles": 1.0320208028977726,
+          "baseInstructions": 538609.1278082876,
+          "typedInstructions": 538609.1283075387,
+          "rssBaseMiB": 3.7421875,
+          "rssTypedMiB": 3.70703125,
+          "load": "6.59→6.59; 6.59→6.59; 6.59→6.59",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "ratio": 0.999634261646523,
+      "floor": 0.02742454401057204,
+      "instructions": 1.0000186059718132,
+      "cycles": 1.0039460675459984,
+      "timeBase": 17501.61041709997,
+      "timeTyped": 17485.416392,
+      "nodeBase": 0.6669641970680698,
+      "nodeTyped": 0.6663470632906232,
+      "bunBase": 0.8521102310897751,
+      "bunTyped": 0.8513217839616909,
+      "rssBase": 4.07421875,
+      "rssTyped": 4.05078125,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 17737.494915664574,
+          "typed": 18022.665569,
+          "ratio": 1.016077278933204,
+          "floor": 0.009579544076253055,
+          "instructions": 1.0000186059718383,
+          "cycles": 1.0201640084994794,
+          "baseInstructions": 429985.098914939,
+          "typedInstructions": 429993.0992055803,
+          "rssBaseMiB": 4.0390625,
+          "rssTypedMiB": 4.05078125,
+          "load": "14.05→14.05; 14.05→14.05; 14.05→14.05",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 17013.660254087947,
+          "typed": 17007.437706,
+          "ratio": 0.999634261646523,
+          "floor": 0.02742454401057204,
+          "instructions": 1.0000186057465565,
+          "cycles": 1.0103057313170938,
+          "baseInstructions": 429985.09823677584,
+          "typedInstructions": 429993.09843053675,
+          "rssBaseMiB": 4.01953125,
+          "rssTypedMiB": 4.03515625,
+          "load": "11.86→11.86; 11.86→11.86; 11.86→11.86",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 18364.237462454366,
+          "typed": 18336.344701,
+          "ratio": 0.9984811369646363,
+          "floor": 0.02115013928316689,
+          "instructions": 1.0000186059718132,
+          "cycles": 1.0039460675459984,
+          "baseInstructions": 429985.09949622164,
+          "typedInstructions": 429993.099786863,
+          "rssBaseMiB": 4.07421875,
+          "rssTypedMiB": 4.05078125,
+          "load": "9.30→9.30; 9.30→9.30; 9.30→9.30",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 17501.61041709997,
+          "typed": 17485.416392,
+          "ratio": 0.9990747122856677,
+          "floor": 0.012048981121550284,
+          "instructions": 1.0000186050706021,
+          "cycles": 1.0037635781758742,
+          "baseInstructions": 429985.0987211781,
+          "typedInstructions": 429993.0986242976,
+          "rssBaseMiB": 4.01953125,
+          "rssTypedMiB": 4.03515625,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→8.10",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 16991.3272574174,
+          "typed": 17168.448944,
+          "ratio": 1.010424240784679,
+          "floor": 0.004510557740425192,
+          "instructions": 1.000018606197179,
+          "cycles": 0.9993181551861859,
+          "baseInstructions": 429985.09823677584,
+          "typedInstructions": 429993.0986242976,
+          "rssBaseMiB": 4.046875,
+          "rssTypedMiB": 4.02734375,
+          "load": "6.59→6.59; 6.59→6.59; 6.59→6.59",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "ratio": 1.002815955686643,
+      "floor": 0.02513092368062486,
+      "instructions": 1.0000186140326512,
+      "cycles": 1.0089230466366574,
+      "timeBase": 17804.389192980336,
+      "timeTyped": 17707.183879,
+      "nodeBase": 0.6785027125721627,
+      "nodeTyped": 0.6747983412232095,
+      "bunBase": 0.8668517826690753,
+      "bunTyped": 0.8621190957571321,
+      "rssBase": 4.07421875,
+      "rssTyped": 4.0625,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 17912.8076799039,
+          "typed": 17876.219144,
+          "ratio": 0.9979574092148072,
+          "floor": 0.016528664870711807,
+          "instructions": 1.000018612454771,
+          "cycles": 0.9960053978541491,
+          "baseInstructions": 429804.0993024608,
+          "typedInstructions": 429812.0990118194,
+          "rssBaseMiB": 4.04296875,
+          "rssTypedMiB": 4,
+          "load": "14.05→14.05; 14.05→13.65; 13.65→13.65",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 17195.110487226313,
+          "typed": 17707.183879,
+          "ratio": 1.029780174553347,
+          "floor": 0.0029580082988127643,
+          "instructions": 1.0000186140326512,
+          "cycles": 1.030228025177484,
+          "baseInstructions": 429804.09843053675,
+          "typedInstructions": 429812.0988180585,
+          "rssBaseMiB": 4.07421875,
+          "rssTypedMiB": 3.9921875,
+          "load": "11.86→11.86; 11.86→11.86; 11.86→11.86",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 18320.103578319497,
+          "typed": 21261.4472,
+          "ratio": 1.1605527834002733,
+          "floor": 0.024258074081072944,
+          "instructions": 1.0000186189915259,
+          "cycles": 1.1562012769370178,
+          "baseInstructions": 429804.099786863,
+          "typedInstructions": 429812.10230575467,
+          "rssBaseMiB": 4.0234375,
+          "rssTypedMiB": 3.99609375,
+          "load": "9.30→9.30; 9.30→9.30; 9.30→9.30",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 17804.389192980336,
+          "typed": 17663.710909,
+          "ratio": 0.9920986739586776,
+          "floor": 0.02513092368062486,
+          "instructions": 1.0000186142580278,
+          "cycles": 0.9990903226649679,
+          "baseInstructions": 429804.0991086999,
+          "typedInstructions": 429812.0995931021,
+          "rssBaseMiB": 4.04296875,
+          "rssTypedMiB": 4.0625,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→8.10",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 17059.839341393388,
+          "typed": 17107.879093,
+          "ratio": 1.002815955686643,
+          "floor": 0.0016290684848170311,
+          "instructions": 1.0000186133564455,
+          "cycles": 1.0089230466366574,
+          "baseInstructions": 429804.09813989536,
+          "typedInstructions": 429812.09823677584,
+          "rssBaseMiB": 4.0625,
+          "rssTypedMiB": 4.05859375,
+          "load": "6.59→6.59; 6.59→6.59; 6.59→6.59",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "c",
+      "ratio": 0.9991795366687681,
+      "floor": 0.023471061194743292,
+      "instructions": 1.0000021243334805,
+      "cycles": 1.0005487140431775,
+      "timeBase": 33097.59980491555,
+      "timeTyped": 33418.510667,
+      "nodeBase": 0.9800568704288717,
+      "nodeTyped": 0.9895593992235551,
+      "bunBase": 1.1896507489629315,
+      "bunTyped": 1.2011854780574687,
+      "rssBase": 3.8359375,
+      "rssTyped": 3.73828125,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 34509.85156390289,
+          "typed": 34375.647139,
+          "ratio": 0.9961111271471458,
+          "floor": 0.023471061194743292,
+          "instructions": 1.000002123254581,
+          "cycles": 1.0005487140431775,
+          "baseInstructions": 941631.1828648832,
+          "typedInstructions": 941633.1821876059,
+          "rssBaseMiB": 3.828125,
+          "rssTypedMiB": 3.70703125,
+          "load": "13.65→13.65; 13.65→13.65; 13.65→13.65",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 31986.02140553198,
+          "typed": 31827.061971,
+          "ratio": 0.9950303467719029,
+          "floor": 0.00399609364108211,
+          "instructions": 1.0000021259518106,
+          "cycles": 0.9996374911291227,
+          "baseInstructions": 941631.1803250931,
+          "typedInstructions": 941633.1821876059,
+          "rssBaseMiB": 3.828125,
+          "rssTypedMiB": 3.70703125,
+          "load": "11.86→11.86; 11.86→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 34335.31241580356,
+          "typed": 34307.141551,
+          "ratio": 0.9991795366687681,
+          "floor": 0.006292028194588406,
+          "instructions": 1.0000021218160633,
+          "cycles": 1.0012002438521688,
+          "baseInstructions": 941631.1821876059,
+          "typedInstructions": 941633.1801557738,
+          "rssBaseMiB": 3.8359375,
+          "rssTypedMiB": 3.71484375,
+          "load": "9.30→9.30; 9.30→9.30; 9.30→9.30",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 33097.59980491555,
+          "typed": 33418.510667,
+          "ratio": 1.0096958952907753,
+          "floor": 0.003748117333651879,
+          "instructions": 1.0000021243334805,
+          "cycles": 1.0007938970619148,
+          "baseInstructions": 941631.1784625804,
+          "typedInstructions": 941633.1788012191,
+          "rssBaseMiB": 3.8046875,
+          "rssTypedMiB": 3.73828125,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→8.10",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 31504.782291362026,
+          "typed": 32034.398239,
+          "ratio": 1.016810652514275,
+          "floor": 0.00034631109697857987,
+          "instructions": 1.0000021254123799,
+          "cycles": 0.9998160322408018,
+          "baseInstructions": 941631.1740602776,
+          "typedInstructions": 941633.1754148324,
+          "rssBaseMiB": 3.83203125,
+          "rssTypedMiB": 3.5703125,
+          "load": "6.59→6.59; 6.59→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "llvm",
+      "ratio": 0.9949471331833292,
+      "floor": 0.05794873063581574,
+      "instructions": 1.0000021995714194,
+      "cycles": 0.9997510957556297,
+      "timeBase": 32145.882012095928,
+      "timeTyped": 32311.6766,
+      "nodeBase": 0.9518754443719964,
+      "nodeTyped": 0.9567848071630463,
+      "bunBase": 1.155442474293387,
+      "bunTyped": 1.1614017479820122,
+      "rssBase": 3.73828125,
+      "rssTyped": 3.7265625,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 32802.94549151023,
+          "typed": 32776.649509,
+          "ratio": 0.9991983652042151,
+          "floor": 0.007268968007130172,
+          "instructions": 1.0000022021797368,
+          "cycles": 0.9997510957556297,
+          "baseInstructions": 908806.1801557738,
+          "typedInstructions": 908808.1815103284,
+          "rssBaseMiB": 3.734375,
+          "rssTypedMiB": 3.58203125,
+          "load": "13.65→13.65; 13.65→13.65; 13.65→13.65",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 31196.81443756062,
+          "typed": 30645.687098,
+          "ratio": 0.9823338584564881,
+          "floor": 0.04117640578245374,
+          "instructions": 1.0000021973356892,
+          "cycles": 0.9994012077994706,
+          "baseInstructions": 908806.1791398578,
+          "typedInstructions": 908808.1760921098,
+          "rssBaseMiB": 3.73046875,
+          "rssTypedMiB": 3.71484375,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 32475.772352465527,
+          "typed": 32311.6766,
+          "ratio": 0.9949471331833292,
+          "floor": 0.010818040377283733,
+          "instructions": 1.000002198639852,
+          "cycles": 0.9992279423791612,
+          "baseInstructions": 908806.1810023704,
+          "typedInstructions": 908808.1791398578,
+          "rssBaseMiB": 3.73828125,
+          "rssTypedMiB": 3.671875,
+          "load": "9.30→9.30; 9.30→9.30; 9.30→9.30",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 32145.882012095928,
+          "typed": 49296.941416,
+          "ratio": 1.533538305075917,
+          "floor": 0.001797747461432797,
+          "instructions": 1.0000022163392748,
+          "cycles": 1.5577442592358077,
+          "baseInstructions": 908806.1774466644,
+          "typedInstructions": 908808.1916694887,
+          "rssBaseMiB": 3.73828125,
+          "rssTypedMiB": 3.71875,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→8.10",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 30975.262658627966,
+          "typed": 30301.019641,
+          "ratio": 0.9782328555189778,
+          "floor": 0.05794873063581574,
+          "instructions": 1.0000021995714194,
+          "cycles": 1.0000760228276036,
+          "baseInstructions": 908806.1730443616,
+          "typedInstructions": 908808.1720284456,
+          "rssBaseMiB": 3.7265625,
+          "rssTypedMiB": 3.7265625,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-parse",
+      "backend": "c",
+      "ratio": 1.0188014208597596,
+      "floor": 0.01628096938219814,
+      "instructions": 1.000379449176334,
+      "cycles": 1.0169939857088446,
+      "timeBase": 889285.0449033756,
+      "timeTyped": 893678.509434,
+      "nodeBase": 1.18151423217609,
+      "nodeTyped": 1.1873514391562856,
+      "bunBase": 1.0868706802872994,
+      "bunTyped": 1.0922403059327377,
+      "rssBase": 7.6015625,
+      "rssTyped": 7.796875,
+      "verdict": "REGRESSES",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 898772.0724061613,
+          "typed": 911076.028302,
+          "ratio": 1.0136897398946754,
+          "floor": 0.004158761708717096,
+          "instructions": 1.000379446492029,
+          "cycles": 1.0169939857088446,
+          "baseInstructions": 21109608.731132075,
+          "typedInstructions": 21117618.698113207,
+          "rssBaseMiB": 7.58203125,
+          "rssTypedMiB": 7.60546875,
+          "load": "13.65→13.65; 13.65→13.65; 13.65→13.65",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 854895.0137721597,
+          "typed": 870968.254717,
+          "ratio": 1.0188014208597596,
+          "floor": 0.015041967588992566,
+          "instructions": 1.000379449176334,
+          "cycles": 1.0092233581429844,
+          "baseInstructions": 21109608.570754718,
+          "typedInstructions": 21117618.594339624,
+          "rssBaseMiB": 7.5546875,
+          "rssTypedMiB": 7.796875,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 894731.3677783802,
+          "typed": 922058.603774,
+          "ratio": 1.0305423918057923,
+          "floor": 0.0018617597979910805,
+          "instructions": 1.0003794505161971,
+          "cycles": 1.0187421456756238,
+          "baseInstructions": 21109608.61792453,
+          "typedInstructions": 21117618.66981132,
+          "rssBaseMiB": 7.6015625,
+          "rssTypedMiB": 7.59765625,
+          "load": "9.30→9.30; 9.30→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 889285.0449033756,
+          "typed": 893678.509434,
+          "ratio": 1.0049404457612372,
+          "floor": 0.01628096938219814,
+          "instructions": 1.000379448058142,
+          "cycles": 1.009691351559831,
+          "baseInstructions": 21109608.62264151,
+          "typedInstructions": 21117618.62264151,
+          "rssBaseMiB": 7.52734375,
+          "rssTypedMiB": 7.5546875,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→8.10",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 839148.4540282635,
+          "typed": 875545.90566,
+          "ratio": 1.0433742700198203,
+          "floor": 0.015080010039223435,
+          "instructions": 1.000379450070311,
+          "cycles": 1.017212871346327,
+          "baseInstructions": 21109608.561320756,
+          "typedInstructions": 21117618.603773586,
+          "rssBaseMiB": 7.59375,
+          "rssTypedMiB": 7.7890625,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-parse",
+      "backend": "llvm",
+      "ratio": 0.9982785699216311,
+      "floor": 0.03603750776986825,
+      "instructions": 1.0003734766099177,
+      "cycles": 1.0016033240255031,
+      "timeBase": 903915.3677126594,
+      "timeTyped": 888458.424528,
+      "nodeBase": 1.2009522455774932,
+      "nodeTyped": 1.1804159749370748,
+      "bunBase": 1.1047516386995448,
+      "bunTyped": 1.085860397414701,
+      "rssBase": 7.765625,
+      "rssTyped": 7.77734375,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 945042.5950354057,
+          "typed": 940319.707547,
+          "ratio": 0.9950024607216474,
+          "floor": 0.016540266899119915,
+          "instructions": 1.000373475727383,
+          "cycles": 1.003857859865229,
+          "baseInstructions": 21447113.768867925,
+          "typedInstructions": 21455123.74528302,
+          "rssBaseMiB": 7.54296875,
+          "rssTypedMiB": 7.77734375,
+          "load": "13.65→13.65; 13.65→13.65; 13.65→13.65",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 889990.4809113026,
+          "typed": 888458.424528,
+          "ratio": 0.9982785699216311,
+          "floor": 0.0027897833765000435,
+          "instructions": 1.0003734766099177,
+          "cycles": 1.001351667972517,
+          "baseInstructions": 21447113.608490568,
+          "typedInstructions": 21455123.603773586,
+          "rssBaseMiB": 7.53125,
+          "rssTypedMiB": 7.6015625,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 903915.3677126594,
+          "typed": 879393.226415,
+          "ratio": 0.9728711977099005,
+          "floor": 0.019887495972569225,
+          "instructions": 1.0003734752899762,
+          "cycles": 1.0016033240255031,
+          "baseInstructions": 21447113.62735849,
+          "typedInstructions": 21455123.594339624,
+          "rssBaseMiB": 7.765625,
+          "rssTypedMiB": 7.53125,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 919083.7161218899,
+          "typed": 928911.754717,
+          "ratio": 1.01069330075456,
+          "floor": 0.03603750776986825,
+          "instructions": 1.0003734783689087,
+          "cycles": 1.0051202816414841,
+          "baseInstructions": 21447113.63679245,
+          "typedInstructions": 21455123.66981132,
+          "rssBaseMiB": 7.765625,
+          "rssTypedMiB": 7.58203125,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→8.10",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 877724.041597118,
+          "typed": 878593.650943,
+          "ratio": 1.0009907548439707,
+          "floor": 0.003433688816176894,
+          "instructions": 1.000373476610082,
+          "cycles": 1.0008072667522112,
+          "baseInstructions": 21447113.599056605,
+          "typedInstructions": 21455123.594339624,
+          "rssBaseMiB": 7.546875,
+          "rssTypedMiB": 7.5546875,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-build-append",
+      "backend": "c",
+      "ratio": 0.98744949880071,
+      "floor": 0.12411827252417129,
+      "instructions": 0.9999999992268769,
+      "cycles": 0.9973582136473421,
+      "timeBase": 7969.13117298579,
+      "timeTyped": 7775.589649,
+      "nodeBase": 0.48711613568529477,
+      "nodeTyped": 0.4752858373488604,
+      "bunBase": 1.0623231597342717,
+      "bunTyped": 1.036523152326019,
+      "rssBase": 3.984375,
+      "rssTyped": 4.01171875,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 8010.816719849768,
+          "typed": 7910.276955,
+          "ratio": 0.98744949880071,
+          "floor": 0.004970882190274417,
+          "instructions": 0.9999999980671923,
+          "cycles": 0.9966344126578817,
+          "baseInstructions": 222779.04495349637,
+          "typedInstructions": 222779.04452290732,
+          "rssBaseMiB": 3.828125,
+          "rssTypedMiB": 4.0078125,
+          "load": "13.65→13.65; 13.65→13.65; 13.65→13.65",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 7628.81846492032,
+          "typed": 7591.632363,
+          "ratio": 0.9951255751999718,
+          "floor": 0.00452721451248983,
+          "instructions": 0.9999999996134384,
+          "cycles": 0.9973582136473421,
+          "baseInstructions": 222779.04374784706,
+          "typedInstructions": 222779.04366172926,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 4.0078125,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 7969.13117298579,
+          "typed": 7787.219773,
+          "ratio": 0.9771729946418195,
+          "floor": 0.02285878416196052,
+          "instructions": 0.9999999992268769,
+          "cycles": 0.9976526952921019,
+          "baseInstructions": 222779.0440923183,
+          "typedInstructions": 222779.04392008268,
+          "rssBaseMiB": 3.98046875,
+          "rssTypedMiB": 3.9609375,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 8361.571353834863,
+          "typed": 7775.589649,
+          "ratio": 0.9299196670053991,
+          "floor": 0.12411827252417129,
+          "instructions": 0.9999999971007885,
+          "cycles": 0.9349578240145398,
+          "baseInstructions": 222779.04447984844,
+          "typedInstructions": 222779.04383396485,
+          "rssBaseMiB": 3.97265625,
+          "rssTypedMiB": 4.01171875,
+          "load": "8.10→8.10; 8.10→8.10; 8.10→7.61",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 7619.82451055712,
+          "typed": 7670.868843,
+          "ratio": 1.006698885567792,
+          "floor": 0.004816154522330196,
+          "instructions": 1.0000000007731231,
+          "cycles": 0.99773142195573,
+          "baseInstructions": 222779.04366172926,
+          "typedInstructions": 222779.04383396485,
+          "rssBaseMiB": 3.96484375,
+          "rssTypedMiB": 3.99609375,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-build-append",
+      "backend": "llvm",
+      "ratio": 1.0108313703718865,
+      "floor": 0.024541897123858014,
+      "instructions": 1.0000000009664038,
+      "cycles": 1.0008084916581543,
+      "timeBase": 8424.37229353803,
+      "timeTyped": 8390.845419,
+      "nodeBase": 0.514942920140816,
+      "nodeTyped": 0.5128935773439585,
+      "bunBase": 1.1230089704115265,
+      "bunTyped": 1.1185396782738855,
+      "rssBase": 4,
+      "rssTyped": 4.1875,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 8424.37229353803,
+          "typed": 8515.61979,
+          "ratio": 1.0108313703718865,
+          "floor": 0.008882560958368924,
+          "instructions": 0.9999999986470346,
+          "cycles": 1.009530671832879,
+          "baseInstructions": 222779.04568549775,
+          "typedInstructions": 222779.04538408542,
+          "rssBaseMiB": 3.97265625,
+          "rssTypedMiB": 3.9765625,
+          "load": "13.65→13.65; 13.65→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 8149.39751198044,
+          "typed": 8186.562435,
+          "ratio": 1.0045604503848198,
+          "floor": 0.003958141186431119,
+          "instructions": 1.0000000011596846,
+          "cycles": 1.003054627475796,
+          "baseInstructions": 222779.0442645539,
+          "typedInstructions": 222779.04452290732,
+          "rssBaseMiB": 3.96484375,
+          "rssTypedMiB": 3.98046875,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 8442.905172416811,
+          "typed": 8281.256373,
+          "ratio": 0.9808538890209354,
+          "floor": 0.01247946684834178,
+          "instructions": 0.9999999986470346,
+          "cycles": 0.997089496269573,
+          "baseInstructions": 222779.04465208406,
+          "typedInstructions": 222779.04435067173,
+          "rssBaseMiB": 3.984375,
+          "rssTypedMiB": 3.984375,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 8497.356910253937,
+          "typed": 8589.974337,
+          "ratio": 1.0108995570886636,
+          "floor": 0.024541897123858014,
+          "instructions": 1.0000000009664038,
+          "cycles": 1.0008084916581543,
+          "baseInstructions": 222779.04473820186,
+          "typedInstructions": 222779.04495349637,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 3.83984375,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 8179.1718015547585,
+          "typed": 8390.845419,
+          "ratio": 1.0258795905723614,
+          "floor": 0.0007698726519979049,
+          "instructions": 1.0000000011596846,
+          "cycles": 0.9988780026075064,
+          "baseInstructions": 222779.04435067173,
+          "typedInstructions": 222779.04460902515,
+          "rssBaseMiB": 4,
+          "rssTypedMiB": 4.1875,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-build-join",
+      "backend": "c",
+      "ratio": 0.9940028718737602,
+      "floor": 0.04779658950357546,
+      "instructions": 1.0002235318634445,
+      "cycles": 0.9950098909324574,
+      "timeBase": 12422.458468479615,
+      "timeTyped": 12571.371845,
+      "nodeBase": 0.5663149466748857,
+      "nodeTyped": 0.573103608604994,
+      "bunBase": 1.0437083934907596,
+      "bunTyped": 1.0562197769155253,
+      "rssBase": 4,
+      "rssTyped": 4.1953125,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 12584.082571210934,
+          "typed": 12498.544627,
+          "ratio": 0.9932026873054199,
+          "floor": 0.003332947548345011,
+          "instructions": 1.0002235318634445,
+          "cycles": 0.9929086940183343,
+          "baseInstructions": 286312.0671350507,
+          "typedInstructions": 286376.0670049441,
+          "rssBaseMiB": 4,
+          "rssTypedMiB": 4.015625,
+          "load": "13.11→13.11; 13.11→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 12156.362047731565,
+          "typed": 12571.371845,
+          "ratio": 1.0341393087536315,
+          "floor": 0.008872456192534184,
+          "instructions": 1.000223534590285,
+          "cycles": 0.9976968815044621,
+          "baseInstructions": 286312.0667447307,
+          "typedInstructions": 286376.0673952641,
+          "rssBaseMiB": 3.96875,
+          "rssTypedMiB": 4,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→11.07",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 12824.864999604355,
+          "typed": 12747.952641,
+          "ratio": 0.9940028718737602,
+          "floor": 0.017821107631024846,
+          "instructions": 1.000223531635979,
+          "cycles": 0.9886009132979537,
+          "baseInstructions": 286312.06746031746,
+          "typedInstructions": 286376.0672651574,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 4.1953125,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 12385.54317919029,
+          "typed": 12668.416081,
+          "ratio": 1.0228389581076252,
+          "floor": 0.029946729737720945,
+          "instructions": 1.0002235329996534,
+          "cycles": 1.0017099757717058,
+          "baseInstructions": 286312.06693989073,
+          "typedInstructions": 286376.0671350507,
+          "rssBaseMiB": 3.96484375,
+          "rssTypedMiB": 3.984375,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 12422.458468479615,
+          "typed": 12064.073901,
+          "ratio": 0.9711502704244115,
+          "floor": 0.04779658950357546,
+          "instructions": 1.0002235311818612,
+          "cycles": 0.9950098909324574,
+          "baseInstructions": 286312.06706999737,
+          "typedInstructions": 286376.0667447307,
+          "rssBaseMiB": 3.9921875,
+          "rssTypedMiB": 4.015625,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→6.23",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-build-join",
+      "backend": "llvm",
+      "ratio": 1.0072775191597252,
+      "floor": 0.020228260088505978,
+      "instructions": 1.0002235329995517,
+      "cycles": 1.0051087450212453,
+      "timeBase": 12272.173667999656,
+      "timeTyped": 12361.484647,
+      "nodeBase": 0.5594637642792427,
+      "nodeTyped": 0.5635352725429569,
+      "bunBase": 1.0310817859578776,
+      "bunTyped": 1.0385855034104299,
+      "rssBase": 4.0390625,
+      "rssTyped": 4.0390625,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 12360.39511830604,
+          "typed": 12703.131408,
+          "ratio": 1.0277285868625963,
+          "floor": 0.0012360635354260463,
+          "instructions": 1.0002235329995517,
+          "cycles": 0.9970107134911907,
+          "baseInstructions": 286312.06706999737,
+          "typedInstructions": 286376.0672651574,
+          "rssBaseMiB": 3.97265625,
+          "rssTypedMiB": 3.84375,
+          "load": "13.11→13.11; 13.11→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 12067.749278692614,
+          "typed": 12042.213375,
+          "ratio": 0.9978839547373012,
+          "floor": 0.013209094632006035,
+          "instructions": 1.0002235339087018,
+          "cycles": 0.9981100994106749,
+          "baseInstructions": 286312.06667967734,
+          "typedInstructions": 286376.0671350507,
+          "rssBaseMiB": 4.0390625,
+          "rssTypedMiB": 4.01171875,
+          "load": "11.07→11.07; 11.07→11.07; 11.07→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 12608.463453447863,
+          "typed": 12694.774005,
+          "ratio": 1.0068454456699507,
+          "floor": 0.011715767220089157,
+          "instructions": 1.000223535725986,
+          "cycles": 1.0051087450212453,
+          "baseInstructions": 286312.06720010407,
+          "typedInstructions": 286376.0681759042,
+          "rssBaseMiB": 4.00390625,
+          "rssTypedMiB": 3.99609375,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 12272.173667999656,
+          "typed": 12361.484647,
+          "ratio": 1.0072775191597252,
+          "floor": 0.020228260088505978,
+          "instructions": 1.0002235327725943,
+          "cycles": 1.0079614615913604,
+          "baseInstructions": 286312.0667447307,
+          "typedInstructions": 286376.0668748374,
+          "rssBaseMiB": 3.97265625,
+          "rssTypedMiB": 4.0390625,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 11947.437515259782,
+          "typed": 12034.957715,
+          "ratio": 1.0073254369088296,
+          "floor": 0.0011522953193765506,
+          "instructions": 1.0002235325455355,
+          "cycles": 1.005331361560594,
+          "baseInstructions": 286312.06654957065,
+          "typedInstructions": 286376.066614624,
+          "rssBaseMiB": 4.00390625,
+          "rssTypedMiB": 3.9765625,
+          "load": "6.23→6.23; 6.23→6.23; 6.23→5.89",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "c",
+      "ratio": 0.9687124888737614,
+      "floor": 0.02098461582337685,
+      "instructions": 1.0000000720495577,
+      "cycles": 0.9706501216469823,
+      "timeBase": 1071426.4873210026,
+      "timeTyped": 1037904.219178,
+      "nodeBase": 0.709401523909429,
+      "nodeTyped": 0.6872061158371421,
+      "bunBase": 0.3041910191822426,
+      "bunTyped": 0.29467363928507634,
+      "rssBase": 12.01171875,
+      "rssTyped": 12,
+      "verdict": "improves",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 1109116.6842589346,
+          "typed": 1078712.726027,
+          "ratio": 0.9725872321069183,
+          "floor": 0.004534532252872925,
+          "instructions": 1.0000000720495577,
+          "cycles": 0.9715556159467792,
+          "baseInstructions": 27188287.83561644,
+          "typedInstructions": 27188289.79452055,
+          "rssBaseMiB": 11.765625,
+          "rssTypedMiB": 11.98046875,
+          "load": "13.11→13.11; 13.11→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 1071426.4873210026,
+          "typed": 1037904.219178,
+          "ratio": 0.9687124888737614,
+          "floor": 0.0029687799872771814,
+          "instructions": 1.000000071797636,
+          "cycles": 0.9709897236042969,
+          "baseInstructions": 27188287.815068495,
+          "typedInstructions": 27188289.76712329,
+          "rssBaseMiB": 11.76171875,
+          "rssTypedMiB": 12,
+          "load": "10.34→10.34; 10.34→10.34; 10.34→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 1121754.1376307586,
+          "typed": 1081432.547945,
+          "ratio": 0.9640548776838735,
+          "floor": 0.02098461582337685,
+          "instructions": 1.0000000712937929,
+          "cycles": 0.9693078680577285,
+          "baseInstructions": 27188287.869863015,
+          "typedInstructions": 27188289.80821918,
+          "rssBaseMiB": 11.8046875,
+          "rssTypedMiB": 11.98046875,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.84",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 1052856.120367296,
+          "typed": 1031757.630137,
+          "ratio": 0.9799607089495422,
+          "floor": 0.008588019881699771,
+          "instructions": 1.000000073561087,
+          "cycles": 0.970311642465261,
+          "baseInstructions": 27188287.78082192,
+          "typedInstructions": 27188289.78082192,
+          "rssBaseMiB": 12.01171875,
+          "rssTypedMiB": 11.84765625,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 1069885.5545814133,
+          "typed": 1034844.479452,
+          "ratio": 0.9672478285370224,
+          "floor": 0.0026234432908520677,
+          "instructions": 1.0000000723014792,
+          "cycles": 0.9706501216469823,
+          "baseInstructions": 27188287.801369864,
+          "typedInstructions": 27188289.76712329,
+          "rssBaseMiB": 11.85546875,
+          "rssTypedMiB": 11.7265625,
+          "load": "5.89→5.89; 5.89→5.89; 5.89→5.89",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "llvm",
+      "ratio": 0.9869972932495995,
+      "floor": 0.03514438147390153,
+      "instructions": 1.0000000735308567,
+      "cycles": 0.9882537138319089,
+      "timeBase": 1084278.6928414681,
+      "timeTyped": 1077165.589041,
+      "nodeBase": 0.7179110896983171,
+      "nodeTyped": 0.7132014369731963,
+      "bunBase": 0.3078399167429007,
+      "bunTyped": 0.3058204200063362,
+      "rssBase": 12.0078125,
+      "rssTyped": 12.015625,
+      "verdict": "inside floor",
+      "rounds": [
+        {
+          "round": 0,
+          "baseline": 1113137.7766860414,
+          "typed": 1098663.972603,
+          "ratio": 0.9869972932495995,
+          "floor": 0.010171564695110158,
+          "instructions": 1.0000000745450752,
+          "cycles": 0.9859131592673789,
+          "baseInstructions": 27013167.83561644,
+          "typedInstructions": 27013169.84931507,
+          "rssBaseMiB": 12.0078125,
+          "rssTypedMiB": 12.015625,
+          "load": "13.11→13.11; 13.11→13.11; 13.11→13.11",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 1,
+          "baseline": 1077585.6156066584,
+          "typed": 1077165.589041,
+          "ratio": 0.9996102151331874,
+          "floor": 0.0028846831515597637,
+          "instructions": 1.00000007479863,
+          "cycles": 0.9922083396231015,
+          "baseInstructions": 27013167.815068495,
+          "typedInstructions": 27013169.83561644,
+          "rssBaseMiB": 11.92578125,
+          "rssTypedMiB": 11.8671875,
+          "load": "10.34→10.34; 10.34→10.34; 10.34→10.34",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 2,
+          "baseline": 1102605.889340559,
+          "typed": 1095585.123288,
+          "ratio": 0.9936325697872356,
+          "floor": 0.03514438147390153,
+          "instructions": 1.0000000732773018,
+          "cycles": 0.9882537138319089,
+          "baseInstructions": 27013167.842465755,
+          "typedInstructions": 27013169.82191781,
+          "rssBaseMiB": 11.99609375,
+          "rssTypedMiB": 11.91015625,
+          "load": "9.84→9.84; 9.84→9.84; 9.84→9.21",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 3,
+          "baseline": 1065812.5548786467,
+          "typed": 1042746.342466,
+          "ratio": 0.978358096546092,
+          "floor": 0.027667003906104104,
+          "instructions": 1.0000000735308567,
+          "cycles": 0.9879788910459886,
+          "baseInstructions": 27013167.79452055,
+          "typedInstructions": 27013169.78082192,
+          "rssBaseMiB": 11.89453125,
+          "rssTypedMiB": 11.91796875,
+          "load": "7.61→7.61; 7.61→7.61; 7.61→7.61",
+          "gates": [
+            null
+          ]
+        },
+        {
+          "round": 4,
+          "baseline": 1084278.6928414681,
+          "typed": 1058434.424658,
+          "ratio": 0.9761645522003752,
+          "floor": 0.034652405974077816,
+          "instructions": 1.0000000735308565,
+          "cycles": 0.9917295877575849,
+          "baseInstructions": 27013167.82191781,
+          "typedInstructions": 27013169.80821918,
+          "rssBaseMiB": 12.0078125,
+          "rssTypedMiB": 11.859375,
+          "load": "5.89→5.89; 5.89→5.89; 5.89→5.89",
+          "gates": [
+            null
+          ]
+        }
+      ]
+    }
+  ],
+  "codeSizes": [
+    {
+      "name": "cyclic-churn",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 34976,
+      "descriptorBytes": 576,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 35104,
+      "descriptorBytes": 576,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 28736,
+      "descriptorBytes": 576,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 28864,
+      "descriptorBytes": 576,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 32992,
+      "descriptorBytes": 576,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 33504,
+      "descriptorBytes": 576,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 18256,
+      "descriptorBytes": 288,
+      "descriptorSymbols": 3,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 18448,
+      "descriptorBytes": 288,
+      "descriptorSymbols": 3,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 30208,
+      "descriptorBytes": 480,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 30528,
+      "descriptorBytes": 480,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 39584,
+      "descriptorBytes": 480,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 39392,
+      "descriptorBytes": 480,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 82208,
+      "descriptorBytes": 672,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 81984,
+      "descriptorBytes": 672,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 32128,
+      "descriptorBytes": 672,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 32096,
+      "descriptorBytes": 672,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-parse",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 124672,
+      "descriptorBytes": 1152,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "json-parse",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 125600,
+      "descriptorBytes": 1152,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "json-build-append",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 47696,
+      "descriptorBytes": 384,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-build-append",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 47888,
+      "descriptorBytes": 384,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 45056,
+      "descriptorBytes": 384,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 45216,
+      "descriptorBytes": 384,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "c",
+      "arm": "base",
+      "textBytes": 116320,
+      "descriptorBytes": 1152,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "llvm",
+      "arm": "base",
+      "textBytes": 116256,
+      "descriptorBytes": 1152,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 35104,
+      "descriptorBytes": 624,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 134,
+      "traceCallbacks": 2,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 35264,
+      "descriptorBytes": 624,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 135,
+      "traceCallbacks": 2,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 28800,
+      "descriptorBytes": 624,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 46,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 28928,
+      "descriptorBytes": 624,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 46,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 32992,
+      "descriptorBytes": 624,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 33504,
+      "descriptorBytes": 624,
+      "descriptorSymbols": 6,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 18288,
+      "descriptorBytes": 312,
+      "descriptorSymbols": 3,
+      "traceCallbackBytes": 46,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 18512,
+      "descriptorBytes": 312,
+      "descriptorSymbols": 3,
+      "traceCallbackBytes": 46,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 30208,
+      "descriptorBytes": 520,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 30528,
+      "descriptorBytes": 520,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 39680,
+      "descriptorBytes": 520,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 88,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 39488,
+      "descriptorBytes": 520,
+      "descriptorSymbols": 5,
+      "traceCallbackBytes": 89,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 82240,
+      "descriptorBytes": 728,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 12,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 81984,
+      "descriptorBytes": 728,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 12,
+      "traceCallbacks": 1,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 32256,
+      "descriptorBytes": 728,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 112,
+      "traceCallbacks": 3,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 32224,
+      "descriptorBytes": 728,
+      "descriptorSymbols": 7,
+      "traceCallbackBytes": 113,
+      "traceCallbacks": 3,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-parse",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 124992,
+      "descriptorBytes": 1248,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 299,
+      "traceCallbacks": 4,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "json-parse",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 125920,
+      "descriptorBytes": 1248,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 300,
+      "traceCallbacks": 4,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "json-build-append",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 47696,
+      "descriptorBytes": 416,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-build-append",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 47888,
+      "descriptorBytes": 416,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 45056,
+      "descriptorBytes": 416,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 45216,
+      "descriptorBytes": 416,
+      "descriptorSymbols": 4,
+      "traceCallbackBytes": 0,
+      "traceCallbacks": 0,
+      "releaseBytes": 81,
+      "valueReleaseBytes": "absent/inlined"
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "c",
+      "arm": "visitors",
+      "textBytes": 116672,
+      "descriptorBytes": 1248,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 345,
+      "traceCallbacks": 4,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "llvm",
+      "arm": "visitors",
+      "textBytes": 116608,
+      "descriptorBytes": 1248,
+      "descriptorSymbols": 12,
+      "traceCallbackBytes": 348,
+      "traceCallbacks": 4,
+      "releaseBytes": 81,
+      "valueReleaseBytes": 120
+    }
+  ]
+}

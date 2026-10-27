@@ -1,0 +1,365 @@
+{
+  "base": "d3a1d29fd",
+  "measuredSource": "ff2426c11ca0a8f6ceeb217a025c0ec5e00aae06",
+  "rawDirectory": "/home/akisarou/.cache/nts-scratch/runtime-20261027/typed-trace-ab",
+  "matrix": {
+    "state": "PASS",
+    "current": null,
+    "completed": 624,
+    "utc": "2026-10-27T16:30:12.649Z"
+  },
+  "cases": [
+    "cyclic-churn",
+    "release-acyclic",
+    "sort-objects",
+    "tree-teardown",
+    "immutable-update",
+    "array-copying-methods",
+    "map-entries-top-k",
+    "awfy-towers",
+    "json-parse",
+    "json-build-append",
+    "json-build-join",
+    "json-stringify-doc"
+  ],
+  "pairedRounds": 5,
+  "hostLaunches": 5,
+  "inlineSizes": [
+    {
+      "name": "cyclic-churn",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-parse",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "json-parse",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "json-build-append",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-build-append",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "c",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "llvm",
+      "arm": "base",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "cyclic-churn",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "release-acyclic",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "sort-objects",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "tree-teardown",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "immutable-update",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "array-copying-methods",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "awfy-towers",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-parse",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "json-parse",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "json-build-append",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-build-append",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-build-join",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": "absent/inlined"
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "c",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": 120
+    },
+    {
+      "name": "json-stringify-doc",
+      "backend": "llvm",
+      "arm": "visitors",
+      "release": 81,
+      "valueRelease": 120
+    }
+  ]
+}

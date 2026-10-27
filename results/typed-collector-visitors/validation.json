@@ -1,0 +1,157 @@
+{
+  "rustTests": 946,
+  "corpusArms": 6,
+  "programsPerArm": 771,
+  "unaffected": {
+    "state": "PASS",
+    "before": "/home/akisarou/.cache/nts-pins/d3a1d29fd965/nts",
+    "after": "target/release/nts",
+    "checks": [
+      {
+        "name": "typed-release-fields",
+        "backend": "c",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "typed-release-fields",
+        "backend": "llvm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "typed-release-fields",
+        "backend": "jvm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "typed-release-fields",
+        "backend": "wasm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "typed-release-fields",
+        "backend": "jvm",
+        "output": "byte-identical",
+        "files": [
+          "nts/gen/Base.class",
+          "nts/gen/Derived.class",
+          "nts/gen/Leaf.class",
+          "nts/gen/Link.class",
+          "nts/gen/Program.class",
+          "nts-runtime.jar"
+        ]
+      },
+      {
+        "name": "typed-release-fields",
+        "backend": "wasm",
+        "output": "byte-identical",
+        "files": [
+          "program.instance.mjs",
+          "program.mjs",
+          "program.origins.json",
+          "program.wasm",
+          "program.wasm.json"
+        ]
+      },
+      {
+        "name": "count-free-sort",
+        "backend": "c",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "count-free-sort",
+        "backend": "llvm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "count-free-sort",
+        "backend": "jvm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "count-free-sort",
+        "backend": "wasm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "count-free-sort",
+        "backend": "jvm",
+        "output": "byte-identical",
+        "files": [
+          "nts/gen/Cell0.class",
+          "nts/gen/Closure1.class",
+          "nts/gen/Closure2.class",
+          "nts/gen/Closure3.class",
+          "nts/gen/Closure4.class",
+          "nts/gen/Closure5.class",
+          "nts/gen/Closure6.class",
+          "nts/gen/Closure7.class",
+          "nts/gen/Closure8.class",
+          "nts/gen/Closure9.class",
+          "nts/gen/Item.class",
+          "nts/gen/Program.class",
+          "nts/gen/RangeError.class",
+          "nts/gen/erased/Callable.class",
+          "nts-runtime.jar"
+        ]
+      },
+      {
+        "name": "count-free-sort",
+        "backend": "wasm",
+        "output": "byte-identical",
+        "files": [
+          "program.instance.mjs",
+          "program.mjs",
+          "program.origins.json",
+          "program.wasm",
+          "program.wasm.json"
+        ]
+      },
+      {
+        "name": "integer-extrema",
+        "backend": "c",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "integer-extrema",
+        "backend": "llvm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "integer-extrema",
+        "backend": "jvm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "integer-extrema",
+        "backend": "wasm",
+        "preparedHir": "byte-identical"
+      },
+      {
+        "name": "integer-extrema",
+        "backend": "jvm",
+        "output": "byte-identical",
+        "files": [
+          "nts/gen/Program.class",
+          "nts-runtime.jar"
+        ]
+      },
+      {
+        "name": "integer-extrema",
+        "backend": "wasm",
+        "output": "byte-identical",
+        "files": [
+          "program.instance.mjs",
+          "program.mjs",
+          "program.origins.json",
+          "program.wasm",
+          "program.wasm.json"
+        ]
+      }
+    ]
+  },
+  "profiles": {
+    "state": "PASS",
+    "profiles": 4,
+    "utc": "2026-10-27T16:30:24.235Z"
+  }
+}
