@@ -1352,6 +1352,15 @@
       "reason": "Steps.next decrements this.at and stops at this.at < 0; NaN stays NaN and the stop comparison stays false, so the iterator never ends. This pair was hidden behind earlier large bounds."
     },
     {
+      "fixture": "benchmarks/cases/symbol-keys",
+      "source": "benchmarks/cases/symbol-keys/case.ts",
+      "function": "keys",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "workload repetition (~2³¹ rounds); int32 induction crossing covered by the near-boundary fixture"
+    },
+    {
       "fixture": "tests/programs/array-from",
       "source": "tests/programs/array-from/src/main.ts",
       "function": "fromIterable",

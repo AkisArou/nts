@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn reviewed_catalog_is_unique_and_names_real_fixture_sources() {
         let rules = parse(CATALOG).unwrap();
-        assert_eq!(rules.len(), 159);
+        assert_eq!(rules.len(), 160);
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for rule in rules {
             let source = std::fs::read_to_string(root.join(&rule.source)).unwrap();
@@ -212,6 +212,23 @@ mod tests {
         assert!(!matches(&[f64::NAN], &excluded));
         let other = for_entry(Utf8Path::new("/tree/tests/programs/fib/case.ts")).unwrap();
         assert_eq!(other.tuples_for("fib"), Vec::<Vec<u64>>::new());
+    }
+
+    #[test]
+    fn symbol_keys_keeps_every_other_pool_input() {
+        let policy = for_entry(Utf8Path::new(
+            "/checkout/benchmarks/cases/symbol-keys/case.ts",
+        ))
+        .unwrap();
+        let rules = policy.tuples_for("keys");
+        assert_eq!(rules.len(), 1);
+        for input in crate::POOL {
+            assert_eq!(
+                matches(&[*input], &rules),
+                input.to_bits() == 2_147_483_647_f64.to_bits()
+            );
+        }
+        assert_eq!(policy.tuples_for("other"), Vec::<Vec<u64>>::new());
     }
 
     #[test]
