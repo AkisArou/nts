@@ -1,6 +1,7 @@
-import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { artifactShadow, canonicalJson, type Inputs } from "./artifact-shadow.ts";
 import { REUSE } from "./artifact-reuse-policy.ts";
 export { REUSE } from "./artifact-reuse-policy.ts";
@@ -8,6 +9,15 @@ export { REUSE } from "./artifact-reuse-policy.ts";
 type Kind = keyof typeof REUSE;
 export type VerifierResult = { status: number | null; signal: string | null; error: string | null; stdout: string; stderr: string };
 let counter = 0;
+
+/** Verification reads emitted classes and the JDK, never the lander's shell
+ * options or locale. Use this exact allowlist for execution and its key. */
+export function verifierEnvironment(command: string, parent: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const located = command.includes("/") ? resolve(command) : spawnSync("sh", ["-c", 'command -v "$1"', "sh", command], { encoding: "utf8", env: parent }).stdout.trim();
+  const home = dirname(dirname(realpathSync(located)));
+  if (!existsSync(join(home, "release")) || !existsSync(join(home, "lib/modules"))) throw new Error(`cannot resolve JDK home for ${command}; set JAVA_HOME to the JDK`);
+  return { PATH: [join(home, "bin"), "/usr/bin", "/bin"].join(delimiter), JAVA_HOME: home, LANG: "C.UTF-8" };
+}
 
 /** GNU time waits for this tool's descendants; capture/emission and hashing
  * are outside the measurement. The inner timeout owns its process group and

@@ -108,7 +108,7 @@ import { describe, provenanceOf } from "./pin.ts";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { artifactFiles, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
-import { artifactResult, completeVerifier, verifierExecution } from "../gate/artifact-reuse.ts";
+import { artifactResult, completeVerifier, verifierEnvironment, verifierExecution } from "../gate/artifact-reuse.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -210,9 +210,9 @@ try {
   process.exit(2);
 }
 
-const run = (cmd, args, timeout = 900_000) =>
+const run = (cmd, args, timeout = 900_000, childEnvironment = env) =>
   new Promise((done) => {
-    const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { cwd: ROOT, env: childEnvironment, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", stdout = "", stderr = "";
     child.stdout.on("data", (d) => { stdout += d; out += d; });
     child.stderr.on("data", (d) => { stderr += d; out += d; });
@@ -515,20 +515,20 @@ async function check(project, slot) {
     return;
   }
   const flags = [...vmToolFlags(JAVA), "-Xverify:all"];
+  let verifierEnv;
+  try { verifierEnv = verifierEnvironment(JAVA); }
+  catch (error) { unmeasured.push(`${project}: ${error.message}`); return; }
   const inputs = () => {
-    // VM agents/options can read files outside this classpath; do not reuse
-    // such an invocation until their full input closure has been reviewed.
-    if (["JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"].some(name => process.env[name])) throw new Error("injected JVM options are not eligible for reuse");
     return { files: [
       ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
-    ], values: { tool: toolIdentity(JAVA), flags, script: fileDigest(fileURLToPath(import.meta.url)),
+    ], values: { tool: toolIdentity(JAVA, verifierEnv), flags, script: fileDigest(fileURLToPath(import.meta.url)),
       reuse_policy: fileDigest(join(HERE, "../gate/artifact-reuse.ts")) } };
   };
   const classCount = artifactFiles(out).filter(file => file.name.endsWith(".class")).length;
   const args = [...flags, "-cp", `${out}:${jar}`, DRIVER, out];
   let freshRun;
-  const result = await artifactResult("jvm-verifies", inputs, () => verifierExecution(async (...command) => {
-    freshRun = await run(...command); return freshRun;
+  const result = await artifactResult("jvm-verifies", inputs, () => verifierExecution(async (command, arguments_, timeout) => {
+    freshRun = await run(command, arguments_, timeout, verifierEnv); return freshRun;
   }, JAVA, args, scratch),
     (value): value is import("../gate/artifact-reuse.ts").VerifierResult => completeVerifier(value, classCount), project);
   const v = freshRun ?? { ...result, error: result.error ? new Error(result.error) : null, out: result.stdout + result.stderr, command: JAVA, args, pid: null };

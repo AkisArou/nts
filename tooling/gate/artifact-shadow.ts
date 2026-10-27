@@ -158,18 +158,18 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
 
 // Cache version discovery within this run only, keyed by the tool's own bytes
 // and relevant environment. Artifact/result keys also include this identity.
-export function toolIdentity(command: string): unknown {
-  const located = command.includes("/") ? resolve(command) : spawnSync("sh", ["-c", 'command -v "$1"', "sh", command], { encoding: "utf8" }).stdout.trim();
+export function toolIdentity(command: string, childEnvironment?: NodeJS.ProcessEnv): unknown {
+  const located = command.includes("/") ? resolve(command) : spawnSync("sh", ["-c", 'command -v "$1"', "sh", command], { encoding: "utf8", env: childEnvironment }).stdout.trim();
   if (!located) throw new Error(`tool not found: ${command}`);
   const executable = realpathSync(located);
-  const environment = Object.fromEntries(["LANG", "LC_ALL", "TZ", "JAVA_HOME", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "LD_LIBRARY_PATH", "LD_PRELOAD", "NODE_OPTIONS"].map(k => [k, process.env[k] ?? null]));
+  const environment = childEnvironment ?? Object.fromEntries(["LANG", "LC_ALL", "TZ", "JAVA_HOME", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "LD_LIBRARY_PATH", "LD_PRELOAD", "NODE_OPTIONS"].map(k => [k, process.env[k] ?? null]));
   const jdkTool = ["java", "javac", "javap", "jar", "jmod", "jdeps", "javadoc", "jlink", "keytool"].includes(basename(command).replace(/\.exe$/, ""));
   const identity = { executable_sha256: fileDigest(executable), environment, vm_flags: vmToolFlags(command),
     ...(jdkTool ? { jdk: jdkIdentity(dirname(dirname(executable))) } : {}) };
   const versionKey = digest(json(identity));
   const saved = process.env.NTS_GATE_RUN_DIR ? join(process.env.NTS_GATE_RUN_DIR, "share/shadow-tools", `${versionKey}.json`) : null;
   if (saved) { try { return JSON.parse(readFileSync(saved, "utf8")); } catch { /* Discover below. */ } }
-  const version = spawnSync(executable, [...vmToolFlags(command), "--version"], { encoding: "utf8", timeout: 10_000 });
+  const version = spawnSync(executable, [...vmToolFlags(command), "--version"], { encoding: "utf8", timeout: 10_000, env: childEnvironment });
   if (version.error || version.status !== 0) throw new Error(`cannot identify ${command}: ${version.error ?? version.stderr}`);
   const value = { ...identity, version: version.stdout + version.stderr };
   if (saved) publish(saved, value);
@@ -183,7 +183,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (process.argv.includes("--request")) {
       const request = JSON.parse(readFileSync(flag("--request"), "utf8"));
       const observe = artifactShadow(request.kind, () => ({ files: request.files, absent: request.absent,
-        values: { ...request.values, tools: request.tools.map(toolIdentity) } }), process.env,
+        values: { ...request.values, tools: request.tools.map(command => toolIdentity(command)) } }), process.env,
         request.mode === "finish" ? request.expected_key : undefined,
         typeof request.context === "string" ? request.context : null);
       process.stdout.write(JSON.stringify(request.mode === "prepare" ? { key: observe.key } : observe(request.result)) + "\n");

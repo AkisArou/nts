@@ -6,8 +6,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { artifactFiles, canonicalJson, jdkIdentity, toolIdentity } from "./artifact-shadow.ts";
-import { artifactResult, completeVerifier, REUSE, verifierExecution, type VerifierResult } from "./artifact-reuse.ts";
+import { artifactFiles, artifactShadow, canonicalJson, fileDigest, jdkIdentity, toolIdentity } from "./artifact-shadow.ts";
+import { artifactResult, completeVerifier, REUSE, verifierEnvironment, verifierExecution, type VerifierResult } from "./artifact-reuse.ts";
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -111,4 +111,55 @@ test("real JDK verification reuses complete output and measures only the verifie
   assert.equal(first.stdout, "VERIFIED 1 OF 1\n"); assert.equal(first.stderr, ""); assert.ok(cpu !== null && cpu > 0);
   assert.deepEqual(await artifactResult("jvm-verifies", inputs, fresh, accept, "A", { env, enabled: true, log: () => {} }), first);
   assert.equal(calls, 1);
+});
+
+test("different lander environments produce identical emitted bytes, verifier facts and keys", async t => {
+  const { root, env } = fixture(t);
+  const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
+  const java = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "/usr/bin/java";
+  const driver = join(ROOT, "tooling/conformance/JvmVerify.java");
+  const run = (command: string, args: string[], childEnv: NodeJS.ProcessEnv) => new Promise<any>((done, reject) => {
+    const child = spawn(command, args, { cwd: ROOT, env: childEnv, stdio: ["ignore", "pipe", "pipe"] }); let stdout = "", stderr = "";
+    child.stdout.on("data", data => stdout += data); child.stderr.on("data", data => stderr += data);
+    child.on("error", reject); child.on("close", (status, signal) => done({ status, signal, stdout, stderr }));
+  });
+  const first = { ...process.env, LANG: "C.UTF-8" }; delete first.NODE_OPTIONS;
+  const second = { ...process.env, LANG: "en_US.UTF-8", NODE_OPTIONS: "--max-old-space-size=8192 --disable-warning=ExperimentalWarning" };
+  const records = [];
+  for (const [i, parent] of [first, second].entries()) {
+    const out = join(root, `out-${i}`);
+    const emit = await run(bin, ["emit-jvm", "tests/programs/induction-boundary-near-start", "--out", out], parent);
+    assert.equal(emit.status, 0, emit.stdout + emit.stderr);
+    const files = artifactFiles(out); assert.ok(files.some(file => file.name.endsWith(".class")));
+    const canonical = verifierEnvironment(java, parent);
+    assert.deepEqual(Object.keys(canonical).sort(), ["JAVA_HOME", "LANG", "PATH"]);
+    assert.equal(canonical.LANG, "C.UTF-8");
+    const flags = [...vmToolFlags(java), "-Xverify:all"], args = ["-Xverify:all", "-cp", `${out}:${join(out, "nts-runtime.jar")}`, driver, out];
+    const before = await run(java, [...vmToolFlags(java), ...args], parent), after = await run(java, [...vmToolFlags(java), ...args], canonical);
+    assert.equal(after.status, 0, after.stderr); assert.equal(after.stderr, "");
+    assert.deepEqual(after, before, "canonicalization must preserve the real verifier's verdict lines");
+    // Separate lander processes matter: computing both keys in this process
+    // would fail to detect a helper accidentally reading process.env.
+    const probe = `
+      import { artifactFiles, artifactShadow, toolIdentity } from ${JSON.stringify(new URL("./artifact-shadow.ts", import.meta.url).href)};
+      import { verifierEnvironment } from ${JSON.stringify(new URL("./artifact-reuse.ts", import.meta.url).href)};
+      const [java, out, driver, metadata] = process.argv.slice(1);
+      const canonical = verifierEnvironment(java);
+      const key = artifactShadow("jvm-verifies", () => ({ files: [...artifactFiles(out), { name: "driver", path: driver }],
+        values: { flags: ${JSON.stringify(flags)}, tool: toolIdentity(java, canonical) } }), JSON.parse(metadata)).key;
+      console.log(JSON.stringify({ key, canonical }));
+    `;
+    const measuredKey = await run(process.execPath, ["--input-type=module", "-e", probe, java, out, driver, JSON.stringify(env)], parent);
+    assert.equal(measuredKey.status, 0, measuredKey.stderr);
+    const { key, canonical: keyedEnvironment } = JSON.parse(measuredKey.stdout);
+    assert.deepEqual(keyedEnvironment, canonical);
+    assert.ok(key);
+    records.push({ key, bytes: files.map(file => [file.name, fileDigest(file.path)]), verdict: after, canonical });
+    // VM and dynamic-loader injection in a lander's shell must never reach
+    // the verifier or its version/identity probe.
+    const injected = verifierEnvironment(java, { ...parent, JAVA_TOOL_OPTIONS: "-not-a-jvm-option", LD_PRELOAD: "/missing/injected.so" });
+    assert.deepEqual(injected, canonical);
+    assert.deepEqual(toolIdentity(java, injected), toolIdentity(java, canonical));
+  }
+  assert.deepEqual(records[0], records[1]);
 });
