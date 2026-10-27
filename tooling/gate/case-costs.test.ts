@@ -187,3 +187,22 @@ test("artifact shadow counts distinguish cross-train matches, mismatches, misses
     } },
   });
 });
+
+test("reuse summary counts actual skips and matching tool-only CPU without inventing unknown costs", t => {
+  const dir = fixture(t);
+  const rows = [
+    { status: "fresh", enabled: false, tool_cpu_s: .5, matching_hit_cpu_s: .5 },
+    { status: "fresh", enabled: false, tool_cpu_s: .7, matching_hit_cpu_s: null },
+    { status: "fresh", enabled: false, tool_cpu_s: null, matching_hit_cpu_s: null },
+    { status: "reused", enabled: true, tool_cpu_s: null, matching_hit_cpu_s: null },
+  ];
+  writeFileSync(join(dir, "reuse-1-0.jsonl"), rows.map(row => JSON.stringify({ event: "artifact.reuse", kind: "jvm-verifies", step: "examples", ...row })).join("\n") + "\n");
+  const result = summarizeCosts(dir, [], [step]).steps.examples as any;
+  assert.equal(result.artifact_reuse.skipped_runs, 1);
+  assert.equal(result.artifact_reuse.fresh_runs, 3);
+  assert.equal(result.artifact_reuse.tool_cpu_s.n, 2);
+  assert.equal(result.artifact_reuse.tool_cpu_s.sum, 1.2);
+  assert.equal(result.artifact_reuse.matching_hit_cpu_s.sum, .5);
+  assert.equal(result.artifact_reuse.unknown_cpu_runs, 1);
+  assert.equal(result.artifact_shadow.skipped_runs, 1);
+});

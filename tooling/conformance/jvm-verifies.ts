@@ -107,7 +107,8 @@ import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-proj
 import { describe, provenanceOf } from "./pin.ts";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
-import { artifactFiles, artifactShadow, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
+import { artifactFiles, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
+import { artifactResult, completeVerifier, verifierExecution } from "../gate/artifact-reuse.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -209,14 +210,14 @@ try {
   process.exit(2);
 }
 
-const run = (cmd, args) =>
+const run = (cmd, args, timeout = 900_000) =>
   new Promise((done) => {
     const child = spawn(cmd, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
     let out = "", stdout = "", stderr = "";
     child.stdout.on("data", (d) => { stdout += d; out += d; });
     child.stderr.on("data", (d) => { stderr += d; out += d; });
     const result = () => ({ command: cmd, args, pid: child.pid, stdout, stderr, out });
-    const timer = setTimeout(() => child.kill("SIGKILL"), 900_000);
+    const timer = setTimeout(() => child.kill("SIGKILL"), timeout);
     child.on("error", (error) => { clearTimeout(timer); done({ ...result(), error }); });
     child.on("close", (status, signal) => { clearTimeout(timer); done({ ...result(), status, signal }); });
   });
@@ -514,11 +515,23 @@ async function check(project, slot) {
     return;
   }
   const flags = [...vmToolFlags(JAVA), "-Xverify:all"];
-  const observe = artifactShadow("jvm-verifies", () => ({ files: [
-    ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
-  ], values: { tool: toolIdentity(JAVA), flags, script: fileDigest(fileURLToPath(import.meta.url)) } }), process.env, undefined, project);
-  const v = await run(JAVA, [...flags, "-cp", `${out}:${jar}`, DRIVER, out]);
-  observe({ status: v.status ?? null, signal: v.signal ?? null, error: v.error?.message ?? null, stdout: v.stdout, stderr: v.stderr });
+  const inputs = () => {
+    // VM agents/options can read files outside this classpath; do not reuse
+    // such an invocation until their full input closure has been reviewed.
+    if (["JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS"].some(name => process.env[name])) throw new Error("injected JVM options are not eligible for reuse");
+    return { files: [
+      ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
+    ], values: { tool: toolIdentity(JAVA), flags, script: fileDigest(fileURLToPath(import.meta.url)),
+      reuse_policy: fileDigest(join(HERE, "../gate/artifact-reuse.ts")) } };
+  };
+  const classCount = artifactFiles(out).filter(file => file.name.endsWith(".class")).length;
+  const args = [...flags, "-cp", `${out}:${jar}`, DRIVER, out];
+  let freshRun;
+  const result = await artifactResult("jvm-verifies", inputs, () => verifierExecution(async (...command) => {
+    freshRun = await run(...command); return freshRun;
+  }, JAVA, args, scratch),
+    (value): value is import("../gate/artifact-reuse.ts").VerifierResult => completeVerifier(value, classCount), project);
+  const v = freshRun ?? { ...result, error: result.error ? new Error(result.error) : null, out: result.stdout + result.stderr, command: JAVA, args, pid: null };
   const read = readVerify(v.out);
   const failure = verifierFailure(v, read);
   if (failure) {

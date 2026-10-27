@@ -1,13 +1,13 @@
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 // Observe prospective cache hits. This module never executes or skips work.
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 type File = { name: string; path: string };
-type Inputs = { files: File[]; absent?: string[]; values?: unknown };
+export type Inputs = { files: File[]; absent?: string[]; values?: unknown };
 type Status = "miss" | "hit-match" | "hit-mismatch" | "unavailable";
 export type ShadowRow = { event: "artifact.shadow"; kind: string; step: string; epoch: number;
   status: Status; key: string | null; run: string | null; baseline_run?: string | null;
@@ -17,9 +17,42 @@ let counter = 0;
 const canonical = (value: any): any => Array.isArray(value) ? value.map(canonical)
   : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])]))
   : value ?? null;
-const json = (value: unknown) => JSON.stringify(canonical(value));
+export const canonicalJson = (value: unknown) => JSON.stringify(canonical(value));
+const json = canonicalJson;
 const digest = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 export const fileDigest = (path: string) => digest(readFileSync(path));
+
+const jdkDigests = new Map<string, unknown>();
+/** Hash the JDK payload once per run, with file identity checked on every use.
+ * A launcher/version alone misses an in-place modules or VM update. */
+export function jdkIdentity(home: string, env: NodeJS.ProcessEnv = process.env): unknown {
+  const files = ["release", "lib/modules"];
+  for (const native of ["lib/server/libjvm.so", "lib/server/libjvm.dylib", "bin/server/jvm.dll"]) {
+    if (existsSync(join(home, native))) files.push(native);
+  }
+  const stamps = () => files.map(name => {
+    const s = statSync(join(home, name), { bigint: true });
+    if (!s.isFile()) throw new Error(`non-regular JDK input: ${name}`);
+    return [name, String(s.dev), String(s.ino), String(s.size), String(s.mtimeNs), String(s.ctimeNs)];
+  });
+  const before = json(stamps()), key = digest(json({ home: realpathSync(home), before }));
+  if (jdkDigests.has(key)) return jdkDigests.get(key);
+  const saved = env.NTS_GATE_RUN_DIR ? join(env.NTS_GATE_RUN_DIR, "share/shadow-jdks", `${key}.json`) : null;
+  if (saved) {
+    try {
+      const value = JSON.parse(readFileSync(saved, "utf8"));
+      if (value.key === key && json(Object.keys(value.files).sort()) === json([...files].sort())
+        && Object.values(value.files).every(hash => typeof hash === "string" && /^[a-f0-9]{64}$/.test(hash))) {
+        jdkDigests.set(key, value.files); return value.files;
+      }
+    } catch { /* Missing or corrupt identity: hash the installed files. */ }
+  }
+  const value = Object.fromEntries(files.map(name => [name, fileDigest(join(home, name))]));
+  if (json(stamps()) !== before) throw new Error("JDK changed while hashing its payload");
+  if (saved) publish(saved, { key, files: value });
+  jdkDigests.set(key, value);
+  return value;
+}
 
 export function normalizeInputPaths(log: string, inputs: File[]): string {
   // d8 warnings embed the absolute input path; the output depends only on the bytes.
@@ -130,7 +163,9 @@ export function toolIdentity(command: string): unknown {
   if (!located) throw new Error(`tool not found: ${command}`);
   const executable = realpathSync(located);
   const environment = Object.fromEntries(["LANG", "LC_ALL", "TZ", "JAVA_HOME", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "LD_LIBRARY_PATH", "LD_PRELOAD", "NODE_OPTIONS"].map(k => [k, process.env[k] ?? null]));
-  const identity = { executable_sha256: fileDigest(executable), environment, vm_flags: vmToolFlags(command) };
+  const jdkTool = ["java", "javac", "javap", "jar", "jmod", "jdeps", "javadoc", "jlink", "keytool"].includes(basename(command).replace(/\.exe$/, ""));
+  const identity = { executable_sha256: fileDigest(executable), environment, vm_flags: vmToolFlags(command),
+    ...(jdkTool ? { jdk: jdkIdentity(dirname(dirname(executable))) } : {}) };
   const versionKey = digest(json(identity));
   const saved = process.env.NTS_GATE_RUN_DIR ? join(process.env.NTS_GATE_RUN_DIR, "share/shadow-tools", `${versionKey}.json`) : null;
   if (saved) { try { return JSON.parse(readFileSync(saved, "utf8")); } catch { /* Discover below. */ } }
