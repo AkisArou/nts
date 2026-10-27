@@ -1,0 +1,36 @@
+{
+  "base": "1612a840bb06",
+  "measuredCandidate": "3f25d11da5015ff9228c2173f895fc9040e216a2",
+  "sourceCommit": "325f065ca",
+  "sourceTreeUnchangedBySquash": true,
+  "cases": [
+    "sort-objects",
+    "map-entries-top-k",
+    "array-copying-methods",
+    "release-acyclic",
+    "cyclic-churn",
+    "tree-teardown",
+    "awfy-towers",
+    "string-sort-control"
+  ],
+  "rawDirectory": "/home/akisarou/.cache/nts-scratch/runtime-20261027/count-free-sort-ab",
+  "matrix": {
+    "state": "PASS",
+    "current": null,
+    "completed": 416,
+    "utc": "2026-10-27T11:35:10.452Z"
+  },
+  "operationCensus": {
+    "rows": 8,
+    "utc": "2026-10-27T11:29:25.536Z"
+  },
+  "profile": {
+    "state": "PASS",
+    "profiles": 2,
+    "n": 12740,
+    "utc": "2026-10-27T11:37:34.389Z"
+  },
+  "nativeWarmCalls": 2,
+  "pairedRounds": 5,
+  "hostLaunchesPerCase": 5
+}

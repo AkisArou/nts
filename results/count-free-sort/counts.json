@@ -1,0 +1,114 @@
+[
+  {
+    "name": "sort-objects",
+    "backend": "c",
+    "arm": "base",
+    "value": {
+      "checksum": "418ff06300000000",
+      "n": 2,
+      "retains": 90112,
+      "releases": 90690,
+      "allocations": 592,
+      "liveCount": 0,
+      "liveBytes": 0
+    }
+  },
+  {
+    "name": "sort-objects",
+    "backend": "llvm",
+    "arm": "base",
+    "value": {
+      "checksum": "418ff06300000000",
+      "n": 2,
+      "retains": 90112,
+      "releases": 90690,
+      "allocations": 592,
+      "liveCount": 0,
+      "liveBytes": 0
+    }
+  },
+  {
+    "name": "map-entries-top-k",
+    "backend": "c",
+    "arm": "base",
+    "value": {
+      "checksum": "40f635a000000000",
+      "n": 2,
+      "retains": 7332,
+      "releases": 8150,
+      "allocations": 426,
+      "liveCount": 258,
+      "liveBytes": 14400
+    }
+  },
+  {
+    "name": "map-entries-top-k",
+    "backend": "llvm",
+    "arm": "base",
+    "value": {
+      "checksum": "40f635a000000000",
+      "n": 2,
+      "retains": 7332,
+      "releases": 8150,
+      "allocations": 426,
+      "liveCount": 258,
+      "liveBytes": 14400
+    }
+  },
+  {
+    "name": "sort-objects",
+    "backend": "c",
+    "arm": "indices",
+    "value": {
+      "checksum": "418ff06300000000",
+      "n": 2,
+      "retains": 16384,
+      "releases": 16994,
+      "allocations": 624,
+      "liveCount": 0,
+      "liveBytes": 0
+    }
+  },
+  {
+    "name": "sort-objects",
+    "backend": "llvm",
+    "arm": "indices",
+    "value": {
+      "checksum": "418ff06300000000",
+      "n": 2,
+      "retains": 16384,
+      "releases": 16994,
+      "allocations": 624,
+      "liveCount": 0,
+      "liveBytes": 0
+    }
+  },
+  {
+    "name": "map-entries-top-k",
+    "backend": "c",
+    "arm": "indices",
+    "value": {
+      "checksum": "40f635a000000000",
+      "n": 2,
+      "retains": 3696,
+      "releases": 4516,
+      "allocations": 428,
+      "liveCount": 258,
+      "liveBytes": 14400
+    }
+  },
+  {
+    "name": "map-entries-top-k",
+    "backend": "llvm",
+    "arm": "indices",
+    "value": {
+      "checksum": "40f635a000000000",
+      "n": 2,
+      "retains": 3696,
+      "releases": 4516,
+      "allocations": 428,
+      "liveCount": 258,
+      "liveBytes": 14400
+    }
+  }
+]

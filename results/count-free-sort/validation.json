@@ -1,0 +1,222 @@
+{
+  "recordedAndBroad": [
+    {
+      "name": "test262-cases",
+      "argv": [
+        "sh",
+        "tooling/gate/all.sh",
+        "--call",
+        "test262-cases"
+      ],
+      "extra": {
+        "NTS_JOBS": "4"
+      },
+      "started": "2026-10-27T11:38:26.355Z",
+      "ended": "2026-10-27T11:44:11.450Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "test262-builtins-cases",
+      "argv": [
+        "sh",
+        "tooling/gate/all.sh",
+        "--call",
+        "test262-builtins-cases"
+      ],
+      "extra": {
+        "NTS_JOBS": "4"
+      },
+      "started": "2026-10-27T11:44:11.450Z",
+      "ended": "2026-10-27T11:45:11.937Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "test262-rest-cases",
+      "argv": [
+        "sh",
+        "tooling/gate/all.sh",
+        "--call",
+        "test262-rest-cases"
+      ],
+      "extra": {
+        "NTS_JOBS": "4"
+      },
+      "started": "2026-10-27T11:45:11.938Z",
+      "ended": "2026-10-27T11:45:32.763Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-c-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "c",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "started": "2026-10-27T11:45:32.763Z",
+      "ended": "2026-10-27T11:50:50.225Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-llvm-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "llvm",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "started": "2026-10-27T11:50:50.226Z",
+      "ended": "2026-10-27T11:55:14.120Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-jvm-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "jvm",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "started": "2026-10-27T11:55:14.120Z",
+      "ended": "2026-10-27T11:57:59.406Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-wasm-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "wasm",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "started": "2026-10-27T11:57:59.408Z",
+      "ended": "2026-10-27T12:00:14.324Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-c-1",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "c",
+        "NTS_RC": "1",
+        "NTS_AGREE_JOBS": "4",
+        "NTS_POISON": "1"
+      },
+      "started": "2026-10-27T12:00:14.325Z",
+      "ended": "2026-10-27T12:03:12.457Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-llvm-1",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "llvm",
+        "NTS_RC": "1",
+        "NTS_AGREE_JOBS": "4",
+        "NTS_POISON": "1"
+      },
+      "started": "2026-10-27T12:03:12.457Z",
+      "ended": "2026-10-27T12:07:18.609Z",
+      "status": 0,
+      "signal": null
+    }
+  ],
+  "runtime": [
+    {
+      "name": "c-compiles-before",
+      "argv": [
+        "node",
+        "tooling/conformance/c-compiles.mjs"
+      ],
+      "extra": {
+        "NTS_BIN": "/home/akisarou/.cache/nts-pins/1612a840bb06/nts"
+      },
+      "started": "2026-10-27T12:07:40.720Z",
+      "ended": "2026-10-27T12:12:09.536Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "c-compiles-after",
+      "argv": [
+        "node",
+        "tooling/conformance/c-compiles.mjs"
+      ],
+      "extra": {
+        "NTS_BIN": "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      },
+      "started": "2026-10-27T12:12:09.536Z",
+      "ended": "2026-10-27T12:17:12.615Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "refusals",
+      "argv": [
+        "node",
+        "tooling/conformance/refusal-diff.ts",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts"
+      ],
+      "extra": {},
+      "started": "2026-10-27T12:17:12.615Z",
+      "ended": "2026-10-27T12:29:08.807Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "emitted-rc",
+      "argv": [
+        "node",
+        "tooling/conformance/emitted-diff.ts",
+        "/home/akisarou/.cache/nts-pins/1612a840bb06/nts",
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "--rc"
+      ],
+      "extra": {},
+      "started": "2026-10-27T12:29:08.807Z",
+      "ended": "2026-10-27T12:35:41.248Z",
+      "status": 0,
+      "signal": null
+    }
+  ],
+  "source": "be0ca2e1b7bd4af087156545e9a452a0ae63b7c5"
+}
