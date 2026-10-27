@@ -1,8 +1,9 @@
-import { launcherPolicyNames } from "../gate/canonical-environment.ts";
+import { launcherPolicyNames, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
+import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -68,6 +69,36 @@ test("the default full run refuses a non-main pin and writes nothing", t => {
   assert.equal(main.commit, f.git("rev-parse", "main"));
   assert.equal(existsSync(f.home), false);
   assert.equal(f.git("status", "--porcelain"), "");
+});
+
+test("a plain full run canonically accepts exactly the landing's standing skips",t=>{
+  const f=fixture(t),source=new URL("../gate/",import.meta.url).pathname,gate=join(f.root,"tooling/gate");
+  // Exercise the real verdict runner in its own repository, with two stand-in
+  // steps that both return 77. Only the source-owned device skip may be green.
+  for(const name of readdirSync(source)) {
+    if(name==="run.mjs") writeFileSync(join(gate,name),readFileSync(join(source,name)));
+    else if(!existsSync(join(gate,name)) && name!=="all.sh") symlinkSync(join(source,name),join(gate,name));
+  }
+  const listed=spawnTest("sh",[join(source,"all.sh"),"--list"],{encoding:"utf8"});
+  assert.equal(listed.status,0,listed.stderr);
+  writeFileSync(join(gate,"all.sh"),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  echo 'SKIP: fixture unavailable'\n  exit 77\nfi\n`);
+  const home=join(f.directory,"home");
+  mkdirSync(join(f.root,"target/release"),{recursive:true});
+  writeFileSync(join(f.root,"target/release/nts"),"fixture compiler identity; steps return 77 without invoking it\n");
+  for(const [index,step] of ["on-device","rustfmt"].entries()) {
+    const plan=fullPlan(f.root,join(home,".cache/nts-full"),[],789+index),env=fullEnvironment(plan,[step],{...f.env,HOME:home});
+    assert.equal(env.NTS_GATE_ACCEPT_SKIP,STANDING_GATE_POLICY.NTS_GATE_ACCEPT_SKIP);
+    assert.equal(env.NTS_GATE_ACCEPT_SKIP,"on-device");
+    assert.equal(JSON.parse(env[ENVIRONMENT_CONTEXT]!).report.canonical,true);
+    const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:f.root,env,encoding:"utf8"});
+    const accepted=step==="on-device";
+    assert.equal(actual.status,accepted?0:1,actual.stdout+actual.stderr);
+    const summary=JSON.parse(readFileSync(join(plan.run,"summary.json"),"utf8"));
+    assert.equal(summary.environment.canonical,true);
+    assert.equal(summary.verdict,accepted?"green":"red");
+    assert.equal(summary.steps[0].verdict,"SKIPPED");
+    assert.equal(summary.steps[0].accepted===true,accepted);
+  }
 });
 
 test("candidate setup consumes a sealed sha and cannot write main's records or full-run history", t => {

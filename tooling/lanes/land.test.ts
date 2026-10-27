@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { readLedger, VerificationLedger } from "./verification-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
+import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
 
 // Fake gates read their own fixture controls from a private file. The real
 // gate environment deliberately does not forward these launcher variables.
@@ -56,6 +57,7 @@ if [ -n "\${LAND_TEST_CHECKERS:-}" ]; then
 fi
 printf '%s' "\${CARGO_PROFILE_DEV_DEBUG-unset}" > "$NTS_GATE_RUN_DIR/test-debug-mode"
 printf '%s' "\${CARGO_PROFILE_DEV_OPT_LEVEL-unset}" > "$NTS_GATE_RUN_DIR/test-opt-level"
+printf '%s' "\${NTS_GATE_ACCEPT_SKIP-unset}" > "$NTS_GATE_RUN_DIR/test-accepted-skips"
 echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
@@ -193,6 +195,10 @@ test("a strict landing journals its own range and author without an optimistic p
   assert.equal(saved.transactions[0].state,"committed");
   assert.deepEqual(saved.transactions[0].entries[0].commits,[tip]);
   assert.equal(saved.transactions[0].entries[0].author.lane,"tsrs");
+  const runs=join(s.home,".cache/nts-land/runs");
+  const actual=readFileSync(join(runs,readdirSync(runs)[0],"test-accepted-skips"),"utf8");
+  assert.equal(actual,STANDING_GATE_POLICY.NTS_GATE_ACCEPT_SKIP);
+  assert.equal(actual,"on-device");
 });
 
 test("a failed post-FF ledger write reports the real landing and recovers on restart", async () => {

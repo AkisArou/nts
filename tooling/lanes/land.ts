@@ -56,6 +56,7 @@ import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 import { VerificationLedger, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
 import { GateResource, supportsResourceHandoff } from "./gate-resource.ts";
+import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -71,7 +72,6 @@ const MAINCTL = join(HOME, ".cache/nts-parallel-20261004/mainctl");
 const MARKER = join(MAINCTL, "GATE-RUNNING");
 const GATE_TREE = join(MAINCTL, "gate-tree");
 const GATE_TARGET = join(MAINCTL, "gate-target");
-const ACCEPT_SKIP = ["on-device"];
 
 type Lane = { branch?: string; owns: string[]; owns_globs?: string[]; not_run?: string };
 const laneConfig = JSON.parse(readFileSync(new URL("./lanes.json", import.meta.url), "utf8"));
@@ -626,7 +626,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     Object.assign(owned, {
       NTS_GATE_TREE: GATE_TREE,
       NTS_GATE_TARGET: GATE_TARGET,
-      NTS_GATE_ACCEPT_SKIP: ACCEPT_SKIP.join(","),
+      ...STANDING_GATE_POLICY,
       NTS_GATE_RUN_DIR: run,
       NTS_CHECKERS: "1",
       CARGO_INCREMENTAL: "0",

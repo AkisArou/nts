@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { gateEnvironment } from "../gate/canonical-environment.ts";
+import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 
 export function fullPlan(root: string, home: string, args: string[], now = Date.now()) {
   const candidate = args.includes("--candidate");
@@ -29,6 +30,7 @@ export function fullPlan(root: string, home: string, args: string[], now = Date.
 
 export function fullEnvironment(plan: ReturnType<typeof fullPlan>, steps: string[], base: NodeJS.ProcessEnv) {
   return gateEnvironment(base, {run:plan.run, standalone:true, owned:{
+    ...STANDING_GATE_POLICY,
     // Candidate times must not rewrite even its pinned policy records.
     ...(plan.candidate ? { NTS_GATE_RECORD_TIMES: "0" } : {}),
     NTS_GATE_STEPS: steps.join(" "),
