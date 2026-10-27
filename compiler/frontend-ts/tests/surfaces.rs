@@ -1,5 +1,5 @@
 //! Which packages under `node_modules` the frontend reads: a platform
-//! surface's declarations, and nothing else (`docs/nts-config.md` 3a).
+//! surface's declarations, and nothing else (`docs/records/notebooks/nts-config.md` 3a).
 //!
 //! pinned binary.
 

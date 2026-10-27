@@ -89,7 +89,7 @@ export function main(): string {
   // which described the design rather than the emitted code: no class this
   // project emits references `NtsInbox` at all.
   //
-  // What makes it work is the post path, which is sized in `docs/jvm-interop.md`
+  // What makes it work is the post path, which is sized in `docs/records/notebooks/jvm-interop.md`
   // and not built: the bridge needs the environment its closure was created on,
   // and the arguments need to outlive the frame.
   Loader.load("payload", (data: Uint8Array): void => {

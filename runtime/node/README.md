@@ -3,7 +3,7 @@
 `node:*` modules, written in TypeScript, compiled by `nts`, with their native
 half in C over libuv.
 
-Status lives in [`docs/conformance/nodejs.md`](../../docs/conformance/nodejs.md):
+Status lives in [`docs/conformance/node.md`](../../docs/conformance/node.md):
 what passes node's own tests, and separately what compiles.
 
 ## Layout
@@ -81,7 +81,7 @@ worth reporting.
 
 `not-applicable` describes the **test**, not an unfinished implementation. Use
 it only when the assertion fundamentally depends on a language non-goal from
-`docs/conformance/typescript.md` §13, or on instrumentation owned by a Node
+`docs/language/boundaries.md`, or on instrumentation owned by a Node
 module outside the supported profile. A child process is not by itself an
 exclusion: same-suite and declared fixture children are routed back through the
 runner so that they retain the substituted module. A host-binary subprocess is

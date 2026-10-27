@@ -1,7 +1,7 @@
 // `noUncheckedIndexedAccess` is on, so `xs[i]` is `number | undefined` and the
 // `!` is the author asserting the index is in bounds. A native compiler has no
 // `undefined` to put in a double, so that assertion has to be *checked* rather
-// than assumed -- see docs/any-unknown.md on assertions.
+// than assumed -- see docs/records/notebooks/any-unknown.md on assertions.
 
 export function total(): number {
   const xs = [1, 2, 3, 4, 5];

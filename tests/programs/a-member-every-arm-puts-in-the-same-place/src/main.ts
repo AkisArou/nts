@@ -189,7 +189,7 @@ type Shape = Circle | Square;
  * Under test: an **exhaustive** `switch` on the discriminant, with no default
  * arm and every member covered.
  *
- * This is here because `docs/conformance/typescript.md` carried it as struck
+ * This is here because `docs/records/notebooks/typescript-ledger.md` carried it as struck
  * through and audited-blocked -- "there is no default arm to remove because
  * there is no switch" -- and unstriking a row is a claim that wants a guard
  * under it rather than a sentence. Every arm narrows to a concrete member, so

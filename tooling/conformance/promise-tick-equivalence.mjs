@@ -1,7 +1,7 @@
 // Is a promise method the same thing as the `async`/`await` shape it would be
 // desugared into? Asked of node, which is the oracle.
 //
-// `typescript.md`'s `.then`/`.catch`/`.finally` row offers two routes, and
+// `docs/records/notebooks/typescript-ledger.md`'s `.then`/`.catch`/`.finally` row offers two routes, and
 // prefers the desugar because it adds no runtime surface. That argument is
 // about cost. This instrument answers the other half: whether the desugar is
 // *observationally* the same. It is not a formality -- tick counts are

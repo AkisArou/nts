@@ -20,7 +20,7 @@
 //
 // # It was listed as working
 //
-// `docs/conformance/typescript.md` carried `using` among shapes "probed and
+// `docs/records/notebooks/typescript-ledger.md` carried `using` among shapes "probed and
 // passing". It passes only if the probe stops at whether the program builds —
 // which is exactly the arm that cannot fail, and the reason the first probe
 // written for this file reported agreement before a second one asked whether

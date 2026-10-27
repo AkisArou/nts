@@ -88,7 +88,7 @@ class Unbuilt extends Error {
 
 // Deliberately not `new Error(...)` against `new RangeError(...)`: those two
 // are structurally identical, share a layout, and `instanceof` between classes
-// of identical shape is a separate open row in typescript.md. The number here
+// of identical shape is a separate open row in `docs/language/README.md`. The number here
 // is about the descriptor being *defined*, not about telling two errors apart.
 export function neverConstructed(n: number): number {
   const e: unknown = n > 2 ? new Error("x") : 5;

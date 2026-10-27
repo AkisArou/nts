@@ -1,5 +1,5 @@
 //! `setTimeout`, `setInterval` and their clears, as the C runtime's
-//! `nts_set_timeout` over the host's `post_delayed` (docs/async.md §2).
+//! `nts_set_timeout` over the host's `post_delayed` (docs/records/notebooks/async.md §2).
 //!
 //! A timer is a task in a table, under a numeric id from 1 (0 is never live,
 //! so clearing it does nothing). The host's `setTimer` starts a JS timer whose

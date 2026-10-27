@@ -3,7 +3,7 @@
 // The erasure has to be at a *parameter*. A local written `const held: unknown
 // = n` is narrowed straight back to `number` by the checker at every use, so it
 // compiles to ordinary numeric code and tests nothing — which is the
-// specialization `docs/any-unknown.md` hopes for, arrived at for free. A
+// specialization `docs/records/notebooks/any-unknown.md` hopes for, arrived at for free. A
 // parameter has no such narrowing: inside the function the value is `unknown`
 // and stays so until something tests it. That is also what the measurement
 // counts, 612 of them across the node profile.

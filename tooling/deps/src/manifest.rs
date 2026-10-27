@@ -142,7 +142,7 @@ impl Manifest {
     /// not expanded. Expanding one means guessing which files in the package
     /// the pattern was meant to reach, and a guess that `dist/foo.js`
     /// corresponds to `src/foo.ts` is exactly the inference
-    /// `docs/npm-deps.md` says not to make. They are reported instead, by
+    /// `docs/records/notebooks/npm-deps.md` says not to make. They are reported instead, by
     /// [`EntryPoint::specifier`] never mentioning them.
     #[must_use]
     pub fn entry_points(&self) -> Vec<EntryPoint> {

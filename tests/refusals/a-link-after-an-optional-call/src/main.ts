@@ -21,7 +21,7 @@
 // A non-optional link after an optional one. `a?.b.c` short-circuits the
 // *whole* chain in JavaScript: when `a` is absent, `.c` is never evaluated.
 //
-// `typescript.md` row 244 said this was "refused and named" and it was not.
+// `docs/records/notebooks/typescript-ledger.md` row 244 said this was "refused and named" and it was not.
 // The rule lived inline in `lower_property_access` and tested one thing -- is
 // my object a *property access* whose second child is `?.` -- under a comment
 // stating its own precondition: "all twenty-six optional accesses in the node

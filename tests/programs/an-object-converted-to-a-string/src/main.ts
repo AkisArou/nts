@@ -10,7 +10,7 @@
 //
 // A function is not here on purpose: node prints its source, which a compiled
 // program does not keep, and nts prints `function () { [native code] }`, as
-// node does for a built-in (`docs/conformance/typescript.md`).
+// node does for a built-in (`docs/language/boundaries.md`, §Not boundaries).
 
 class Plain {
   v = 1;

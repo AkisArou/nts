@@ -179,7 +179,7 @@ export function nestedInAWalk(n: number): number {
   // literals nested inside two more get an anonymous type each, and the array's
   // element type is a third: same fields, different types, and the emitter has
   // no cast to reconcile them. That is the anonymous-type row in
-  // `docs/conformance/typescript.md`, not this feature.
+  // `docs/language/README.md`, not this feature.
   const near: Point = { x: n, y: 2 };
   const far: Point = { x: 3, y: n };
   const segments: Segment[] = [

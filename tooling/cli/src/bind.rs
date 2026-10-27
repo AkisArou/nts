@@ -1,7 +1,7 @@
 //! Derive a native binding from a C header: `nts bind-c`.
 //!
 //! A **subprocess**, not libclang, and measured rather than assumed: see the
-//! comparison in `docs/native-operations.md`. The short of it is that the
+//! comparison in `docs/records/notebooks/native-operations.md`. The short of it is that the
 //! driver supplies its own resource directory -- so `size_t` stays `size_t` --
 //! and a header it cannot find is a nonzero exit rather than a diagnostic
 //! someone has to remember to read.

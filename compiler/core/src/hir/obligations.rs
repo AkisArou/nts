@@ -3,7 +3,7 @@
 //!
 //! # Why this exists
 //!
-//! `docs/scalar-numbers.md` makes such stores *strict*: proven to fit, or a
+//! `docs/records/notebooks/scalar-numbers.md` makes such stores *strict*: proven to fit, or a
 //! compile error, with no check nts inserts (decisions D1, D2). A store into a
 //! written kind is also what makes the kind a fact: a parameter written
 //! `n: c_int` may be read as `int`'s range, whole, *because* every call had to
@@ -69,7 +69,7 @@ pub struct Obligation {
     pub into: Into,
     pub location: Location,
     /// The integers the slot holds on every target the program is built for
-    /// (`docs/scalar-numbers.md`, S6), or `None` for a float kind. Lowering,
+    /// (`docs/records/notebooks/scalar-numbers.md`, S6), or `None` for a float kind. Lowering,
     /// which does not know the targets, records every target's; the check
     /// restates it for the build's ([`Self::on`]).
     range: Option<(i128, i128)>,
@@ -318,7 +318,7 @@ pub fn take_checked(program: &mut Program, arrivals: &[super::lower::Arrival]) -
     rejected
 }
 
-/// The strict check (`docs/scalar-numbers.md`, D1, D2, Q1): every store into
+/// The strict check (`docs/records/notebooks/scalar-numbers.md`, D1, D2, Q1): every store into
 /// a written kind proven by local facts, and no function let in where a call
 /// could hand it a kind it relies on and was never obliged to fit. Each
 /// failure is a compile error -- nts inserts no check the program didn't

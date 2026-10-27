@@ -7,7 +7,7 @@
 // `nts_value_to_string`, which prints whatever the value turns out to be
 // (`hir::Program::printed`). A function prints `function () { [native code] }`
 // where node prints its source, which a compiled program does not keep: the
-// one deliberate difference, recorded in `docs/conformance/typescript.md`.
+// one deliberate difference, recorded in `docs/language/boundaries.md`, §Not boundaries.
 
 /** Control: a string interpolates. */
 export function fromString(value: string): string {

@@ -4,7 +4,7 @@
 //!
 //! Generated here, once per SDK and deployment target, rather than published:
 //! whether declarations derived from Apple's SDK may be redistributed is an
-//! open question (`docs/nts-config.md` 3a), and a store on the machine that
+//! open question (`docs/records/notebooks/nts-config.md` 3a), and a store on the machine that
 //! has the SDK does not ask it.
 
 use std::collections::BTreeMap;

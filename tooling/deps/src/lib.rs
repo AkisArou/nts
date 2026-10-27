@@ -12,7 +12,7 @@
 //!
 //! # What it will and will not get
 //!
-//! Measured over a 458-package closure in `docs/npm-deps.md`: 26 packages have
+//! Measured over a 458-package closure in `docs/records/notebooks/npm-deps.md`: 26 packages have
 //! their entry point's implementation recoverable, almost all through embedded
 //! source-map content rather than shipped `.ts`. This crate gets those, gets
 //! every workspace package for free, and says precisely why it could not get

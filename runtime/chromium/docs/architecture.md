@@ -6,7 +6,7 @@ as it is for any page script. Each decision below says what it is, why it is
 that, and what it was measured or read against. Chromium file references are at
 the pinned checkout (`third_party/chromium/src`, Chromium 154);
 `costs.md` keeps the measurement log this summarizes, and
-`docs/electron-like.md` was the starting research, not a specification.
+`docs/records/notebooks/electron-like.md` was the starting research, not a specification.
 
 The bar is the user's: the best performance the platform allows, clean code,
 no hacks. Concretely that has meant: never weaken V8 or Blink to make a number

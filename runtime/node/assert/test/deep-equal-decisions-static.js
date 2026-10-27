@@ -23,7 +23,7 @@
 //     new (class { x = 1 })() vs  { x: 1 }                node: differ
 //
 // This file used to assert `equal` for all three and explain that they could not
-// be anything else, citing `docs/conformance/typescript.md` §13: `getPrototypeOf`,
+// be anything else, citing `docs/language/boundaries.md` §The prototype chain: `getPrototypeOf`,
 // `setPrototypeOf` and `__proto__` are listed together as *"there is no chain to
 // read or rewrite"*, so a comparator with no prototype access cannot separate two
 // objects that differ only by one.

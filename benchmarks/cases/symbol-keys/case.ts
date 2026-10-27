@@ -1,6 +1,6 @@
 // A symbol key against a plain field, in one loop, on one object.
 //
-// `typescript.md` claims `[kRefed]` "costs exactly what `_refed` would". This
+// `docs/records/notebooks/typescript-ledger.md` claims `[kRefed]` "costs exactly what `_refed` would". This
 // row is that claim as a number. The two halves do identical work through the
 // two spellings, so the comparison is not against C++ or node but *within the
 // row*: if a symbol key were a property map rather than a field, this would

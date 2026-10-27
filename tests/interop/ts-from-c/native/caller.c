@@ -1,6 +1,6 @@
 /* Plain C calling compiled TypeScript. No node, no napi.
  *
- * Each block is one row of `docs/native-interop.md`'s "awkward spots". The ones
+ * Each block is one row of `docs/records/notebooks/native-interop.md`'s "awkward spots". The ones
  * that work are called; the ones that do not are written out and commented,
  * because a gap you can see the shape of is worth more than a sentence. */
 #include <stdio.h>

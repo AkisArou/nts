@@ -5252,7 +5252,7 @@ impl Type {
 }
 
 /// The C ABI a native target lays storage out and passes scalars by, as a
-/// row of data (`docs/scalar-numbers.md`, 2c): the calling convention, and
+/// row of data (`docs/records/notebooks/scalar-numbers.md`, 2c): the calling convention, and
 /// what the target's C makes of its own types.
 ///
 /// **A backend fact, not a lowering one.** HIR is shared by every target a
@@ -5544,7 +5544,7 @@ impl Scalar {
     }
 
     /// The values that fit the kind on every one of `targets`: what a store
-    /// into it must be proven within (`docs/scalar-numbers.md`, S6). A `long`
+    /// into it must be proven within (`docs/records/notebooks/scalar-numbers.md`, S6). A `long`
     /// for Linux and Windows takes what 32 bits do, a `char` for x86-64 and
     /// arm64 Linux 0..127. `None` for a floating-point kind and a boolean.
     #[must_use]
@@ -5577,7 +5577,7 @@ impl Scalar {
     /// NaN and `-0` too.
     ///
     /// A fact only where every store into the slot was proven to fit
-    /// (`docs/scalar-numbers.md`, Q1), or where C made the value.
+    /// (`docs/records/notebooks/scalar-numbers.md`, Q1), or where C made the value.
     #[must_use]
     pub fn facts_on(self, targets: Targets) -> super::facts::Facts {
         #[allow(clippy::cast_precision_loss)]
@@ -5900,7 +5900,7 @@ fn enum_scalar(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Scalar> {
 
 /// The kind of `ty` without its absences: an optional slot's (`n?: c_int`,
 /// `align?: CEnum<GtkAlign, c_uint>`), which holds its absence beside the
-/// kind. For the kind a slot was **written** as (`docs/scalar-numbers.md`,
+/// kind. For the kind a slot was **written** as (`docs/records/notebooks/scalar-numbers.md`,
 /// S3) -- not for a representation, which the absence changes, and which
 /// [`scalar`] answers.
 #[must_use]

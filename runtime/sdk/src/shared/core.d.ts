@@ -15,7 +15,7 @@ export type PlatformOS = "ios" | "android" | "macos" | "windows" | "linux" | "we
 /**
  * How the app is hosted. A Chromium-hosted app on macOS is
  * `os: "macos"`, `host: "chromium"` — OS and host are different axes,
- * the same split `docs/nts-config.md` makes for target and backend.
+ * the same split `docs/records/notebooks/nts-config.md` makes for target and backend.
  */
 export type HostKind = "native" | "chromium" | "browser";
 

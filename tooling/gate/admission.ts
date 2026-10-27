@@ -4,7 +4,7 @@
 //
 // **Below 12 GB nothing new starts; at 14 GB it starts again; what is running
 // is never stopped.** A case already running finishes on its own timeout. A
-// SIGSTOP of timed work fabricates timeouts (docs/agents/lessons/measurement.md),
+// SIGSTOP of timed work fabricates timeouts (docs/contributing/lessons/measurement.md),
 // and a phase admitted below the line is what turned a neighbour's gate red
 // at its memory pre-check. The two thresholds differ so that admission does
 // not flap around one number: a run that dropped to 11.9 waits for 14, and

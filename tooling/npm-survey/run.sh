@@ -3,7 +3,7 @@
 #
 # Every stage caches to disk, so a re-run costs nothing until the cache is
 # deleted. `meta/` and `tars/` hold the registry's answers, and keeping them is
-# what makes a number in `docs/npm-deps.md` re-derivable rather than
+# what makes a number in `docs/records/notebooks/npm-deps.md` re-derivable rather than
 # re-measured against an ecosystem that has moved underneath it.
 #
 # TypeScript, run directly: node 24 strips types with no flag and no build step.

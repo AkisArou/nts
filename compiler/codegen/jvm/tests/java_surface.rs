@@ -158,7 +158,7 @@ fn a_class_carries_an_instance_method_for_each_of_its_statics() {
 }
 
 /// **Zero interface dispatch on `java.util.Map` or `java.util.Set`**, which
-/// `docs/jvm-interop.md` row 7 calls "zero, by construction".
+/// `docs/records/notebooks/jvm-interop.md` row 7 calls "zero, by construction".
 ///
 /// Every table operation is a `public static` taking the table as its first
 /// argument, so emitted code never calls through the interface -- an interface a

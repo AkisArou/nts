@@ -3,7 +3,7 @@
 //!
 //! A parameter written as a kind (`n: c_int`) is the kind's range inside its
 //! function ([`super::Param::written`]), because every call in the program
-//! was obliged to prove its argument fits (`docs/scalar-numbers.md`, D2). A
+//! was obliged to prove its argument fits (`docs/records/notebooks/scalar-numbers.md`, D2). A
 //! root's callers are outside the program and were obliged to nothing, and a
 //! `double` slot lets them pass anything: a C host's `3e10`, which the body's
 //! conversion to C's `int` makes undefined behaviour, or JavaScript's

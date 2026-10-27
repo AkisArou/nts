@@ -106,7 +106,7 @@ acquired: a dependency's own dependencies are invisible on the first pass.
 | bundles N sources | a map naming several sources and no identifiable entry |
 | published JavaScript only | nothing to recover |
 
-Measured over a 458-package closure in [`docs/npm-deps.md`](../../docs/npm-deps.md),
+Measured over a 458-package closure in [`docs/records/notebooks/npm-deps.md`](../../docs/records/notebooks/npm-deps.md),
 26 packages have their entry point's implementation recoverable. The rest are
 reported, never substituted: there is no JavaScript fallback in this compiler.
 

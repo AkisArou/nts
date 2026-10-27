@@ -11,7 +11,7 @@
 //
 // **`Symbol.toPrimitive` is a §13 row, asserted as one.** Node's `Timeout` has
 // one, so `+setTimeout(f, 0)` yields the timer id and `clearTimeout(id)` works
-// on a number. `docs/conformance/typescript.md` §13 lists `Symbol.toPrimitive`
+// on a number. `docs/language/boundaries.md` §Redirect hooks lists `Symbol.toPrimitive`
 // among the "hooks that redirect built-in operations at run time", so it is
 // absent here by decision. If §13 ever admits it, this row fails and says so.
 //
@@ -21,7 +21,7 @@
 // arms one host timer for the whole queue and re-arms after each drain, so a
 // timer that becomes due during a drain can land after an immediate that was
 // queued before it. That is a real divergence and it is recorded in
-// `docs/conformance/nodejs.md` rather than pinned here, because a test that
+// `docs/records/notebooks/node-ledger.md` rather than pinned here, because a test that
 // asserts an order this implementation does not yet guarantee is a flaky test,
 // and a flaky test is worse than a documented gap.
 

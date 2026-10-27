@@ -17,7 +17,7 @@
 // as what they are. The join erases them, so no copy of the write knows which
 // class it has. An interface is the same shape
 // (`tests/outcomes/a-field-through-an-interface-its-classes-order-differently`,
-// the `Red` half). Found checking Part 0 of `docs/interfaces-by-shape.md`.
+// the `Red` half). Found checking Part 0 of `docs/records/notebooks/interfaces-by-shape.md`.
 //
 // The control is `Other`: the same write through the same `Base`, read back
 // through `Base`.

@@ -88,4 +88,4 @@ The build script carries the working link command.
 
 TypeScript calling C is a separate capability. The `c-from-ts` example next
 door still needs the native ABI and ownership language surface described in
-`docs/native-interop.md`.
+`docs/records/notebooks/native-interop.md`.

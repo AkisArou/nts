@@ -3,7 +3,7 @@
 #
 #   apple-binding.sh FIXTURE SOURCE OUT OS FRAMEWORK platform|imports
 #
-# - `platform`: the platform packages (`docs/nts-config.md` 3a), linked into
+# - `platform`: the platform packages (`docs/records/notebooks/nts-config.md` 3a), linked into
 #   SOURCE/node_modules, with nothing generated for the program's imports.
 # - `imports`: a binding generated from the program's imports under
 #   SOURCE/.nts: the fallback, for a framework no platform package provides.

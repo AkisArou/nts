@@ -1,5 +1,5 @@
 // A generator `function` that reads its own `this` takes the call's, as any
-// `function` does (`docs/function-receivers.md`). Its body runs at the first
+// `function` does (`docs/records/notebooks/function-receivers.md`). Its body runs at the first
 // `next()`, not at the call, so the `this` waits in the generator's frame with
 // its parameters, and is proven where the body starts.
 

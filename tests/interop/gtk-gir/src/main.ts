@@ -383,7 +383,7 @@ function boxedRecords(): void {
   start.forward_char();
   // `buffer` named again after its iterators' last use: an iterator points
   // into its buffer without counting it, and under `--rc` a buffer released
-  // at its last use is gone before the offsets are read (docs/gtk-lane-goal.md).
+  // at its last use is gone before the offsets are read (docs/records/notebooks/gtk-lane-goal.md).
   console.log(
     "iter " + all + "|" + buffer.get_text(start, end, false) + " " + String(start.get_offset()) + " " + String(copy.get_offset()) + " " + String(buffer.get_char_count()),
   );

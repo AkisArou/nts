@@ -61,7 +61,7 @@ What changed, and every item came from writing a config against it:
   `.dylib` and `.dll` are one kind of artifact with different packaging.
   `library.xcframework` is the Apple *distribution* format and is chosen by how
   the artifact is consumed, not by which platform it targets -- see
-  `docs/nts-config.md`.
+  `docs/records/notebooks/nts-config.md`.
 - **`tsconfig` defaults** to `./tsconfig.json` beside the config. Every config
   here used to write that string; `tests/programs/library` no longer does.
 - **`host` and `debug` have builders.** `host.ios()` and `host.macos()` differ in
@@ -208,7 +208,7 @@ them together says more than any of them alone:
   which is worth noticing, because effort spent on a backend does not predict
   effort spent on packaging its output.
 
-The common thread is the item `docs/nts-config.md` §6c names as unanswered:
+The common thread is the item `docs/records/notebooks/nts-config.md` §6c names as unanswered:
 consuming a package manager's resolved output is one problem, and **emitting
 something it resolves** is a different one. All seven of these need the second,
 and `emit-jvm --out` writing a directory of class files is not it.
@@ -225,7 +225,7 @@ Chosen for the combinations they force, not for coverage.
 | `biometrics` | Java, Swift | android, ios **only** | yes -- a strict subset of targets |
 | `notifications` | Java, Swift, C, WinRT | all five | yes -- the showcase |
 
-**Two of five need no config**, which is the rule from `docs/nts-config.md`
+**Two of five need no config**, which is the rule from `docs/records/notebooks/nts-config.md`
 made visible: *a config file is required exactly where there is a build step.*
 `storage` and `telemetry` are ordinary TypeScript and get their type environment
 from `types: [...]` in their own `tsconfig.json`.
@@ -261,7 +261,7 @@ share it.
 - **and a callback**, because a notification tap has to reach a TypeScript
   handler.
 
-That last point is the hard one. `docs/nts-config.md` §6 records the ordering
+That last point is the hard one. `docs/records/notebooks/nts-config.md` §6 records the ordering
 cycle: TypeScript-calls-native needs bindings generated before the TypeScript is
 checked, and native-calls-TypeScript needs the emitted artefacts before the
 native compiles. `notifications` needs both, in one package -- and the config

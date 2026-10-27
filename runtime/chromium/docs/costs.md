@@ -1,7 +1,7 @@
 # Native Chromium architecture and cost experiments
 
 Initial investigation, 2026-10-05. V8 remains enabled and React remains outside
-scope. This complements the [RFC](../../../docs/electron-like.md) and the
+scope. This complements the [RFC](../../../docs/records/notebooks/electron-like.md) and the
 [DOM/scheduling record](dom-and-microtasks.md); it is not a final API or ABI.
 The objective covers execution, scheduling, ownership, binding generation,
 interoperability, and deployment as well as individual DOM calls.

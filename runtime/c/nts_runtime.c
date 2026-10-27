@@ -2895,8 +2895,8 @@ NtsString *nts_value_to_string(NtsValue value) {
  *
  * The second bound is ours rather than the language's: this `bigint` is 128
  * bits, and a double above 2^127 has no value here to convert to. That is the
- * boundary `typescript.md` argues for, refused where it is crossed rather than
- * wrapped silently. */
+ * boundary `docs/language/numbers.md` argues for, refused where it is crossed
+ * rather than wrapped silently. */
 __int128 nts_bigint_from_number(double value) {
   if (!(value == nts_to_integer(value))) {
     fprintf(stderr, NTS_REFUSED "%g is not an integer, so it has no bigint\n",
@@ -11197,11 +11197,11 @@ double nts_str_point_width(const NtsString *s, double at) {
 
 /* --- Tasks, the host seam, and the checkpoint ------------------------------
  *
- * See docs/async.md. The short version: the runtime owns the two queues and
- * the checkpoint because their ordering is observable, and the host owns the
- * loop because it is the platform's. The vtable is what makes a deterministic
- * test host possible, which is why it is a vtable rather than a compile-time
- * choice.
+ * See docs/language/async.md. The short version: the runtime owns the two
+ * queues and the checkpoint because their ordering is observable, and the host
+ * owns the loop because it is the platform's. The vtable is what makes a
+ * deterministic test host possible, which is why it is a vtable rather than a
+ * compile-time choice.
  */
 
 void nts_host_install(const NtsHost *host) {
@@ -12395,7 +12395,8 @@ bool nts_promise_claim(NtsPromise *promise, uint32_t pair) {
   return true;
 }
 
-/* --- Timers, as a program calls them (docs/async.md 8, phase C) -------------
+/* --- Timers, as a program calls them (docs/records/notebooks/async.md 8, phase
+ * C) -------------
  *
  * `setTimeout` and its family are a *capability*, not part of the host
  * contract: a host provides `post_delayed`, and this is the surface built on

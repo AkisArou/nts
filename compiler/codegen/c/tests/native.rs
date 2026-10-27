@@ -1217,7 +1217,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
 }
 
 /// A `number` passed to a C integer, or stored into one through a pointer,
-/// must be proven to fit (`docs/scalar-numbers.md`, D1): unproven, it is a
+/// must be proven to fit (`docs/records/notebooks/scalar-numbers.md`, D1): unproven, it is a
 /// compile error naming the argument; proven, it arrives exactly. There is no
 /// conversion in between -- it was JavaScript's `ToInt32`, which wrapped
 /// `2^32 + 5` to 5 and sent C a value the program never computed, and before

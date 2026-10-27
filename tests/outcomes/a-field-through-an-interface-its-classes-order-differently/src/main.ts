@@ -11,7 +11,7 @@
 // `Channel` to a field some implementing class holds elsewhere tests the
 // object's class first (`hir::interface_fields`), and a `Green` stops naming
 // `level`. What lifts the stop is the field half of interfaces satisfied by
-// shape (`docs/interfaces-by-shape.md`, Part 2): the access goes through a
+// shape (`docs/records/notebooks/interfaces-by-shape.md`, Part 2): the access goes through a
 // getter or setter each class fills.
 //
 // Found on 2026-10-10 by the step 2f example, where a store through `Channel`

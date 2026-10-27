@@ -6,7 +6,7 @@
 // backend over.
 //
 // **`javaPackage` is `nts.gen` and that is a statement about today, not a
-// choice.** The emitter hardcodes it, `docs/jvm-interop.md` lists it under
+// choice.** The emitter hardcodes it, `docs/records/notebooks/jvm-interop.md` lists it under
 // packaging gaps, and `package_jvm` refuses a jar whose config asks for
 // anything else rather than shipping classes somewhere other than where the
 // declaration says. `java/Main.java` spells `nts.gen.Session` for the same

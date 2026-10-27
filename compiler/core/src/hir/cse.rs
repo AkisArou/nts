@@ -6,7 +6,7 @@
 //! each read its own value. The guard narrowed three of them and the call
 //! passed the fourth, so the strict check found nothing proven about it ("it
 //! could be any number"), and no guard the program could write would have
-//! helped (`docs/scalar-numbers.md`, Q1: an `any` into a written kind is a store
+//! helped (`docs/records/notebooks/scalar-numbers.md`, Q1: an `any` into a written kind is a store
 //! like any other, so it has to be provable like any other).
 //!
 //! An `unerase` of one erased value is that value read as its representation:

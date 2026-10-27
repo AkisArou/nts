@@ -94,7 +94,7 @@ try {
   // which pins the defect as expected behaviour and makes the test fail against
   // the oracle it is supposed to be checking against. A test may assert what
   // node does; it may not assert what this implementation happens to do. The gap
-  // is recorded in docs/conformance/nodejs.md instead, where gaps belong.
+  // is recorded in docs/records/notebooks/node-ledger.md instead, where gaps belong.
 } finally {
   fs.rmSync(dir, { recursive: true, force: true });
 }

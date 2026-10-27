@@ -3114,7 +3114,7 @@ fn the_workspace_fixture_still_builds() {
 ///
 /// **`nts.gen` was hardcoded in the emitter and `package_jvm` refused any
 /// config that asked otherwise** -- which is the honest thing to do while the
-/// emitter cannot, and `docs/jvm-interop.md` listed it under packaging gaps
+/// emitter cannot, and `docs/records/notebooks/jvm-interop.md` listed it under packaging gaps
 /// because "`nts.gen` is wrong for a shipped library".
 ///
 /// The assertion is a consumer that compiles and runs, because every weaker one

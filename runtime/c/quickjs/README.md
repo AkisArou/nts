@@ -1,6 +1,6 @@
 # quickjs-ng, vendored
 
-Unicode **case mapping** and **normalization**: the two things `typescript.md`
+Unicode **case mapping** and **normalization**: the two things `docs/records/notebooks/typescript-ledger.md`
 called "data rather than code", which is exactly right — the code is a hundred
 lines and the tables are a Unicode release.
 

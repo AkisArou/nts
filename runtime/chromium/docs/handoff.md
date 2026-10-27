@@ -8,7 +8,7 @@
 
 Prepared 2026-10-05 at the user's request to stop after completing the current
 benchmarks. Continue only when assigned by the user. This is an investigation
-of the initial [electron-like RFC](../../../docs/electron-like.md), not a final
+of the initial [electron-like RFC](../../../docs/records/notebooks/electron-like.md), not a final
 implementation specification. Read [architecture and costs](costs.md),
 [DOM and scheduling](dom-and-microtasks.md), and [bring-up](bringup.md) for the
 evidence behind the current design.
@@ -23,7 +23,7 @@ evidence behind the current design.
   or Python tooling. Upstream Chromium's own tooling remains upstream.
 - Many independent compiler agents and a MainCodex session share this tree.
   Stay in `runtime/chromium`, `tooling/chromium`, `third_party/chromium`, and
-  `docs/electron-like.md`; coordinate shared compiler/runtime fixes with their
+  `docs/records/notebooks/electron-like.md`; coordinate shared compiler/runtime fixes with their
   owners. Do not reset their work or assume a prebuilt compiler includes it.
 - Eight build jobs are the current conservative limit after a real OOM.
   Report actions remaining and approximate build progress during long builds;

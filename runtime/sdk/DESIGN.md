@@ -134,7 +134,7 @@ scanner). Apps never select providers.
    globals exist there (no UI, which SDK modules)? Defines geofencing and
    background location delivery.
 6. **`Date` vs Temporal** for schedules/calendars once the Temporal track
-   lands (`docs/temporal.md`).
+   lands (`docs/records/notebooks/temporal.md`).
 7. **Performance family implementation debt**: the lib types the whole
    User Timing / Performance Timeline family (`performance`,
    `PerformanceObserver`, `PerformanceMark/Measure`,

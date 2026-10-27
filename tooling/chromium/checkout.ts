@@ -1,5 +1,5 @@
 // Where the lane's inputs that no commit carries are. A lane works in its own
-// worktree (docs/workflow.md), and there Chromium's source -- a submodule of
+// worktree (docs/contributing/workflow.md), and there Chromium's source -- a submodule of
 // tens of gigabytes -- is an empty directory, and depot_tools (gitignored) is
 // absent: a symlink in the submodule's place breaks `git status` in the tree,
 // and a checkout per tree is out of the question at that size. The one real

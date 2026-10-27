@@ -9,7 +9,7 @@
 //
 // # Why so little machinery is needed
 //
-// `docs/conformance/test262.md` names four prerequisites for execution. Three
+// `docs/records/notebooks/test262-protocol-history.md` names four prerequisites for execution. Three
 // were already met, verified end to end before this file was written:
 //
 //   a passing test    exit 0

@@ -65,7 +65,7 @@ const ASKS = {
   // A function's text is the one place nts differs from node by decision:
   // node prints the source, which a compiled program does not keep, and nts
   // prints a built-in's, `function () { [native code] }` (2026-10-10,
-  // `docs/conformance/typescript.md`; `compiler/core/tests/printed.rs` pins
+  // `docs/language/boundaries.md`, §Not boundaries; `compiler/core/tests/printed.rs` pins
   // the text). So a function's cell asks what both must still agree on --
   // that the three conversions give one text -- rather than comparing a text
   // that differs on purpose. Record 0298 rejected skipping the cell while the

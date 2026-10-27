@@ -35,7 +35,7 @@
 // construct: these diagnostics carry a location and not an enclosing name, and
 // `path` has already shown the reported position drifting from the construct.
 // **That remainder is a labelled diagnosis, not a filed blocker**, and it is
-// written up in `docs/conformance/nodejs.md` rather than asserted here.
+// written up in `docs/records/notebooks/node-ledger.md` rather than asserted here.
 
 export class Socket {
   ended = false;

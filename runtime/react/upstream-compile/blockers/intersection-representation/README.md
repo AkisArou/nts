@@ -8,7 +8,7 @@ npm run --prefix runtime/react blockers:probe
 
 The fixture is ordinary strict TypeScript: two object records form one
 `FiberRoot` intersection. NTS refuses the parameter even though
-`docs/conformance/typescript.md` marks intersections as supported. The full
+`docs/language/README.md` marks intersections as supported. The full
 runtime has 115 occurrences of the plain intersection-parameter refusal,
 mostly from React's statically known `FiberRoot` shape.
 

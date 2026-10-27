@@ -29,7 +29,7 @@
 //                    with no recorded arguments)
 //
 // That is the same shape `RegExp` has -- see `regexp-as-a-property`, whose
-// property form is one of three, and the note in `docs/conformance/nodejs.md`
+// property form is one of three, and the note in `docs/records/notebooks/node-ledger.md`
 // on the entry set deciding which message a defect gets. Counting sites by
 // message text counts texts, not causes.
 //

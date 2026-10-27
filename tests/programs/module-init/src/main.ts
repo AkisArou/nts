@@ -6,7 +6,7 @@
 // the gate was green.
 //
 // They are one function now, `module#init`, which the embedder calls before
-// anything else. Module evaluation is itself a job (`docs/async.md` 3), so
+// anything else. Module evaluation is itself a job (`docs/records/notebooks/async.md` 3), so
 // what it queues is drained at the checkpoint after it rather than interleaved
 // with it -- which is also why it is an ordinary function rather than
 // something the runtime runs implicitly. On node's side `await import()` does

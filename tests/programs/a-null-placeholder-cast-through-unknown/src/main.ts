@@ -3,7 +3,7 @@
 // `let currentlyRenderingFiber: Fiber = null as unknown as Fiber;`
 // (ReactFiberHooks.ts:306), Flow's `(null: any)` written in TypeScript.
 //
-// An `as` checks only what the representation needs (docs/scalar-numbers.md,
+// An `as` checks only what the representation needs (docs/records/notebooks/scalar-numbers.md,
 // D4), and a reference holds its absence as the null pointer. From e6d7961f2,
 // which made a lone `null` erase as `null`, the cast instead checked presence
 // and threw at module init, so every native React program ended before its

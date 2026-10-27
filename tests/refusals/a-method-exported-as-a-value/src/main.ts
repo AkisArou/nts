@@ -93,7 +93,7 @@
 //
 // # What closing it is worth, measured 2026-09-24
 //
-// **Six declined exports**, not the 27 that `docs/conformance/nodejs.md` once
+// **Six declined exports**, not the 27 that `docs/records/notebooks/node-ledger.md` once
 // attributed here. The 27 share a *sentence*, because `storable` declines every
 // module-scope name whose value is a function it cannot lay out, and that is a
 // property of the binding rather than of what is bound. Opened one at a time

@@ -283,7 +283,7 @@ pub struct Arrival {
     pub returns: Option<HirType>,
     /// The scalar kind each of the slot's parameters is written as, which a
     /// call through the slot is obliged to fit -- and so all a closure in it
-    /// may rely on (docs/scalar-numbers.md, Q1).
+    /// may rely on (docs/records/notebooks/scalar-numbers.md, Q1).
     pub kinds: Vec<Option<super::native::Scalar>>,
 }
 
@@ -1931,7 +1931,7 @@ fn number_slots(hierarchy: &mut Hierarchy) {
 }
 
 /// Every class that has an interface's methods, with signatures one dispatch
-/// slot can carry, implements it (`docs/interfaces-by-shape.md`, Part 1).
+/// slot can carry, implements it (`docs/records/notebooks/interfaces-by-shape.md`, Part 1).
 ///
 /// TypeScript is structurally typed: `class C { go(): number }` satisfies
 /// `interface S { go(): number }` without writing `implements S`, and a call
@@ -3109,7 +3109,7 @@ struct ClosureInfo {
     /// does ([`FuncBuilder::binds_this`]). Its body takes the call's `this`
     /// after the closure, as a uniform entry does ([`super::UNIFORM_THIS`]),
     /// and its written `#call` is a wrapper passing `undefined`, for the
-    /// callers that have no `this` to give (`docs/function-receivers.md`).
+    /// callers that have no `this` to give (`docs/records/notebooks/function-receivers.md`).
     reads_this: bool,
 }
 
@@ -4641,7 +4641,7 @@ impl UniformArguments {
 /// its name, and have no `this` to give -- the C runtime's timers and
 /// reactions, the native callback bridges, the JVM's callback interfaces, a
 /// plain call, an importer, the export surface -- so none of them changes
-/// shape for a function that reads one (`docs/function-receivers.md`). A call
+/// shape for a function that reads one (`docs/records/notebooks/function-receivers.md`). A call
 /// that has a `this` names the body.
 fn passing_undefined(name: String, body: &Func, this_at: usize) -> Func {
     let origin = Origin::generated(
@@ -9532,7 +9532,7 @@ fn collect_module_scope(
         //     function f() { using r = new R(); }
         //     f();                    // node: disposed is 1.  this: 0
         //
-        // `typescript.md` listed `using` among shapes "probed and passing",
+        // `docs/records/notebooks/typescript-ledger.md` listed `using` among shapes "probed and passing",
         // which it is only if the probe stops at whether the program builds.
         if kind.disposes() {
             scope.unsupported.insert(
@@ -20742,7 +20742,7 @@ fn provided_representation(
         return None;
     }
     // declared its own `Promise` would be mis-read, and the principled
-    // version is `docs/any-unknown.md`'s profiles, which tie a trusted
+    // version is `docs/records/notebooks/any-unknown.md`'s profiles, which tie a trusted
     // A `Date` carries nothing: the specification's "time value" is the whole
     // of its contents, so there are no arguments to read and no payload
     // representation to decide. First, because it is the only one of these
@@ -21240,7 +21240,7 @@ fn representation_of(
         // **permits operations it cannot justify** -- a read, a call, an index,
         // arithmetic, all without narrowing -- and an erased value meets the
         // refusal `unknown` already meets for every one of them: the same code,
-        // the same place, the same sentence. `docs/any-unknown.md`'s requirement,
+        // the same place, the same sentence. `docs/records/notebooks/any-unknown.md`'s requirement,
         // "must legalize each one from independent representation evidence before
         // lowering it", is satisfied **by construction** rather than by a second
         // analysis. The hatch would be open only if `any` got a representation
@@ -30046,7 +30046,7 @@ impl<'a> FuncBuilder<'a> {
             return Some(disagrees);
         }
         // **And the kinds the fields were written as**, in both directions
-        // (docs/scalar-numbers.md, Q1): a read through a field written
+        // (docs/records/notebooks/scalar-numbers.md, Q1): a read through a field written
         // `Uint8` is the kind's range, which every store into that field was
         // proven to fit -- and a store through the other type was not.
         to.fields
@@ -31398,7 +31398,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// A module's top-level statements, as one function.
     ///
-    /// Module evaluation is itself a job (`docs/async.md` §3), so what this
+    /// Module evaluation is itself a job (`docs/records/notebooks/async.md` §3), so what this
     /// function queues is drained at the checkpoint after it rather than
     /// interleaved with it -- which is why it is an ordinary function the
     /// embedder calls, and not something the runtime runs implicitly.
@@ -34467,7 +34467,7 @@ impl<'a> FuncBuilder<'a> {
     /// The receiver a method taken as a value calls its method with, where the
     /// body reads `this`: the call's `this`, not the object it was read from.
     /// JavaScript does not bind a method read off an object
-    /// (`docs/function-receivers.md`).
+    /// (`docs/records/notebooks/function-receivers.md`).
     ///
     /// The implementation that runs is the read object's, though, and a call
     /// dispatches only on the receiver it passes. So where a subclass overrides
@@ -34860,7 +34860,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A `number` where C takes an integer is converted with the call's other
     /// arguments (`specialize`), and C's own conversion is exact there: the
-    /// strict check proved the value fits (`docs/scalar-numbers.md`, D1), so
+    /// strict check proved the value fits (`docs/records/notebooks/scalar-numbers.md`, D1), so
     /// no wrapping conversion stands in for a proof.
     fn unboxed_argument(
         &mut self,
@@ -37526,7 +37526,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The scalar kind `name`'s declaration was **written** as
-    /// (`docs/scalar-numbers.md`, S3): the type its annotation names, or for a
+    /// (`docs/records/notebooks/scalar-numbers.md`, S3): the type its annotation names, or for a
     /// parameter with neither annotation nor default, the type its context
     /// declares -- a binding's callback, a declared function type. Never an
     /// inferred type: `let n = get_n_items()` holds a `number`, and what is
@@ -52201,7 +52201,7 @@ impl<'a> FuncBuilder<'a> {
     /// `n + 1` on the same `any` refuses, and only by luck: `any + 1` is `any`, so
     /// the *return* coercion catches it. A bitwise operator hands back a `number` and
     /// leaves nothing later to notice, so the operator is the only place that can --
-    /// which is `docs/any-unknown.md`'s requirement exactly: *"Checker-accepted `any`
+    /// which is `docs/records/notebooks/any-unknown.md`'s requirement exactly: *"Checker-accepted `any`
     /// allows those operations syntactically, so Native TypeScript must legalize each
     /// one from independent representation evidence before lowering it."* A shift is
     /// one of those operations and the evidence is that the operand is a number.
@@ -53326,7 +53326,7 @@ impl<'a> FuncBuilder<'a> {
             // Named, not "this statement". Five sites in the corpus shared
             // that message and no reader could rank them -- which is the
             // mistake `describe_name` exists to undo one field over, and the
-            // one `typescript.md` §15 warns about in as many words: the first
+            // one `docs/records/notebooks/typescript-ledger.md` §15 warns about in as many words: the first
             // move on a row is to name what it blocks on. `for...in` and
             // `try` are different features and a count that adds them together
             // ranks neither.
@@ -61895,7 +61895,7 @@ impl<'a> FuncBuilder<'a> {
     /// an array.
     ///
     /// `Array.isArray` narrows an `unknown` to `any[]`, and `any` deliberately
-    /// has no representation -- `docs/any-unknown.md` forbids one, because it is
+    /// has no representation -- `docs/records/notebooks/any-unknown.md` forbids one, because it is
     /// the checker announcing it has stopped providing safety. So the narrowing
     /// lowered and **the `.length` it was performed in order to reach did not**,
     /// which is the wrong half to lose: the test is the thing that made the fact
@@ -73968,7 +73968,7 @@ impl<'a> FuncBuilder<'a> {
     /// narrower than an array can be long -- a `uint32_t`, as the Windows
     /// Runtime takes every one -- is bounded there too: an array too long for
     /// it throws a `RangeError`. The binding declared the array crosses with
-    /// that count, so the check is one it wrote (`docs/scalar-numbers.md`,
+    /// that count, so the check is one it wrote (`docs/records/notebooks/scalar-numbers.md`,
     /// Q4), and the count is then proven to fit.
     fn bounded_counts(
         &mut self,
@@ -77813,7 +77813,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A call through a function value hands it to the uniform entry, as every
     /// such call hands its `this` ([`super::UNIFORM_THIS`]), and a body that
-    /// reads its own `this` takes it (`docs/function-receivers.md`): a
+    /// reads its own `this` takes it (`docs/records/notebooks/function-receivers.md`): a
     /// `function` expression or declaration, and a method taken as a value
     /// ([`Self::method_receiver`]). An arrow has no `this` of its own, and the
     /// enclosing one is captured at the arrow rather than passed at the call.
@@ -78536,7 +78536,7 @@ impl<'a> FuncBuilder<'a> {
     /// call -- and some `function` in the program reads its own `this`, which
     /// `undefined` would then silently replace. A program with no such
     /// function cannot observe the difference, and before
-    /// `docs/function-receivers.md` step 2 a program with one did not compile
+    /// `docs/records/notebooks/function-receivers.md` step 2 a program with one did not compile
     /// at all, so this narrows nothing that compiled.
     fn check_this_is_passed(&self, id: NodeId) -> Result<(), Diagnostic> {
         if self.closures.iter().any(|info| info.reads_this) {
@@ -78585,7 +78585,7 @@ impl<'a> FuncBuilder<'a> {
     /// reach here — so the remaining case is an import named `Math` with
     /// matching method names.
     ///
-    /// `docs/any-unknown.md` describes the principled version: profiles that
+    /// `docs/records/notebooks/any-unknown.md` describes the principled version: profiles that
     /// associate trusted *declaration identities* with a closed set of
     /// compiler-owned semantics, so the core never matches on a name at all.
     /// This is the shape that becomes.

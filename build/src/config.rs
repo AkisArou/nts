@@ -6,7 +6,7 @@
 //! `library.native({ targets: [target.linux()], entry })`. Parsing it would mean
 //! reimplementing those constructors in Rust -- a second answer to what
 //! `target.linux()` produces, in a different language from the one the user
-//! typechecks against. Every round of `docs/nts-config.md`'s audit has been
+//! typechecks against. Every round of `docs/records/notebooks/nts-config.md`'s audit has been
 //! about deleting exactly that shape, so this runs the real constructors and
 //! reads the value they return.
 //!
@@ -15,7 +15,7 @@
 //! config being optional -- a project with no `nts.config.ts` never invokes
 //! node, which is every example in this tree but one.
 //!
-//! §5 of `docs/nts-config.md` settled the other half. An earlier draft wanted a
+//! §5 of `docs/records/notebooks/nts-config.md` settled the other half. An earlier draft wanted a
 //! statically evaluable config because a cache key cannot be the output of
 //! arbitrary code; that was over-stated. Keying on the **resolved** value -- what
 //! this returns -- is sound however it was computed. What survives is a property
@@ -90,7 +90,7 @@ pub struct Product {
     /// The package generated classes land in, for a JVM product.
     ///
     /// Read so a build can refuse a jar that would not match it: the emitter
-    /// hardcodes `nts/gen`, and `docs/jvm-interop.md` lists that under packaging
+    /// hardcodes `nts/gen`, and `docs/records/notebooks/jvm-interop.md` lists that under packaging
     /// gaps. A jar whose classes are somewhere other than where its config says
     /// is an artifact that does not match its declaration.
     #[serde(default, rename = "javaPackage")]
@@ -174,7 +174,7 @@ impl Manifest {
 /// real case: an app with `compileSdk: 36` and `minSdk: 21` compiles against a
 /// surface newer than the claim and still runs on devices older than it, so a
 /// package needing API 29 is *not* satisfied and comparing against the id would
-/// have said it was. `docs/nts-config.md` states the rule, which is the half
+/// have said it was. `docs/records/notebooks/nts-config.md` states the rule, which is the half
 /// that was already written down -- the audit derived it and the build did not
 /// read it back.
 ///
@@ -634,7 +634,7 @@ mod tests {
     }
 
     /// **The surface is not the floor**, which the first version of this
-    /// conflated and `docs/nts-config.md` had already written down.
+    /// conflated and `docs/records/notebooks/nts-config.md` had already written down.
     ///
     /// An app compiling against API 36 and running back to 21 is a real
     /// configuration, and a package needing API 29 is not satisfied by it --

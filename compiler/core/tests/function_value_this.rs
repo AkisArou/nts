@@ -4,7 +4,7 @@
 //! `o.f()`, `r` for `f.call(r)` and `f.apply(r, list)`. A closure's uniform
 //! entries take it after the closure and before the arguments
 //! (`hir::UNIFORM_THIS`), so a body that reads `this` can be given one
-//! (`docs/function-receivers.md`). No body reads it yet, so no program's answer
+//! (`docs/records/notebooks/function-receivers.md`). No body reads it yet, so no program's answer
 //! can show whether it arrives; what is asserted here is *what each call
 //! passes*, which is the fact step 2 rests on.
 //!

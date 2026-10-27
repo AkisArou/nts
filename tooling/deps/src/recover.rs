@@ -1,6 +1,6 @@
 //! Getting a package's TypeScript back out of what was installed.
 //!
-//! Two routes, in the order `docs/npm-deps.md` measured them worth trying:
+//! Two routes, in the order `docs/records/notebooks/npm-deps.md` measured them worth trying:
 //! the package shipped its sources, or the package shipped a source map that
 //! embeds them. Both read files that are already on disk in `node_modules`.
 //! Neither runs anything.
@@ -518,7 +518,7 @@ fn word_boundary(text: &str, at: usize, len: usize) -> bool {
 /// package that is more than one module and is not bundled.
 ///
 /// The alternative was to guess that `dist/ast.js` came from `src/ast.ts`,
-/// which is the inference `docs/npm-deps.md` says not to make. The index does
+/// which is the inference `docs/records/notebooks/npm-deps.md` says not to make. The index does
 /// not guess: each map *states* which source it was built from, and the walk
 /// below follows imports between the sources those statements produced.
 type MapIndex = FxHashMap<Utf8PathBuf, String>;

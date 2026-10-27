@@ -1,5 +1,5 @@
 //! A class with an interface's methods implements it without writing
-//! `implements` (`infer_implements`, `docs/interfaces-by-shape.md` Part 1),
+//! `implements` (`infer_implements`, `docs/records/notebooks/interfaces-by-shape.md` Part 1),
 //! where the methods' signatures are ones the interface's slot can carry. The
 //! example `a-method-through-a-structural-interface` runs the dispatch; this
 //! checks which edges are inferred.

@@ -16,7 +16,7 @@
 // `new NtsSocket()` would be a type error at best and a link error at worst.
 // The import that *should* exist is `java:android.net`, or any type resolved
 // against a real jar; that needs a class-file reader and is written up in
-// `docs/jvm-android-provider.md`. This module is what the ergonomics look like
+// `docs/records/notebooks/jvm-android-provider.md`. This module is what the ergonomics look like
 // without it, which is most of them. (It said `java:okhttp3` until the floor
 // moved to 29 and that dependency went; the example should not name something
 // the tree no longer pins.)

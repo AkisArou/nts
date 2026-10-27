@@ -4,7 +4,7 @@
 //
 // Every export below exists to demonstrate one row of the boundary's behaviour.
 // `native/caller.c` calls the ones that work and documents the ones that do
-// not; `docs/native-interop.md` carries the same list as prose.
+// not; `docs/records/notebooks/native-interop.md` carries the same list as prose.
 
 // --- free: scalars, and no runtime at all ----------------------------------
 //

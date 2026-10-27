@@ -4,7 +4,7 @@
 //
 // This lane represents a `bigint` as two `long`s -- 128 bits, wrapping, no
 // allocation -- which is a deliberate trade of precision for representation,
-// argued in `typescript.md` on the grounds that every `bigint` in the node
+// argued in `docs/language/numbers.md` on the grounds that every `bigint` in the node
 // profile is really a 64-bit quantity. `BigInteger` makes the opposite trade
 // and allocates an object per operation. So this reference is not a
 // transliteration of our design into Java; it is the design a Java programmer

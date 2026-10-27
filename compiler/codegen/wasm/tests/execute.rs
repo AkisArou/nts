@@ -1958,7 +1958,7 @@ fn source_bool_keys_agree_with_node() {
 /// Every function the module defines declares each local type in one run:
 /// the program's, the outlined and the runtime's helpers alike. A run costs
 /// bytes and V8 inlines by size -- `fib#whole`'s six runs kept its recursion
-/// from inlining (docs/agents/lessons/backends.md).
+/// from inlining (docs/contributing/lessons/backends.md).
 #[test]
 fn every_defined_function_declares_each_local_type_in_one_run() {
     for fixture in ["collection-tables", "array-lookup", "array-methods"] {

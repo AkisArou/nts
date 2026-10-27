@@ -3861,7 +3861,8 @@ static inline double nts_max(double a, double b) {
  * the answer is known. */
 #define NTS_REFUSED "nts: refused: "
 
-/* --- Tasks, the host seam, and the checkpoint (docs/async.md) ---------------
+/* --- Tasks, the host seam, and the checkpoint (docs/language/async.md)
+ * ---------------
  *
  * The runtime owns language behavior; the host owns execution environment
  * behavior. Promise ordering is specified and observable, so it stays here. The
@@ -4129,7 +4130,8 @@ void nts_host_checkpoint_end(void);
  * loop, and for a test asserting quiescence. */
 bool nts_has_pending_work(void);
 
-/* --- Promises (docs/async.md 5a) -------------------------------------------
+/* --- Promises (docs/records/notebooks/async.md 5a)
+ * -------------------------------------------
  *
  * The runtime never learns what a promise's value *is*, for the same reason it
  * never learns a closure's signature: whoever reads it was compiled knowing.
@@ -4413,7 +4415,8 @@ void nts_enqueue_job(NtsHeader *callback, double slot);
  * number found a promise and aborted. Node awaits the inner. */
 void nts_promise_resolve_value(NtsPromise *promise, NtsValue value);
 
-/* --- Combinators (docs/async.md 5b) ----------------------------------------
+/* --- Combinators (docs/records/notebooks/async.md 5b)
+ * ----------------------------------------
  *
  * `Promise.all` fulfils with the values in *input* order once every element
  * has fulfilled, and rejects with the first rejection. `Promise.race` settles
@@ -4428,7 +4431,8 @@ void nts_promise_resolve_value(NtsPromise *promise, NtsValue value);
 NtsPromise *nts_promise_all(NtsArray *promises, NtsArray *values);
 NtsPromise *nts_promise_race(NtsArray *promises);
 
-/* --- Timers (docs/async.md 8) ----------------------------------------------
+/* --- Timers (docs/records/notebooks/async.md 8)
+ * ----------------------------------------------
  *
  * A capability over the host's `post_delayed`, so both hosts have it and
  * neither implements it. `callback` is a closure and `slot` is its method

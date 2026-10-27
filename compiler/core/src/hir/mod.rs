@@ -180,7 +180,7 @@ pub enum HirType {
     /// saying what it currently holds.
     ///
     /// **`TypeKind::Any` maps here too, and this paragraph said the opposite.** It
-    /// read: *"`docs/any-unknown.md` forbids an `any` from reaching HIR at all,
+    /// read: *"`docs/records/notebooks/any-unknown.md` forbids an `any` from reaching HIR at all,
     /// because it is the checker announcing it has stopped providing safety, and
     /// giving it a representation would accept the escape hatch that rule exists to
     /// close."* The fear is real and the inference was backwards, and that document
@@ -514,7 +514,7 @@ impl HirType {
 
     /// Whether a module-scope variable may hold this.
     ///
-    /// Scalars, and an erased value. `docs/any-unknown.md` lists module state
+    /// Scalars, and an erased value. `docs/records/notebooks/any-unknown.md` lists module state
     /// among the places `unknown` may appear and says the compiler "must not
     /// reject `unknown` merely because it requires an erased representation" --
     /// and a global of erased type is representable: it starts as `undefined`
@@ -870,7 +870,7 @@ pub struct Param {
     /// the same `Managed(Array(f64))`, and `x?: number` and `x: number = 1` are
     /// both an `f64` slot the callee always has. TypeScript distinguishes all
     /// three and this used to drop the distinction -- which is a precision loss
-    /// of the kind `docs/conformance/typescript.md` §16 exists to record, and
+    /// of the kind `docs/records/notebooks/typescript-ledger.md` §16 exists to record, and
     /// `lower_param` was computing both halves of it and throwing them away.
     ///
     /// Nothing is emitted for it: a parameter is a parameter in every backend
@@ -893,7 +893,7 @@ pub struct Param {
     /// The scalar kind the parameter's type was **written** as -- `n: c_int`
     /// -- or `None`.
     ///
-    /// An obligation and a fact at once (docs/scalar-numbers.md, step 1):
+    /// An obligation and a fact at once (docs/records/notebooks/scalar-numbers.md, step 1):
     /// every call must prove its argument fits, and so inside the function the
     /// parameter is the kind's range, whole. Kept apart from `known` because
     /// it's the written type, which the strict check may rely on, and `known`
@@ -2321,7 +2321,7 @@ impl Layout {
     /// share a layout over that would split `Point` from `Readonly<Point>`.
     /// But the scalar kind each field was written as, yes: a read through a
     /// field written `Uint8` is a fact only its own stores proved
-    /// (docs/scalar-numbers.md, Q1), so `{ x: number }` is another shape.
+    /// (docs/records/notebooks/scalar-numbers.md, Q1), so `{ x: number }` is another shape.
     ///
     /// The dispatch table counts too. Two classes that extend the same base and
     /// add no fields have identical field lists and different `area` methods —
@@ -4678,7 +4678,7 @@ pub fn call_may_grow(kind: &OpKind) -> bool {
 /// **Only the uniform entries take one.** A closure's written `#call` is what
 /// the C runtime, the native callback bridges and the JVM's callback interfaces
 /// call, and none of them has a `this` to give, so its shape stays as it is
-/// (`docs/function-receivers.md`). A uniform entry is reached only from a call
+/// (`docs/records/notebooks/function-receivers.md`). A uniform entry is reached only from a call
 /// through a function value, which always knows its `this`: `undefined` for
 /// `f()`, `o` for `o.f()`, `r` for `f.call(r)`.
 pub const UNIFORM_THIS: usize = 1;
@@ -5196,7 +5196,7 @@ pub struct Prepared {
     /// Where the program breaks a rule nts adds to TypeScript's own: a value
     /// that may not fit the scalar kind it is stored into, or a function let
     /// in where a kind it relies on was never obliged ([`obligations::check`],
-    /// `docs/scalar-numbers.md`). **Fatal**: the program's to fix, and
+    /// `docs/records/notebooks/scalar-numbers.md`). **Fatal**: the program's to fix, and
     /// [`prepare_with`] refuses it.
     pub rejected: Vec<nts_diagnostics::Diagnostic>,
     pub specialized: usize,
@@ -6233,7 +6233,7 @@ enum Moved {
 /// nothing.
 ///
 /// That is a fact about the *checker's* order and not about the pass, which is
-/// why the pass stays: `docs/conformance/nodejs.md` records the pre-switch tsgo listing a
+/// why the pass stays: `docs/records/notebooks/node-ledger.md` records the pre-switch tsgo listing a
 /// type's own members before its inherited ones for an **interface**, so
 /// `interface Wide extends Narrow` is not laid out with `Narrow` as a prefix --
 /// and classes escape that only because their instance type arrives the other

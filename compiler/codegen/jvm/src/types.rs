@@ -481,7 +481,7 @@ pub struct Shape<'a> {
     ///
     /// **A whole-program fact that changes a type's spelling, which is what
     /// this struct is for.** It was `nts/gen` baked into `symbols::
-    /// jvm_class_name`, and `docs/jvm-interop.md` listed that under packaging
+    /// jvm_class_name`, and `docs/records/notebooks/jvm-interop.md` listed that under packaging
     /// gaps: a shipped library cannot have its classes in `nts.gen`, and
     /// `package_jvm` refused a jar whose config asked for anything else rather
     /// than emitting classes somewhere other than where the declaration says.

@@ -887,7 +887,7 @@ fn run_command() -> Result<()> {
         // `--obligations`: every store into a slot of a written scalar kind
         // -- a native argument, a native store, a written parameter -- and
         // whether the range analysis proves the value fits
-        // (docs/scalar-numbers.md, step 1). Report only. `--tsv` for tools.
+        // (docs/records/notebooks/scalar-numbers.md, step 1). Report only. `--tsv` for tools.
         Some("facts") => {
             let rest: Vec<String> = args.collect();
             let tsconfig = project(&rest)?;
@@ -928,7 +928,7 @@ fn run_command() -> Result<()> {
         }
         // What a program does with its `any` and `unknown` values.
         //
-        // `docs/any-unknown.md` argues for whole-program representation
+        // `docs/records/notebooks/any-unknown.md` argues for whole-program representation
         // analysis from a table its author counted by hand, and says outright
         // that the compiler should produce that table itself. This is the
         // instrument that does, and it exists before the representation on
@@ -940,12 +940,12 @@ fn run_command() -> Result<()> {
         // `erasure`'s instrument, for the interface decision. See `dump_receivers`.
         Some("receivers") => dump_receivers(&args.collect::<Vec<String>>()),
         // Acquire the TypeScript behind this project's dependencies, and say
-        // what could not be acquired. `docs/npm-deps-plan.md` is why this is a
+        // what could not be acquired. `docs/records/notebooks/npm-deps-plan.md` is why this is a
         // report as much as an action: there is no JavaScript fallback, so a
         // dependency the compiler cannot take has to be visible before a build
         // fails on it.
         // Read a jar, write the declarations and the binding table beside each
-        // other. `docs/jvm-interop.md` has quoted this command since its first
+        // other. `docs/records/notebooks/jvm-interop.md` has quoted this command since its first
         // draft and it answered `unknown command` until now; the generator
         // lived in `cargo run --example bind` behind a shell script.
         Some("bind") => {
@@ -1157,7 +1157,7 @@ fn bind_java(args: &[String]) -> Result<()> {
     // knows is never null.
     //
     // The file was checked in beside `java-from-ts` from that project's first
-    // commit, documented in `docs/jvm-interop.md`, and **read by nothing** until
+    // commit, documented in `docs/records/notebooks/jvm-interop.md`, and **read by nothing** until
     // 2026-09-15. The project's own `Catalog.java` says `describe` "is marked
     // and `name` is not, so the generator has to distinguish", and the generator
     // could not: both rendered `string | null` and there was no mechanism to
@@ -2264,7 +2264,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
         list_sites(&snapshot, &erasure);
     }
 
-    // Split by what sort of declaration it is, because `docs/any-unknown.md`
+    // Split by what sort of declaration it is, because `docs/records/notebooks/any-unknown.md`
     // counts parameters and a total that folded fields in with them would not
     // be the same measurement.
     for checker in [Checker::Any, Checker::Unknown] {
@@ -4229,7 +4229,7 @@ fn imported_names(file: &Utf8Path, module: &str) -> Result<(Vec<String>, Vec<Str
 
 /// Generate the bindings a program's `c:` imports need, before it is compiled.
 ///
-/// This is the first phase of the order `docs/nts-config.md` describes and the
+/// This is the first phase of the order `docs/records/notebooks/nts-config.md` describes and the
 /// config's own comments argue for: **declarations before bodies.** Bind the
 /// native declarations, then typecheck and emit against them, then compile the
 /// native sources. Mutual recursion resolves the same way and for the same
@@ -5658,7 +5658,7 @@ fn create_jar() -> std::process::Command {
 ///
 /// **Refuses a package it cannot produce.** `javaPackage` has had no reader
 /// since it was written, and `codegen/jvm` hardcodes `nts/gen` --
-/// `docs/jvm-interop.md` lists that under packaging gaps. A jar whose classes
+/// `docs/records/notebooks/jvm-interop.md` lists that under packaging gaps. A jar whose classes
 /// are somewhere other than where its config says is an artifact that does not
 /// match its own declaration, so a config asking for anything else is told what
 /// it would have got rather than given it.
@@ -8883,7 +8883,7 @@ struct Emission<'a> {
 
 impl Emission<'_> {
     /// The C data models the program is checked against: a value stored into
-    /// a written scalar kind must fit it on every one (`docs/scalar-numbers.md`,
+    /// a written scalar kind must fit it on every one (`docs/records/notebooks/scalar-numbers.md`,
     /// S6). The product's targets, all of them -- each target's build checks
     /// the same program, so one that fits Linux's `long` and not Windows'
     /// fails for both -- or, with no product, the one this emits for.

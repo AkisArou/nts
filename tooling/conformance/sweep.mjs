@@ -5,7 +5,7 @@
 //
 // Two reasons this exists rather than thirteen invocations typed by hand.
 //
-// The first is drift. The per-module table in `docs/conformance/nodejs.md` was
+// The first is drift. The per-module table in `docs/conformance/node.md` was
 // hand-copied, and a hand-copied number is a claim nobody can check -- which is
 // the same failure as a measurement that cannot go red, one level up. The rows
 // this prints are the rows that belong in the document.
@@ -94,7 +94,7 @@ if (usesCompilerEarly && !existsSync(compiler)) {
 /**
  * The binary can change underneath a measurement that takes minutes.
  *
- * `nodejs.md` states the rule -- `stat` before and after, discard if the mtime
+ * `docs/records/notebooks/node-ledger.md` states the rule -- `stat` before and after, discard if the mtime
  * moved -- and stating a rule is not the same as running it. A compiled column
  * was published once from a run a rebuild had landed in the middle of, and
  * nothing about it looked wrong. So the sweep checks itself now: it records the

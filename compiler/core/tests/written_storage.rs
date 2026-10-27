@@ -1,5 +1,5 @@
 //! A written field or global is held at its kind's width (`hir::written_storage`,
-//! `docs/scalar-numbers.md` step 2f). The examples check the answers against
+//! `docs/records/notebooks/scalar-numbers.md` step 2f). The examples check the answers against
 //! node, which holds every one as a double and so cannot see a width; this
 //! checks the width itself.
 //!

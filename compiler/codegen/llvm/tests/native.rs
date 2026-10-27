@@ -7434,7 +7434,7 @@ void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) {
 
 /// A `number` proven to fit reaches C integer storage exactly on both
 /// backends: an argument and a store through a native pointer, from a written
-/// parameter and from a mask (`docs/scalar-numbers.md`, D1). An unproven one
+/// parameter and from a mask (`docs/records/notebooks/scalar-numbers.md`, D1). An unproven one
 /// is refused before either backend sees it -- the C backend's
 /// `a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit` -- so no
 /// conversion stands between the program's value and C's.

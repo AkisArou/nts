@@ -1,6 +1,6 @@
 // A call through an interface on classes that satisfy it without writing
 // `implements` -- which TypeScript does not require, and which this compiler's
-// dispatch did, until 2026-10-10 (`docs/interfaces-by-shape.md`, Part 1).
+// dispatch did, until 2026-10-10 (`docs/records/notebooks/interfaces-by-shape.md`, Part 1).
 //
 // ```text
 // class C { go(): number { return 3; } }              take(new C())  REFUSED

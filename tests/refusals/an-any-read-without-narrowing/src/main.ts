@@ -1,6 +1,6 @@
 // expect: NTS1001 `k` on `any`, which is erased here
 //
-// **The escape hatch, held shut.** `docs/any-unknown.md`'s plan names this arm as
+// **The escape hatch, held shut.** `docs/records/notebooks/any-unknown.md`'s plan names this arm as
 // owed by *every* `any` slice and not once: a slice that makes any of the four
 // below compile has accepted the hatch `representation_of`'s own comment was
 // written to keep closed, and the whole design of erasing `any` rests on an

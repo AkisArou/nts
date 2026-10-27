@@ -241,7 +241,7 @@ pub(super) const ITERATOR_RESULT: &str = "IteratorResult";
 /// `done?: false` is an **optional property**, which is the same thing that
 /// keeps `Error` out of `lib.d.ts`'s reach: it needs a presence bit, which
 /// changes a layout rather than adding to it. And `TReturn` defaults to `any`,
-/// which `docs/any-unknown.md` says may never reach HIR.
+/// which `docs/records/notebooks/any-unknown.md` says may never reach HIR.
 ///
 /// One layout answers both. `done` is a plain `bool` — the specification says
 /// an absent `done` is `false`, so the optional carries no information a bit
@@ -472,7 +472,7 @@ pub(super) fn element_width(element: &HirType) -> Option<u32> {
 /// narrowing conversion and `double` to `double` is nothing at all.
 ///
 /// Only a typed array's: a store into C -- an argument, a field -- is proven
-/// to fit instead (`docs/scalar-numbers.md`, D1), and a typed array keeps
+/// to fit instead (`docs/records/notebooks/scalar-numbers.md`, D1), and a typed array keeps
 /// JavaScript's wrapping (C27).
 pub(super) fn element_coercion(element: &HirType) -> Option<&'static str> {
     let HirType::Int { bits, signed } = element else {

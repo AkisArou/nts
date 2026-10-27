@@ -311,7 +311,7 @@ pub struct Whole {
 
 /// What the rest of the program contributes to one function's analysis.
 ///
-/// The scalar kinds slots were **written** as (`docs/scalar-numbers.md`,
+/// The scalar kinds slots were **written** as (`docs/records/notebooks/scalar-numbers.md`,
 /// step 1), as facts: every store into one was proven to fit
 /// (`super::obligations`), so a read is the kind's range whoever stored.
 ///

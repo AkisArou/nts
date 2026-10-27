@@ -73,7 +73,7 @@ export function unitAt(s: string, i: number): number {
  * range, node answers `undefined`, and the harness renders both the same. The
  * moment `codePointAt` started answering `undefined` properly, this arm started
  * reporting `0`, which is `undefined!` unerased to a double and is a **separate,
- * older divergence** from node: see the `x!` row in `typescript.md`.
+ * older divergence** from node: see the `x!` row in `docs/language/README.md`.
  *
  * So the lie is removed rather than the assertion weakened. This still drives
  * the narrowed path, which is the one that must cost nothing.

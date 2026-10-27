@@ -356,7 +356,7 @@ impl VariableKind {
     /// this compiler had heard of `using` at all: the declaration lowered as an
     /// ordinary binding and `[Symbol.dispose]` was **never called**. A program
     /// using it compiled, ran, and silently did nothing at scope exit —
-    /// `docs/conformance/typescript.md` even listed `using` among shapes
+    /// `docs/records/notebooks/typescript-ledger.md` even listed `using` among shapes
     /// "probed and passing", which it is only if the probe stops at whether it
     /// compiles.
     #[must_use]
@@ -619,7 +619,7 @@ pub enum TypeKind {
     /// They are two facts and a consumer that gives them one representation is
     /// wrong about one of them: erasing an evolving declaration threw away a
     /// `string[]` the assignments had already proven and cost 243 recorded test262
-    /// passes. `docs/any-unknown.md` asks for the distinction in as many words --
+    /// passes. `docs/records/notebooks/any-unknown.md` asks for the distinction in as many words --
     /// provenance is "retained" -- and this is where it is kept.
     ///
     /// A `TypeKind` of its own rather than a flag on `Any`, because every reader

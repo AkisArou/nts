@@ -5,7 +5,7 @@
 // `f64` slot the callee always has. TypeScript distinguishes all three and the
 // HIR used to drop the distinction — while `lower_param` computed both halves
 // of it and threw them away, which is a precision loss of the kind
-// `docs/conformance/typescript.md` §16 exists to record.
+// `docs/records/notebooks/typescript-ledger.md` §16 exists to record.
 //
 // Nothing is emitted for the distinction: a parameter is a parameter in every
 // backend whatever its shape, and the work a rest or a default implies happens

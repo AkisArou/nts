@@ -2,7 +2,7 @@
 //!
 //! The first slice supports scalar programs. Unsupported reachable operations
 //! refuse by name before an artifact is returned. Managed representation and
-//! runtime helper families follow the reviewed plan in `docs/wasm.md`.
+//! runtime helper families follow the reviewed plan in `docs/records/notebooks/wasm.md`.
 
 mod abi;
 mod array_copy;

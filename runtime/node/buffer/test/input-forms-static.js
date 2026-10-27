@@ -17,7 +17,7 @@
 // **The two that differ are refusals this compiler makes on purpose.**
 // `Buffer.from({ valueOf })` and `Buffer.from({ [Symbol.toPrimitive] })` coerce
 // on node and throw `ERR_INVALID_ARG_TYPE` here, because `ToPrimitive` dispatch
-// and `Symbol.toPrimitive` are both listed in `docs/conformance/typescript.md`
+// and `Symbol.toPrimitive` are both listed in `docs/language/boundaries.md` §Redirect hooks
 // §13, *What this compiler is not* — "one decision made once", not a backlog
 // item.
 //

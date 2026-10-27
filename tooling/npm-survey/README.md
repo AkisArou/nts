@@ -5,7 +5,7 @@ Four stages that answer one question with evidence instead of intuition:
 > Of the packages a real TypeScript application depends on, how many can this
 > compiler actually compile, and what stops the rest?
 
-The findings are written up in [`docs/npm-deps.md`](../../docs/npm-deps.md).
+The findings are written up in [`docs/records/notebooks/npm-deps.md`](../../docs/records/notebooks/npm-deps.md).
 This directory is how they were produced, and re-running it is how they get
 re-derived when the ecosystem or the compiler moves.
 
@@ -49,9 +49,9 @@ npm would.
 `verdict.ts` compiles each package with nothing calling it, so the compiler
 prunes what no root reaches and never walks it. `mitt` came back with zero
 refusals that way and then refused three different constructs the moment a
-program used it — see `docs/npm-deps.md`. Reading a zero here as "this package
+program used it — see `docs/records/notebooks/npm-deps.md`. Reading a zero here as "this package
 compiles" is exactly the mistake the profile number in
-`docs/conformance/typescript.md` §14 was caught making twice.
+`docs/records/notebooks/typescript-ledger.md` §14 was caught making twice.
 
 ## Caches
 

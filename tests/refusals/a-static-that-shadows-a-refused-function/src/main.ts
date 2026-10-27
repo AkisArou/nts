@@ -33,7 +33,7 @@
 // erased here"* -- while the wrapper prints the storage sentence. So three of
 // `events`' declined exports currently point at the closure-layout work when
 // they belong to the intersection-and-erasure family, which is the largest
-// head in `docs/conformance/nodejs.md` and a different piece of work.
+// head in `docs/records/notebooks/node-ledger.md` and a different piece of work.
 //
 // # The precondition a first reduction drops
 //
@@ -55,7 +55,7 @@
 // sentence to its own root.
 //
 // Related: `blockers/a-method-exported-as-a-value` is the construct the storage
-// sentence is *correct* about, and `docs/conformance/nodejs.md` records that
+// sentence is *correct* about, and `docs/records/notebooks/node-ledger.md` records that
 // the 27 exports wearing that sentence are four constructs rather than one.
 
 // `Map<any, any>` and not `Map<string, number>`: the second one **is**

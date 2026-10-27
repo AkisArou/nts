@@ -1,5 +1,5 @@
 //! Platform type surfaces: packages of declarations a binder generates, and
-//! the store they are kept in (`docs/nts-config.md` 3a).
+//! the store they are kept in (`docs/records/notebooks/nts-config.md` 3a).
 //!
 //! Every lane binds a platform the same way -- the macOS SDK, Win32 metadata,
 //! GIR -- and differs only in its generator. So a generator implements

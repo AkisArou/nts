@@ -31,7 +31,7 @@
 // `fs`'s stand-ins delegate to node's real `fs`. `Buffer.isBuffer` in a test is
 // node's, so it accepts one and rejects the other. In a compiled build there is
 // one `Buffer` and the question does not arise, which is why the row is absent
-// rather than asserted either way. See `docs/conformance/nodejs.md`.
+// rather than asserted either way. See `docs/records/notebooks/node-ledger.md`.
 
 const assert = require("node:assert");
 const os = require("node:os");

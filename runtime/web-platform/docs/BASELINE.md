@@ -3,7 +3,7 @@
 ## Inputs
 
 - NTS implementation-start commit: `31f15a0d87ecc6d20640bec73dba0563d31b4894`.
-- Governing contract: `docs/web-platform-integration-plan.md` at that commit.
+- Governing contract: `docs/records/notebooks/web-platform-integration-plan.md` at that commit.
 - External source directory:
   `/home/akisarou/Projects/nts-web-platform-integration/runtime/web-platform`.
 - External provenance snapshot recorded by the delivery:

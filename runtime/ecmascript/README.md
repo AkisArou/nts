@@ -241,7 +241,7 @@ same instruction/data format later. Do not introduce a second matching engine.
 
 The generic facade uses `Reflect.apply`, dynamic species construction and
 unchecked constructor casts. These conflict with the fixed-layout boundary in
-`docs/conformance/typescript.md` §13. Replace the production facade with typed
+`docs/language/boundaries.md` §The object model. Replace the production facade with typed
 operations and direct calls while retaining the parser, matcher and reusable
 buffers. Bind supported default builtin paths to those operations; the compiler
 must not recreate excluded metaobject behavior to accommodate the host facade.
@@ -265,7 +265,7 @@ The host source currently does not reproduce native object descriptors,
 prototype poisoning immunity or `$262` realms. Those remain visible failures,
 including the `lastIndex` descriptor, inherited setters on match-array metadata,
 the RegExp object tag and iterator ancestry/tag descriptor. The project's
-metaobject boundary is documented in `docs/conformance/typescript.md` §13; these
+metaobject boundary is documented in `docs/language/boundaries.md`; these
 host results must not be advertised as full ECMAScript engine conformance.
 
 Run the compiler lane's ordinary Test262 runner after builtin binding. The host

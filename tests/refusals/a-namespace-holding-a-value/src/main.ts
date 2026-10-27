@@ -1,6 +1,6 @@
 // expect: a namespace
 //
-// `namespace` was ✅ in `typescript.md` on eleven characters of claim. It is
+// `namespace` was ✅ in `docs/records/notebooks/typescript-ledger.md` on eleven characters of claim. It is
 // not: every form refuses, and this fixture is the four of them in one file so
 // the row cannot go green again without all four moving.
 //

@@ -4,7 +4,7 @@
 // sibling fields below use one and are not refused -- so this is `WeakRef`
 // alone, not the container it sits in.
 //
-// `typescript.md` §16 puts `WeakRef` and `FinalizationRegistry` in the **gap**
+// `docs/records/notebooks/typescript-ledger.md` §16 puts `WeakRef` and `FinalizationRegistry` in the **gap**
 // column rather than the not-a-goal column, so this is a blocker rather than a
 // declared limit, and it had no fixture.
 //

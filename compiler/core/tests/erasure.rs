@@ -1,7 +1,7 @@
 //! What a program does with its `any` and `unknown` values.
 //!
 //!
-//! The fixture is deliberately two files. `docs/any-unknown.md` argues that the
+//! The fixture is deliberately two files. `docs/records/notebooks/any-unknown.md` argues that the
 //! cheapest representation for `console`'s `unknown` is decided by a use in
 //! `node:util`, and a one-file fixture could not tell a whole-program analysis
 //! from a per-file one.

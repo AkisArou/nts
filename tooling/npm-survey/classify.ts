@@ -57,7 +57,7 @@ export interface Classified {
 }
 
 /**
- * Constructs `docs/conformance/typescript.md` §13 refuses, probed textually.
+ * Constructs `docs/language/boundaries.md` refuses, probed textually.
  *
  * A floor on the problem rather than a proof of it: this over-counts on
  * comments and string literals and cannot see what a type alias hides. The

@@ -13,7 +13,7 @@
 //   - and the artifact has to be something Gradle can resolve, which means an
 //     **AAR** -- not a directory of class files.
 //
-// That last point is the reverse direction `docs/nts-config.md` §6c names as
+// That last point is the reverse direction `docs/records/notebooks/nts-config.md` §6c names as
 // unanswered: consuming a package manager's resolved output is one problem, and
 // *emitting something it resolves* is another. This app is the case for it.
 import { defineConfig, library } from "@nts/config";
@@ -25,7 +25,7 @@ export default defineConfig({
       minSdk: 29,
 
       // Java package for the generated classes. `nts.gen` is the current fixed
-      // name and is wrong for a shipped library: `docs/jvm-interop.md` lists it
+      // name and is wrong for a shipped library: `docs/records/notebooks/jvm-interop.md` lists it
       // under packaging gaps.
       javaPackage: "com.acme.sdk",
 

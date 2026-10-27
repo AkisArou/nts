@@ -1,6 +1,6 @@
 //! What a program actually does with an `any` or `unknown` value.
 //!
-//! `docs/any-unknown.md` specifies a whole-program representation planner and
+//! `docs/records/notebooks/any-unknown.md` specifies a whole-program representation planner and
 //! argues for it with a table: 174 `unknown` parameters across thirteen
 //! `node:*` modules, sorted by hand into *carried*, *examined* and *tested*.
 //! Its own closing caveat is that the table "is one person's reading of one
@@ -93,7 +93,7 @@ impl Verdict {
 
 /// What sort of declaration a site is.
 ///
-/// Split out because `docs/any-unknown.md` counts *parameters* -- 174 of them
+/// Split out because `docs/records/notebooks/any-unknown.md` counts *parameters* -- 174 of them
 /// -- and a table that silently folded fields and locals in with them would not
 /// be comparable with the one it is meant to check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,7 +235,7 @@ type Edges = FxHashMap<u32, Vec<(u32, String)>>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Analysis {
     /// Follow the value into the functions it is passed to, to a fixpoint.
-    /// This is what `docs/any-unknown.md` specifies.
+    /// This is what `docs/records/notebooks/any-unknown.md` specifies.
     WholeProgram,
     /// Judge each site by its own uses alone, and treat handing the value on
     /// as carrying it. Not a proposal -- it is the control, so that the value

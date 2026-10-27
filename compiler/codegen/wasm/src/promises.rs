@@ -1,6 +1,6 @@
 //! Promises, the tasks their settlement queues, and the checkpoint that runs
 //! them, as the C runtime's `NtsPromise`, `NtsTask` and `nts_leave`
-//! (docs/async.md; runtime/c `nts_promise_*`).
+//! (docs/language/async.md; runtime/c `nts_promise_*`).
 //!
 //! - **A promise** is an object (descriptor, identity hash) holding its state
 //!   (0 pending, 1 fulfilled, 2 rejected), one erased settlement, the pair of

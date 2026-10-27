@@ -24,7 +24,7 @@
 // the second one genuinely is a two-position tuple that should expand to two
 // parameters. Any test lowering could apply would have to answer the same for
 // both. What is missing is the rest marker, which is a `SCHEMA_VERSION` change and
-// the frontend's half; `docs/conformance/typescript.md`'s precision list is where this belongs.
+// the frontend's half; `docs/records/notebooks/typescript-ledger.md`'s precision list is where this belongs.
 //
 // **Pre-existing, measured rather than assumed, and that is what lets this record
 // be committed beside the change that found it**: `outcomes-check` run with the

@@ -78,7 +78,7 @@
 // carry a reason and an authority:
 //
 //   - `features.json`'s `inapplicable` class -- already the ledger of Test262
-//     features that are typescript.md §13 non-goals. Read, not copied: two
+//     features that `docs/language/boundaries.md` puts out of scope. Read, not copied: two
 //     lists of one fact disagree the day one is edited.
 //   - `test262-exclusions.json`, for anything that is not a feature token.
 //

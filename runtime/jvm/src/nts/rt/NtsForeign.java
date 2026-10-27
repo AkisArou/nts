@@ -4,7 +4,7 @@ package nts.rt;
  * A Java callback arriving on a thread we do not own, delivered to the lane
  * that does.
  *
- * <p>This is the half of the threading story {@code docs/jvm-interop.md} called
+ * <p>This is the half of the threading story {@code docs/records/notebooks/jvm-interop.md} called
  * unbuilt: {@link NtsInbox} has had {@code reserve}/{@code post}/{@code drain}
  * since the promise work, and a bound Java interface can be implemented by a
  * generated closure, but nothing joined the two. A framework thread calling

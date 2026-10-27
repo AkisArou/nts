@@ -1,5 +1,5 @@
 // A method taken as a value whose body reads `this` takes the call's `this`, as
-// a `function` does (`docs/function-receivers.md`). JavaScript does not bind a
+// a `function` does (`docs/records/notebooks/function-receivers.md`). JavaScript does not bind a
 // method read off an object: `c.get.bind(c)`, a method stored in a field and
 // called through it, and `m.call(other)` each give the body a `this` of their
 // own. Until this, such a read was refused (`RECEIVER_IS_NOT_BOUND`), since

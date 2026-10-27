@@ -13,7 +13,7 @@
 //
 // What closes it is an adapter: an entry for `Wide` in `Sink`'s slot that
 // takes the slot's `number` and calls `Wide#take` with it. Interfaces
-// satisfied by shape (`docs/interfaces-by-shape.md`, Part 1) infer the edge
+// satisfied by shape (`docs/records/notebooks/interfaces-by-shape.md`, Part 1) infer the edge
 // where every candidate either fits or admits an adapter, so every class
 // that can arrive through the interface has an entry.
 //

@@ -1,5 +1,5 @@
 // `f.bind(r, ...bound)`: a function that calls `f` with `r` as its `this` and
-// the bound arguments before its own (`docs/function-receivers.md`). It holds
+// the bound arguments before its own (`docs/records/notebooks/function-receivers.md`). It holds
 // `f`, `r` and the bound arguments, and calls `f` through the entry any call
 // of a function value takes, so `f` may be a declared function, a closure or a
 // `function` that reads its own `this`.

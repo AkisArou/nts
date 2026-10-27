@@ -1,5 +1,5 @@
 // A `function` expression that reads its own `this` is given the call's
-// (`docs/function-receivers.md`, step 2): `o` for `o.f()`, `r` for `f.call(r)`
+// (`docs/records/notebooks/function-receivers.md`, step 2): `o` for `o.f()`, `r` for `f.call(r)`
 // and `f.apply(r, list)`, and `undefined` for a plain `f()`.
 //
 // Until step 2 such a function was refused, and `f.call(r)` dropped `r`, which

@@ -788,7 +788,7 @@ fn a_call_through_an_interface_reaches_two_implementations() {
 
 /// **Can one class implement both `java.util.Map` and `java.util.Set`?**
 ///
-/// `docs/jvm-interop.md` said no, and said the reason was structural: both
+/// `docs/records/notebooks/jvm-interop.md` said no, and said the reason was structural: both
 /// declare `remove(Object)`, with return types `V` and `boolean`, "which is a
 /// return-type clash the JVM rejects outright".
 ///

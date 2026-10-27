@@ -4,7 +4,7 @@
 // A scalar is a `number` (or a `bigint`) with an OPTIONAL label naming its
 // kind. A plain number goes anywhere a scalar does, and a scalar anywhere a
 // number does: the label makes no claim TypeScript checks. nts checks it, where
-// a scalar type is written (`docs/scalar-numbers.md`):
+// a scalar type is written (`docs/records/notebooks/scalar-numbers.md`):
 //
 //   - a value stored into a written kind -- a parameter, a field, a global, a
 //     local, a return, an argument to C -- must be proven to be one of the

@@ -1,6 +1,6 @@
 // The erased tagged JSON graph.
 //
-// `docs/web-platform-integration-plan.md` §9 asks for a generic result that "can be carried,
+// `docs/records/notebooks/web-platform-integration-plan.md` §9 asks for a generic result that "can be carried,
 // narrowed, validated, reviver-transformed and stringified" without introducing "arbitrary
 // ordinary-object property maps, prototype behavior, or unchecked `any` into HIR". This is
 // that representation. It is deliberately *not* the fast path: direct typed materialization

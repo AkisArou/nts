@@ -1,5 +1,5 @@
 //! A field read or written through an interface, on an object whose class
-//! holds the field elsewhere, stops by name (`docs/interfaces-by-shape.md`,
+//! holds the field elsewhere, stops by name (`docs/records/notebooks/interfaces-by-shape.md`,
 //! Part 0).
 //!
 //! An interface's fields are only where a class happens to declare them.

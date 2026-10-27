@@ -1,7 +1,7 @@
 // `bigint` arithmetic, which is where the 128-bit representation is supposed to
 // pay for the precision it gives up.
 //
-// `typescript.md` argues the width: every `bigint` in the node profile is a
+// `docs/language/numbers.md` argues the width: every `bigint` in the node profile is a
 // 64-bit quantity -- `readBigUInt64BE`, an hrtime timestamp,
 // `0xffffffffffffffffn` -- and a true bignum puts a heap allocation into each
 // of them. This row is what that argument buys. Node's `BigInt` is arbitrary
@@ -9,7 +9,7 @@
 //
 // The *loop bound* carries the seed rather than the arithmetic, because
 // `BigInt(n)` is refused -- this compiler provides no number-to-bigint
-// conversion, which is a named gap in `typescript.md` §7. An unknown trip count
+// conversion, which is a named gap in `docs/records/notebooks/typescript-ledger.md` §7. An unknown trip count
 // is enough that nothing here folds.
 export function mix(seed: number): number {
   const modulus = 1000000007n;

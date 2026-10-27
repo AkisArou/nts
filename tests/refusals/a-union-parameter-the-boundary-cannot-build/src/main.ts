@@ -29,7 +29,7 @@
 //
 // `unknown` is the one that stings, because it publishes and then fails where no
 // `emit-c` output mentions it. That half is a labelled diagnosis in
-// `docs/conformance/nodejs.md` rather than a fixture here, for the reason this
+// `docs/records/notebooks/node-ledger.md` rather than a fixture here, for the reason this
 // directory keys on refusals: a `publishes` guard beside a runtime throw reads
 // "guard ok" and asserts nothing about the throw. I wrote one, watched it do
 // exactly that, and deleted it.

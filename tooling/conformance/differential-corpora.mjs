@@ -896,7 +896,7 @@ export const CORPORA = {
             // That is node's bug and not a divergence -- this profile's stand-in
             // reaches the same binding and dies identically, which the comparison
             // cannot show because neither side survives to report. It is recorded
-            // in `docs/conformance/nodejs.md` and excluded here, because a spec
+            // in `docs/records/notebooks/node-ledger.md` and excluded here, because a spec
             // that aborts the process measures nothing.
             //
             // `REJECTED_NON_NUMERIC` holds no numbers at all, and it exists in this
@@ -4701,7 +4701,7 @@ export const CORPORA = {
     // `test-timers-to-primitive.js` is marked not applicable for exactly that
     // reason. Keeping the probe would report 8 divergences on every run for a
     // decision already made, which trains a reader to ignore the number. The
-    // difference is recorded in `docs/conformance/nodejs.md` instead.
+    // difference is recorded in `docs/records/notebooks/node-ledger.md` instead.
     fixed: [
       "fn|0", "fn|1", "fn|-1", "fn|N", "fn|I", "fn|2147483648", "fn|1.5",
       "fn|", "fn|s", "no|0", "str|0", "obj|0", "num|0", "undef|0",
@@ -7119,7 +7119,7 @@ export const CORPORA = {
         //
         // That is the second node assertion this corpus reached today; the other is
         // `fs.writeFileSync(-0, "x")`. Both are recorded in
-        // `docs/conformance/nodejs.md`, and both are the same shape: a JavaScript
+        // `docs/records/notebooks/node-ledger.md`, and both are the same shape: a JavaScript
         // argument reaching a C++ `CHECK` with nothing in between.
         //
         // Guarded by `typeof`, because two of these have come and gone across node

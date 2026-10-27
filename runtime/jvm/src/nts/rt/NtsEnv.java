@@ -505,7 +505,7 @@ public final class NtsEnv {
         // with a leak that was the accounting rather than the program. And a
         // callback that resolved a promise had its continuation deferred to
         // whenever something else happened to checkpoint, which is an ordering
-        // difference from node in the one place `docs/async.md` says there
+        // difference from node in the one place `docs/language/async.md` says there
         // must not be one.
         //
         // It was invisible because no example in the corpus does external I/O:

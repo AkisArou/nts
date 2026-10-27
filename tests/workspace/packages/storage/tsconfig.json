@@ -1,5 +1,5 @@
 {
-  "//": "There is deliberately NO nts.config.ts beside this file: no native sources, so no build step. If this package ever needs one, the rule in docs/nts-config.md has broken.",
+  "//": "There is deliberately NO nts.config.ts beside this file: no native sources, so no build step. If this package ever needs one, the rule in docs/records/notebooks/nts-config.md has broken.",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,

@@ -24,9 +24,9 @@
 //
 // # Why overloads rather than `unknown`
 //
-// `unknown` is refused by the lowerer today (`docs/any-unknown.md`), so
+// `unknown` is refused by the lowerer today (`docs/records/notebooks/any-unknown.md`), so
 // `sameValue(actual: unknown, expected: unknown)` cannot lower. Overload
-// signatures *do* lower -- `typescript.md` row 287 -- so each comparison the
+// signatures *do* lower -- `docs/records/notebooks/typescript-ledger.md` row 287 -- so each comparison the
 // slice actually makes gets a signature, and the implementation signature stays
 // `unknown` where TypeScript requires it but no call resolves to it.
 //

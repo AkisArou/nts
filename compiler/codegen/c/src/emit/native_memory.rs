@@ -562,7 +562,7 @@ pub(super) fn witness(
             // positions changes the size of the record holding them, which is
             // what the three probe structs in `tests/native_bitfields.rs` were
             // written to pin. Its *position* is checked by running -- see the
-            // bit-field section of docs/native-operations.md.
+            // bit-field section of docs/records/notebooks/native-operations.md.
             if matches!(field.ty, Pointee::Bits { .. }) {
                 continue;
             }
@@ -870,7 +870,7 @@ fn pointee_is_foreign(pointee: &Pointee) -> bool {
         // witness cannot do *about* one is a separate matter: `offsetof` and
         // `&` are both illegal on a bit-field, so its position is checked by
         // running rather than by asserting -- see the bit-field section of
-        // docs/native-operations.md.
+        // docs/records/notebooks/native-operations.md.
         Pointee::Scalar(_) | Pointee::Opaque(_) | Pointee::Void | Pointee::Bits { .. } => true,
         // Witnessable exactly when every part of its signature is, which is
         // the same rule `Type::FnPointer` follows one level up.

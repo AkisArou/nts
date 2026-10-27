@@ -871,7 +871,7 @@ fn parameter_binary(descriptor: &str, index: usize) -> Option<String> {
 /// `onTouch` property, which is not what anybody writes and not what `javac`
 /// accepts either.
 ///
-/// This is cost 8 in docs/jvm-interop.md -- *"Closure to Java functional
+/// This is cost 8 in docs/records/notebooks/jvm-interop.md -- *"Closure to Java functional
 /// interface, eliminated"* -- and it is eliminated here rather than at the call
 /// site: a closure already IS an object with one method on this backend, so
 /// there is nothing to convert, only something to *declare correctly*.

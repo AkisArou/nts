@@ -8,7 +8,7 @@ npm run --prefix runtime/react blockers:probe
 
 The fixture assigns closures with different capture layouts to one module-level
 function slot. This is the documented module gap in
-`docs/conformance/typescript.md`: NTS cannot yet give the slot one callable
+`docs/language/README.md`: NTS cannot yet give the slot one callable
 representation. The full React profile reports this shape 26 times.
 
 The selected browser Scheduler accounts for the important live cases by

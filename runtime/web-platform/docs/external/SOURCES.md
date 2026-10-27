@@ -11,7 +11,7 @@ Inspected snapshot identifier: `bf5a6824c9bfd76fb3a30006fc4fea0665fe25dd`.
 Some initial documentation reads used the then-default branch; these documents are
 context, not a promise that every old project claim is current.
 
-Read: `docs/fetch-websocket.md`, `docs/conformance/typescript.md`,
+Read: `docs/fetch-websocket.md`, `docs/records/notebooks/typescript-ledger.md`,
 `docs/codex-session.md`, `docs/handoff-runtime-node.md`, `tsconfig.base.json`,
 `runtime/node/url/src/main.ts`, JVM directory/tree and `runtime/jvm/src/nts/rt/NtsLoop.java`.
 The inspected NtsLoop blob was `98e6048a993ba68f34618283888b9597347a05e1`.

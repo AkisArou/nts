@@ -72,7 +72,7 @@ const selectionFile = flag("--selection", null);
  * class it `inapplicable` and which nonetheless lowers proves the class wrong;
  * a `supported` feature all of whose files refuse proves the *ledger row*
  * wrong. Neither is visible without the per-file join, and the second is not
- * hypothetical -- `typescript.md`'s `namespace` row was ✅ and false.
+ * hypothetical -- `docs/records/notebooks/typescript-ledger.md`'s `namespace` row was ✅ and false.
  */
 const rowsFile = flag("--rows", null);
 const limit = Number(flag("--limit", "0")) || 0;

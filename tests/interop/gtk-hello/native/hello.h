@@ -1,7 +1,7 @@
 // The part of GTK a TypeScript program cannot reach yet, and nothing else.
 //
 // Each function here stands in for one missing compiler capability, named
-// beside it. Each step of docs/gtk-lane-goal.md deletes the functions it makes
+// beside it. Each step of docs/records/notebooks/gtk-lane-goal.md deletes the functions it makes
 // unnecessary; a shim function that outlives its reason is the thing to look
 // for when reading this file.
 #ifndef NTS_GTK_HELLO_H

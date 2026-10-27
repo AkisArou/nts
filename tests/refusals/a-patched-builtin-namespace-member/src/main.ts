@@ -18,7 +18,7 @@
 // compile it. `path`'s failure is something else entirely: `nts_process_cwd`
 // reaches `uv_cwd()` in C (`runtime/node/internal/process.c:19`) and never
 // consults the JS binding, which is a Node-API boundary question and not a
-// lowering one. The two are recorded apart in `docs/conformance/nodejs.md`.
+// lowering one. The two are recorded apart in `docs/records/notebooks/node-ledger.md`.
 //
 // # What the diagnostic says, and what is true
 //

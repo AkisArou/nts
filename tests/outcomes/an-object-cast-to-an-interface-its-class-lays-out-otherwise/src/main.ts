@@ -5,7 +5,7 @@
 //
 // Now an access through `Channel` to a field some implementing class holds
 // elsewhere tests the object's class first (`hir::interface_fields`,
-// `docs/interfaces-by-shape.md` Part 0): a `Red`, laid out as `Channel`,
+// `docs/records/notebooks/interfaces-by-shape.md` Part 0): a `Red`, laid out as `Channel`,
 // reads at `Channel`'s offsets and agrees, and a `Green` stops -- `refused at
 // run time: `level` read through `Channel` on an object whose class does not
 // hold it where `Channel` does`. A stop and not a `TypeError`, because a

@@ -3,7 +3,7 @@
 // 25.5.2.1 `ParseJSON` validates against ECMA-404 and then evaluates; this does both in one
 // pass, which is the same language and one traversal instead of two.
 //
-// **No recursion, deliberately.** `docs/web-platform-integration-plan.md` §9 requires an
+// **No recursion, deliberately.** `docs/records/notebooks/web-platform-integration-plan.md` §9 requires an
 // explicit work stack so that a provider's thread stack cannot choose observable behaviour --
 // "deep input must never become a JVM `StackOverflowError` on one target and a C/LLVM signal
 // death on another". A recursive-descent parser makes nesting depth a property of the host,

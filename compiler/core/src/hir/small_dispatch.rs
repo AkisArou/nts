@@ -31,7 +31,7 @@
 //!
 //! Past [`MAX_TESTED`] the table stays: it is one indexed load however many
 //! classes there are, and a chain of tests is not (decision 2 of
-//! `docs/interfaces-by-shape.md`, which this refines for small sets).
+//! `docs/records/notebooks/interfaces-by-shape.md`, which this refines for small sets).
 //!
 //! # Where it runs
 //!

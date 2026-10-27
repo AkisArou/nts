@@ -169,7 +169,7 @@ export function workspace(dir, language: Language = "js") {
           // The test is JavaScript, compiled as JavaScript: the checker types
           // it and reports syntax and early errors, not TypeScript's type
           // errors. Its unannotated values reach lowering as `any`, which is
-          // `docs/any-unknown.md`'s "implicit values in unannotated JavaScript"
+          // `docs/records/notebooks/any-unknown.md`'s "implicit values in unannotated JavaScript"
           // -- the population NeedsRepresentation serves. Compiled as `.ts` it
           // was 18,987 checker refusals, 2,818 of them syntax.
           //

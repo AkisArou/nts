@@ -1,7 +1,7 @@
 # NTS Web platform runtime
 
 This directory owns the canonical strictly typed Web APIs and server/mobile
-networking algorithms described by [`docs/web-platform-integration-plan.md`](../../docs/web-platform-integration-plan.md).
+networking algorithms described by [`docs/records/notebooks/web-platform-integration-plan.md`](../../docs/records/notebooks/web-platform-integration-plan.md).
 
 The current source began from the separately delivered web-platform implementation,
 but that delivery is an implementation baseline rather than the feature boundary.

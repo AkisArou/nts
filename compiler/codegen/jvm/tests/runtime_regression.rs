@@ -12,7 +12,7 @@
 //! strings, promises and the timer heap, with the randomised parts grounded on
 //! something independent -- 128-bit arithmetic against `BigInteger`, timer
 //! ordering against a list sorted by delay and creation index, which is the
-//! contract `docs/async.md` states.
+//! contract `docs/language/async.md` states.
 //!
 //! They arrived with an audit of this runtime that also proposed replacing the
 //! number formatter with `Double.toString` behind a JDK-version check. That

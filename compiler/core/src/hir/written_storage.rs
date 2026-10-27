@@ -1,5 +1,5 @@
 //! A written field or global is held at its kind's width
-//! (`docs/scalar-numbers.md`, step 2f).
+//! (`docs/records/notebooks/scalar-numbers.md`, step 2f).
 //!
 //! `r: Uint8` is a byte in its object, `count: Int32` four, `big: Uint32` an
 //! unsigned four: what the program wrote, on every backend. Every store into

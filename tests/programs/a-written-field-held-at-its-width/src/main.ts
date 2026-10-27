@@ -1,5 +1,5 @@
 // A field or global written as a scalar kind is held at that kind's width
-// (`docs/scalar-numbers.md`, step 2f): `r: Uint8` is a byte in the object,
+// (`docs/records/notebooks/scalar-numbers.md`, step 2f): `r: Uint8` is a byte in the object,
 // `count: Int32` four bytes, `big: Uint32` an unsigned four, `ratio: Float32`
 // a float. Every store into one is proven to fit, so the store converts
 // exactly, and every read widens back to the `number` the program computes

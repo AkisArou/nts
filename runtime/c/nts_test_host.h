@@ -1,9 +1,10 @@
 /* A deterministic host: no I/O, no threads, and a clock that is a number.
  *
  * This is the reason the host seam is a vtable rather than a compile-time
- * choice (docs/async.md §7). Ordering is the one part of the async stack where
- * a wrong answer looks exactly like a right one, and against a real loop it is
- * only reproducible by luck. Against this one it is a unit test.
+ * choice (docs/records/notebooks/async.md §7). Ordering is the one part of the
+ * async stack where a wrong answer looks exactly like a right one, and against
+ * a real loop it is only reproducible by luck. Against this one it is a unit
+ * test.
  *
  * Not part of the emitted runtime: nothing here is linked into a compiled
  * program.

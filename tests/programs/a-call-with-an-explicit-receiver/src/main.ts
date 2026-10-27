@@ -8,7 +8,7 @@
 // `handler.callback(...)` would make the private `ListenerRecord` the receiver
 // and leak an implementation detail as `this`.
 //
-// The receiver is passed as the call's `this` (`docs/function-receivers.md`).
+// The receiver is passed as the call's `this` (`docs/records/notebooks/function-receivers.md`).
 // None of the functions here reads it, so this fixture is about the arguments:
 // a receiver written at `.call` must not shift them, and its expression is still
 // evaluated. `tests/programs/a-function-that-reads-its-own-this` is the one whose

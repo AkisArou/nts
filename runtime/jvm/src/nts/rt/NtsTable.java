@@ -1221,7 +1221,7 @@ public abstract class NtsTable {
     // of the plan's "free".
     //
     // **Implemented directly rather than by extending `AbstractMap`**, which is
-    // cost 6 in docs/jvm-interop.md: `AbstractMap` defines `equals` and
+    // cost 6 in docs/records/notebooks/jvm-interop.md: `AbstractMap` defines `equals` and
     // `hashCode` by iterating `entrySet()` and allocating an `Entry` per
     // element, and inheriting them would put that cost on operations that do
     // not otherwise need one.

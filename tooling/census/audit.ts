@@ -40,7 +40,7 @@
 //   a file classed `inapplicable` that LOWERS    the classification is wrong
 //   a file classed `supported` that ALL REFUSE   the LEDGER ROW is wrong
 //
-// The second is not hypothetical. `typescript.md`'s `namespace` row was ✅ and
+// The second is not hypothetical. `docs/records/notebooks/typescript-ledger.md`'s `namespace` row was ✅ and
 // false until it was probed on 2026-09-14, and `x!` and decorators are ✗ rows
 // that produce wrong answers rather than refusing.
 

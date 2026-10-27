@@ -20,7 +20,7 @@
 // **One row is a §13 decision rather than a defect.** Node's `once` wrapper
 // carries a `.listener` property pointing at the original function, so
 // `rawListeners(e)[0].listener` is a function there and `undefined` here.
-// `docs/conformance/typescript.md` §13 states it directly -- *"a function here
+// `docs/language/boundaries.md` states it directly -- *"a function here
 // is a C function, not an object with properties"* -- so the relationship is a
 // typed record (`ListenerRecord.original`) rather than a property on a callable.
 //

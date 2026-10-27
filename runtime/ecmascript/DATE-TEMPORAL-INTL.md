@@ -4,7 +4,7 @@ Date, Temporal and all ECMA-402 services are the target within NTS's typed
 object model. The plan is in progress. Standard builtin binding and complete
 compiled public acceptance remain open, alongside the APIs listed below.
 The supported representation boundary is
-[typescript.md §13](../../docs/conformance/typescript.md#13-what-this-compiler-is-not).
+[boundaries.md](../../docs/language/boundaries.md).
 
 ## Standing architecture and performance requirements
 

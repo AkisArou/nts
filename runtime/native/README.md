@@ -25,7 +25,7 @@ instead: a number reaching a C integer or float must be proven one of the
 kind's values, or the build stops (NTS5001). `n | 0` is proven an `int`; an
 `as` is accepted only where nts proves it. A 64-bit integer handed over as a
 number (`AsNumber<C>`) is exact, and a `RangeError` past 2^53. A label has no
-run-time value, and reading one is refused. `docs/scalar-numbers.md` has the
+run-time value, and reading one is refused. `docs/records/notebooks/scalar-numbers.md` has the
 whole design.
 
 The initial declarations target LP64; generated C checks `int`, `long`, `size_t`,
@@ -75,7 +75,7 @@ handles are refused. Node-API and JVM do not marshal opaque C pointers.
 
 Native scalar/struct access, `addrOf`, `local<T>(count)`, `sizeof<T>()`, typed
 `malloc<T>(byteCount)` and `free` are described in
-[the native operations contract](../../docs/native-operations.md). The
+[the native operations contract](../../docs/records/notebooks/native-operations.md). The
 [poll example](../../tests/interop/native-poll/src/main.ts) uses local, fixed
 array, and heap request storage. Local addresses cannot escape; foreign borrowing
 uses the declaration's `@ntsNoEscape` contract. General heap ownership remains

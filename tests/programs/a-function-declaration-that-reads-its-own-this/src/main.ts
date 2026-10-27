@@ -1,5 +1,5 @@
 // A `function` *declaration* that reads its own `this` takes the call's, as a
-// `function` expression does (`docs/function-receivers.md`). Its body is
+// `function` expression does (`docs/records/notebooks/function-receivers.md`). Its body is
 // lowered taking the `this` first; its name is an entry passing `undefined`,
 // which is what a plain call, an importer and the export surface reach. A call
 // that has a `this` -- `f.call(r)`, `o.f()` through a field, a bound function

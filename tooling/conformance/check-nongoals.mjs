@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Audit runtime/node TypeScript for constructs excluded by
-// docs/conformance/typescript.md section 13 and for unchecked type escapes.
+// docs/language/boundaries.md and for unchecked type escapes.
 //
 //   node tooling/conformance/check-nongoals.mjs
 //   node tooling/conformance/check-nongoals.mjs async_hooks

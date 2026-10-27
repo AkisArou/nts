@@ -6,7 +6,7 @@
 //
 // What is *not* absent:
 //   - `nts.gen` as the fixed package name is unacceptable in a published jar,
-//     and `docs/jvm-interop.md` already lists it under packaging gaps;
+//     and `docs/records/notebooks/jvm-interop.md` already lists it under packaging gaps;
 //   - a published jar wants a `module-info` for JPMS consumers, which is a
 //     second declaration of the export surface and therefore a second thing that
 //     can disagree with `exports`;

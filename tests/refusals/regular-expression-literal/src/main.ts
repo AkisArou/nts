@@ -31,7 +31,7 @@
 //
 // A fixture asserting one of those does not see the others, and `path` proved
 // that the entry set alone decides which of them is printed for the same source
-// -- see `docs/conformance/nodejs.md`. So this fixture asserts the literal and
+// -- see `docs/records/notebooks/node-ledger.md`. So this fixture asserts the literal and
 // nothing else.
 //
 // **Ruled out on the way**: that a pattern with no metacharacters could be

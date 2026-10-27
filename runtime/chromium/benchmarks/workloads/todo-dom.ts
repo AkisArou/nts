@@ -1,6 +1,6 @@
 // TodoMVC as a browser program writes it: ordinary DOM TypeScript, typed by
 // the stock lib.dom.d.ts, with no import. The acceptance target for binding
-// lib.dom.d.ts by delegation (docs/lib-dom.md): when the compiler half
+// lib.dom.d.ts by delegation (runtime/chromium/docs/lib-dom.md): when the compiler half
 // lands, this file compiles native unchanged, and the same file, types
 // stripped, is the page script it is measured against -- one source for both
 // engines. Until then todo.ts, on nts:dom, is the compiled side; the two are

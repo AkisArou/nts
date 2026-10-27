@@ -1779,7 +1779,7 @@ fn refusals(name: &str, source: &str) -> Vec<(String, String)> {
     }
 }
 
-/// TypeScript's own holes into a written kind (`docs/scalar-numbers.md`, Q1),
+/// TypeScript's own holes into a written kind (`docs/records/notebooks/scalar-numbers.md`, Q1),
 /// each closed: a number that reaches a `Uint8` through one of them is never
 /// taken as fitting. Each beside a control that differs in one thing -- a
 /// guard that proves it fits, or the type written alike -- and is accepted,
