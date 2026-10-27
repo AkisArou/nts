@@ -183,6 +183,7 @@ int main(void) {
                                        0u,
                                        0,
                                        NULL,
+                                       NULL,
                                        NULL};
   retained = 0;
   released = 0;

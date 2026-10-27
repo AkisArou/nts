@@ -3598,7 +3598,8 @@ fn emit_object_descriptors(
         // The *pointer* slots, not every slot that may hold a reference: an
         // erased one belongs in the table below and in this one it would be
         // read as a pointer. See `HirType::holds_a_pointer`.
-        let references = layout.pointer_fields();
+        let release = nts_codegen_common::release::Fields::of(layout);
+        let references = &release.managed;
         let offsets = if references.is_empty() {
             // No table, and no `static const uint32_t x[] = {};` either: a
             // zero-length array is not C.
@@ -3621,13 +3622,7 @@ fn emit_object_descriptors(
         // says so. Emitted the same way and for the same reason as the
         // reference table above: `offsetof`, so the compiler that laid the
         // struct out is the one that says where its fields are.
-        let erased: Vec<usize> = layout
-            .fields
-            .iter()
-            .enumerate()
-            .filter(|(_, field)| field.ty == HirType::Erased)
-            .map(|(at, _)| at)
-            .collect();
+        let erased = &release.erased;
         let erased_offsets = if erased.is_empty() {
             "0".to_owned()
         } else {
@@ -3661,6 +3656,7 @@ fn emit_object_descriptors(
             references.len()
         );
         let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
+        let release_fields = emit_release_fields(writer, origin, layout, &name, &release);
         // How an object of this layout, or of one class sharing it, prints
         // (`Program::printing`), which the runtime reads off the descriptor. A
         // function this program does not define is null, as a table entry is,
@@ -3694,7 +3690,7 @@ fn emit_object_descriptors(
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {}, \
-                 {function_name}",
+                 {function_name}, {release_fields}",
                 erased.len(),
                 to_string(class)
             )
@@ -3745,6 +3741,50 @@ fn emit_object_descriptors(
 /// keeps its own layouts -- while letting a wrapper build the one thing it must.
 fn construction_hole(name: &str, descriptor: &str) -> String {
     format!("NtsHeader *nts_construct_{name}(void) {{ return nts_object_new(&{descriptor}); }}")
+}
+
+/// Managed edges only: foreign values retain the runtime's separate,
+/// clear-before-release finalization order, including those in erased slots.
+fn emit_release_fields(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    layout: &nts_core::hir::Layout,
+    name: &str,
+    fields: &nts_codegen_common::release::Fields,
+) -> String {
+    if fields.is_empty() {
+        return "NULL".to_owned();
+    }
+    let callback = format!("nts_release_fields_{name}");
+    writer.line(
+        origin,
+        format!("static void {callback}(NtsHeader *object) {{"),
+    );
+    writer.line(origin, format!("    {name} *self = ({name} *)object;"));
+    for at in &fields.managed {
+        let field = c_member_at(layout, *at);
+        writer.line(
+            origin,
+            format!("    if (self->{field}) nts_release((NtsHeader *)self->{field});"),
+        );
+    }
+    for at in &fields.erased {
+        let field = c_member_at(layout, *at);
+        writer.line(origin, format!("    NtsValue slot_{at} = self->{field};"));
+        writer.line(
+            origin,
+            format!(
+                "    if (NTS_TAG_IS_MANAGED(nts_value_tag(slot_{at})) && nts_value_reference(slot_{at})) {{"
+            ),
+        );
+        writer.line(
+            origin,
+            format!("        nts_release(nts_value_reference(slot_{at}));"),
+        );
+        writer.line(origin, "    }");
+    }
+    writer.line(origin, "}");
+    callback
 }
 
 /// A layout's foreign slots: the fields holding a counted foreign object, each
@@ -3823,7 +3863,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL }};",
                 descriptor_name(element),
                 array_element_kind(element),
             ),
@@ -7082,7 +7122,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL }};"
                 ),
             );
         }

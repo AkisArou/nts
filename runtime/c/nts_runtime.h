@@ -322,6 +322,16 @@ typedef struct NtsDescriptor {
    * makes has one -- `""` for an anonymous one -- so a null is a method whose
    * key is computed at run time, or a type that is not a function at all. */
   const struct NtsHeader *function_name;
+  /* Give up only the managed edges of this fixed layout, once its count has
+   * reached zero. Emitted by C and LLVM from the same field plan. Erased
+   * fields release managed tags only; foreign slots stay on the runtime's
+   * clear-before-release protocol. NULL selects the generic contents walk.
+   *
+   * This never frees the receiver or recurses through destruction: child
+   * releases join the runtime's iterative dying list. The cycle collector
+   * must not call it, because trial deletion already accounted for its edges.
+   * Trailing for source compatibility with handwritten descriptors. */
+  void (*release_fields)(struct NtsHeader *object);
 } NtsDescriptor;
 
 /* What an array's slots hold.

@@ -315,6 +315,7 @@ int main(void) {
                                           0,
                                           NULL,
                                           NULL,
+                                          NULL,
                                           NULL};
     NtsHeader *function = nts_object_new(&closure);
     NtsPromise *object = nts_promise_new();

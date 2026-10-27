@@ -33,4 +33,5 @@ pub mod gobject;
 pub mod native;
 pub mod objc;
 pub mod provider;
+pub mod release;
 pub mod string_hash;

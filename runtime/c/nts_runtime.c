@@ -552,6 +552,7 @@ const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
                                     0u,
                                     NULL,
                                     nts_array_to_string,
+                                    NULL,
                                     NULL};
 /* The same array of references, for one whose elements the compiler proved
    can never lead back to it (`Cycles::array`): never buffered as a cycle
@@ -570,13 +571,14 @@ const NtsDescriptor nts_desc_ref_acyclic = {NTS_KIND_ARRAY,
                                             0u,
                                             NULL,
                                             nts_array_to_string,
+                                            NULL,
                                             NULL};
 const NtsDescriptor nts_desc_string1 = {
-    NTS_KIND_STRING,   1,  0,    0,    0,   0, "string", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL};
+    NTS_KIND_STRING,   1,  0,    0,    0,    0,   "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL};
 const NtsDescriptor nts_desc_string2 = {
-    NTS_KIND_STRING,   2,  0,    0,    0,   0, "string", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL};
+    NTS_KIND_STRING,   2,  0,    0,    0,    0,   "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL};
 
 static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
                                               (uint32_t)sizeof(NtsBigIntBox),
@@ -589,6 +591,7 @@ static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
                                               0,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
+                                              NULL,
                                               NULL,
                                               NULL,
                                               NULL};
@@ -1339,10 +1342,28 @@ static void nts_release_foreign(NtsHeader *object) {
   }
 }
 
+/* A fixed object with no erased/foreign fields cannot hold a foreign handle.
+ * Maps hold tags in implicit columns; foreign arrays have an implicit family
+ * slot. Keep those on the existing protocol even without erased fields. */
+static bool nts_has_foreign_contents(const NtsDescriptor *descriptor) {
+  return descriptor->erased || descriptor->foreign ||
+         descriptor->kind == NTS_KIND_MAP ||
+         (descriptor->kind == NTS_KIND_ARRAY &&
+          descriptor->element == NTS_ARRAY_FOREIGN);
+}
+
 /* Reclaim an object: what hangs off it, then the block itself. */
 static void nts_free(NtsHeader *object) {
-  nts_release_foreign(object);
-  nts_free_storage(object);
+  const NtsDescriptor *descriptor = object->descriptor;
+  if (nts_has_foreign_contents(descriptor)) {
+    nts_release_foreign(object);
+  }
+  /* These layouts keep all storage in their own block. Other kinds retain
+   * their existing backing-store/finalizer dispatch. */
+  if (descriptor->kind != NTS_KIND_OBJECT &&
+      descriptor->kind != NTS_KIND_TUPLE) {
+    nts_free_storage(object);
+  }
   nts_free_block(object);
 }
 
@@ -1408,8 +1429,8 @@ void nts_register_holders(uint32_t family, const NtsHolders *holders) {
  * this descriptor in its header, and the collector recognises it by address.
  * Cyclic, since holding is what puts it in a cycle. */
 const NtsDescriptor nts_holder_descriptor = {
-    NTS_KIND_OBJECT,   0,  0,    1,    0,   0, "holder", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL};
+    NTS_KIND_OBJECT,   0,  0,    1,    0,    0,   "holder", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL};
 
 static bool nts_is_holder(const NtsHeader *object) {
   return object->descriptor == &nts_holder_descriptor;
@@ -1526,9 +1547,9 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
   }
   /* And the slots whose contents decide whether they are references at all.
    *
-   * This is the single traversal: `nts_release_contents` and all four passes of
-   * the cycle collector go through here, so teaching it about erased slots
-   * teaches the whole collector at once. That is the reason an erased value is
+   * The generic destruction fallback and all four passes of the cycle
+   * collector share this traversal. Generated contents callbacks use the same
+   * managed-tag and non-null test. That is the reason an erased value is
    * stored whole rather than decomposed into a tag beside a typed slot at every
    * kind of storage -- one concept here, against a parallel tag slot in object
    * layout, array layout, globals and closure captures. */
@@ -1873,7 +1894,12 @@ void nts_value_release(NtsValue value) {
  * everything below its root, which is the shape of leak that looks like it
  * works right up until it doesn't. */
 static void nts_release_contents(NtsHeader *object) {
-  nts_each_reference(object, nts_release, NTS_EDGES_OWNED);
+  const NtsDescriptor *descriptor = object->descriptor;
+  if (descriptor->release_fields) {
+    descriptor->release_fields(object);
+  } else if (descriptor->references || descriptor->erased) {
+    nts_each_reference(object, nts_release, NTS_EDGES_OWNED);
+  }
 }
 
 static void nts_maybe_collect(void);
@@ -1968,7 +1994,9 @@ static void nts_destroy(NtsHeader *object) {
        * back twice. The count word is a count again, zero; `NTS_DYING` stays,
        * and with `NTS_BUFFERED` beside it that pair is the shell's mark --
        * nothing else ever carries both. */
-      nts_release_foreign(dead);
+      if (nts_has_foreign_contents(dead->descriptor)) {
+        nts_release_foreign(dead);
+      }
       dead->reserved = 0;
       continue;
     }
@@ -2986,6 +3014,7 @@ static const NtsDescriptor nts_desc_number_array = {NTS_KIND_ARRAY,
                                                     0u,
                                                     NULL,
                                                     nts_array_to_string,
+                                                    NULL,
                                                     NULL};
 
 NtsArray *nts_array_of_numbers(double length) {
@@ -7198,6 +7227,7 @@ static const NtsDescriptor nts_desc_boxed = {NTS_KIND_BOXED,
                                              0u,
                                              NULL,
                                              NULL,
+                                             NULL,
                                              NULL};
 
 NtsHeader *nts_boxed_new(void *boxed, void (*free)(void *boxed, size_t data),
@@ -8915,6 +8945,7 @@ static const NtsDescriptor nts_desc_map = {NTS_KIND_MAP,
                                            0u,
                                            NULL,
                                            nts_map_to_string,
+                                           NULL,
                                            NULL};
 
 /* A table: an object used as a dictionary (`Record<string, T>`, an index
@@ -8936,6 +8967,7 @@ static const NtsDescriptor nts_desc_table = {NTS_KIND_MAP,
                                              0u,
                                              NULL,
                                              nts_object_to_string,
+                                             NULL,
                                              NULL};
 
 static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,
@@ -8985,6 +9017,7 @@ static const NtsDescriptor nts_desc_date = {NTS_KIND_OBJECT,
                                             0,
                                             NTS_ARRAY_UNKNOWN,
                                             0u,
+                                            NULL,
                                             NULL,
                                             NULL,
                                             NULL};
@@ -9044,6 +9077,7 @@ static const NtsDescriptor nts_desc_buffer = {NTS_KIND_BUFFER,
                                               0u,
                                               NULL,
                                               nts_buffer_to_string,
+                                              NULL,
                                               NULL};
 
 /* A byte count, from a double the lowering has already made legal.
@@ -9211,6 +9245,7 @@ static const NtsDescriptor nts_desc_dataview = {NTS_KIND_OBJECT,
                                                 0u,
                                                 NULL,
                                                 nts_dataview_to_string,
+                                                NULL,
                                                 NULL};
 
 static NtsDataView *nts_dataview_make(NtsBuffer *buffer, double byte_offset,
@@ -9518,7 +9553,7 @@ static const NtsDescriptor nts_desc_view = {
     /* One reference, at offset zero: the buffer. Cyclic because a view is an
        ordinary managed object and a program may put one in a cycle. */
     (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)}, 0, "TypedArray",
-    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL};
+    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL, NULL};
 
 /* Beside the descriptor it compares against, rather than with the other
  * `nts_is_*` helpers: a file-scope `static const` has no forward declaration
@@ -10064,6 +10099,7 @@ static const NtsDescriptor nts_desc_symbol = {NTS_KIND_SYMBOL,
                                               0,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
+                                              NULL,
                                               NULL,
                                               NULL,
                                               NULL};
@@ -11734,6 +11770,7 @@ static const NtsDescriptor nts_desc_reaction = {NTS_KIND_OBJECT,
                                                 0u,
                                                 NULL,
                                                 NULL,
+                                                NULL,
                                                 NULL};
 
 /* The settlement payload is *not* here: it is an erased slot, listed below, and
@@ -11761,6 +11798,7 @@ static const NtsDescriptor nts_desc_promise = {NTS_KIND_OBJECT,
                                                0u,
                                                NULL,
                                                nts_promise_to_string,
+                                               NULL,
                                                NULL};
 
 bool nts_is_promise(NtsValue value) {
@@ -12114,6 +12152,7 @@ static const NtsDescriptor nts_desc_combinator = {
     0u,
     NULL,
     NULL,
+    NULL,
     NULL};
 
 static const uint32_t nts_combinator_slot_offsets[] = {
@@ -12133,6 +12172,7 @@ static const NtsDescriptor nts_desc_combinator_slot = {
     0,
     NTS_ARRAY_UNKNOWN,
     0u,
+    NULL,
     NULL,
     NULL,
     NULL};
@@ -12329,6 +12369,7 @@ static const NtsDescriptor nts_desc_adoption = {NTS_KIND_OBJECT,
                                                 0u,
                                                 NULL,
                                                 NULL,
+                                                NULL,
                                                 NULL};
 
 static void nts_adoption_drop(void *state) { nts_release((NtsHeader *)state); }
@@ -12431,6 +12472,7 @@ static const NtsDescriptor nts_desc_callback = {NTS_KIND_OBJECT,
                                                 0,
                                                 NTS_ARRAY_UNKNOWN,
                                                 0u,
+                                                NULL,
                                                 NULL,
                                                 NULL,
                                                 NULL};

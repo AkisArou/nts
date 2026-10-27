@@ -30,7 +30,8 @@ static const NtsDescriptor value_desc = {NTS_KIND_OBJECT,
                                          0u,
                                          0,
                                          0,
-                                         0};
+                                         0,
+                                         NULL};
 static const NtsDescriptor refs = {NTS_KIND_ARRAY,
                                    sizeof(NtsHeader *),
                                    1u,
@@ -44,7 +45,8 @@ static const NtsDescriptor refs = {NTS_KIND_ARRAY,
                                    0u,
                                    0,
                                    0,
-                                   0};
+                                   0,
+                                   NULL};
 
 static size_t rss(void) {
 #if defined(__linux__)

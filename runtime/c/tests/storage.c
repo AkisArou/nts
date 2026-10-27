@@ -46,6 +46,7 @@ static const NtsDescriptor desc_num = {NTS_KIND_ARRAY,
                                        0u,
                                        NULL,
                                        NULL,
+                                       NULL,
                                        NULL};
 
 /* A reference array, whose elements are pointers the collector walks. Growing
@@ -62,6 +63,7 @@ static const NtsDescriptor desc_ref_grow = {NTS_KIND_ARRAY,
                                             0,
                                             NTS_ARRAY_REFERENCE,
                                             0u,
+                                            NULL,
                                             NULL,
                                             NULL,
                                             NULL};

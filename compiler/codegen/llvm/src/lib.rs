@@ -806,10 +806,10 @@ fn literal_table(program: &Program) -> Vec<JsText> {
 /// field, `foreign` and `foreign_slots` after `element` as in the runtime.
 ///
 /// And `to_string`, how an object of the type prints (`Program::printed`), and
-/// `function_name` last, what a function of it is called
-/// (`Program::function_names`).
+/// `function_name`, what a function of it is called (`Program::function_names`),
+/// and `release_fields`, its owned managed-edge cleanup, last.
 const DESCRIPTOR_TYPE: &str = "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, \
-     ptr, i32, i32, ptr, ptr, ptr }";
+     ptr, i32, i32, ptr, ptr, ptr, ptr }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -952,23 +952,21 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         // The *pointer* slots, not every slot that may hold a reference: an
         // erased one belongs in the table below and in this one it would be
         // read as a pointer. See `HirType::holds_a_pointer`.
-        let references: Vec<u32> = layout
-            .fields
+        let release = nts_codegen_common::release::Fields::of(layout);
+        let references: Vec<u32> = release
+            .managed
             .iter()
-            .enumerate()
-            .filter(|(_, field)| field.ty.holds_a_pointer())
-            .filter_map(|(at, _)| placed.offsets.get(at).copied())
+            .filter_map(|at| placed.offsets.get(*at).copied())
             .collect();
-        let erased: Vec<u32> = layout
-            .fields
+        let erased: Vec<u32> = release
+            .erased
             .iter()
-            .enumerate()
-            .filter(|(_, field)| field.ty == HirType::Erased)
-            .filter_map(|(at, _)| placed.offsets.get(at).copied())
+            .filter_map(|at| placed.offsets.get(*at).copied())
             .collect();
         let reference_table = offsets("refs", &references);
         let erased_table = offsets("erased", &erased);
         let (foreign, foreign_table) = foreign_slots(&mut out, layout, &placed.offsets, &tag);
+        let release_fields = release_fields(&mut out, &tag, &references, &erased);
         // The class's dispatch table, where the hierarchy has one. A slot the
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at
@@ -1025,7 +1023,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {}, \
-                 {function_name}",
+                 {function_name}, {release_fields}",
                 erased.len(),
                 to_string_slot(program, layout, class)
             )
@@ -1040,6 +1038,59 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
     }
     array_descriptors(&mut out, program);
     out
+}
+
+/// Like the C callback, this releases managed edges only. The runtime owns
+/// the drain, freeing and the separate foreign-slot finalization protocol.
+fn release_fields(out: &mut String, tag: &str, managed: &[u32], erased: &[u32]) -> String {
+    use nts_core::hir::tags;
+    if managed.is_empty() && erased.is_empty() {
+        return "ptr null".to_owned();
+    }
+    let callback = format!("nts_release_fields_{tag}");
+    let _ = writeln!(
+        out,
+        "define internal void @{callback}(ptr %object) {{\nentry:"
+    );
+    for (at, offset) in managed.iter().enumerate() {
+        let _ = writeln!(
+            out,
+            "  %m{at}.at = getelementptr i8, ptr %object, i64 {offset}"
+        );
+        let _ = writeln!(out, "  %m{at} = load ptr, ptr %m{at}.at");
+        let _ = writeln!(out, "  %m{at}.live = icmp ne ptr %m{at}, null");
+        let _ = writeln!(
+            out,
+            "  br i1 %m{at}.live, label %m{at}.release, label %m{at}.next\nm{at}.release:"
+        );
+        let _ = writeln!(out, "  call void @nts_release(ptr %m{at})");
+        let _ = writeln!(out, "  br label %m{at}.next\nm{at}.next:");
+    }
+    for (at, offset) in erased.iter().enumerate() {
+        let _ = writeln!(
+            out,
+            "  %e{at}.at = getelementptr i8, ptr %object, i64 {offset}"
+        );
+        let _ = writeln!(out, "  %e{at} = load {ERASED_TYPE}, ptr %e{at}.at");
+        let _ = writeln!(out, "  %t{at} = extractvalue {ERASED_TYPE} %e{at}, 0");
+        let _ = writeln!(out, "  %lo{at} = icmp uge i32 %t{at}, {}", tags::STRING);
+        let _ = writeln!(out, "  %hi{at} = icmp ule i32 %t{at}, {}", tags::OBJECT);
+        let _ = writeln!(out, "  %range{at} = and i1 %lo{at}, %hi{at}");
+        let _ = writeln!(out, "  %big{at} = icmp eq i32 %t{at}, {}", tags::BIGINT);
+        let _ = writeln!(out, "  %managed{at} = or i1 %range{at}, %big{at}");
+        let _ = writeln!(out, "  %bits{at} = extractvalue {ERASED_TYPE} %e{at}, 1");
+        let _ = writeln!(out, "  %live{at} = icmp ne i64 %bits{at}, 0");
+        let _ = writeln!(out, "  %owned{at} = and i1 %managed{at}, %live{at}");
+        let _ = writeln!(
+            out,
+            "  br i1 %owned{at}, label %release{at}, label %next{at}\nrelease{at}:"
+        );
+        let _ = writeln!(out, "  %p{at} = inttoptr i64 %bits{at} to ptr");
+        let _ = writeln!(out, "  call void @nts_release(ptr %p{at})");
+        let _ = writeln!(out, "  br label %next{at}\nnext{at}:");
+    }
+    let _ = writeln!(out, "  ret void\n}}");
+    format!("ptr @{callback}")
 }
 
 /// One descriptor per scalar element type an array is made of. An array of
@@ -1071,7 +1122,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
              ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null, \
-             ptr null }}",
+             ptr null, ptr null }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -1118,7 +1169,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 {erased}, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)
             );

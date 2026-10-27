@@ -45,6 +45,7 @@ static const NtsDescriptor desc_strings = {NTS_KIND_ARRAY,
                                            0u,
                                            NULL,
                                            NULL,
+                                           NULL,
                                            NULL};
 
 int main(void) {

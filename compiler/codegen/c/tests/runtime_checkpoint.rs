@@ -122,6 +122,22 @@ fn checks(report: &str) -> usize {
 }
 
 #[test]
+fn typed_contents_cleanup_preserves_the_runtime_death_protocol() {
+    for flags in [
+        vec!["-DNTS_PROVIDER_RC"],
+        vec![
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    ] {
+        let report = run_suite("typed_release", &flags);
+        assert!(checks(&report) >= 23, "{report}");
+    }
+}
+
+#[test]
 fn collector_progress_and_candidate_indices() {
     for flags in [
         vec!["-DNTS_PROVIDER_RC"],

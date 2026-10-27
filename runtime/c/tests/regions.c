@@ -53,8 +53,8 @@ typedef struct Node {
 
 static const uint32_t node_refs[] = {offsetof(Node, a)};
 static const NtsDescriptor node_desc = {
-    NTS_KIND_OBJECT,   sizeof(Node), 1u,   1u,   node_refs, 0, "Node", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u,           NULL, NULL, NULL};
+    NTS_KIND_OBJECT,   sizeof(Node), 1u,   1u,   node_refs, 0,   "Node", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u,           NULL, NULL, NULL,      NULL};
 
 static const NtsDescriptor numbers_desc = {NTS_KIND_ARRAY,
                                            (uint32_t)sizeof(double),
@@ -67,6 +67,7 @@ static const NtsDescriptor numbers_desc = {NTS_KIND_ARRAY,
                                            0,
                                            NTS_ARRAY_FLOAT,
                                            0u,
+                                           NULL,
                                            NULL,
                                            NULL,
                                            NULL};
@@ -82,6 +83,7 @@ static const NtsDescriptor refs_desc = {NTS_KIND_ARRAY,
                                         0,
                                         NTS_ARRAY_REFERENCE,
                                         0u,
+                                        NULL,
                                         NULL,
                                         NULL,
                                         NULL};
