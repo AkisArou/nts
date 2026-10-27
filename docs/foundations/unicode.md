@@ -27,8 +27,9 @@ Terms used below:
 Unicode data reaches programs from four places, each with its own Unicode
 version: QuickJS's `libunicode` for native case conversion, a 191 KB TypeScript
 file generated from that `libunicode` for the RegExp engine, the JDK's tables on
-the JVM, and the JavaScript host on Wasm. Most other Unicode features are
-refused (`normalize`, `localeCompare`, the locale case forms, `Intl.Segmenter`).
+the JVM, and the checker's identifier tables in the frontend. Most other
+Unicode features are refused (`normalize`, `localeCompare`, the locale case
+forms, `Intl.Segmenter`).
 
 Answers that are wrong today:
 
@@ -37,6 +38,7 @@ Answers that are wrong today:
 | Final_Sigma is missing: `"ΑΣ".toLowerCase()` gives `ασ`, node gives `ας` | C, LLVM | two recorded test262 failures (`results/test262/{c,llvm}/builtins.tsv`) |
 | JDK 21 carries Unicode 15.0, so a Unicode 16 letter such as `Ɤ` does not lowercase | JVM | probe on JDK 21.0.5 |
 | the JDK mishandles Final_Sigma after a supplementary combining mark | JVM | a recorded test262 failure |
+| the checker knows identifiers by Unicode 15.1, so a name starting with a Unicode 16 letter such as `Ɤ` is a syntax error (TS1127) that node accepts | every backend: it is the frontend's | a probe; upstream's tables, reported and not edited |
 
 The `case-convert` benchmark wins: 1.65 µs on C and 1.64 µs on LLVM, **0.50x
 node and 0.48x Bun**. That was measured 2026-10-27 on CPU 4 under `with-lock`,
