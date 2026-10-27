@@ -321,7 +321,7 @@ function hashFn(key: CustomHash): number {
 }
 
 export class Dictionary<K extends CustomHash, V> {
-  buckets: (DictEntry<K, V> | null)[];
+  buckets: (DictEntry<K, V> | null | undefined)[];
   size_: number;
 
   constructor(size?: number) {
@@ -341,7 +341,7 @@ export class Dictionary<K extends CustomHash, V> {
     return (this.buckets.length - 1) & hash;
   }
 
-  getBucket(hash: number): DictEntry<K, V> | null {
+  getBucket(hash: number): DictEntry<K, V> | null | undefined {
     return this.buckets[this.getBucketIdx(hash)];
   }
 
@@ -415,7 +415,7 @@ export class Dictionary<K extends CustomHash, V> {
     this.transferEntries(oldStorage);
   }
 
-  transferEntries(oldStorage: (DictEntry<K, V> | null)[]): void {
+  transferEntries(oldStorage: (DictEntry<K, V> | null | undefined)[]): void {
     for (let i = 0; i < oldStorage.length; i += 1) {
       const current = oldStorage[i];
       if (current) {
@@ -430,7 +430,7 @@ export class Dictionary<K extends CustomHash, V> {
     }
   }
 
-  splitBucket(oldStorage: (DictEntry<K, V> | null)[], i: number, head: DictEntry<K, V>): void {
+  splitBucket(oldStorage: (DictEntry<K, V> | null | undefined)[], i: number, head: DictEntry<K, V>): void {
     let loHead: DictEntry<K, V> | null = null;
     let loTail: DictEntry<K, V> | null = null;
     let hiHead: DictEntry<K, V> | null = null;
