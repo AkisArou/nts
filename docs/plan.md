@@ -126,12 +126,15 @@ The designs and their build orders are in [`foundations/`](foundations).
 1. **Instruments before mechanisms:**
    - the memory census;
    - the memory rows: `tree-teardown`, `sort-objects`, `release-acyclic`,
-     `immutable-update`, `array-copying-methods`, `cyclic-churn`, plus the
-     `case-convert` variants;
+     `immutable-update`, `array-copying-methods`, `cyclic-churn`;
    - the six remaining Are We Fast Yet ports: Richards, DeltaBlue, Havlak, CD,
      Json and Storage. With the eight already on `main`, that is the whole
-     suite of fourteen, against node, Bun, C++ and Java;
-   - the Unicode fixtures and the version-pin check.
+     suite of fourteen, against node, Bun, C++ and Java. They wait on three
+     compiler gaps, recorded as fixtures: a nullable generic array property
+     (four ports), Richards' module-scope sentinel, and Storage's recursive
+     array return;
+   - the Unicode rows (`case-convert-latin1`, `-greek`, `-cjk`,
+     `-unchanged`), the new-letter fixtures and the version-pin check (*done*).
 2. **Memory stages 1 and 2** (cheap counting wins; the one placement analysis,
    facts only), beside **Unicode stage 1** (case mapping). Stage 1 so far:
    release by type, the count-free sort and proved-integer `Math.min` and

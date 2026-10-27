@@ -40,13 +40,14 @@ Answers that are wrong today:
 | the JDK mishandles Final_Sigma after a supplementary combining mark | JVM | a recorded test262 failure |
 | the checker knows identifiers by Unicode 15.1, so a name starting with a Unicode 16 letter such as `Ɤ` is a syntax error (TS1127) that node accepts | every backend: it is the frontend's | a probe; upstream's tables, reported and not edited |
 
-The `case-convert` benchmark wins: 1.65 µs on C and 1.64 µs on LLVM, **0.50x
-node and 0.48x Bun**. That was measured 2026-10-27 on CPU 4 under `with-lock`,
-in five paired rounds, with shipping flags, against node's 3.28 µs and Bun's
-3.50 µs. The 3.90 µs row in `results/benchmarks/full.md` predates the ASCII
-conversion change `b2e2d24b8` and is stale. That row is all ASCII and never
-reads a Unicode table, so it cannot choose a table source. Rows with Greek,
-CJK and unchanged text (stage 0) do that.
+`case-convert` is all ASCII and never reads a Unicode table, so it cannot
+choose a table source. The stage 0 rows do: `case-convert-latin1`, `-greek`,
+`-cjk` and `-unchanged`, against node, Bun and, where an honest one exists, a
+C++ or Java reference. Native wins the ASCII rows and loses every row that
+reaches the tables, while the JVM runs level with Java; the measurements are
+in [`results/`](../../results). `tooling/gate/unicode-version.test.ts` checks
+each data source against node's Unicode version, with the JVM's and the
+checker's lag recorded as known gaps.
 
 ## The design
 
