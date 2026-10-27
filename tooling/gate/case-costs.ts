@@ -197,6 +197,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
   let checks: Check[] = [];
   try { checks = readChecks(root, errors); } catch (e) { errors.push(`reading case costs: ${(e as Error).message}`); }
   const aggregates: Record<string, unknown>[] = [];
+  const shadows: Record<string, unknown>[] = [];
   try {
     for (const name of readdirSync(root).filter(n => /^aggregate-\d+-\d+\.jsonl$/.test(n))) {
       for (const line of readFileSync(join(root, name), "utf8").split("\n").filter(Boolean)) {
@@ -208,6 +209,17 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       }
     }
   } catch (e) { errors.push(`reading aggregate costs: ${(e as Error).message}`); }
+  try {
+    for (const name of readdirSync(root).filter(n => /^shadow-\d+-\d+\.jsonl$/.test(n))) {
+      for (const line of readFileSync(join(root, name), "utf8").split("\n").filter(Boolean)) {
+        try {
+          const row = JSON.parse(line);
+          if (row.event === "artifact.shadow" && typeof row.step === "string") shadows.push(row);
+          else errors.push(`invalid shadow observation: ${name}`);
+        } catch { errors.push(`partial JSON: ${name}`); }
+      }
+    }
+  } catch (e) { errors.push(`reading artifact shadows: ${(e as Error).message}`); }
   const reqs = requests(events);
   const byStep: Record<string, unknown> = {};
   let missingChecks = 0;
@@ -233,7 +245,19 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       cgroup: row.cgroup, scope_budget_bytes: peakRss(row.scope_budget_bytes), peak_bytes: peakRss(row.peak_bytes),
     }));
     const peaks = scopes.flatMap(row => row.peak_bytes === null ? [] : [row.peak_bytes]);
+    const shadowRows = shadows.filter(row => row.step === step.name);
+    const shadowKinds = [...new Set(shadowRows.map(row => String(row.kind)))];
     byStep[step.name] = {
+      artifact_shadow: { observations: shadowRows.length, skipped_runs: 0,
+        kinds: Object.fromEntries(shadowKinds.map(kind => {
+          const rows = shadowRows.filter(row => row.kind === kind);
+          return [kind, { observations: rows.length,
+            misses: rows.filter(row => row.status === "miss").length,
+            matching_hits: rows.filter(row => row.status === "hit-match").length,
+            mismatching_hits: rows.filter(row => row.status === "hit-mismatch").length,
+            unavailable: rows.filter(row => row.status === "unavailable").length,
+            cross_train_hits: rows.filter(row => String(row.status).startsWith("hit-") && row.run && row.baseline_run && row.run !== row.baseline_run).length }];
+        })) },
       aggregate_memory: { reserved_step_mem_bytes: step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30),
         scopes, max_scope_peak_bytes: peaks.length ? Math.max(...peaks) : null,
         measured_scopes: peaks.length, unknown_scopes: scopes.length - peaks.length },
@@ -268,6 +292,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       "RSS distributions count measured completed checks only; sums of per-check peaks are not simultaneous resident memory.",
       "Aggregate memory.peak is read before removing each real step's resident-worker cgroup; it includes that group's descendants, not its outside orchestrator.",
       "max_scope_peak_bytes is the maximum over observed scopes, not the sum of concurrent scopes; missing scopes and peaks remain unknown.",
+      "Artifact shadows always run fresh; matching and mismatching hits are observations and never gate verdict inputs. No CPU work is skipped.",
       "Complete describes telemetry, never program agreement; missing telemetry never changes a gate verdict."], steps: byStep };
 }
 

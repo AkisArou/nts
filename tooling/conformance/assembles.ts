@@ -44,6 +44,7 @@ import { fileURLToPath } from "node:url";
 
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
+import { artifactShadow, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -122,7 +123,10 @@ async function check(project, slot) {
     return;
   }
   bytes += size;
+  const observe = artifactShadow("assembles", () => ({ files: [{ name: "module.ll", path: ir }],
+    values: { tool: toolIdentity(LLVM_AS), flags: ["-o", "/dev/null"], script: fileDigest(fileURLToPath(import.meta.url)) } }));
   const as = await run(LLVM_AS, [ir, "-o", "/dev/null"]);
+  observe({ status: as.status ?? null, signal: as.signal ?? null, error: as.error?.message ?? null, out: as.out });
   if (as.error) {
     unmeasured.push(`${project}: ${LLVM_AS} could not run: ${as.error.message}`);
     return;

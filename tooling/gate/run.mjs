@@ -74,7 +74,7 @@ import {
   chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
   readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
-import { cpus, totalmem } from "node:os";
+import { cpus, homedir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTokenPool } from "./tokenpool.mjs";
@@ -425,6 +425,9 @@ function stepEnv(step, slots) {
   e.NTS_GATE_RUN_DIR = RUN_DIR;
   delete e.NTS_GATE_CASE_COSTS_DIR;
   if (caseCosts?.available) e.NTS_GATE_CASE_COSTS_DIR = caseCosts.root;
+  if (caseCosts?.available && ["assembles", "jvm-verifies", "dex", "bench-agree", "examples", "rc", "llvm", "llvm-rc", "jvm", "wasm"].includes(step.name)) {
+    e.NTS_GATE_SHADOW_DIR ??= join(homedir(), ".cache/nts-gate/artifact-shadow/v1");
+  } else delete e.NTS_GATE_SHADOW_DIR;
   e.NTS_GATE_CASE_BINARY_SHA = identities.nts?.sha256;
   // An elastic step's workers ask for tokens; any other step already holds
   // its slots, so whatever token-aware tool it runs must not ask again.

@@ -143,15 +143,23 @@ JSON
   # shellcheck disable=SC2086
   if "$tools/d8" --min-api 29 --lib "$out/classes/nts-runtime.jar" \
        --output "$out/dex" $classes > "$out/d8.log" 2>&1; then
+    d8_status=0
     dexed=1
     names=$(echo "$classes" | sed "s|$out/classes/||g;s|\.class||g;s|/|.|g")
     # shellcheck disable=SC2086
     n=$(javap -p -cp "$out/classes" $names 2>/dev/null | grep -cE "^  .*\(.*\);")
     methods=$n
   else
+    d8_status=$?
     refused=1
     printf "%-28s d8 refused it\n" "$name"
     sed -n '1,3p' "$out/d8.log" | sed 's/^/    /'
+  fi
+  if [ -n "${NTS_GATE_SHADOW_DIR:-}" ]; then
+    node "$root/tooling/gate/artifact-shadow.ts" --kind dex \
+      --inputs "$out/classes" --outputs "$out/dex" --result "$out/d8.log" --status "$d8_status" \
+      --script "$root/tooling/android/dexes.sh" --tool "$tools/d8" --tool-library "$tools/lib/d8.jar" \
+      --java "${JAVA_HOME:+$JAVA_HOME/bin/}java" > "$out/shadow.log" 2>&1 || :
   fi
   record
 }

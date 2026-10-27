@@ -166,3 +166,21 @@ test("unreadable aggregate peaks stay unknown and a failed observation cannot th
   assert.equal(data.aggregate_memory.unknown_scopes, 1);
   assert.doesNotThrow(() => recordAggregatePeak("/nonexistent-nts-peak", 1024, { ...env, NTS_GATE_CASE_COSTS_DIR: join(dir, "absent") }));
 });
+
+test("artifact shadow counts distinguish cross-train matches, mismatches, misses and unavailable keys", t => {
+  const dir = fixture(t);
+  const rows = [
+    { status: "miss", run: "run-a" },
+    { status: "hit-match", run: "run-b", baseline_run: "run-a" },
+    { status: "hit-match", run: "run-b", baseline_run: "run-b" },
+    { status: "hit-mismatch", run: "run-b", baseline_run: "run-a" },
+    { status: "unavailable", run: "run-b" },
+  ];
+  writeFileSync(join(dir, "shadow-1-0.jsonl"), rows.map(row => JSON.stringify({ event: "artifact.shadow", kind: "assemble", step: "examples", ...row })).join("\n") + "\n");
+  const result = summarizeCosts(dir, [], [step]);
+  assert.deepEqual((result.steps.examples as any).artifact_shadow, {
+    observations: 5, skipped_runs: 0, kinds: { assemble: {
+      observations: 5, misses: 1, matching_hits: 2, mismatching_hits: 1, unavailable: 1, cross_train_hits: 2,
+    } },
+  });
+});

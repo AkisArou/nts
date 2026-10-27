@@ -106,6 +106,7 @@ import { materialise, outcomeFixtures, OUTCOMES, runMode } from "./outcomes-proj
 import { describe, provenanceOf } from "./pin.ts";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
+import { artifactFiles, artifactShadow, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -511,7 +512,11 @@ async function check(project, slot) {
     retainFailure(project, out, emit, null, "emit did not supply a verifiable output");
     return;
   }
+  const observe = artifactShadow("jvm-verifies", () => ({ files: [
+    ...artifactFiles(out), { name: "verifier-driver", path: DRIVER },
+  ], values: { tool: toolIdentity(JAVA), flags: ["-Xverify:all"], script: fileDigest(fileURLToPath(import.meta.url)) } }));
   const v = await run(JAVA, ["-Xverify:all", "-cp", `${out}:${jar}`, DRIVER, out]);
+  observe({ status: v.status ?? null, signal: v.signal ?? null, error: v.error?.message ?? null, stdout: v.stdout, stderr: v.stderr });
   const read = readVerify(v.out);
   const failure = verifierFailure(v, read);
   if (failure) {
