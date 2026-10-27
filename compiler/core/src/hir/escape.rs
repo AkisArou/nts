@@ -67,6 +67,9 @@ use super::{BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Termin
 /// Work per recursive component. Exhaustion loses placements, never lifetimes.
 const SUMMARY_BUDGET: usize = 100_000;
 
+/// Alias-origin visits per function. Exhaustion puts repeated allocations on the heap.
+const CARRY_BUDGET: usize = 100_000;
+
 /// Values produced by an operation that can run more than once.
 ///
 /// A frame allocation is a single slot, so confining one is a claim that at
@@ -671,8 +674,8 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     // had asked a program that stores in a loop.
                     //
                     // Two repeated sites need a stronger proof than two
-                    // booleans: the container must be recreated before each
-                    // stored allocation. See `store_lifetime`.
+                    // booleans: the container and the stored instance must
+                    // be recreated in lockstep. See `store_lifetime`.
                     //
                     // The container's own escape is still decided on its own
                     // evidence, and the fixpoint below carries it to whatever
@@ -787,15 +790,40 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
             }
         }
 
-        escape_through(
-            &mut escapes,
-            func,
-            &repeated,
-            &live,
-            &mut carried,
-            &block.terminator,
-        );
+        escape_through(&mut escapes, func, &mut carried, &block.terminator);
     }
+    let read_from = reads_from_containers(func);
+    let edges = aliased_by
+        .iter()
+        .filter(|(result, _)| func.values[result.0 as usize].ty.may_hold_a_reference())
+        .map(|(result, argument)| (*result, CarryEdge::Alias(*argument)))
+        .chain(
+            reachable_from
+                .iter()
+                .filter(|(_, stored)| func.values[stored.0 as usize].ty.may_hold_a_reference())
+                .map(|(container, stored)| (*container, CarryEdge::Stored(*stored))),
+        )
+        .chain(
+            read_from
+                .iter()
+                .filter(|(_, read)| func.values[read.0 as usize].ty.may_hold_a_reference())
+                .map(|(container, read)| (*read, CarryEdge::Read(*container))),
+        )
+        .chain(
+            contents_read_by
+                .iter()
+                .filter(|(result, _)| func.values[result.0 as usize].ty.may_hold_a_reference())
+                .map(|(result, container)| (*result, CarryEdge::Read(*container))),
+        );
+    escape_reused_instances(
+        &mut escapes,
+        func,
+        &repeated,
+        &live,
+        edges,
+        &carried,
+        CARRY_BUDGET,
+    );
 
     // Now the stores, once every other reason to escape is known.
     //
@@ -829,7 +857,6 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     // returning a read is not leaking it. Handed on rather than returned, the
     // result takes a parameter's contents too, which is that function's to
     // publish.
-    let read_from = reads_from_containers(func);
     let handed_on = handed_to_an_op(func);
     loop {
         let before = (escapes.values.len(), contents_leave.len());
@@ -985,8 +1012,6 @@ fn reads_from_containers(func: &Func) -> Vec<(ValueId, ValueId)> {
 fn escape_through(
     escapes: &mut Escapes,
     func: &Func,
-    repeated: &FxHashSet<ValueId>,
-    live: &liveness::Liveness,
     carried: &mut Vec<(ValueId, ValueId)>,
     terminator: &Terminator,
 ) {
@@ -996,9 +1021,7 @@ fn escape_through(
                 escaped(escapes, func, *value);
             }
         }
-        Terminator::Jump { target, args } => {
-            hand_on(escapes, func, repeated, live, carried, *target, args);
-        }
+        Terminator::Jump { target, args } => hand_on(escapes, func, carried, *target, args),
         Terminator::Branch {
             then_target,
             then_args,
@@ -1006,30 +1029,13 @@ fn escape_through(
             else_args,
             ..
         } => {
-            hand_on(
-                escapes,
-                func,
-                repeated,
-                live,
-                carried,
-                *then_target,
-                then_args,
-            );
-            hand_on(
-                escapes,
-                func,
-                repeated,
-                live,
-                carried,
-                *else_target,
-                else_args,
-            );
+            hand_on(escapes, func, carried, *then_target, then_args);
+            hand_on(escapes, func, carried, *else_target, else_args);
         }
         Terminator::Return(None) | Terminator::Unreachable | Terminator::FellThrough => {}
     }
 }
 
-/// One edge: pair each argument with the parameter that receives it.
 /// Whether a parameter is still being read where the value it receives is made.
 ///
 /// The allocation is one slot in the frame, written every time its operation
@@ -1065,6 +1071,19 @@ fn still_live_where_it_is_made(
         if live.live_in(block).contains(&one) || live.live_out(block).contains(&one) {
             return true;
         }
+        // Liveness excludes parameters *defined by this block* from live_in.
+        // They can still hold a previous iteration's object. Even a read
+        // before this container is recreated can keep its old contents alive
+        // past an earlier allocation in the block. Confine neither in that
+        // case: escaping the container propagates to what it holds.
+        let body = &func.blocks[at];
+        if body.params.contains(&one)
+            && (body.ops.iter().any(|value| {
+                super::verify::operands(&func.values[value.0 as usize].kind).contains(&one)
+            }) || super::verify::terminator_operands(&body.terminator).contains(&one))
+        {
+            return true;
+        }
         for source in &func.blocks {
             let edges: Vec<(BlockId, &Vec<ValueId>)> = match &source.terminator {
                 Terminator::Jump { target, args } => vec![(*target, args)],
@@ -1096,11 +1115,10 @@ fn still_live_where_it_is_made(
     false
 }
 
+/// One edge: pair each argument with the parameter that receives it.
 fn hand_on(
     escapes: &mut Escapes,
     func: &Func,
-    repeated: &FxHashSet<ValueId>,
-    live: &liveness::Liveness,
     carried: &mut Vec<(ValueId, ValueId)>,
     target: BlockId,
     args: &[ValueId],
@@ -1111,39 +1129,120 @@ fn hand_on(
         .map(|block| block.params.as_slice())
         .unwrap_or_default();
     for (slot, argument) in args.iter().enumerate() {
-        let made_here = matches!(
-            func.values[argument.0 as usize].kind,
-            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-        );
-        // "One slot, two live results" is a statement about *liveness*, and it
-        // used to be tested by repetition alone: any allocation from inside a
-        // loop, handed to any block parameter, escaped.
-        //
-        // Most of them are handed forward within the iteration that made them.
-        // A factory merged into its caller returns through a continuation --
-        // `const got = maybe(i)` is a parameter receiving either the object or
-        // a null -- and that parameter is dead before the loop comes round and
-        // the next one is made. One slot is exactly right for it.
-        //
-        // It is two live results only when the parameter is still live where
-        // the allocation happens, which is what a value carried on a *back*
-        // edge is: `aCellPerIteration` holds last round's cell across the whole
-        // body, so the slot would be written while the previous result is still
-        // being read.
-        let reused = made_here
-            && repeated.contains(argument)
-            && params
-                .get(slot)
-                .is_some_and(|param| still_live_where_it_is_made(func, live, *argument, *param));
         match params.get(slot) {
-            Some(_) if reused => {
-                escaped(escapes, func, *argument);
-            }
             Some(param) => carried.push((*param, *argument)),
-            // An argument with no parameter to land in is one this does not
-            // model, and what is not modelled is assumed to escape.
-            None => {
-                escaped(escapes, func, *argument);
+            // An argument with no parameter to land in is not modelled.
+            None => escaped(escapes, func, *argument),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CarryEdge {
+    Alias(ValueId),
+    Read(ValueId),
+    Stored(ValueId),
+}
+
+/// A used carrier already defined when an allocation runs can hold its previous
+/// instance. Its last direct read may be earlier than the allocation block:
+/// a field result or another holder can keep that instance alive afterwards.
+/// Forward continuations, defined after the allocation, do not meet this test.
+fn carried_before_allocation(func: &Func) -> impl Fn(ValueId, ValueId) -> bool + '_ {
+    let dominates = super::loops::dominance(func);
+    let mut defined = vec![None; func.values.len()];
+    let mut used = FxHashSet::default();
+    for (at, body) in func.blocks.iter().enumerate() {
+        let block = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+        for value in body.params.iter().chain(&body.ops) {
+            defined[value.0 as usize] = Some(block);
+        }
+        for value in &body.ops {
+            used.extend(super::verify::operands(&func.values[value.0 as usize].kind));
+        }
+        used.extend(super::verify::terminator_operands(&body.terminator));
+    }
+    move |made, param| {
+        used.contains(&param)
+            && match (defined[made.0 as usize], defined[param.0 as usize]) {
+                (Some(made), Some(param)) => dominates(param, made),
+                _ => true,
+            }
+    }
+}
+
+/// Follow the existing pointer, store and read authorities after every call's
+/// summaries are known. A carried container keeps its contents alive too.
+/// Reads follow contents without claiming that the holder itself was returned.
+fn escape_reused_instances(
+    escapes: &mut Escapes,
+    func: &Func,
+    repeated: &FxHashSet<ValueId>,
+    live: &liveness::Liveness,
+    edges: impl IntoIterator<Item = (ValueId, CarryEdge)>,
+    carried: &[(ValueId, ValueId)],
+    mut work_left: usize,
+) {
+    if !repeated.iter().any(|value| made_here(func, *value))
+        || !carried
+            .iter()
+            .any(|(_, argument)| func.values[argument.0 as usize].ty.may_hold_a_reference())
+    {
+        return;
+    }
+    let older_carrier = carried_before_allocation(func);
+    let refuse = |escapes: &mut Escapes| {
+        for value in repeated.iter().filter(|value| made_here(func, **value)) {
+            escaped(escapes, func, *value);
+        }
+    };
+    let mut follows: FxHashMap<ValueId, Vec<CarryEdge>> = FxHashMap::default();
+    for (result, edge) in edges {
+        if work_left == 0 {
+            refuse(escapes);
+            return;
+        }
+        work_left -= 1;
+        follows.entry(result).or_default().push(edge);
+    }
+    for (param, argument) in carried {
+        if !func.values[argument.0 as usize].ty.may_hold_a_reference() {
+            continue;
+        }
+        let mut pending = vec![(*argument, false)];
+        let mut seen = FxHashSet::default();
+        while let Some((one, contents_only)) = pending.pop() {
+            if seen.contains(&(one, contents_only)) {
+                continue;
+            }
+            for source in super::carried_values(func, one) {
+                if work_left == 0 {
+                    refuse(escapes);
+                    return;
+                }
+                work_left -= 1;
+                if !func.values[source.0 as usize].ty.may_hold_a_reference()
+                    || !seen.insert((source, contents_only))
+                {
+                    continue;
+                }
+                if !contents_only
+                    && made_here(func, source)
+                    && repeated.contains(&source)
+                    && (older_carrier(source, *param)
+                        || still_live_where_it_is_made(func, live, source, *param))
+                {
+                    escaped(escapes, func, source);
+                }
+                if let Some(next) = follows.get(&source) {
+                    for edge in next {
+                        pending.push(match *edge {
+                            CarryEdge::Alias(value) => (value, contents_only),
+                            CarryEdge::Read(container) => (container, true),
+                            CarryEdge::Stored(value) => (value, false),
+                        });
+                    }
+                }
             }
         }
     }
@@ -1243,10 +1342,13 @@ fn bodies_reached<'a>(
 /// Can every stored instance die before this frame slot is reused?
 /// Straight-line values and reads of this container's existing contents do
 /// not introduce repeated instances. Otherwise require both definitions in
-/// the same block, container first: every execution of the stored site then
-/// creates a new container first. Nested loops and cross-block domains are
-/// deliberately not guessed. The container's own escape/carried aliases are
-/// still checked independently and propagate to its contents.
+/// the same block: either order creates one instance of each per execution.
+/// The container's own escape/carried aliases are still checked independently
+/// and propagate to its contents, so an old container kept across that block
+/// also prevents reuse of its contents. A merged stored reference needs more:
+/// its root may be last iteration's instance even when that root is defined
+/// in this block. Do not infer a shared lifetime from those definition sites.
+/// Nested loops and cross-block/merged repetition domains are not guessed.
 fn store_lifetime(
     func: &Func,
     repeated: &FxHashSet<ValueId>,
@@ -1256,21 +1358,37 @@ fn store_lifetime(
     // A continuation parameter may execute in a loop without appearing in
     // block.ops. Its allocating origins, rather than the merge or view, own
     // the repetition domain. A merge is safe only for every incoming origin.
-    super::carried_values(func, stored).all(|source| {
-        if matches!(func.values[source.0 as usize].kind,
-            OpKind::BlockParam(_) | OpKind::Erase { .. } | OpKind::Unerase { .. }
-                | OpKind::Convert(_) | OpKind::FieldView { .. } | OpKind::NativeStringView { .. })
-            || !repeated.contains(&source)
+    let mut merged = false;
+    let mut needs_lockstep = false;
+    for source in super::carried_values(func, stored) {
+        if matches!(func.values[source.0 as usize].kind, OpKind::BlockParam(_)) {
+            merged = true;
+            continue;
+        }
+        if matches!(
+            func.values[source.0 as usize].kind,
+            OpKind::Erase { .. }
+                | OpKind::Unerase { .. }
+                | OpKind::Convert(_)
+                | OpKind::FieldView { .. }
+                | OpKind::NativeStringView { .. }
+        ) || !repeated.contains(&source)
             || matches!(&func.values[source.0 as usize].kind,
                 OpKind::FieldGet { object, .. } | OpKind::ArrayGet { array: object, .. } if *object == container)
         {
-            return true;
+            continue;
         }
-        repeated.contains(&container) && func.blocks.iter().any(|block| {
-            let Some(container_at) = block.ops.iter().position(|value| *value == container) else { return false; };
-            block.ops[container_at + 1..].contains(&source)
-        })
-    })
+        needs_lockstep = true;
+        if !repeated.contains(&container)
+            || !func
+                .blocks
+                .iter()
+                .any(|block| block.ops.contains(&container) && block.ops.contains(&source))
+        {
+            return false;
+        }
+    }
+    !needs_lockstep || !merged
 }
 
 /// The caller's half of a store into a parameter.
@@ -1484,7 +1602,7 @@ mod tests {
     }
 
     #[test]
-    fn container_recreation_must_precede_every_stored_instance() {
+    fn container_and_stored_instance_must_be_recreated_in_lockstep() {
         for through_call in [false, true] {
             let setter = func(
                 "set",
@@ -1565,8 +1683,14 @@ mod tests {
                     },
                 }],
             );
+            // Closure captures and cycles create the stored object first.
+            // Both sites still execute once per iteration, and neither old
+            // instance survives the next execution of this block.
+            let mut reversed = control.clone();
+            reversed.name = "reversed".to_owned();
+            reversed.blocks[0].ops.swap(0, 1);
             let program = Program {
-                funcs: vec![nested, control, setter],
+                funcs: vec![nested, control, reversed, setter],
                 ..Program::default()
             };
             let answer = analyze_program(&program);
@@ -1574,10 +1698,420 @@ mod tests {
                 answer[0].escapes(ValueId(1)),
                 "nested, through_call={through_call}"
             );
-            assert!(
-                answer[1].is_frame_local(ValueId(1)),
-                "lockstep, through_call={through_call}"
+            for at in [1, 2] {
+                assert!(
+                    answer[at].is_frame_local(ValueId(1)),
+                    "{}, through_call={through_call}",
+                    program.funcs[at].name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn coallocation_does_not_confine_a_carried_prior_instance() {
+        let mut funcs = Vec::new();
+        for prior in [true, false] {
+            funcs.push(func(
+                if prior { "prior" } else { "current" },
+                0,
+                vec![
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::BlockParam(0), object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::FieldSet {
+                            object: ValueId(2),
+                            field: 0,
+                            value: ValueId(if prior { 1 } else { 3 }),
+                        },
+                        HirType::Void,
+                    ),
+                    op(
+                        OpKind::FieldGet {
+                            object: ValueId(2),
+                            field: 0,
+                        },
+                        object(),
+                    ),
+                    op(OpKind::ConstBool(true), HirType::Bool),
+                ],
+                vec![
+                    Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(0), ValueId(6)],
+                        terminator: Terminator::Jump {
+                            target: BlockId(1),
+                            args: vec![ValueId(0)],
+                        },
+                    },
+                    Block {
+                        params: vec![ValueId(1)],
+                        ops: vec![ValueId(2), ValueId(3), ValueId(4), ValueId(5)],
+                        terminator: Terminator::Branch {
+                            cond: ValueId(6),
+                            then_target: BlockId(1),
+                            then_args: vec![ValueId(3)],
+                            else_target: BlockId(2),
+                            else_args: Vec::new(),
+                        },
+                    },
+                    Block {
+                        params: Vec::new(),
+                        ops: Vec::new(),
+                        terminator: Terminator::Return(None),
+                    },
+                ],
+            ));
+        }
+        let answer = analyze_program(&Program {
+            funcs,
+            ..Program::default()
+        });
+        // The sole difference is whether the holder receives this iteration's
+        // object or last iteration's. The latter must survive slot reuse.
+        assert!(answer[0].escapes(ValueId(3)), "prior instance");
+        assert!(answer[1].is_frame_local(ValueId(3)), "current instance");
+    }
+
+    fn carried_holder(prior: bool, alias: Option<OpKind>) -> Func {
+        let carried = if prior {
+            if alias.is_some() { 8 } else { 5 }
+        } else {
+            0
+        };
+        func(
+            if prior {
+                "prior_holder"
+            } else {
+                "initial_holder"
+            },
+            1,
+            vec![
+                op(OpKind::Param(0), object()),
+                op(OpKind::BlockParam(0), object()),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::FieldGet {
+                        object: ValueId(1),
+                        field: 0,
+                    },
+                    object(),
+                ),
+                op(
+                    OpKind::FieldGet {
+                        object: ValueId(3),
+                        field: 1,
+                    },
+                    HirType::NUMBER,
+                ),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(5),
+                        field: 0,
+                        value: ValueId(2),
+                    },
+                    HirType::Void,
+                ),
+                op(OpKind::ConstBool(true), HirType::Bool),
+                op(alias.unwrap_or(OpKind::Convert(ValueId(5))), object()),
+            ],
+            vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(7)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(0)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(1)],
+                    ops: vec![
+                        ValueId(2),
+                        ValueId(3),
+                        ValueId(4),
+                        ValueId(5),
+                        ValueId(6),
+                        ValueId(8),
+                    ],
+                    terminator: Terminator::Branch {
+                        cond: ValueId(7),
+                        then_target: BlockId(1),
+                        then_args: vec![ValueId(carried)],
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(None),
+                },
+            ],
+        )
+    }
+
+    fn identity_func() -> Func {
+        let mut identity = func(
+            "identity",
+            1,
+            vec![op(OpKind::Param(0), object())],
+            vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0)],
+                terminator: Terminator::Return(Some(ValueId(0))),
+            }],
+        );
+        identity.return_type = object();
+        identity
+    }
+
+    #[test]
+    fn a_carried_container_keeps_its_prior_contents_alive() {
+        let mut decisions = Vec::new();
+        for alias in [
+            None,
+            Some(OpKind::Convert(ValueId(5))),
+            Some(OpKind::Call {
+                callee: Callee::Direct("identity".to_owned()),
+                args: vec![ValueId(5)],
+                frame: None,
+            }),
+        ] {
+            let answer = analyze_program(&Program {
+                funcs: vec![
+                    carried_holder(true, alias.clone()),
+                    carried_holder(false, alias),
+                    identity_func(),
+                ],
+                ..Program::default()
+            });
+            decisions.push([answer[0].escapes(ValueId(2)), answer[1].escapes(ValueId(2))]);
+        }
+        // Only the holder supplied on the back edge changes within each pair.
+        // Keep its old child alive, through direct, view and returned aliases.
+        assert_eq!(
+            decisions,
+            [[true, false]; 3],
+            "prior/initial holder, direct/view/call"
+        );
+    }
+
+    #[test]
+    fn a_holder_read_before_the_allocation_block_keeps_its_item_alive() {
+        let mut funcs = Vec::new();
+        for prior in [true, false] {
+            let mut body = carried_holder(prior, None);
+            let later = Block {
+                params: Vec::new(),
+                ops: vec![ValueId(2), ValueId(4), ValueId(5), ValueId(6), ValueId(8)],
+                terminator: body.blocks[1].terminator.clone(),
+            };
+            body.blocks[1].ops = vec![ValueId(3)];
+            body.blocks[1].terminator = Terminator::Jump {
+                target: BlockId(3),
+                args: Vec::new(),
+            };
+            body.blocks.push(later);
+            funcs.push(body);
+        }
+        let answer = analyze_program(&Program {
+            funcs,
+            ..Program::default()
+        });
+        // The old holder dies in the header, but its field result is still
+        // read after the item's allocation runs again in the next block.
+        assert!(answer[0].escapes(ValueId(2)), "prior holder's item");
+        assert!(
+            answer[1].is_frame_local(ValueId(2)),
+            "caller's initial holder"
+        );
+    }
+
+    #[test]
+    fn a_forwarded_current_instance_dies_before_the_next_allocation() {
+        let body = func(
+            "forwarded",
+            0,
+            vec![
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::Call {
+                        callee: Callee::Direct("identity".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    object(),
+                ),
+                op(OpKind::BlockParam(0), object()),
+                op(
+                    OpKind::FieldGet {
+                        object: ValueId(2),
+                        field: 1,
+                    },
+                    HirType::NUMBER,
+                ),
+                op(OpKind::ConstBool(true), HirType::Bool),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(5),
+                    },
+                    HirType::Void,
+                ),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(5),
+                        field: 0,
+                        value: ValueId(0),
+                    },
+                    HirType::Void,
+                ),
+            ],
+            vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(4)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(5), ValueId(6), ValueId(7), ValueId(1)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(2),
+                        args: vec![ValueId(1)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(2)],
+                    ops: vec![ValueId(3)],
+                    terminator: Terminator::Branch {
+                        cond: ValueId(4),
+                        then_target: BlockId(1),
+                        then_args: Vec::new(),
+                        else_target: BlockId(3),
+                        else_args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(None),
+                },
+            ],
+        );
+        let answer = analyze_program(&Program {
+            funcs: vec![body, identity_func()],
+            ..Program::default()
+        });
+        assert!(answer[0].is_frame_local(ValueId(0)));
+        assert!(
+            answer[0].is_frame_local(ValueId(5)),
+            "fresh cycle terminates without losing its frames"
+        );
+    }
+
+    #[test]
+    fn a_carried_field_result_keeps_the_item_but_not_its_holder() {
+        let mut decisions = Vec::new();
+        for read in [
+            OpKind::FieldGet {
+                object: ValueId(5),
+                field: 0,
+            },
+            OpKind::Call {
+                callee: Callee::Direct("read_field".to_owned()),
+                args: vec![ValueId(5)],
+                frame: None,
+            },
+        ] {
+            let mut funcs = Vec::new();
+            for prior in [true, false] {
+                let mut body = carried_holder(prior, Some(read.clone()));
+                // This parameter carries the item itself, not its holder.
+                for at in [3, 4] {
+                    body.values[at].kind = OpKind::FieldGet {
+                        object: ValueId(1),
+                        field: 1,
+                    };
+                    body.values[at].ty = HirType::NUMBER;
+                }
+                funcs.push(body);
+            }
+            let mut reader = func(
+                "read_field",
+                1,
+                vec![
+                    op(OpKind::Param(0), object()),
+                    op(
+                        OpKind::FieldGet {
+                            object: ValueId(0),
+                            field: 0,
+                        },
+                        object(),
+                    ),
+                ],
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1)],
+                    terminator: Terminator::Return(Some(ValueId(1))),
+                }],
             );
+            reader.return_type = object();
+            funcs.push(reader);
+            let answer = analyze_program(&Program {
+                funcs,
+                ..Program::default()
+            });
+            decisions.push([
+                answer[0].escapes(ValueId(2)),
+                answer[1].escapes(ValueId(2)),
+                answer[0].is_frame_local(ValueId(5)),
+                answer[1].is_frame_local(ValueId(5)),
+            ]);
+        }
+        assert_eq!(
+            decisions,
+            [[true, false, true, true]; 2],
+            "local/callee read, prior/initial item"
+        );
+    }
+
+    #[test]
+    fn exhausted_carry_work_refuses_repeated_allocations_only() {
+        let mut body = carried_holder(false, None);
+        let initial = ValueId(u32::try_from(body.values.len()).expect("small fixture"));
+        body.values
+            .push(op(OpKind::ObjectNew { frame: false }, object()));
+        body.blocks[0].ops.push(initial);
+        let repeated = repeats(&body);
+        let live = liveness::analyze(&body);
+        let carried = [(ValueId(1), ValueId(0)), (ValueId(1), ValueId(0))];
+        let mut normal = Escapes::default();
+        escape_reused_instances(
+            &mut normal,
+            &body,
+            &repeated,
+            &live,
+            [],
+            &carried,
+            CARRY_BUDGET,
+        );
+        assert!(normal.is_frame_local(ValueId(2)));
+        for budget in [0, 1] {
+            let mut answer = Escapes::default();
+            escape_reused_instances(&mut answer, &body, &repeated, &live, [], &carried, budget);
+            assert!(answer.escapes(ValueId(2)), "budget={budget}");
+            assert!(answer.escapes(ValueId(5)), "budget={budget}");
+            assert!(answer.is_frame_local(initial), "budget={budget}");
         }
     }
 
