@@ -21,6 +21,7 @@ mod generator_inputs;
 mod gir_surface;
 mod jar_resources;
 mod multi_emit;
+mod native_paths;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
@@ -4989,6 +4990,7 @@ fn compile_program(
             compile_one(
                 with.cache,
                 with.tools,
+                out,
                 &from,
                 &object,
                 &arguments,
@@ -5040,6 +5042,7 @@ fn compile_program(
         compile_one(
             with.cache,
             with.tools,
+            out,
             &from,
             &object,
             &arguments,
@@ -6613,18 +6616,28 @@ impl Toolchain {
         command
     }
 
+    fn command_in(&self, directory: &Utf8Path) -> Result<std::process::Command> {
+        let mut command = std::process::Command::new(native_paths::program(&self.program)?);
+        command
+            .args(native_paths::arguments(&self.leading, directory)?)
+            .current_dir(directory);
+        Ok(command)
+    }
+
     /// `command`, for a link.
-    fn link_command(&self) -> std::process::Command {
+    fn link_command(&self, directory: &Utf8Path) -> Result<std::process::Command> {
         let mut command = match self.linker.as_deref() {
             Some([program, leading @ ..]) => {
-                let mut command = std::process::Command::new(program);
-                command.args(leading);
+                let mut command = std::process::Command::new(native_paths::program(program)?);
+                command
+                    .args(native_paths::arguments(leading, directory)?)
+                    .current_dir(directory);
                 command
             }
-            _ => self.command(),
+            _ => self.command_in(directory)?,
         };
-        command.args(&self.link);
-        command
+        command.args(native_paths::arguments(&self.link, directory)?);
+        Ok(command)
     }
 
     /// What the object cache keys on, so a target change is a cache miss.
@@ -7225,15 +7238,18 @@ fn link_c(
     if product.kind == "static-library" {
         {
             let mut command = archiver(format);
-            command.arg("rcs").arg(artifact.as_str());
+            command
+                .current_dir(out)
+                .arg("rcs")
+                .arg(native_paths::relative(&artifact, out)?);
             for object in &objects {
-                command.arg(object.as_str());
+                command.arg(native_paths::relative(object, out)?);
             }
             run(command, &format!("archiving `{name}`"))?;
         }
     } else {
         {
-            let mut command = tools.link_command();
+            let mut command = tools.link_command(out)?;
             if tools.lto {
                 command.args(lto_flags()).args(&tools.cpu_at_link);
             }
@@ -7251,10 +7267,7 @@ fn link_c(
                 // agree, and reported below because an output nobody is told
                 // about reads later as one that was never generated.
                 if format == ObjectFormat::Coff {
-                    command.arg(format!(
-                        "-Wl,--out-implib={}",
-                        out.join(format!("{name}.lib"))
-                    ));
+                    command.arg(format!("-Wl,--out-implib={name}.lib"));
                 }
                 if !addon {
                     hide_all_but_the_exports(&mut command, out, wrote, format)?;
@@ -7262,7 +7275,7 @@ fn link_c(
                 name_the_library(&mut command, name, product, target, format);
             }
             for object in &objects {
-                command.arg(object.as_str());
+                command.arg(native_paths::relative(object, out)?);
             }
             match format {
                 // libm is part of libSystem there, and the zig-derived sysroot
@@ -7277,9 +7290,7 @@ fn link_c(
             // objects needing it resolves nothing -- which is the failure mode
             // that reads as "the dependency did not work" rather than as an
             // ordering rule.
-            for flag in &needs.libs {
-                command.arg(flag);
-            }
+            command.args(native_paths::arguments(&needs.libs, out)?);
             command.args(binding_link_flags(wrote));
             command.args(loop_host_link_flags(&sources, format));
             // Swift's runtime, which the Swift objects name through their
@@ -7305,7 +7316,9 @@ fn link_c(
             if shared && !addon && format == ObjectFormat::Elf {
                 command.arg("-Wl,--no-undefined");
             }
-            command.arg("-o").arg(artifact.as_str());
+            command
+                .arg("-o")
+                .arg(native_paths::relative(&artifact, out)?);
             run(command, &format!("linking `{name}`"))?;
             if addon {
                 refuse_unresolved(name, &artifact)?;
@@ -7737,17 +7750,24 @@ impl ObjectCache {
         }
     }
 
-    fn entry(&self, source: &Utf8Path, arguments: &[String]) -> Option<Entry> {
+    fn entry(
+        &self,
+        source: &Utf8Path,
+        arguments: &[String],
+        directory: &Utf8Path,
+    ) -> Option<Entry> {
         use std::hash::{Hash, Hasher};
-        let directory = self.directory.as_ref()?;
+        let cache_directory = self.directory.as_ref()?;
         let mut hasher = rustc_hash::FxHasher::default();
         self.compiler.hash(&mut hasher);
+        // Relative argv must not share a cache entry across include-search roots.
+        directory.hash(&mut hasher);
         std::fs::read(source).ok()?.hash(&mut hasher);
         arguments.hash(&mut hasher);
         let key = format!("{:016x}", hasher.finish());
         Some(Entry {
-            object: directory.join(format!("{key}.o")),
-            deps: directory.join(format!("{key}.deps")),
+            object: cache_directory.join(format!("{key}.o")),
+            deps: cache_directory.join(format!("{key}.deps")),
         })
     }
 
@@ -7799,7 +7819,7 @@ impl ObjectCache {
     }
 
     /// Record what a compile read, from the depfile `-MMD` wrote.
-    fn record(entry: &Entry, depfile: &Utf8Path) {
+    fn record(entry: &Entry, depfile: &Utf8Path, directory: &Utf8Path) {
         let Ok(text) = std::fs::read_to_string(depfile) else {
             return;
         };
@@ -7808,7 +7828,8 @@ impl ObjectCache {
         let listed = text.split_once(':').map_or("", |(_, rest)| rest);
         let mut recorded = String::new();
         for path in listed.split_whitespace().filter(|word| *word != "\\") {
-            if let Ok(bytes) = std::fs::read(path) {
+            let path = directory.join(path);
+            if let Ok(bytes) = std::fs::read(&path) {
                 use std::fmt::Write;
                 let _ = writeln!(recorded, "{:016x} {path}", hash_of(&bytes));
             }
@@ -7823,8 +7844,70 @@ impl ObjectCache {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod module_cache_tests {
-    use super::{Entry, ObjectCache};
+    use super::{Entry, ObjectCache, Toolchain, compile_one};
     use camino::Utf8PathBuf;
+
+    #[test]
+    fn a_shared_compile_cache_keeps_each_build_directorys_headers() {
+        let available = std::process::Command::new("clang")
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| output.status.success());
+        if !available {
+            assert!(
+                std::env::var_os("NTS_TESTS_REQUIRE_TOOLING").is_none(),
+                "clang is required"
+            );
+            eprintln!("SKIP shared native cache: clang is not available");
+            return;
+        }
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-native-cache-dirs-{}", std::process::id()));
+        let tools = Toolchain {
+            program: "clang".to_owned(),
+            leading: Vec::new(),
+            link: Vec::new(),
+            linker: None,
+            lto: false,
+            cpu: Vec::new(),
+            cpu_at_link: Vec::new(),
+        };
+        let cache = ObjectCache::new(Some(&root.join("cache")), &tools);
+        for (directory, answer) in [("left", 17), ("right", 23)] {
+            let directory = root.join(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            let source = directory.join("program.c");
+            let binary = directory.join("program");
+            std::fs::write(
+                &source,
+                "#include \"answer.h\"\nint main(void) { return ANSWER; }\n",
+            )
+            .unwrap();
+            std::fs::write(
+                directory.join("answer.h"),
+                format!("#define ANSWER {answer}\n"),
+            )
+            .unwrap();
+            let arguments = [source.to_string(), "-o".to_owned(), binary.to_string()];
+            compile_one(
+                &cache,
+                &tools,
+                &directory,
+                &source,
+                &binary,
+                &arguments,
+                "shared-cache control",
+            )
+            .unwrap();
+            assert_eq!(
+                std::process::Command::new(&binary).status().unwrap().code(),
+                Some(answer),
+                "the cached compile used another directory's header"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     /// A whole module's entry is current while every input hashes the same,
     /// and its key follows their contents: an edited header is a miss, not a
@@ -7879,12 +7962,15 @@ mod module_cache_tests {
 fn compile_one(
     cache: &ObjectCache,
     tools: &Toolchain,
+    directory: &Utf8Path,
     source: &Utf8Path,
     object: &Utf8Path,
     arguments: &[String],
     what: &str,
 ) -> Result<()> {
-    let entry = cache.entry(source, arguments);
+    let directory = native_paths::absolute(directory)?;
+    let arguments = native_paths::arguments(arguments, &directory)?;
+    let entry = cache.entry(source, &arguments, &directory);
     if let Some(entry) = &entry
         && entry.object.exists()
         && ObjectCache::current(entry)
@@ -7894,10 +7980,12 @@ fn compile_one(
         return Ok(());
     }
     let depfile = Utf8PathBuf::from(format!("{object}.d"));
-    let mut command = tools.command();
-    command.args(arguments);
+    let mut command = tools.command_in(&directory)?;
+    command.args(&arguments);
     if entry.is_some() {
-        command.args(["-MMD", "-MF"]).arg(depfile.as_str());
+        command
+            .args(["-MMD", "-MF"])
+            .arg(native_paths::relative(&depfile, &directory)?);
     }
     run(command, what)?;
     if let Some(entry) = &entry {
@@ -7907,7 +7995,7 @@ fn compile_one(
         // A cache that cannot be written is not a build failure. It is the
         // build it would have been without one.
         if std::fs::copy(object, &entry.object).is_ok() {
-            ObjectCache::record(entry, &depfile);
+            ObjectCache::record(entry, &depfile, &directory);
         }
     }
     Ok(())
@@ -8137,6 +8225,7 @@ fn compile_native(
         compile_one(
             with.cache,
             with.tools,
+            out,
             source,
             &object,
             &arguments,
@@ -8214,7 +8303,7 @@ fn hide_all_but_the_exports(
             text.push('\n');
         }
         std::fs::write(&definitions, text).with_context(|| format!("writing {definitions}"))?;
-        command.arg(definitions.as_str());
+        command.arg(native_paths::relative(&definitions, out)?);
     } else if format == ObjectFormat::MachO {
         // ld64 has no version scripts. An exported-symbols list is the same
         // set, in Mach-O's spelling of a C name (a leading underscore), and a
@@ -8228,12 +8317,18 @@ fn hide_all_but_the_exports(
             text.push('\n');
         }
         std::fs::write(&list, text).with_context(|| format!("writing {list}"))?;
-        command.arg(format!("-Wl,-exported_symbols_list,{list}"));
+        command.arg(format!(
+            "-Wl,-exported_symbols_list,{}",
+            native_paths::relative(&list, out)?
+        ));
     } else {
         let script = out.join("exports.map");
         std::fs::write(&script, version_script(&wrote.published))
             .with_context(|| format!("writing {script}"))?;
-        command.arg(format!("-Wl,--version-script={script}"));
+        command.arg(format!(
+            "-Wl,--version-script={}",
+            native_paths::relative(&script, out)?
+        ));
         // **A name in the script that no symbol answers to is an error, not a
         // no-op.** By default `ld` accepts an unmatched pattern silently, which is
         // how `global: Counter;` and a doubled `global: stdin_;` both went

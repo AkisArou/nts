@@ -464,6 +464,80 @@ export default defineConfig({
 });
 "#;
 
+/// Different build paths must not change assert strings or `ThinLTO` identities.
+#[test]
+fn native_artifacts_do_not_depend_on_the_build_directory() {
+    if !available() {
+        skip("node, clang and nm");
+        return;
+    }
+    let config = r#"
+import { defineConfig, library, app, target } from "@nts/config";
+export default defineConfig({
+  build: { cache: { local: false } },
+  products: {
+    c: library.native({ entry: "./src/main.ts", targets: [target.linux({backend: "c"})] }),
+    llvm: library.native({ entry: "./src/main.ts", targets: [target.linux({backend: "llvm"})] }),
+    exeC: app({kind: "executable", entry: "./src/main.ts", targets: [target.linux({backend: "c"})]}),
+    exeLlvm: app({kind: "executable", entry: "./src/main.ts", targets: [target.linux({backend: "llvm"})]})
+  }
+});
+"#;
+    let source = "export function text(n: number): string {\n\
+        let value = n;\n\
+        const step = (): number => { value += 0.25; return value; };\n\
+        return String(step());\n\
+        }\nconsole.log(text(1));\n";
+    let projects = [
+        fixture("deterministic-native-left", config),
+        fixture("deterministic-native-longer/right", config),
+    ];
+    for project in &projects {
+        std::fs::write(project.join("src/main.ts"), source).expect("entry");
+        let tmp = project.join("tmp");
+        std::fs::create_dir_all(&tmp).expect("TMPDIR");
+        let built = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("TMPDIR", &tmp),
+        )
+        .expect("building native artifacts");
+        assert!(
+            built.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&built.stdout),
+            String::from_utf8_lossy(&built.stderr)
+        );
+        assert!(
+            !String::from_utf8_lossy(&built.stderr).contains("NTS"),
+            "the build refused code: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+    }
+    for (product, program, binary) in [
+        ("c", "program.c", "libc.so"),
+        ("llvm", "program.ll", "libllvm.so"),
+        ("exeC", "program.c", "exeC"),
+        ("exeLlvm", "program.ll", "exeLlvm"),
+    ] {
+        let outputs = projects
+            .each_ref()
+            .map(|project| project.join(format!(".nts/build/{product}/linux-gnu-x86_64")));
+        for file in [program, "nts_runtime.c.o", binary] {
+            let bytes = outputs.each_ref().map(|out| {
+                std::fs::read(out.join(file))
+                    .unwrap_or_else(|why| panic!("{product}/{file}: {why}"))
+            });
+            assert!(!bytes[0].is_empty(), "empty {product}/{file}");
+            assert!(
+                bytes[0] == bytes[1],
+                "{product}/{file} depends on its build path"
+            );
+        }
+    }
+}
+
 /// A library runs its own module evaluation when it loads.
 ///
 /// **Nothing caught this until it was asked directly.** The three tests above
