@@ -62,6 +62,27 @@ pub(super) fn declare(
             .collect(),
     };
     let layouts = LayoutIndex::build(program);
+    for contract in hierarchy.access_families.callable.values() {
+        let Some(face) = layouts.of_class(contract.face) else {
+            continue;
+        };
+        let Some(field) = program.layouts[face].index_of_key(&contract.member) else {
+            continue;
+        };
+        program
+            .interface_access
+            .callable
+            .push(interface_access::Callable {
+                face: contract.face,
+                member: contract.member.clone(),
+                field,
+                owners: contract
+                    .suppliers
+                    .iter()
+                    .map(|supplier| supplier.owner)
+                    .collect(),
+            });
+    }
     let mut functions = Vec::new();
     for family in &hierarchy.access_families.licensed {
         let Some(face) = layouts.of_class(family.face) else {

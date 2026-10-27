@@ -633,10 +633,24 @@ fn check_native_views(program: &Program, problems: &mut Vec<Invalid>) {
                         .iter()
                         .filter(|family| family.face == face)
                         .collect();
-                    let supplied = !families.is_empty()
+                    let callable: Vec<_> = program
+                        .interface_access
+                        .callable
+                        .iter()
+                        .filter(|contract| contract.face == face)
+                        .collect();
+                    let supplied = (!families.is_empty() || !callable.is_empty())
                         && families
                             .iter()
-                            .all(|family| family.owners.contains(&source));
+                            .all(|family| family.owners.contains(&source))
+                        && callable.iter().all(|contract| {
+                            !contract.owners.is_empty()
+                                && contract.owners.contains(&source)
+                                && layouts.of_class(face).is_some_and(|at| {
+                                    program.layouts[at].index_of_key(&contract.member)
+                                        == Some(contract.field)
+                                })
+                        });
                     let object_layout = |ty: &HirType| match ty {
                         HirType::Managed(super::ManagedType::Object(ty)) => layouts.of_class(*ty),
                         _ => None,

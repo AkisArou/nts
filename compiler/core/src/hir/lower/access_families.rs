@@ -28,6 +28,28 @@ struct Sources {
     symbols: FxHashMap<NodeId, u32>,
 }
 
+impl Sources {
+    fn collect(probe: &FuncBuilder<'_>, literals: BTreeMap<TypeId, Vec<NodeId>>) -> Self {
+        Self {
+            ready: field_initialization::Ready::collect(probe),
+            literals,
+            symbols: probe
+                .snapshot
+                .symbols
+                .iter()
+                .enumerate()
+                .flat_map(|(at, symbol)| {
+                    let at = u32::try_from(at).unwrap_or(u32::MAX);
+                    symbol
+                        .declarations
+                        .iter()
+                        .map(move |declaration| (*declaration, at))
+                })
+                .collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) enum Reader {
     Stored,
@@ -410,6 +432,9 @@ impl FuncBuilder<'_> {
         if self.known_allocation(object) == Some(face) {
             return Ok(None);
         }
+        if self.projected_callable(face, member).is_some() {
+            return Err(self.unsupported(at, "reading a method-backed callable property as a function value; its identity and unbound receiver are not represented"));
+        }
         if self.hierarchy.cast_faces.contains(&face)
             && self.hierarchy.access_families.get(face, member).is_none()
         {
@@ -635,6 +660,14 @@ impl FuncBuilder<'_> {
         face: TypeId,
         member: &super::PropertyKey,
     ) -> Result<Option<super::Place>, nts_diagnostics::Diagnostic> {
+        if self.projected_callable(face, member).is_some()
+            && self.known_allocation(object) != Some(face)
+        {
+            return Err(self.unsupported(
+                at,
+                "writing a method-backed callable property without concrete storage",
+            ));
+        }
         // A cast is no evidence that the object has storage for this field.
         // Refuse before even an unlicensed family can fall back to FieldSet.
         if self.hierarchy.cast_faces.contains(&face) {
@@ -823,6 +856,8 @@ impl FuncBuilder<'_> {
 #[derive(Debug, Clone, Default)]
 pub(super) struct Families {
     pub licensed: Vec<Family>,
+    pub callable:
+        BTreeMap<(TypeId, super::PropertyKey), std::sync::Arc<super::callable_fields::Contract>>,
     pub declined: BTreeMap<(TypeId, super::PropertyKey), &'static str>,
     by_member: FxHashMap<TypeId, BTreeMap<super::PropertyKey, usize>>,
     by_site: FxHashMap<NodeId, Vec<usize>>,
@@ -887,6 +922,15 @@ impl Families {
     pub(super) fn carries(&self, owner: TypeId, face: TypeId) -> bool {
         self.transports.contains(&(owner, face))
     }
+
+    pub(super) fn projects_method(&self, owner: TypeId, member: &super::MemberKey) -> bool {
+        self.callable.values().any(|contract| {
+            contract
+                .methods
+                .iter()
+                .any(|(root, key)| *root == owner && key == member)
+        })
+    }
     /// The owners other than itself that a value of `face` may hold through a
     /// licensed view, in type order so a refusal naming one is deterministic.
     pub(super) fn carried_by(&self, face: TypeId) -> Vec<TypeId> {
@@ -924,7 +968,7 @@ impl Families {
 
     pub(super) fn collect(probe: &mut FuncBuilder<'_>, hierarchy: &Hierarchy) -> Self {
         let sites = super::access_family_sites::collect(probe, hierarchy);
-        let used = used_members(&sites);
+        let mut used = used_members(&sites);
         // Every program's objects, whether or not it reads a field through an
         // interface: a union of interfaces is read without one, and its arms
         // can hold any of them (`Self::structural_owners`).
@@ -934,6 +978,7 @@ impl Families {
         // whatever storage a backend gives a face: every type is answered.
         let flow =
             super::access_family_flow::Bound::collect(probe, hierarchy, &owners.all, &literals);
+        let before_read = add_supplied_callables(probe, hierarchy, &flow, &mut used);
         if used.is_empty() {
             return Self {
                 flow,
@@ -941,23 +986,7 @@ impl Families {
                 ..Self::default()
             };
         }
-        let sources = Sources {
-            ready: field_initialization::Ready::collect(probe),
-            literals,
-            symbols: probe
-                .snapshot
-                .symbols
-                .iter()
-                .enumerate()
-                .flat_map(|(at, symbol)| {
-                    let at = u32::try_from(at).unwrap_or(u32::MAX);
-                    symbol
-                        .declarations
-                        .iter()
-                        .map(move |declaration| (*declaration, at))
-                })
-                .collect(),
-        };
+        let sources = Sources::collect(probe, literals);
         let mut result = Self {
             flow,
             ..Self::default()
@@ -992,6 +1021,16 @@ impl Families {
                 else {
                     continue;
                 };
+                if before_read.contains(&(face, member.clone())) {
+                    if let Some(contract) =
+                        callable_contract(probe, hierarchy, &sources, face, wanted, &candidates)
+                    {
+                        result
+                            .callable
+                            .insert((face, member), std::sync::Arc::new(contract));
+                    }
+                    continue;
+                }
                 match family(probe, hierarchy, &sources, face, wanted, &candidates) {
                     Ok(family) => {
                         result
@@ -1002,11 +1041,24 @@ impl Families {
                         result.licensed.push(family);
                     }
                     Err(reason) => {
-                        result.declined.insert((face, member), reason);
+                        if let Some(contract) =
+                            callable_contract(probe, hierarchy, &sources, face, wanted, &candidates)
+                        {
+                            result
+                                .callable
+                                .insert((face, member), std::sync::Arc::new(contract));
+                        } else {
+                            result.declined.insert((face, member), reason);
+                        }
                     }
                 }
             }
         }
+        // A declined data member still blocks the entire view. Do not change
+        // dispatch for methods belonging only to such an unavailable view.
+        result
+            .callable
+            .retain(|(face, _), _| !result.declined.keys().any(|(declined, _)| declined == face));
         result.record_transports(hierarchy);
         for (site, reads) in sites {
             let families: Vec<_> = reads
@@ -1047,6 +1099,24 @@ impl Families {
                     .map(|supply| (supply.owner, family.face)),
             );
         }
+        for contract in self.callable.values() {
+            if self.declined.keys().any(|(face, _)| *face == contract.face) {
+                continue;
+            }
+            transports.extend(
+                contract
+                    .suppliers
+                    .iter()
+                    .filter(|supply| {
+                        hierarchy
+                            .declares
+                            .get(&hierarchy.declared_face(contract.face))
+                            .is_none_or(Vec::is_empty)
+                            || hierarchy.descends_from(supply.owner, contract.face)
+                    })
+                    .map(|supply| (supply.owner, contract.face)),
+            );
+        }
         self.transports.extend(transports);
     }
 
@@ -1056,6 +1126,155 @@ impl Families {
             .and_then(|members| members.get(member))
             .and_then(|at| self.licensed.get(*at))
     }
+}
+
+/// Transport can precede any read of an optional callback. Only a member an
+/// actual source supplies as a method needs this additional calls-only plan.
+fn add_supplied_callables(
+    probe: &FuncBuilder<'_>,
+    hierarchy: &Hierarchy,
+    flow: &super::access_family_flow::Bound,
+    used: &mut BTreeMap<TypeId, Vec<super::PropertyKey>>,
+) -> FxHashSet<(TypeId, super::PropertyKey)> {
+    let mut before_read = FxHashSet::default();
+    for face in hierarchy
+        .faces
+        .iter()
+        .chain(hierarchy.face_instances.keys())
+    {
+        if flow.reaching(*face).next().is_none() {
+            continue;
+        }
+        let Some(properties) = properties(probe, *face) else {
+            continue;
+        };
+        for property in properties {
+            if property.optional
+                && property.kind == MemberKind::Field
+                && super::callable_fields::signature(probe.snapshot, property.ty).is_some()
+                && flow.reaching(*face).any(|owner| {
+                    interfaces::property(probe.snapshot, owner, &property.name)
+                        .is_some_and(|provided| provided.kind == MemberKind::Method)
+                })
+            {
+                let members = used.entry(*face).or_default();
+                if !members.contains(&property.name) {
+                    members.push(property.name.clone());
+                    before_read.insert((*face, property.name.clone()));
+                }
+            }
+        }
+    }
+    before_read
+}
+
+fn callable_contract(
+    probe: &FuncBuilder<'_>,
+    hierarchy: &Hierarchy,
+    sources: &Sources,
+    face: TypeId,
+    wanted: &PropertyRecord,
+    candidates: &[TypeId],
+) -> Option<super::callable_fields::Contract> {
+    use super::callable_fields::{Contract, Kind, SUPPLIER_BUDGET, Supplier, signature};
+    if !wanted.optional
+        || wanted.kind != MemberKind::Field
+        || signature(probe.snapshot, wanted.ty).is_none()
+        || candidates.is_empty()
+        || candidates.len() > SUPPLIER_BUDGET
+        || hierarchy.cast_faces.contains(&face)
+    {
+        return None;
+    }
+    let mut supplies = Vec::new();
+    let mut methods = Vec::new();
+    let mut read_only = wanted.clone();
+    read_only.readonly = true;
+    for owner in candidates {
+        let kind = match interfaces::property(probe.snapshot, *owner, &wanted.name) {
+            None => Kind::Missing,
+            Some(found) => {
+                if signature(probe.snapshot, found.ty).is_none()
+                    || !interfaces::candidate(probe, found, wanted)
+                {
+                    return None;
+                }
+                match found.kind {
+                    MemberKind::Method => {
+                        let declaration = found.declaration?;
+                        // A single source body supplies this signature. An
+                        // overload's first callable type is not necessarily
+                        // its implementation ABI, and foreign declarations
+                        // supply no body here.
+                        if !probe
+                            .children(declaration)
+                            .iter()
+                            .any(|node| probe.kind_of(*node) == Some(syntax::BLOCK))
+                            || probe
+                                .snapshot
+                                .symbols
+                                .get(*sources.symbols.get(&declaration)? as usize)?
+                                .declarations
+                                .len()
+                                != 1
+                        {
+                            return None;
+                        }
+                        let key = super::MemberKey::method(wanted.name.clone());
+                        let root = hierarchy.root_declaring(*owner, &key)?;
+                        methods.push((root, key));
+                        Kind::Method(signature(probe.snapshot, found.ty)?)
+                    }
+                    MemberKind::Field => {
+                        if !matches!(
+                            supply(probe, hierarchy, sources, *owner, &read_only)
+                                .ok()?
+                                .reader,
+                            Reader::Stored
+                        ) {
+                            return None;
+                        }
+                        Kind::Stored
+                    }
+                    MemberKind::Accessor(_) => return None,
+                }
+            }
+        };
+        supplies.push(Supplier {
+            owner: *owner,
+            kind,
+        });
+    }
+    if methods.is_empty() {
+        return None;
+    }
+    // A subclass's own callback can shadow its base's prototype method.
+    // Test the most derived concrete suppliers first.
+    let depth = |owner: TypeId| {
+        let mut at = owner;
+        for depth in 0..super::callable_fields::SUPPLIER_BUDGET {
+            let Some(parent) = hierarchy.base.get(&at) else {
+                return Some(depth);
+            };
+            at = *parent;
+        }
+        None
+    };
+    // An exhausted or cyclic ancestry cannot establish the dispatch order.
+    // Decline the contract rather than treating a partial depth as exact.
+    let depths: FxHashMap<_, _> = supplies
+        .iter()
+        .map(|supply| Some((supply.owner, depth(supply.owner)?)))
+        .collect::<Option<_>>()?;
+    supplies.sort_by_key(|supply| (std::cmp::Reverse(depths[&supply.owner]), supply.owner.0));
+    methods.sort_unstable();
+    methods.dedup();
+    Some(Contract {
+        face,
+        member: wanted.name.clone(),
+        suppliers: supplies,
+        methods,
+    })
 }
 
 /// Declaration-only layouts reserve rows under the same candidate contract
@@ -1727,6 +1946,107 @@ fn join_absences(joined: &mut Option<Vec<u32>>, other: Option<Vec<u32>>) {
 mod tests {
     use super::*;
     use nts_frontend_ts::Frontend;
+
+    #[test]
+    fn stdio_has_a_complete_structural_source_contract() {
+        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let config = root.join("runtime/node/process/tsconfig.json");
+        let captured = Frontend::new(root.as_str())
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
+        let materialised = super::super::super::instantiate::materialise(&captured);
+        let snapshot =
+            super::super::LoweringSnapshot::new(materialised.as_ref().unwrap_or(&captured));
+        let probe = FuncBuilder::probe(&snapshot);
+        let readers = super::super::initialization::PrivateReaders::new(&probe);
+        let closures = super::super::collect_closures(&snapshot, &readers);
+        let (hierarchy, _) = super::super::hierarchy_and_naming(
+            &snapshot,
+            &FxHashMap::default(),
+            &closures,
+            &readers,
+        );
+        let named = |name: &str| {
+            let found: Vec<_> = hierarchy
+                .name
+                .iter()
+                .filter(|(ty, _)| {
+                    snapshot.types[ty.0 as usize].symbol.is_some_and(|symbol| {
+                        let symbol = &snapshot.symbols[symbol.0 as usize];
+                        symbol.name.is_name(name)
+                            && symbol.declarations.iter().any(|node| {
+                                let file = probe.location(*node).file;
+                                snapshot.sources[file.0 as usize]
+                                    .display_path
+                                    .as_str()
+                                    .ends_with("runtime/node/internal/stdio.ts")
+                            })
+                    })
+                })
+                .map(|(ty, _)| *ty)
+                .collect();
+            let candidates: Vec<_> = hierarchy
+                .name
+                .keys()
+                .filter_map(|ty| {
+                    let symbol = snapshot.types[ty.0 as usize].symbol?;
+                    let symbol = &snapshot.symbols[symbol.0 as usize];
+                    symbol.name.is_name(name).then(|| {
+                        (
+                            ty,
+                            symbol
+                                .declarations
+                                .iter()
+                                .map(|node| {
+                                    let file = probe.location(*node).file;
+                                    &snapshot.sources[file.0 as usize]
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                })
+                .collect();
+            assert_eq!(
+                found.len(),
+                1,
+                "expected one source {name}, got {found:?}; candidates={candidates:?}"
+            );
+            found[0]
+        };
+        let face = named("WritableLike");
+        let owner = named("StandardStream");
+        for ty in [face, owner] {
+            let member = interfaces::property(&snapshot, ty, &"end".into())
+                .and_then(|member| member.declaration)
+                .unwrap_or_else(|| panic!("missing source end"));
+            let file = probe.location(member).file;
+            assert!(
+                snapshot.sources[file.0 as usize]
+                    .display_path
+                    .as_str()
+                    .ends_with("runtime/node/internal/stdio.ts"),
+                "{ty:?} end declaration source: {:?}",
+                snapshot.sources[file.0 as usize]
+            );
+        }
+        assert!(
+            hierarchy.access_families.carries(owner, face),
+            "stdio source transport declined: fields={:?}; callable={:?}",
+            hierarchy
+                .access_families
+                .declined
+                .iter()
+                .filter(|((ty, _), _)| *ty == face)
+                .collect::<Vec<_>>(),
+            hierarchy
+                .access_families
+                .callable
+                .keys()
+                .filter(|(ty, _)| *ty == face)
+                .collect::<Vec<_>>(),
+        );
+    }
 
     #[test]
     fn field_supplies_include_both_halves_of_a_user_accessor() {

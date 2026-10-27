@@ -45,7 +45,13 @@ impl Proof<'_> {
             .flat_map(|(at, block)| {
                 block.ops.iter().filter_map(move |value| {
                     let kind = &func.value(*value).kind;
-                    self.program.interface_access.stored_entry(func, kind)?;
+                    if !self
+                        .program
+                        .interface_access
+                        .needs_storage_proof(func, kind)
+                    {
+                        return None;
+                    }
                     let object = match kind {
                         OpKind::FieldGet { object, .. } | OpKind::FieldSet { object, .. } => {
                             *object
@@ -87,9 +93,6 @@ impl Proof<'_> {
         else {
             return false;
         };
-        let Some(at) = self.program.interface_access.by_field.get(&(face, field)) else {
-            return false;
-        };
         let Some(layout) = self.layouts.of_class(face) else {
             return false;
         };
@@ -99,8 +102,18 @@ impl Proof<'_> {
         {
             return self.layouts.of_class(owner) == Some(layout);
         }
-        let family = &self.program.interface_access.families[*at];
-        let mut owners = family.owners.clone();
+        let mut owners =
+            if let Some(at) = self.program.interface_access.by_field.get(&(face, field)) {
+                self.program.interface_access.families[*at].owners.clone()
+            } else if let Some(owners) = self
+                .program
+                .interface_access
+                .callable_owners(func, &func.value(value).kind)
+            {
+                owners.to_vec()
+            } else {
+                return false;
+            };
         let mut child = block;
         while let Some(parent) = idom[child.0 as usize] {
             if parent == child {

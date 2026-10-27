@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: refused at run time: a `function` called with a `this` that is not `Valued`, which its body is read at",
+  "node": null,
+  "measured_with": "4907f28fcf2d378c",
+  "source": "measured"
+}

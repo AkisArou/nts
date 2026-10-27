@@ -392,3 +392,84 @@ fn a_named_literal_fills_the_row_and_allows_class_edges() {
         "the literal supplies the same Sink slot as Exact"
     );
 }
+
+#[test]
+fn optional_callable_property_keeps_its_method_supplier() {
+    let program =
+        prepared("../../tests/programs/an-optional-callable-property-supplied-by-a-method");
+    assert!(program.uncompiled.is_empty(), "{:?}", program.uncompiled);
+    let field = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "throughField")
+        .unwrap();
+    let method = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "throughMethod")
+        .unwrap();
+    assert!(!field.blocks.is_empty());
+    assert!(!method.blocks.is_empty());
+    assert!(
+        !program.interface_access.callable.is_empty(),
+        "the optional function field must have its own calls-only supplier contract"
+    );
+    assert!(
+        field
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::InstanceOf { .. })),
+        "the call must check which concrete supplier the structural view contains"
+    );
+    assert!(
+        field.values.iter().any(|op| matches!(
+            &op.kind,
+            OpKind::Call {
+                callee: hir::Callee::Virtual { .. },
+                ..
+            }
+        )),
+        "a method supplier must retain virtual override dispatch"
+    );
+}
+
+#[test]
+fn callable_supplier_exhaustion_keeps_no_partial_dispatch() {
+    let within = prepared("../../tests/programs/a-callable-view-at-its-supplier-budget");
+    assert!(within.uncompiled.is_empty(), "{:?}", within.uncompiled);
+    assert!(
+        within
+            .interface_access
+            .callable
+            .iter()
+            .any(|contract| contract.owners.len() == 64),
+        "the positive control must retain all 64 concrete suppliers"
+    );
+    let beyond = prepared("../../tests/refusals/a-callable-view-beyond-its-supplier-budget");
+    assert!(
+        beyond
+            .uncompiled
+            .iter()
+            .any(|(_, why)| why.contains("`Supplier0` where `Maybe` is wanted")),
+        "the exhausted contract must refuse by name: {:?}",
+        beyond.uncompiled
+    );
+    assert!(
+        beyond.interface_access.callable.is_empty(),
+        "exhaustion must not publish the first 64 suppliers"
+    );
+}
+
+#[test]
+fn an_accessor_cannot_enter_a_calls_only_supplier_contract() {
+    let program = prepared("../../tests/refusals/an-accessor-cannot-supply-a-callable-projection");
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .any(|(_, why)| why.contains("`Accessor` where `PlainMaybe` is wanted")),
+        "the getter supplier must refuse by name: {:?}",
+        program.uncompiled
+    );
+    assert!(program.interface_access.callable.is_empty());
+}

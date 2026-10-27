@@ -57,6 +57,9 @@ impl Family {
 #[derive(Debug, Clone, Default)]
 pub struct Plan {
     pub families: Vec<Family>,
+    /// Callable properties whose concrete suppliers are inspected before a call.
+    /// These contracts authorize transport, never a positional field access.
+    pub callable: Vec<Callable>,
     pub storage_bodies: BTreeMap<String, TypeId>,
     /// Missing-field getters, with their ordinary/raising convention. This is
     /// permission to consider native sharing, never proof that a body is pure.
@@ -81,7 +84,32 @@ pub struct Plan {
     selectors: FxHashSet<u32>,
 }
 
+#[derive(Debug, Clone)]
+pub struct Callable {
+    pub face: TypeId,
+    pub member: nts_semantic_schema::PropertyKey,
+    pub field: u32,
+    pub owners: Vec<TypeId>,
+}
+
 impl Plan {
+    pub(super) fn callable_owners(&self, func: &Func, kind: &OpKind) -> Option<&[TypeId]> {
+        let (OpKind::FieldGet { object, field } | OpKind::FieldSet { object, field, .. }) = kind
+        else {
+            return None;
+        };
+        let HirType::Managed(ManagedType::Object(face)) = func.value(*object).ty else {
+            return None;
+        };
+        self.callable
+            .iter()
+            .find(|contract| contract.face == face && contract.field == *field)
+            .map(|contract| contract.owners.as_slice())
+    }
+
+    pub(super) fn needs_storage_proof(&self, func: &Func, kind: &OpKind) -> bool {
+        self.stored_entry(func, kind).is_some() || self.callable_owners(func, kind).is_some()
+    }
     pub(super) fn prune_views(&mut self, funcs: &[Func]) {
         let views: FxHashSet<_> = funcs
             .iter()
@@ -92,6 +120,8 @@ impl Plan {
             })
             .collect();
         self.native_views.retain(|pair| views.contains(pair));
+        self.callable
+            .retain(|contract| views.iter().any(|(_, face)| *face == contract.face));
     }
     /// The body a dispatch through `slot` calls when the receiver's class has
     /// no row there.
@@ -358,17 +388,20 @@ pub(super) fn verify_mode(program: &Program, problems: &mut Vec<super::verify::I
     for (at, func) in program.funcs.iter().enumerate() {
         for value in func.blocks.iter().flat_map(|block| &block.ops) {
             let op = func.value(*value);
-            let invalid = program
-                .interface_access
-                .stored_entry(func, &op.kind)
-                .is_some()
+            let invalid = program.interface_access.needs_storage_proof(func, &op.kind)
                 && !direct[at].contains(value);
             if invalid {
+                let reason = if program
+                    .interface_access
+                    .stored_entry(func, &op.kind)
+                    .is_some()
+                {
+                    "a stored family's field operation survived materialization"
+                } else {
+                    "a callable projection's field operation has no proved storage"
+                };
                 problems.push(super::verify::Invalid::InvalidInterfaceAccess {
-                    reason: format!(
-                        "{}: a stored family's field operation survived materialization",
-                        func.name
-                    ),
+                    reason: format!("{}: {reason}", func.name),
                 });
             }
         }

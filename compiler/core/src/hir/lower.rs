@@ -1025,6 +1025,11 @@ impl Hierarchy {
     /// dispatch, and it is why a class hierarchy with no overriding costs
     /// nothing: every call in it is static.
     fn overridden(&self, ty: TypeId, member: &MemberKey) -> bool {
+        if let Some(root) = self.root_declaring(ty, member)
+            && self.access_families.projects_method(root, member)
+        {
+            return true;
+        }
         let Some(target) = self.declaring(ty, member) else {
             return false;
         };
@@ -61515,6 +61520,19 @@ impl<'a> FuncBuilder<'a> {
         let Some(&receiver_ty) = self.snapshot.node_types.get(&object) else {
             return Ok(None);
         };
+        if let Some(contract) = self.projected_callable(receiver_ty, &key) {
+            let receiver = self.lower_expression(object)?;
+            return self
+                .start_callable(
+                    id,
+                    receiver,
+                    object,
+                    member,
+                    contract,
+                    callable_fields::Action::Call,
+                )
+                .map(Some);
+        }
         if let Some(selector) = self.objc_optional_selector(member) {
             return self
                 .objc_optional_call(id, (object, member), &selector)
@@ -61687,6 +61705,9 @@ impl<'a> FuncBuilder<'a> {
     /// something the checker hands back, and recursing would buy a shape that
     /// does not occur at the cost of a depth this cannot bound.
     fn declares_it_optionally(&self, ty: TypeId, key: &PropertyKey) -> bool {
+        if self.projected_callable(ty, key).is_some() {
+            return true;
+        }
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return false;
         };
@@ -62879,6 +62900,8 @@ impl<'a> FuncBuilder<'a> {
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn evaluate(&mut self, id: NodeId, branch: Branch) -> Result<ValueId, Diagnostic> {
         match branch {
+            Branch::CallableProjection(projection) => self.project_callable(id, projection),
+            Branch::CallableSupplier(projection) => self.callable_supplier(id, &projection),
             Branch::Expression(node) => self.lower_expression(node),
             Branch::Value(value) => Ok(value),
             Branch::ParameterDefault {
@@ -83388,6 +83411,22 @@ impl<'a> FuncBuilder<'a> {
         let member_name = self
             .called_member_name(member)
             .ok_or_else(|| self.unsupported(member, "a computed method name"))?;
+        let key = self.required_access_key(id, &member_name)?;
+        if let Some(contract) = self.projected_callable(type_id, &key) {
+            let object = self
+                .children(id)
+                .first()
+                .and_then(|callee| self.children(*callee).first().copied())
+                .unwrap_or(id);
+            return self.start_callable(
+                id,
+                receiver,
+                object,
+                member,
+                contract,
+                callable_fields::Action::Call,
+            );
+        }
 
         // `g.next()` on a generator **held as a value** rather than walked.
         if member_name == "next"
@@ -83637,20 +83676,14 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<(Vec<ValueId>, Option<HirType>), Diagnostic> {
         let declared = self.signature_behind_any(id, type_id, member_name);
         let outer = declared.map(|function_ty| self.callee_signature.replace((id, function_ty)));
+        let returns = self
+            .overriding_signature(id)
+            .map(|signature| signature.return_type);
         let lowered = self.lower_arguments_on(id, arguments, receiver);
         if let Some(outer) = outer {
             self.callee_signature = outer;
         }
-        let result = declared
-            .and_then(
-                |function_ty| match self.snapshot.types.get(function_ty.0 as usize)?.kind {
-                    TypeKind::Function(signature) => {
-                        self.snapshot.signatures.get(signature.0 as usize)
-                    }
-                    _ => None,
-                },
-            )
-            .and_then(|signature| self.represent(signature.return_type));
+        let result = returns.and_then(|return_type| self.represent(return_type));
         Ok((lowered?, result))
     }
 
@@ -86510,6 +86543,35 @@ impl<'a> FuncBuilder<'a> {
         object: NodeId,
         key: &PropertyKey,
     ) -> Result<Option<(ValueId, ValueId)>, Diagnostic> {
+        if let Some(contract) = self
+            .snapshot
+            .node_types
+            .get(&object)
+            .and_then(|face| self.projected_callable(*face, key))
+        {
+            let member = self
+                .children(id)
+                .iter()
+                .copied()
+                .find_map(|child| {
+                    self.member_access_key(child)
+                        .and_then(|(receiver, member)| {
+                            (receiver == object && member == *key).then_some(child)
+                        })
+                })
+                .and_then(|access| self.children(access).last().copied())
+                .unwrap_or(object);
+            let receiver = self.lower_expression(object)?;
+            let present = self.start_callable(
+                id,
+                receiver,
+                object,
+                member,
+                contract,
+                callable_fields::Action::Present,
+            )?;
+            return Ok(Some((receiver, present)));
+        }
         let mut declaring: Vec<TypeId> = (0..self.snapshot.types.len())
             .filter_map(|at| u32::try_from(at).ok().map(TypeId))
             .filter(|class| matches!(self.declares(*class, key), Declares::Always))
@@ -87922,6 +87984,8 @@ enum Native {
 /// used and moved once, so nothing here wanted the copy.
 #[derive(Clone)]
 enum Branch {
+    CallableProjection(callable_fields::Projection),
+    CallableSupplier(callable_fields::Projection),
     Expression(NodeId),
     Value(ValueId),
     /// A supplied parameter payload, read only in the arm whose undefined
@@ -88858,6 +88922,7 @@ mod access_family_functions;
 mod access_family_sites;
 mod assertions;
 mod bigint;
+mod callable_fields;
 mod cast_descriptions;
 mod claimed_reads;
 mod closure_context;
