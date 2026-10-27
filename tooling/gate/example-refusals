@@ -116,3 +116,4 @@ a-closed-call-recovers-an-erased-object-parameter 6 the erased originals still r
 a-module-read-of-a-cut-binding 1 `make`'s `Object.defineProperty`, on purpose: the module-scope cut it starts is the subject
 an-inferred-array-literal-at-its-binding 1 `passed`: an inferred array of records handed to an `Entry[]` parameter, whose nested records are one layout only after `collect_layouts`
 a-structural-alias-read-after-an-interface-view 1 main refuses the `S1` -> `Face` view; the fixture guards the alias read behind it
+a-class-whose-constants-are-prototype-getters 2 the readonly-tuple destructuring heading the descriptor loop after the class, and its cut statement; the loop is what the case exists to survive
