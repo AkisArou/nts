@@ -34,7 +34,16 @@ if ! { exec {nts_gate_token}<>"/dev/tcp/$host/$port"; } 2>/dev/null; then
   echo "token.sh: no gate runner at $NTS_GATE_TOKENS; not running $1" >&2
   exit 75
 fi
-printf 'want %s %s\n' "${NTS_GATE_STEP:-?}" "$$" >&"$nts_gate_token"
+if [ -n "${NTS_GATE_CASE_COSTS_DIR:-}" ]; then
+  # Escape the two protocol delimiters without spawning another process.
+  context=${!#}
+  context=${context//%/%25}
+  context=${context//$'\n'/%0A}
+  context=${context//$'\r'/%0D}
+  printf 'want %s %s path:%s\n' "${NTS_GATE_STEP:-?}" "$$" "$context" >&"$nts_gate_token"
+else
+  printf 'want %s %s\n' "${NTS_GATE_STEP:-?}" "$$" >&"$nts_gate_token"
+fi
 if ! IFS= read -r reply <&"$nts_gate_token" || [ "$reply" != go ]; then
   echo "token.sh: the gate runner at $NTS_GATE_TOKENS went away before granting a token; not running $1" >&2
   exit 75

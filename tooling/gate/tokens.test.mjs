@@ -20,6 +20,7 @@ async function pool(n, opts = {}) {
     free: () => n - p.total,
     claim: opts.claim ?? ((step, { waitedS }) => waitedS),
     known: () => true,
+    observe: opts.observe,
   });
   const grant = p.grant;
   p.grant = () => { grant(); peakTotal = Math.max(peakTotal, p.total); };
@@ -127,13 +128,15 @@ test("the highest claim among waiting steps gets the freed token", async () => {
   // waiting when the token came free, so `short` took it unopposed and the
   // test failed on landings that never touched the gate (2026-10-15).
   const order = [];
-  const p = await pool(1, { claim: (step) => (step === "long" ? 100 : 1) });
+  const p = await pool(1, { claim: (step) => (step === "long" ? 100 : 1),
+    observe: e => { if (e.event === "token.grant" && e.step !== "other") order.push(e.step); },
+  });
   const holder = spawn(TOKEN, ["sh", "-c", "read _"], { env: { ...process.env, ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
   const released = new Promise((r) => holder.on("close", r));
   while (p.total === 0) await settle();
-  const a = run(TOKEN, ["sh", "-c", "echo short"], tokenEnv(p, "short")).then((r) => order.push(r.out.trim()));
+  const a = run(TOKEN, ["sh", "-c", "echo short"], tokenEnv(p, "short")).then((r) => assert.equal(r.status, 0));
   await settle();
-  const b = run(TOKEN, ["sh", "-c", "echo long"], tokenEnv(p, "long")).then((r) => order.push(r.out.trim()));
+  const b = run(TOKEN, ["sh", "-c", "echo long"], tokenEnv(p, "long")).then((r) => assert.equal(r.status, 0));
   while (p.waiting.length < 2) await settle();
   holder.stdin.end();
   await Promise.all([a, b, released]);
@@ -163,4 +166,30 @@ test("tokens.mjs holds a token around fn and returns it", async () => {
   p.close();
   // And a runner that is gone rejects rather than running untokened.
   await assert.rejects(withToken(async () => "ran"), /went away|cannot be reached/);
+});
+
+test("a failed telemetry observer changes neither grants nor the command's exit", async () => {
+  const p = await pool(1, { observe: () => { throw new Error("metrics unavailable"); } });
+  try {
+    const r = await run(TOKEN, ["sh", "-c", "printf original; exit 7"], tokenEnv(p));
+    assert.equal(r.status, 7);
+    assert.equal(r.out, "original");
+    await settle();
+    assert.equal(p.total, 0);
+  } finally { p.close(); }
+});
+
+test("shell telemetry preserves project names without adding protocol lines", async () => {
+  const observations = [];
+  const p = await pool(1, { observe: e => observations.push(e) });
+  try {
+    const project = "tests/programs/a% b\nq/tsconfig.json";
+    const r = await run(TOKEN, ["sh", "-c", "exit 0", "_", project], {
+      ...tokenEnv(p), NTS_GATE_CASE_COSTS_DIR: "enabled",
+    });
+    assert.equal(r.status, 0);
+    const request = observations.find(e => e.event === "token.request");
+    assert.equal(decodeURIComponent(request.context.slice(5)), project);
+    assert.equal(observations.filter(e => e.event === "token.grant").length, 1);
+  } finally { p.close(); }
 });

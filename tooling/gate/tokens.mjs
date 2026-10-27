@@ -23,7 +23,7 @@ const STEP = process.env.NTS_GATE_STEP ?? "?";
 const ENABLED = WHERE !== "" && !process.env.NTS_GATE_TOKEN_HELD;
 process.env.NTS_GATE_TOKEN_HELD = "1";
 
-function acquire() {
+function acquire(context) {
   return new Promise((resolve, reject) => {
     const i = WHERE.lastIndexOf(":");
     const sock = connect({ host: WHERE.slice(0, i), port: Number(WHERE.slice(i + 1)) });
@@ -36,7 +36,10 @@ function acquire() {
       reject(new Error(`tokens.mjs: the gate runner at ${WHERE} ${why}`));
     };
     sock.setEncoding("utf8");
-    sock.on("connect", () => sock.write(`want ${STEP} ${process.pid}\n`));
+    sock.on("connect", () => {
+      const label = process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
+      sock.write(`want ${STEP} ${process.pid}${label}\n`);
+    });
     sock.on("data", (d) => {
       buf += d;
       if (settled || !buf.includes("\n")) return;
@@ -49,9 +52,9 @@ function acquire() {
   });
 }
 
-export async function withToken(fn) {
+export async function withToken(fn, context) {
   if (!ENABLED) return fn();
-  const sock = await acquire();
+  const sock = await acquire(context);
   try {
     return await fn();
   } finally {

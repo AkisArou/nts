@@ -475,7 +475,7 @@ const check = (pinned, example) =>
   new Promise((done) => {
     const child = spawn(pinned.pinned, ["check", join("tests/programs", example, "tsconfig.json")], {
       cwd: ROOT,
-      env,
+      env: { ...env, NTS_GATE_CASE_BINARY_SHA: pinned.hash },
     });
     let out = "";
     child.stdout.on("data", (chunk) => (out += chunk));
@@ -520,7 +520,7 @@ await Promise.all(Array.from({ length: Math.min(JOBS, examples.length) }, async 
     // Both binaries run the same example consecutively in one worker.
     const records = [];
     // One of the gate's tokens per check (tokens.mjs).
-    for (const p of pins) records.push(await withToken(() => check(p, example)));
+    for (const p of pins) records.push(await withToken(() => check(p, example), { project: `tests/programs/${example}/tsconfig.json`, binary: p.hash }));
     runs.set(example, records);
   }
 }));

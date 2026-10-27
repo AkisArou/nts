@@ -2,6 +2,8 @@
 // The gate's runner: every requested step of tooling/gate/all.sh, at once where
 // they can be, under one CPU, memory and frontend budget, with a verdict per
 // step and a summary that is printed however the run ends.
+// summary.json.case_costs records per-check phases and token waits; raw events
+// live under this run's costs/ directory. Missing metrics never alter verdicts.
 //
 //   tooling/gate/all.sh                       (hands over to this file)
 //   NTS_GATE_STEPS="clippy rc" tooling/gate/all.sh
@@ -76,6 +78,7 @@ import { cpus, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTokenPool } from "./tokenpool.mjs";
+import { CaseCosts } from "./case-costs.ts";
 import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
 import { TEST_BUILD_DEBUG } from "./test-artifacts.ts";
 
@@ -393,6 +396,7 @@ const running = new Map(); // name -> { child, slots, started, rider, elastic }
 let interrupted = null;
 let stopping = false;
 let summaryWritten = false;
+let caseCosts = null;
 const identities = {};
 let plan = [];
 
@@ -414,6 +418,9 @@ function stepEnv(step, slots) {
   // instead of queueing on their lock. What it lints is unchanged.
   if (step.name === "clippy") e.CARGO_TARGET_DIR = join(target, "clippy");
   e.NTS_GATE_RUN_DIR = RUN_DIR;
+  delete e.NTS_GATE_CASE_COSTS_DIR;
+  if (caseCosts?.available) e.NTS_GATE_CASE_COSTS_DIR = caseCosts.root;
+  e.NTS_GATE_CASE_BINARY_SHA = identities.nts?.sha256;
   // An elastic step's workers ask for tokens; any other step already holds
   // its slots, so whatever token-aware tool it runs must not ask again.
   delete e.NTS_GATE_TOKENS;
@@ -607,9 +614,13 @@ function workEstimate(name) {
 // already running are never stopped (`./admission.ts`). The recheck below
 // reconsiders a held pool every few seconds.
 const caseAdmission = new Admission({ report: (message) => process.stdout.write(`  ${message}\n`) });
+let observedAdmissionOpen = null;
 const tok = createTokenPool({
   // `used()` counts the tokens held in an elastic step's share.
-  free: () => (caseAdmission.open() ? SLOTS - used().slots - withhold : 0),
+  free: () => {
+    observedAdmissionOpen = caseAdmission.open();
+    return observedAdmissionOpen ? SLOTS - used().slots - withhold : 0;
+  },
   claim: (step, { held, used: spent, waitedS }) => {
     const left = Math.max(10, workEstimate(step) - spent);
     const c = left / (held + 1) + waitedS;
@@ -617,11 +628,22 @@ const tok = createTokenPool({
   },
   eligible: (step) => !BY_NAME.get(step)?.fe || used().fe < FRONTENDS,
   known: (step) => BY_NAME.has(step),
+  observe: (event) => caseCosts?.record({ ...event, compiler_sha: identities.nts?.sha256, memory_allowed: observedAdmissionOpen,
+    used: { slots: used().slots, fe: used().fe }, slots: SLOTS, frontends: FRONTENDS, withhold }),
   released: () => { if (!stopping) schedule(); },
 });
 let tokenAddr = null;
 const grant = () => { if (tokenAddr) tok.grant(); };
 const account = () => tok.account();
+// Sampling is independent of the five-second policy recheck: it never calls
+// schedule(), grant(), admission.open(), or any other policy decision.
+const costClock = setInterval(() => caseCosts?.record({ event: "pool.state", memory_allowed: observedAdmissionOpen,
+  used: { slots: used().slots, fe: used().fe }, slots: SLOTS, frontends: FRONTENDS, withhold,
+  held: Object.fromEntries(tok.held), waiting: tok.waiting.map(w => ({ request:w.id, step:w.step, pid:w.pid })),
+  running: [...running.keys()],
+  fixed_grants: Object.fromEntries([...running].filter(([,r]) => !r.elastic).map(([name,r]) => [name,{ slots:r.slots, rider:r.rider }])),
+  runner_cpu: process.resourceUsage(), memory_gb: readMemAvailable() }), 500);
+costClock.unref();
 
 // Only lower the others when a favoured step is in this run at all.
 const FAVOURED_PLANNED = () => plan.some((n) => BY_NAME.get(n).favoured);
@@ -824,6 +846,7 @@ function slower() {
 function done() {
   if (summaryWritten) return;
   summaryWritten = true;
+  clearInterval(costClock);
   if (!identities.nts) identify();
   identities.node = process.version;
   for (const name of plan) if (!results.has(name)) finish(name, "NOT RUN", interrupted ?? "never scheduled");
@@ -888,6 +911,7 @@ function done() {
     accept_skip: [...ACCEPT_SKIP],
     steps: plan.map((name) => ({ name, ...results.get(name) })),
     slower: slow,
+    case_costs: caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" },
   };
   try {
     writeFileSync(join(RUN_DIR, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
@@ -975,6 +999,7 @@ checkTable();
 plan = requested();
 takeTreeLock();
 mkdirSync(RUN_DIR, { recursive: true });
+caseCosts = new CaseCosts(RUN_DIR);
 identities.commit = git("rev-parse", "--short=12", "HEAD");
 const dirty = git("status", "--porcelain", "--untracked-files=no");
 identities.dirty = dirty === null ? null : dirty.split("\n").filter(Boolean).length;

@@ -41,6 +41,7 @@ use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
 use nts_frontend_ts::Frontend;
 
+mod case_costs;
 mod objects;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
@@ -416,6 +417,7 @@ fn c_type(ty: &HirType) -> String {
 /// two sides disagree.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
+    let _trace_session = case_costs::session(tsconfig);
     let backend = Backend::from_environment()?;
     let provider =
         match backend {
@@ -431,7 +433,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
             Backend::Wasm => nts_codegen_common::provider::host_gc("wasm", counting())
                 .map_err(anyhow::Error::msg)?,
         };
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = case_costs::measure("capture", || source.snapshot(tsconfig))?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
             eprintln!(
@@ -461,7 +463,12 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         }),
         ..hir::Options::default()
     };
-    let prepared = match hir::prepare_with(&snapshot, &options) {
+    let raw = case_costs::measure("lower", || {
+        hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
+    });
+    let prepared = match case_costs::measure("prepare", || {
+        raw.into_prepared(&hir::PreparationOptions::from(&options))
+    }) {
         Ok(prepared) => prepared,
         Err(unprepared) => bail!("{}", unprepared.render(&snapshot.sources)),
     };
@@ -486,6 +493,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         );
     }
 
+    let selection = case_costs::span("select_exports");
     let entry = entry_module(&snapshot)?;
     let importable = exports_of(&snapshot, &entry);
     // A module that exports `then` *is a thenable*. `await import(m)` sees the
@@ -530,6 +538,8 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         })
         .collect();
 
+    drop(selection);
+    case_costs::event(serde_json::json!({"event":"population", "functions":testable.len()}));
     if testable.is_empty() {
         return Ok(Report::default());
     }
@@ -578,7 +588,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
             &mut timeouts,
         )?,
     };
-    let engine = run_node(dir, &entry, &testable)?;
+    let engine = case_costs::measure("oracle.total", || run_node(dir, &entry, &testable))?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
     let mut report = report(&native, &engine, &testable, &refused, &approximate);
     report.aborts = aborts;
@@ -589,6 +599,9 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     // as both is how it read before: one line saying the program declined and
     // one saying it ran out of time, about the same case.
     report.refused = report.refused.saturating_sub(timeouts);
+    case_costs::event(
+        serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
+    );
     Ok(report)
 }
 
@@ -1599,7 +1612,9 @@ fn render(
         bail!("the JVM backend produces class files, which this driver cannot link");
     }
     Ok(if backend == Backend::Llvm {
-        let rendered = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let rendered = case_costs::measure("llvm.emit", || {
+            nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64)
+        });
         if !rendered.diagnostics.is_empty() {
             for diagnostic in rendered.diagnostics.iter().take(3) {
                 eprintln!(
@@ -1618,13 +1633,15 @@ fn render(
         // rejected module is reported as one rather than as a C error about a
         // file clang was not expecting.
         let object = dir.join("program.o");
-        let assembled = std::process::Command::new("clang")
-            .args(["-x", "ir", "-c", "-w", "-O1"])
-            .arg(&path)
-            .arg("-o")
-            .arg(&object)
-            .output()
-            .context("assembling the emitted LLVM IR")?;
+        let assembled = case_costs::child("llvm.assemble", || {
+            std::process::Command::new("clang")
+                .args(["-x", "ir", "-c", "-w", "-O1"])
+                .arg(&path)
+                .arg("-o")
+                .arg(&object)
+                .output()
+                .context("assembling the emitted LLVM IR")
+        })?;
         if !assembled.status.success() {
             bail!(
                 "clang rejected the emitted LLVM IR: {}",
@@ -1670,7 +1687,9 @@ fn run_native(
     // wrong lane -- a quiet trap with two backends and a certainty with three,
     // since `llvm` and `jvm` differ by one character.
     let backend = Backend::from_environment()?;
-    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64);
+    let emitted = case_costs::measure("c.emit", || {
+        nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64)
+    });
     // The backend's own refusals, which used to be dropped on the floor here.
     // A function the emitter cannot write is *absent* from the C, and the
     // driver below still calls it -- so the run died at the linker with an
@@ -1763,20 +1782,26 @@ fn run_native(
     let objects = sources
         .iter()
         .chain(std::iter::once(&host))
-        .map(|source| objects::object(source, &flags, &[dir], dir))
+        .map(|source| {
+            case_costs::measure("native.runtime_objects", || {
+                objects::object(source, &flags, &[dir], dir)
+            })
+        })
         .collect::<Result<Vec<_>>>()?;
-    let build = std::process::Command::new("clang")
-        .args(&flags)
-        .arg("-I")
-        .arg(dir)
-        .arg("-o")
-        .arg(&binary)
-        .arg(&main_path)
-        .arg(&generated)
-        .args(&objects)
-        .arg("-lm")
-        .output()
-        .context("running clang")?;
+    let build = case_costs::child("native.link", || {
+        std::process::Command::new("clang")
+            .args(&flags)
+            .arg("-I")
+            .arg(dir)
+            .arg("-o")
+            .arg(&binary)
+            .arg(&main_path)
+            .arg(&generated)
+            .args(&objects)
+            .arg("-lm")
+            .output()
+            .context("running clang")
+    })?;
     if !build.status.success() {
         bail!("clang: {}", String::from_utf8_lossy(&build.stderr));
     }
@@ -1786,6 +1811,7 @@ fn run_native(
     // such case costs every case after it. Node answers `undefined` for the same
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
+    let _execution = case_costs::span("program.total");
     collect_restarting(
         dir,
         &results(testable),
@@ -1793,11 +1819,13 @@ fn run_native(
         aborts,
         timeouts,
         |from, path| {
-            bounded_native(binary.as_str())
-                .env("NTS_DIFF_RESULTS", path.as_str())
-                .arg(from.to_string())
-                .output()
-                .context("running the compiled program")
+            case_costs::child("program.attempt", || {
+                bounded_native(binary.as_str())
+                    .env("NTS_DIFF_RESULTS", path.as_str())
+                    .arg(from.to_string())
+                    .output()
+                    .context("running the compiled program")
+            })
         },
     )
 }
@@ -1987,7 +2015,7 @@ fn run_jvm(
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
 ) -> Result<Run> {
-    let emitted = nts_codegen_jvm::emit(program);
+    let emitted = case_costs::measure("jvm.emit", || nts_codegen_jvm::emit(program));
     for diagnostic in &emitted.diagnostics {
         eprintln!(
             "  not emitted: {}",
@@ -2006,7 +2034,7 @@ fn run_jvm(
             emitted.diagnostics.len()
         );
     }
-    let jar = write_jvm_artifacts(dir, &emitted)?;
+    let jar = case_costs::measure("jvm.toolchain", || write_jvm_artifacts(dir, &emitted))?;
 
     // The cases, as data. Generating and compiling a driver per case set would
     // put `javac` in this loop -- some 300ms against nine hundred cases -- to
@@ -2095,6 +2123,7 @@ fn run_jvm(
     std::fs::write(&cases_path, cases)?;
 
     let classpath = format!("{dir}:{jar}");
+    let _execution = case_costs::span("program.total");
     collect_restarting(
         dir,
         &results(testable),
@@ -2102,15 +2131,17 @@ fn run_jvm(
         aborts,
         timeouts,
         move |from, path| {
-            bounded_jvm()
-                .env("NTS_DIFF_RESULTS", path.as_str())
-                .arg("-cp")
-                .arg(&classpath)
-                .arg("nts.rt.Check")
-                .arg(cases_path.as_str())
-                .arg(from.to_string())
-                .output()
-                .context("running the compiled classes")
+            case_costs::child("program.attempt", || {
+                bounded_jvm()
+                    .env("NTS_DIFF_RESULTS", path.as_str())
+                    .arg("-cp")
+                    .arg(&classpath)
+                    .arg("nts.rt.Check")
+                    .arg(cases_path.as_str())
+                    .arg(from.to_string())
+                    .output()
+                    .context("running the compiled classes")
+            })
         },
     )
 }
@@ -2408,7 +2439,7 @@ fn run_wasm(
         .public_api
         .retain(|(emitted, _)| called.contains(emitted.as_str()));
     program.public_namespaces.clear();
-    let emitted = match nts_codegen_wasm::emit(&program) {
+    let emitted = match case_costs::measure("wasm.emit", || nts_codegen_wasm::emit(&program)) {
         Ok(emitted) => emitted,
         Err(nts_codegen_wasm::EmitError::Declined(diagnostics)) => {
             for diagnostic in &diagnostics {
@@ -2454,11 +2485,13 @@ fn run_wasm(
     std::fs::write(&path, driver(&import, testable, Engine::Wasm))?;
     let results_path = dir.join("results-wasm.txt");
     let _ = std::fs::remove_file(&results_path);
-    let run = without_colour(bounded("node"))
-        .env("NTS_DIFF_RESULTS", results_path.as_str())
-        .arg(&path)
-        .output()
-        .context("running the Wasm module under node")?;
+    let run = case_costs::child("program.total", || {
+        without_colour(bounded("node"))
+            .env("NTS_DIFF_RESULTS", results_path.as_str())
+            .arg(&path)
+            .output()
+            .context("running the Wasm module under node")
+    })?;
     let results = wasm_results(
         node_results("wasm", &results_path, &run)?,
         testable,
@@ -2570,28 +2603,30 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
     // run at this path would read as this run's results, so it goes before
     // node starts -- here, where the run boundary is known.
     let _ = std::fs::remove_file(&results_path);
-    let run = without_colour(bounded("node"))
-        .env("NTS_DIFF_RESULTS", results_path.as_str())
-        // Node strips types by default, which *refuses* the two TypeScript
-        // constructs that are not erasable: a parameter property and an `enum`.
-        // `constructor(private x: number)` is `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX
-        // ... not supported in strip-only mode`, and the oracle cannot run the
-        // program at all.
-        //
-        // Transform mode compiles them instead of refusing them, which is what
-        // `tsc` does and what the language says they mean. Without it, two
-        // features on the goal's list are unverifiable rather than unimplemented
-        // -- and "unmeasured is not done" would make them permanently not done
-        // for a reason that has nothing to do with this compiler.
-        //
-        // Everything already passing is unaffected: an erasable program is
-        // stripped identically either way, which the 89 examples check.
-        .arg("--experimental-transform-types")
-        .arg("--import")
-        .arg(format!("file://{hook}"))
-        .arg(&path)
-        .output()
-        .context("running node")?;
+    let run = case_costs::child("oracle.execute", || {
+        without_colour(bounded("node"))
+            .env("NTS_DIFF_RESULTS", results_path.as_str())
+            // Node strips types by default, which *refuses* the two TypeScript
+            // constructs that are not erasable: a parameter property and an `enum`.
+            // `constructor(private x: number)` is `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX
+            // ... not supported in strip-only mode`, and the oracle cannot run the
+            // program at all.
+            //
+            // Transform mode compiles them instead of refusing them, which is what
+            // `tsc` does and what the language says they mean. Without it, two
+            // features on the goal's list are unverifiable rather than unimplemented
+            // -- and "unmeasured is not done" would make them permanently not done
+            // for a reason that has nothing to do with this compiler.
+            //
+            // Everything already passing is unaffected: an erasable program is
+            // stripped identically either way, which the 89 examples check.
+            .arg("--experimental-transform-types")
+            .arg("--import")
+            .arg(format!("file://{hook}"))
+            .arg(&path)
+            .output()
+            .context("running node")
+    })?;
     let results = node_results("node", &results_path, &run)?;
     Ok(Run {
         results,
