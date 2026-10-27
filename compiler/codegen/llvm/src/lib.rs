@@ -6009,19 +6009,19 @@ fn rounding_identity(
     out: &str,
     ty: &str,
 ) -> Result<String, Diagnostic> {
-    if !matches!(func.values[value.0 as usize].ty, HirType::Float { .. }) {
+    let from = &func.values[operand.0 as usize].ty;
+    let to = &func.values[value.0 as usize].ty;
+    let want = ty_of(to, func)?;
+    if ty == want {
         return Ok(format!("{out} = add {ty} {}, 0", name(operand)));
     }
-    let want = ty_of(&func.values[value.0 as usize].ty, func)?;
-    let widen = if matches!(
-        func.values[operand.0 as usize].ty,
-        HirType::Int { signed: false, .. }
-    ) {
-        "uitofp"
-    } else {
-        "sitofp"
-    };
-    Ok(format!("{out} = {widen} {ty} {} to {want}", name(operand)))
+    // Specialization can change the integer width too. Its source's
+    // signedness selects extension, exactly as for an explicit Convert.
+    let instruction = conversion(from, to, func)?;
+    Ok(format!(
+        "{out} = {instruction} {ty} {} to {want}",
+        name(operand)
+    ))
 }
 
 fn unary(
