@@ -7859,6 +7859,94 @@ mod module_cache_tests {
     use super::{Entry, ObjectCache, Toolchain, compile_one};
     use camino::Utf8PathBuf;
 
+    /// A no-SONAME dependency records its argv spelling in `DT_NEEDED`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_absolute_shared_library_loads_from_another_directory() {
+        if !std::process::Command::new("clang")
+            .arg("--version")
+            .output()
+            .is_ok_and(|out| out.status.success())
+        {
+            assert!(
+                std::env::var_os("NTS_TESTS_REQUIRE_TOOLING").is_none(),
+                "clang is required"
+            );
+            eprintln!("SKIP absolute shared library: clang is not available");
+            return;
+        }
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-no-soname-{}", std::process::id()));
+        let build = root.join("build");
+        let elsewhere = root.join("elsewhere/deeper");
+        std::fs::create_dir_all(&build).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(
+            root.join("dependency.c"),
+            "int nts_dependency(void) { return 42; }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            build.join("main.c"),
+            "int nts_dependency(void); int main(void) { return nts_dependency() != 42; }\n",
+        )
+        .unwrap();
+        let tools = Toolchain {
+            program: "clang".to_owned(),
+            leading: Vec::new(),
+            link: Vec::new(),
+            linker: None,
+            lto: false,
+            cpu: Vec::new(),
+            cpu_at_link: Vec::new(),
+        };
+        // ELF accepts these filenames too, so Linux exercises all supported
+        // shared-library spellings without needing a second platform.
+        for filename in [
+            "libdependency.so",
+            "libdependency.so.1",
+            "libdependency.1.dylib",
+        ] {
+            let dependency = root.join(filename);
+            let compiled = std::process::Command::new("clang")
+                .args(["-shared", "-fPIC"])
+                .arg(root.join("dependency.c"))
+                .arg("-o")
+                .arg(&dependency)
+                .output()
+                .unwrap();
+            assert!(
+                compiled.status.success(),
+                "{}",
+                String::from_utf8_lossy(&compiled.stderr)
+            );
+            let linked = tools
+                .link_command(&build)
+                .unwrap()
+                .arg("main.c")
+                .args(super::native_paths::arguments(&[dependency.to_string()], &build).unwrap())
+                .args(["-o", "program"])
+                .output()
+                .unwrap();
+            assert!(
+                linked.status.success(),
+                "{}",
+                String::from_utf8_lossy(&linked.stderr)
+            );
+            let run = std::process::Command::new(build.join("program"))
+                .current_dir(&elsewhere)
+                .output()
+                .unwrap();
+            assert!(
+                run.status.success(),
+                "{filename}: {}",
+                String::from_utf8_lossy(&run.stderr)
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn a_shared_compile_cache_keeps_each_build_directorys_headers() {
         let available = std::process::Command::new("clang")

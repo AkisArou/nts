@@ -56,7 +56,18 @@ pub(super) fn arguments(arguments: &[String], directory: &Utf8Path) -> Result<Ve
     arguments
         .iter()
         .map(|argument| {
-            if path_next || Utf8Path::new(argument).is_absolute() {
+            let path = Utf8Path::new(argument);
+            // Without a SONAME/install name, the loader records this spelling.
+            // A relative DT_NEEDED path would resolve against the user's cwd.
+            if !path_next
+                && path.is_absolute()
+                && (path.extension().is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("so") || extension.eq_ignore_ascii_case("dylib")
+                }) || path.file_name().is_some_and(|name| name.contains(".so.")))
+            {
+                return Ok(argument.clone());
+            }
+            if path_next || path.is_absolute() {
                 path_next = false;
                 return relative(Utf8Path::new(argument), directory).map(Utf8PathBuf::into_string);
             }
