@@ -165,6 +165,11 @@ as Go's and HotSpot's escape analyses do. It produces, once:
   closure capture may hold;
 - per function: which parameters escape, are stored, returned or captured, and
   which fields it writes;
+- for each allocation, what its fields, elements and map values can hold at
+  run time: the possible kinds of value, and number facts. These are joined
+  over every write through every alias, and become unknown at any writer the
+  program cannot see. Releases, number specialization and bounds read this
+  one summary, never a declared element or value type;
 - **the home of each site**, per calling context.
 
 **How it is formulated** (the review of 2026-10-27 showed that naming the
