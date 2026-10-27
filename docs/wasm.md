@@ -2210,6 +2210,7 @@ Checked erased reads return undefined where HIR asks for it; typed reads beyond
 the compiler's supported input contract produce the harness's named decline,
 not a validator/runtime trap. Sparse growth and holes must follow the prepared
 array contract; decline shapes whose storage cannot express them.
+Backlog: typed arrays cannot hold holes; such reads refuse until the representation is decided (`core::hir::holes::observations`, `tests/programs/array-with/src/main.ts:96`).
 In particular, HIR's zero fill of a typed `new Array(n)` is not an undefined
 element representation. Wasm checks initialization before admitting observations:
 core's `hir::holes` names every op that may observe a hole, and `array_init.rs`

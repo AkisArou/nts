@@ -1668,7 +1668,9 @@ wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
   # 614 -> 663, 2026-10-21: the official Wasm step in landing gate
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/wasm.log.
-  backend_examples 676 "through the Wasm backend" exact 10 ); }
+  # Array.with's replacedHoleIsNotRead is safe but outside the typed-hole
+  # proof. The Wasm execution test pins that refusal and runs the other exports.
+  backend_examples 676 "through the Wasm backend" exact 10 "array-with" ); }
 corpus() {
   node tooling/gate/corpus.ts "$root" core
 }

@@ -138,6 +138,47 @@ fn source_typed_holes_decline_instead_of_returning_zero() {
     );
 }
 
+/// Keep the one conservative refusal visible without losing execution of
+/// Array.with's other cases behind the example's named gate allowance.
+#[test]
+fn source_array_with_pins_its_typed_hole_refusal_and_executes_the_rest() {
+    let fixture = common::repository().join("tests/programs/array-with");
+    let mut program = prepared_project(&fixture);
+    let nts_codegen_wasm::EmitError::Declined(diagnostics) =
+        nts_codegen_wasm::emit(&program).unwrap_err()
+    else {
+        panic!("expected the replaced typed-hole slot to decline")
+    };
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    assert_eq!(diagnostics[0].code, "NTS5001");
+    assert!(
+        diagnostics[0].message.contains("`replacedHoleIsNotRead`")
+            && diagnostics[0]
+                .message
+                .contains("typed array holes: observed slots are not proven initialized"),
+        "{diagnostics:?}"
+    );
+    let before = program.funcs.len();
+    program.funcs.retain(|f| f.name != "replacedHoleIsNotRead");
+    assert_eq!(program.funcs.len(), before - 1);
+    program
+        .public_api
+        .retain(|(name, _)| name != "replacedHoleIsNotRead");
+    hir::verify::verify(&program).unwrap();
+    let emitted = nts_codegen_wasm::emit(&program).unwrap();
+    assert_eq!(emitted.manifest.exports.len(), 17);
+    let output = common::run(
+        "array-with",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+    );
+    assert_eq!(output["cases"], 289, "{output}");
+    assert_eq!(output["exportedFunctions"], 17, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Typed array literals whose elements branch (a ternary, `??`, `&&`, a
 /// bigint power's exponent check, a call that may raise): the stores after
 /// each branch sit in later blocks, and the initialization proof follows them
