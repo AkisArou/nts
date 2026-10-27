@@ -724,18 +724,51 @@ test("the dated platform policy accepts Windows SKIPs without a per-landing flag
   assert.match(run(s, s.root, ["notes", "--ref=land", "show", "main"]), /unrun accepted by user policy 2026-10-23: apple/);
 });
 
-test("the originating process retires only its own clean scratch submission after landing", async () => {
-  const s = scratch();
-  const home = lane(s, "compiler/scratch", { "landed.txt": "landed\n" });
-  run(s, s.root, ["tag", "compiler/scratch", "main"]); // An ambiguous short name is not a branch identity.
-  const disposable = join(s.home, ".cache/nts-scratch/compiler/submission"); mkdirSync(dirname(disposable), { recursive: true }); run(s, s.root, ["worktree", "move", home, disposable]);
-  const r = await land(s, disposable).done;
-  assert.equal(r.status, 0, r.out); assert.equal(existsSync(disposable), false);
-  assert.equal(run(s, s.root, ["for-each-ref", "refs/heads/compiler/scratch"]), "");
-  assert.ok(run(s, s.root, ["for-each-ref", "refs/tags/compiler/scratch"]));
-  assert.ok(existsSync(join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-tree")), "the gate cache remains");
-  assert.match(readFileSync(join(s.home, ".cache/nts-land/upkeep.jsonl"), "utf8"), /"operation":"delete-landed-topic"/);
-});
+// Upkeep must fail closed when an own-user cwd cannot be read. A real host
+// process can become non-dumpable while another tooling test execs it, so the
+// deletion assertion cannot depend on the host's /proc. Supply only cwd
+// observations in these child processes; Git, the lander and retirement stay
+// real, and the child's own idle cwd still tests its move out of the tree.
+for (const state of ["idle", "busy", "unreadable"] as const) {
+  test(`post-landing scratch retirement respects ${state} process observations`, async () => {
+    const s = scratch();
+    const home = lane(s, "compiler/scratch", { "landed.txt": "landed\n" });
+    run(s, s.root, ["tag", "compiler/scratch", "main"]); // An ambiguous short name is not a branch identity.
+    const disposable = join(s.home, ".cache/nts-scratch/compiler/submission"); mkdirSync(dirname(disposable), { recursive: true }); run(s, s.root, ["worktree", "move", home, disposable]);
+    const preload = "data:text/javascript," + encodeURIComponent(`
+      import fs from "node:fs";
+      import {syncBuiltinESMExports} from "node:module";
+      const readlink = fs.readlinkSync;
+      fs.readlinkSync = function(path, ...args) {
+        if (/^\\/proc\\/\\d+\\/cwd$/.test(String(path))) {
+          if (String(path) !== "/proc/" + process.pid + "/cwd") return "/";
+          if (${JSON.stringify(state)} === "unreadable") throw Object.assign(new Error("fixture: cwd unreadable"), {code:"EACCES"});
+          return ${JSON.stringify(state)} === "busy" ? ${JSON.stringify(disposable)} : process.cwd();
+        }
+        return readlink.call(this, path, ...args);
+      };
+      syncBuiltinESMExports();
+    `);
+    s.env.NODE_OPTIONS = `${s.env.NODE_OPTIONS ?? ""} --import=${preload}`;
+    const r = await land(s, disposable).done;
+    assert.equal(r.status, 0, r.out);
+    assert.ok(onMain(s, "landed.txt"), r.out);
+    const upkeep = readFileSync(join(s.home, ".cache/nts-land/upkeep.jsonl"), "utf8");
+    const branch = run(s, s.root, ["for-each-ref", "refs/heads/compiler/scratch"]);
+    assert.equal(existsSync(disposable), state !== "idle", r.out);
+    if (state === "idle") {
+      assert.equal(branch, "", r.out);
+      assert.match(upkeep, /"operation":"delete-landed-topic"/, r.out);
+    } else {
+      assert.ok(branch, r.out);
+      assert.match(upkeep, state === "busy" ? /process cwd inside submission: \d+/ : /Cannot inspect own-user PID \d+/, r.out);
+      assert.match(upkeep, /"status":"still checked out"/, r.out);
+      assert.doesNotMatch(upkeep, /"operation":"delete-landed-topic"/, r.out);
+    }
+    assert.ok(run(s, s.root, ["for-each-ref", "refs/tags/compiler/scratch"]), r.out);
+    assert.ok(existsSync(join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-tree")), "the gate cache remains\n" + r.out);
+  });
+}
 
 test("a later landing revisits a recorded topic after its lane home switches away, leaving unsent branches alone", async () => {
   const s = scratch();
