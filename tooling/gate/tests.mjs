@@ -23,6 +23,10 @@
 // The verdict fails closed: the first pass must exit 0 (a compile error or a
 // failing doctest fails it), at least one binary must have been recorded, and
 // every replayed binary must exit 0. A binary that crashes or is killed fails.
+// Only then are obsolete test executables pruned. The official lander sets
+// CARGO_INCREMENTAL=0; match that setting in standalone runs to avoid building
+// a second variant before pruning. Fingerprints identify either variant, so
+// old incremental/feature variants are reclaimed after a successful run too.
 
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

@@ -25,8 +25,8 @@ const control = process.env.JSX_CONTROL === "1";
 // Every import is kept (`verbatimModuleSyntax`): otherwise TypeScript elides
 // `import fbt` on the lowered side, where `<fbt>` has become the string
 // "fbt", and keeps it on the other. The runtime import's specifiers are
-// sorted: TypeScript 5 lists them in first-use order and tsgo, which the
-// lowering follows, sorts them; the order of named imports means nothing.
+// sorted: TypeScript 5 lists them in first-use order and the pre-switch tsgo,
+// whose JSX ordering the lowering retains, sorted them; the order of named imports means nothing.
 function runs(code, file, jsx, ours = false) {
   const js = ts.transpileModule(code, {
     fileName: file,

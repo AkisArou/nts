@@ -16,9 +16,8 @@ one; add a row here in the same commit as the first case that uses it.
 1. **TypeScript's own conformance taxonomy**: the directories of
    `tests/cases/conformance/` in TypeScript's repository (classes, enums, es6,
    expressions, functions, generators, internalModules, types, decorators and
-   the rest), read for concepts only. The submodule is not checked out here;
-   its baselines are, flattened, under
-   `third_party/typescript-go/testdata/baselines/reference/submodule/conformance/`.
+   the rest), read for concepts only. Bootstrap supplies the pinned corpus at
+   `third_party/typescript/tsc/testdata/tests/cases/conformance/`.
    Written `conformance/<dir>` below.
 2. **typescript-eslint's AST**: the TypeScript-only node kinds
    (`TSEnumDeclaration`, `TSModuleDeclaration`, `TSParameterProperty`,
@@ -95,7 +94,7 @@ with others.
 | node | where |
 | --- | --- |
 | TSEnumDeclaration, TSEnumMember | `enums/` |
-| TSModuleDeclaration, TSModuleBlock, TSQualifiedName | `namespaces/` (the `module` keyword form is rejected by tsgo 7 and node alike, TS1540, so it has no case) |
+| TSModuleDeclaration, TSModuleBlock, TSQualifiedName | `namespaces/` (the `module` keyword form is rejected by the pre-switch tsgo 7 and node alike, TS1540, so it has no case) |
 | TSParameterProperty | `classes/parameter-*.ts`, `classes/override-parameter-property.ts` |
 | TSAbstractMethodDefinition, TSAbstractPropertyDefinition, TSAbstractKeyword | `classes/abstract-*.ts` |
 | TSAbstractAccessorProperty, AccessorProperty | pending `accessor-fields/` |

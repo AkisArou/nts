@@ -17,6 +17,6 @@ emit, which is what nts compiles to.
   no object; node's transform drops the declaration and leaves `Flags.Both`,
   which names nothing.
 
-**The oracle these need:** tsgo's emit with the suite's own options
+**The oracle these need:** TypeScript's emit with the suite's own options
 (`target: "ESNext"`, `isolatedModules` off: inlining a `declare const enum`
 needs the whole program).

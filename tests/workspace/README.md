@@ -15,7 +15,7 @@ not before.
 The gate's example globs are `tests/programs/*/tsconfig.json`, **depth one**, and this
 directory has no `tsconfig.json` at its root -- the same reason
 `tests/interop/<name>/` has never been in the 205. `nts-suite` reads
-`third_party/typescript-go/testdata/`, not here. The interop step globs
+`third_party/typescript/tsc/testdata/tests/cases/`, not here. The interop step globs
 `tests/interop/*/build.sh`, and nothing here is under `interop`. Checked
 before this directory was created, because a fixture that silently joins a
 floor is worse than no fixture.
