@@ -75,6 +75,7 @@ import { existsSync, globSync, lstatSync, readdirSync, readFileSync, statSync } 
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
+import { mergeRuleMetadata } from "./rule-metadata.ts";
 
 /**
  * The tree whose change is asked about: the one the command is run from, not
@@ -1144,7 +1145,8 @@ export function owed(changes) {
   // say; otherwise every one (see `interopOwed`).
   const add = (name, path, steps, extra = {}, projects = null) => {
     let r = out.find((x) => x.name === name);
-    if (!r) { r = { name, paths: [], steps: [], arms: [], ...extra }; out.push(r); }
+    if (!r) { r = { name, paths: [], steps: [], arms: [], precise: true }; out.push(r); }
+    Object.assign(r, mergeRuleMetadata(r, extra));
     if (!r.paths.includes(path)) r.paths.push(path);
     for (const st of steps) if (!r.steps.includes(st)) r.steps.push(st);
     if (steps.includes("interop")) {

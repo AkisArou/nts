@@ -32,6 +32,16 @@ const superset = (got, want, what) => {
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
 
+test("an earlier data path cannot erase a source script's wide obligations", () => {
+  const source = "tooling/conformance/integrity.ts";
+  const data = "results/test262/c/language.tsv";
+  const wide = stepsFor(source).filter(step => WIDE.has(step));
+  assert.ok(wide.includes("integrity-runtime"));
+  for (const paths of [[data, source], [source, data]]) {
+    superset(stepsFor(...paths), wide, paths.join(" then "));
+  }
+});
+
 test("the standalone ICU driver has an explicit validation obligation", () => {
   const rules = owed([{path:"runtime/ecmascript/tools/icu.ts",added:false}]);
   assert.ok(!rules.some(r => r.full));
