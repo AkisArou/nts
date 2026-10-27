@@ -27,7 +27,13 @@ the evidence behind each decision.
   claims about foreign code. There, nts proves the fact itself, checks it at
   run time, or refuses
   ([types](../language/types.md#when-a-types-claim-is-false-at-run-time),
-  [log](../records/notebooks/decisions-log.md#the-bar)).
+  [log](../records/notebooks/decisions-log.md#the-bar)). What a failed check
+  does is register [L6](../open-questions.md#1-language-and-compiler). A layout
+  taken from a declared class or field type is kept sound by those checks and
+  refusals. Any other fact that licenses an unchecked operation (a narrowed
+  type, a literal type, a container's contents) needs a proof: operator
+  semantics, a guard dominating the same value, initialization analysis, or an
+  invariant over every writer.
 - **One answer per question across backends:** a fact several backends need is
   computed once in `compiler/core`, and each backend reads it.
 - **Each platform gets its best implementation.** Shared code is reused where it

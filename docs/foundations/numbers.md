@@ -46,6 +46,12 @@ way of `ToInt32`.
 - other functions: arguments are joined over every call site in the program,
   including calls through dispatch tables, and results flow back.
 
+A join is sound only if it sees every writer. A store through a wider alias is
+a writer too: TypeScript accepts `Sub[]` as `Base[]` and `Map<string, number>`
+as `Map<string, unknown>`. Facts never come from a declared element or value
+type alone. Register [L5](../open-questions.md#1-language-and-compiler) records
+where nts does not yet see those stores.
+
 **Three obligations** before a value may be an integer, in this order:
 representable (the literal survives as a double), whole on every path with
 `NaN` excluded, and within ±(2^53 − 1), past which adjacent integers are not
@@ -69,6 +75,15 @@ clone with integer parameters behind one test at entry: `ToInt32(n) == n`
 sends whole arguments to the clone and everything else (`NaN`, `1e300`, `1.5`)
 to the original body (`hir::guards`). A function named by a dispatch table
 keeps the table's signature.
+
+**Truncated sums** (being built). `(a + b) | 0` observes only the low 32 bits
+of a sum that is exact when both operands are int32, so it is one wrapping
+integer instruction. A loop's int32 accumulator whose addend is not proved
+int32 tests the addend once per update, with the same `ToInt32(b) == b` the
+roots use, and keeps the original double arithmetic as the fallback. The
+general form is backward truncation demand, as V8's simplified lowering
+computes it, joined with the forward facts above. The accumulator is its first
+case.
 
 | operation | cost on native |
 |---|---|

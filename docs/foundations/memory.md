@@ -277,6 +277,33 @@ cover the runtime too: no cycle candidate, collector work list, weak structure
 or traced field can reach reclaimed storage, or those edges are cleared first.
 Source-level last use alone is not a proof.
 
+### A region needs two proofs
+
+A site goes into a region only with two proofs, and without either it stays on
+the counted heap:
+
+- **Lifetime:** no reference to an object outlives its region. This is what the
+  analysis above proves.
+- **Retention:** the region adds only bounded dead memory compared with the
+  counted heap. The count covers object bodies, the backing stores of arrays
+  and strings, regions kept alive past their reset, and heap objects held
+  through the fields of dead region objects, since a small region can hold the
+  only reference to a large heap graph. A size cap per region does not bound
+  it. In a loop that leaves one survivor per iteration, a dead temporary in each
+  iteration's region that still points at the previous survivor keeps every
+  earlier region alive, while the program's live data stays small.
+
+A site's home is fixed at compile time. A run-time quota that sent a region
+site to the heap when full would need both homes' counting code at every use,
+so nts has none: a site whose retention is not proved bounded stays on the
+heap.
+
+Speed and space are separate acceptance criteria. Each stage 3 row is
+measured at three input sizes and iteration counts. Its retained bytes (region
+bytes, regions kept alive, heap bytes held through region fields) must not
+grow faster than the counted heap's live bytes. A speedup at one size proves
+nothing about space.
+
 ### How small the dynamic part can get
 
 Static analysis cannot remove the run-time checks and the cycle collector for
@@ -369,6 +396,24 @@ user's code written the same way can be fixed the same way. It is not the whole
 story: the parser also reuses frames across containers and shares key
 templates between results, and the analysis must still tell those lifetimes
 apart.
+
+### Measuring the cycle collector
+
+M6 keeps trial deletion and measures it first. The counters, per collection:
+candidates and their age; nodes, edges and bytes visited; bytes reclaimed;
+repeat visits to graphs that stay live; and time split between traversal,
+destruction and freeing. A program's end-to-end latency is reported apart
+from the collector's pauses. Four workloads cover what a candidate count
+misrepresents: a large live cyclic graph under frequent decrements, a large
+cycle that has just become unreachable, a dense graph, and a small cycle
+holding a large acyclic payload.
+
+Collecting incrementally needs a progress policy, and a protocol for the
+program's mutations between slices. Stopping after a fixed amount of work
+turns collection debt into retained memory. CPython 3.14.0 to 3.14.4 shipped an
+incremental collector that shortened pauses and raised peak memory in
+production, and 3.14.5 reverted it
+([release](https://www.python.org/downloads/release/python-3145/)).
 
 ## Build order
 

@@ -39,13 +39,16 @@ collide, making every insert and lookup scan the whole table, so a `Map` or a
    - **rapidhash v3 with randomized secret constants:** the fastest published
      short-key hash, and what V8 (node) and JavaScriptCore (Bun) use now.
      Randomizing only its seed is not enough: the secrets must be random too
-     (node's July 2025 security release).
+     (node's July 2025 security release). Every secret word the function
+     reads comes from the process key: v3 reads eight, and its repository's
+     `make_secret` fills four, so that helper is not used.
    - **SipHash-1-3:** the better-established keyed hash (Rust, CPython),
      slower on short uncached keys.
 
    The table fallback below bounds the worst case whichever is chosen. That
    turns the choice into mainly a speed question, so the faster one wins
-   unless the rows show no difference.
+   unless the rows show no difference. Both are measured with random secrets,
+   the widening reads and the fallback switched on.
 4. **The table defends itself.** It counts probes. Past a budget set from
    normal probe-length measurements, that table's index switches to a
    balanced tree over the actual keys. Iteration order is unaffected, since
@@ -53,6 +56,15 @@ collide, making every insert and lookup scan the whole table, so a `Map` or a
    keys collide. Java's HashMap does the same per bucket; nts does it per
    table. The tree orders real keys (code units, numbers, identity tokens),
    never hashes.
+   - The bound covers every operation: hits, misses, insertions, deletions
+     and growth. Growth never rehashes repeatedly before the switch, and a
+     switched table stays switched.
+   - The order is total and agrees with `SameValueZero`. Kinds come first,
+     then numbers by value (one NaN, one zero), strings by code units, BigInts
+     by value, and references by identity token.
+   - Comparing two strings costs their common prefix, so a lookup costs one
+     hash plus O(log n) comparisons of that length. The switch runs once per
+     table, so the bound is amortized.
 5. **Literal hashes are computed lazily, into writable metadata:** the first
    use of a literal as a key hashes it and caches the result. A compile-time
    digest keyed at run time is not safe: every collision of the unkeyed
@@ -61,7 +73,12 @@ collide, making every insert and lookup scan the whole table, so a `Map` or a
    unsynchronized lazy write.
 6. **Numbers, references and BigInts are keyed too,** each in its own type
    domain. A BigInt hashes its full value in order, not its halves XORed.
-   Number canonicalization stays: `-0` equals `+0`, and every NaN is one key.
+   Number canonicalization stays: `-0` equals `+0`, every NaN is one key, and
+   a number stored as an integer hashes as the same number stored as a double.
+   No key path is unkeyed: integer keys, strings that look like array indices
+   and literal hashes all use the keyed definition. V8 hashed array-index
+   strings without a key until node's March 2026 security release
+   ([CVE-2026-21717](https://nodejs.org/en/blog/vulnerability/march-2026-hashdos)).
 
 ## Build order
 
