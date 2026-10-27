@@ -227,7 +227,31 @@ reset audits are kept; its analysis of already-counted code is not.
 - **A page-based allocator** (try vendored mimalloc first, as Koka, Lean and
   CPython ship): one size per page, empty pages shared by all sizes, which
   removes the cause of the `realloc` failures; then a 16-byte header instead of
-  40 bytes of overhead.
+  40 bytes of overhead. What the 2026-10-27 research changed in the
+  experiment:
+  - **Hot reuse is not guaranteed.** mimalloc keeps a page's freshly freed
+    blocks on a separate list until allocation runs out, so the block just
+    freed is not necessarily the next one returned. nts's measured advantage is
+    exactly that immediate reuse, so the experiment measures reuse distance,
+    not only time.
+  - **Size:** in a standalone probe (GCC 13, `-O2 -flto`, gc-sections,
+    stripped; measured by the reviewer), a program grew from 14 KB with libc to
+    119 KB with mimalloc v2 and 127–152 KB with v3; rpmalloc was 35 KB. nts's
+    hello world is about 16 KB, so allocator size is a decision criterion, and
+    rpmalloc joins as a comparator. The size is measured on nts's own programs.
+  - **Isolate the allocator:** keep today's header, prefix and accounting.
+    Route every storage family through the adapter (objects, array buffers,
+    side allocations), and remove nts's own free lists for what is
+    substituted, or frees never reach the allocator. Use the explicit
+    per-thread heap API, not a malloc override. Regions keep their bump
+    allocation and take their chunks from the allocator.
+  - **The header comes later and separately.** The prefix holds a free link
+    (fine in dead storage) and the cycle collector's candidate index (live
+    metadata). Moving the index into the count word clashes with destruction,
+    which writes the dying-list pointer into that word before unbuffering
+    (`nts_destroy`).
+  - **Today's state, corrected:** blocks above the pooled sizes already go
+    back to libc's `free`; only pooled sizes are kept.
 - **Weak references:** `WeakRef`, `WeakMap`, `WeakSet` and
   `FinalizationRegistry`, as decided, including the cycles that run through a
   `WeakMap` (ephemerons). Their rules constrain everything before them, so
@@ -329,7 +353,7 @@ node and Bun in the same sitting.
 | 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `json-build-append` must not regress |
 | 4 | borrowed region inputs | `record-word-counts` and `json-stringify-doc` a few percent |
 | 5 | reuse for arrays and objects | `immutable-update`, `array-copying-methods` below node and Bun; stop if they don't move |
-| 6 | page allocator, tried with today's object layout first; then the 16-byte header, measured separately; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row |
+| 6 | page allocator: mimalloc v3 (v2 as control) and rpmalloc against today's, with today's object layout; then the 16-byte header, measured separately; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row; reuse distance; executable size; RSS retained by long-running programs |
 | 7 | weak references, on the contract fixed in stage 0 | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry` |
 | 8 | proving types acyclic from how they are built, only if a row needs it | cycle-candidate traffic |
 | 9 | workers as isolated heaps | a message row against node's `worker_threads` |

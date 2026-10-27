@@ -33,9 +33,9 @@ means it is on main.
 | Foundation | Covers | Native today | Open |
 |---|---|---|---|
 | **Numbers** | integers proved from doubles, BigInt, `Math`, number ↔ text | Built: integer specialization, zmij for number → text, ffc for text → number, x86-64-v3 builds, ThinLTO, aligned hot loops. | `Math` bit-identical to node (V8's fdlibm): decided, not built. BigInt past 64 bits: wraps today, real bignums later. |
-| **Strings** | layout, building, slicing, comparing, hashing, UTF-8 | One or two bytes per character, inline, with a cached hash. Built: in-place append, strings written where they are appended, SIMD JSON quoting, literal hashes. | simdutf for UTF-8: prototyped, not built. Header flags (ASCII, escape-free) and one data pointer for every string kind: designed, not built. |
+| **Strings** ([design](strings.md)) | layout, building, slicing, comparing, hashing, UTF-8 | One or two bytes per character, inline, with a cached hash. Built: in-place append, strings written where they are appended, SIMD JSON quoting, literal hashes. | Stage D (one data pointer, proved flags, slices that own their owner) and stage E (fewer passes and temporaries): designed. simdutf for UTF-8: prototyped, not built. |
 | **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Decided 2026-10-27: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Not built. |
-| **Hash tables** | `Map`, `Set`, objects used as dictionaries | Insertion-ordered tables of 16-byte tagged keys and values; the static key type picks the hash and comparison, and the index keeps each entry's hash so growth never rehashes. | **Contradicts a decision:** hashing was to take a random seed per process (against hash flooding); main's hash is unseeded FNV-1a, and literal hashes are fixed at compile time. It also reads one character at a time. |
+| **Hash tables** ([design](hashing.md)) | `Map`, `Set`, objects used as dictionaries | Insertion-ordered tables of 16-byte tagged keys and values; the static key type picks the hash and comparison, and the index keeps each entry's hash so growth never rehashes. | **Contradicts a decision:** main's hash is unseeded FNV-1a with literal hashes fixed at compile time; BigInt keys collide structurally; the JVM table can be flooded. Designed: one keyed definition (rapidhash with random secrets against SipHash-1-3, by the rows), lazy literal hashes, and a per-table tree fallback when probes run long. |
 | **Objects and classes** | layouts, field access, interfaces, method calls | Fixed layouts per class, interfaces satisfied by shape, and a call through a value with at most two known classes becomes a direct call. | `instanceof` as a class-id range test, nullable fields: designed, not built. |
 | **Arrays** | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
 | **Functions as values** | closures, indirect calls | A closure is an object with one method; known-class calls are direct. | Sets of classes for fields and return values, splitting call sites, typed adapters: designed, not built. |
@@ -92,7 +92,9 @@ the benchmark rows it is held to, and what is still open.
 |---|---|
 | [Unicode and text data](unicode.md) | decided 2026-10-27 |
 | [Memory management](memory.md) | decided 2026-10-27 |
-| Strings, numbers, hash tables, JSON | designs exist from the 2026-10-22 studies; to be written here as pages |
+| [Hashing and hash tables](hashing.md) | designed 2026-10-27 |
+| [Strings](strings.md) | approved 2026-10-22; stages D and E refined 2026-10-27 |
+| Numbers, JSON | designs exist from the 2026-10-22 studies; to be written here as pages |
 
 ## What is still open for native
 
@@ -103,9 +105,8 @@ measurement:
   stack pointer from an unfinished escape analysis, and loop objects sharing a
   frame slot), found by an outside review on 2026-10-27 and reproduced. They
   are being fixed before any memory stage; see [memory](memory.md).
-- **Hashing:** a seeded hash function that is fast on long keys, and literal
-  hashes computed without fixing the seed at compile time. Settles the
-  contradiction in the map. A research request is out.
+- **Hashing:** designed ([hashing.md](hashing.md)); the function is chosen by an
+  A/B on the rows. It settles the contradiction in the map.
 - *Resolved 2026-10-27:* `case-convert` is not a regression. It is 0.50x node
   and 0.48x Bun on main; the 3.90 µs full-run row was stale.
 
