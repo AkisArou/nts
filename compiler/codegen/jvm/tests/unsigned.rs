@@ -91,6 +91,11 @@ fn func(
 
 /// `(a, b) -> a op b` over `ty`, the comparison's value returned.
 fn valued(name: &str, ty: &HirType, compare: BinOp) -> hir::Func {
+    let returns = if matches!(compare, BinOp::Min | BinOp::Max) {
+        ty.clone()
+    } else {
+        HirType::Bool
+    };
     let values = vec![
         op(OpKind::Param(0), ty.clone()),
         op(OpKind::Param(1), ty.clone()),
@@ -100,13 +105,13 @@ fn valued(name: &str, ty: &HirType, compare: BinOp) -> hir::Func {
                 lhs: ValueId(0),
                 rhs: ValueId(1),
             },
-            HirType::Bool,
+            returns.clone(),
         ),
     ];
     func(
         name,
         &[ty.clone(), ty.clone()],
-        HirType::Bool,
+        returns,
         values,
         vec![block(&[0, 1, 2], hir::Terminator::Return(Some(ValueId(2))))],
     )
@@ -209,6 +214,10 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
             converted("float64", &U64, &HirType::Float { bits: 32 }),
             converted("double32", &U32, &HirType::NUMBER),
             erased("erased32", &U32),
+            valued("min32", &U32, BinOp::Min),
+            valued("max32", &U32, BinOp::Max),
+            valued("min64", &U64, BinOp::Min),
+            valued("max64", &U64, BinOp::Max),
         ],
         ..hir::Program::default()
     };
@@ -243,6 +252,21 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
   System.out.println(nts.gen.Program.above32(big, 1) + " " + nts.gen.Program.above64(top, 1L));
   System.out.println(nts.gen.Program.double64(max) + " " + nts.gen.Program.float64(max) + " " + nts.gen.Program.double32(big));
   System.out.println(nts.gen.Program.erased32(big));
+  int[] ints = {0, 1, Integer.MAX_VALUE, Integer.MIN_VALUE, big, -1};
+  long[] longs = {0L, 1L, Long.MAX_VALUE, top, max};
+  for (int x : ints) for (int y : ints) {
+    int lo = Integer.compareUnsigned(x, y) <= 0 ? x : y;
+    int hi = Integer.compareUnsigned(x, y) >= 0 ? x : y;
+    if (nts.gen.Program.min32(x, y) != lo || nts.gen.Program.max32(x, y) != hi)
+      throw new AssertionError("uint32 extrema");
+  }
+  for (long x : longs) for (long y : longs) {
+    long lo = Long.compareUnsigned(x, y) <= 0 ? x : y;
+    long hi = Long.compareUnsigned(x, y) >= 0 ? x : y;
+    if (nts.gen.Program.min64(x, y) != lo || nts.gen.Program.max64(x, y) != hi)
+      throw new AssertionError("uint64 extrema");
+  }
+  System.out.println("unsigned extrema agree on 61 ordered pairs");
 }}
 "#,
     )
@@ -272,6 +296,6 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
     // node: 3000000000 > 1, 2^63 >= 1, 2^64 - 1 as a number, as a float.
     assert_eq!(
         said,
-        "true false true\nfalse true\n1.0 1.0\n1.8446744073709552E19 1.8446744E19 3.0E9\n3.0E9\n"
+        "true false true\nfalse true\n1.0 1.0\n1.8446744073709552E19 1.8446744E19 3.0E9\n3.0E9\nunsigned extrema agree on 61 ordered pairs\n"
     );
 }

@@ -461,7 +461,7 @@ fn width_of(
 
     let usable = match &func.values[index].kind {
         OpKind::Binary {
-            op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Rem,
+            op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Rem | BinOp::Min | BinOp::Max,
             lhs,
             rhs,
         } => {
@@ -636,6 +636,15 @@ fn width_of(
     // inference, and their operands are coerced to `i32` on the way in -- which
     // is a truncation the source asked for.
     let widest = match &func.values[index].kind {
+        // Selecting a bounded operand does not make the other operand safe
+        // to narrow before comparing it: min(uint32, 100) can answer 100 for
+        // an input above INT32_MAX. Keep both operands in a signed width
+        // that holds their full proved ranges, even when the result is small.
+        OpKind::Binary {
+            op: BinOp::Min | BinOp::Max,
+            lhs,
+            rhs,
+        } => width(id)?.max(width(*lhs)?).max(width(*rhs)?),
         OpKind::Binary {
             op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Rem,
             lhs,
@@ -1708,7 +1717,11 @@ fn unsigned_classes(
             pays.insert(root);
         }
         if let OpKind::Binary { op, lhs, rhs } = &func.values[index].kind
-            && (op.is_comparison() || matches!(op, BinOp::Div | BinOp::Rem | BinOp::Shr))
+            && (op.is_comparison()
+                || matches!(
+                    op,
+                    BinOp::Div | BinOp::Rem | BinOp::Shr | BinOp::Min | BinOp::Max
+                ))
             && !(non_negative(*lhs) && non_negative(*rhs))
         {
             // All three, because the operands are coerced to the operation's

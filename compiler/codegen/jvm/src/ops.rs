@@ -5950,6 +5950,12 @@ impl Emitter<'_> {
         if counts_as_shift && kind == Kind::Long {
             return self.wide_shift(code, pool, op, (lhs, rhs), right, &origin);
         }
+        if matches!(op, BinOp::Min | BinOp::Max)
+            && matches!(kind, Kind::Int | Kind::Long)
+            && matches!(self.ty(value), HirType::Int { signed: false, .. })
+        {
+            return self.unsigned_extrema(code, pool, op, (lhs, rhs), kind);
+        }
         self.load(code, pool, lhs)?;
         self.load(code, pool, rhs)?;
         match op {
@@ -5992,17 +5998,9 @@ impl Emitter<'_> {
             // `Math.min` and `Math.max` on doubles are JavaScript's, exactly:
             // NaN propagates and `-0.0` is less than `0.0`. C's `fmin`/`fmax`
             // are wrong on both, which is why the native runtime has its own.
-            // `Math.min` on two `int`s is signed, so an unsigned operand would
-            // answer wrong above 2^31. Nothing makes one today; refused by name
-            // rather than emitted, should something start to.
-            BinOp::Min | BinOp::Max
-                if matches!(self.ty(value), HirType::Int { signed: false, .. }) =>
-            {
-                return Err(refuse(
-                    self.func,
-                    "the smaller or larger of two unsigned integers",
-                ));
-            }
+            // Unsigned integer operands take the order-preserving sign-bit
+            // transform above; widened unsigned values held as doubles are
+            // already positive numeric values and use the floating overload.
             BinOp::Min | BinOp::Max => {
                 let name = if op == BinOp::Min { "min" } else { "max" };
                 let descriptor = kind.descriptor();
@@ -6014,6 +6012,38 @@ impl Emitter<'_> {
                 unreachable!("comparisons are handled above")
             }
         }
+        Ok(Placed::OnStack)
+    }
+
+    /// Toggling the sign bit maps unsigned order to signed order. Signed
+    /// Math.min/max can then select the operand; toggle back to restore its
+    /// bits. No new stack-map labels or temporary locals are needed.
+    fn unsigned_extrema(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        op: BinOp,
+        (lhs, rhs): (ValueId, ValueId),
+        kind: Kind,
+    ) -> Result<Placed, Diagnostic> {
+        let origin = self.func.origin.clone();
+        let flip = |code: &mut Code, pool: &mut Pool| {
+            if kind == Kind::Int {
+                code.const_int(&origin, pool, i32::MIN);
+            } else {
+                code.const_long(&origin, pool, i64::MIN);
+            }
+            code.bitwise(&origin, insn::XOR, kind);
+        };
+        for operand in [lhs, rhs] {
+            self.load(code, pool, operand)?;
+            flip(code, pool);
+        }
+        let name = if op == BinOp::Min { "min" } else { "max" };
+        let descriptor = kind.descriptor();
+        let signature = format!("({descriptor}{descriptor}){descriptor}");
+        code.invoke_static(&origin, pool, "java/lang/Math", name, &signature);
+        flip(code, pool);
         Ok(Placed::OnStack)
     }
 
