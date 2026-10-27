@@ -215,6 +215,11 @@ From [`foundations/memory.md`](../../foundations/memory.md):
 - **M3:** weak references follow the specification exactly.
 - **M4:** mimalloc is tried first as the native allocator.
 - **M5:** no memory annotations in the language.
+- **Build order** (MainClaude, from the stage 1.1 profile): `release-acyclic`
+  moves from stage 1 to stage 3. After release by type, its drain is mostly
+  loading each dying object's header and descriptor, and the explicit list
+  work is about 6% of the run, so no drain change closes its gap with node.
+  The profile is in `~/.cache/nts-scratch/runtime-20261027/typed-release-ab/profile/split.md`.
 
 ## Language and hosts (10-27)
 

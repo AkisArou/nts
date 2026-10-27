@@ -377,9 +377,9 @@ node and Bun in the same sitting.
 | stage | work | rows it must move |
 |---|---|---|
 | 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`); a macOS cycle test like `gtk-cycles`, recording today's behaviour (it runs when a Mac is available again; there is none now) | none: instruments and fixes |
-| 1 | release specialized by type; count-free sort; erased-value releases; one count per map key; anchors held only to the last borrow | `release-acyclic` and `sort-objects` below node and Bun (today 2.1× and 3.0× node: generic release and the merge loop's counting are about two thirds and a third of their cycles); `cyclic-churn` loses its generic-walker share (two thirds of its cycles are the collector); `map-entries-top-k` about −5% more; `awfy-towers` below Bun |
+| 1 | release specialized by type; count-free sort; erased-value releases; one count per map key; anchors held only to the last borrow | `sort-objects` below node and Bun (the merge loop's counting is its cost); `release-acyclic` and `cyclic-churn` lose their generic-walker share; `map-entries-top-k` about −5% more; `awfy-towers` below Bun |
 | 2 | the one memory analysis, facts only, as formulated above; its first slice end to end (a parser-shaped workload and a tree or list builder) | none may move; each difference from today's placement explained |
-| 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `json-build-append` must not regress |
+| 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `release-acyclic` below node and Bun; `json-build-append` must not regress |
 | 4 | borrowed region inputs | `record-word-counts` and `json-stringify-doc` a few percent |
 | 5 | reuse for arrays and objects | `immutable-update`, `array-copying-methods` below node and Bun; stop if they don't move |
 | 6 | page allocator: mimalloc v3 (v2 as control) and rpmalloc against today's, with today's object layout; then the 16-byte header, measured separately; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row; reuse distance; executable size; RSS retained by long-running programs |
@@ -389,6 +389,13 @@ node and Bun in the same sitting.
 
 Stages 1 and 2 run side by side; 3 needs 2; 4 needs 3; 5 and 6 are
 independent; 7 needs the stage 0 contract.
+
+**`release-acyclic` is held to stage 3, not stage 1.** Once release is
+specialized by type, finding a dying object's fields costs almost nothing.
+What remains is freeing each object on its own: loading its header and
+descriptor, then returning it to its pool. No change to the release loop can
+remove that per-object work; a tree that dies at once, kept in one region and
+freed at once, can.
 
 **The riskiest stage is 3, general per-site cohorts:** the most work for the
 least certain payoff. Next is 5, because callbacks and observable sources
