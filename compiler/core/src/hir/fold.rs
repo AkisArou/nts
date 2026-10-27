@@ -142,13 +142,14 @@ fn exactly_one_value(facts: Facts) -> bool {
 /// declaration, where `S` may perfectly well be a number. The fact only exists
 /// once a copy has substituted, which is after lowering.
 ///
-/// # Strings and tags only
+/// # Constants and integer identities
 ///
 /// A float comparison has `NaN` and two zeroes in it, and the reasoning for those
 /// is [`exactly_one_value`]'s, over intervals the analysis proved. Nothing here
-/// needs it: the shape that produces invalid HIR is `typeof`, whose operands are
-/// string literals the lowering wrote itself, and the shape run again after
-/// `simplify` is a tag it decided. See [`same_constant`].
+/// needs it: `typeof` compares literals, and an integer equals itself regardless
+/// of its range. The latter becomes visible after signature narrowing: a NaN
+/// check that `Object.is` needed for a double is false for its integer result.
+/// Floats keep that check. See [`known_equality`].
 ///
 /// # Why here, before `dce::prune_unreachable_blocks`
 ///
@@ -167,7 +168,7 @@ fn decide(func: &mut Func) -> usize {
         let super::OpKind::Binary { op, lhs, rhs } = func.values[index].kind else {
             continue;
         };
-        let Some(equal) = same_constant(func, lhs, rhs) else {
+        let Some(equal) = known_equality(func, lhs, rhs) else {
             continue;
         };
         let answer = match op {
@@ -219,22 +220,20 @@ fn decide(func: &mut Func) -> usize {
     decided
 }
 
-/// Whether two values are string or same-typed integer constants, and whether
-/// they are equal.
+/// Whether equality is known from constants or an integer's identity.
 ///
-/// **Strings and integers and nothing else**, because `typeof` is the only
-/// thing that makes a decidable comparison this pass has to answer: before
-/// preparation its operands are string literals the lowering wrote itself, and
-/// after `simplify` decides the tag of an erased scalar they are two tags. A float comparison belongs to
-/// [`exactly_one_value`]'s interval reasoning, which has `NaN` and the two zeroes
-/// in it. A boolean one would be exact and is left out for want of a program that
-/// reaches it -- `lower::statically_decided` already folds every `=== true` the
-/// checker can see, so a fold here would be a branch with no fixture.
+/// `typeof` produces string constants; simplified erased tags are integer
+/// constants. An integer also equals itself without knowing its value: it
+/// cannot be NaN. Floating identities stay unknown here, since a double may
+/// be NaN; their facts belong to [`exactly_one_value`]'s interval reasoning.
 ///
 /// `None` for anything else, including two constants of *different* kinds: saying
 /// `false` for those would be a claim about coercion rather than a fact about the
 /// values.
-fn same_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<bool> {
+fn known_equality(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<bool> {
+    if lhs == rhs && matches!(func.values[lhs.0 as usize].ty, super::HirType::Int { .. }) {
+        return Some(true);
+    }
     match (
         &func.values[lhs.0 as usize].kind,
         &func.values[rhs.0 as usize].kind,
