@@ -154,6 +154,13 @@ then a guard once fixed), `tests/memory/`.
   the same commit.
 - Run a new fixture against the previous compiler too: if it passes on both, it
   does not test the fix.
+- A new `tests/programs/` or `benchmarks/cases/` fixture, or one whose
+  generated cases change, records its node oracle count in the same commit:
+  `node tooling/differential/record-oracles.ts tests/programs/<name> …`. It
+  measures complete node runs and writes only those rows; the gate's
+  "oracle not measured" error prints the command. A change to a function
+  body with the same cases needs no new record, since every run still checks
+  that all cases arrive.
 
 ## Compiler contracts
 
