@@ -350,6 +350,11 @@ function runCheck(dir, backend, options) {
   });
   if (ran.memoryKilled) return { category: "not-measured", nts: "the resident memory cap" };
   const said = `${ran.stdout ?? ""}${ran.stderr ?? ""}`.split("\n").map((l) => l.trim());
+  return decideCheck(said, ran.status);
+}
+
+/** What a finished `nts check` run decided, from its lines alone. */
+function decideCheck(said, status) {
   // The CLI says a decline as "17 case(s) the compiled program declined -- …",
   // count first: matched by its words, not by a line start, or it drops out
   // of the record and the check reads "agreed on every case" over cases that
@@ -368,6 +373,13 @@ function runCheck(dir, backend, options) {
   ).map((l) => stableCheckText(l.replace(/^Error: (?=invalid HIR)/, "")));
   const text = lines.join(" | ");
   if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
+  // An internal emitter error decides the run on its own: nothing was emitted
+  // to compare, and the line matches no deciding prefix above (the Wasm
+  // emitter's "no callable fills uniform slot N" in CookieJar#evict@raises
+  // recorded as NOT MEASURED with a wall of unrelated refusals as its text,
+  // 2026-10-27). The slot number moves with the program, so it comes out.
+  const internal = said.find((l) => /^Error: internal \w+ emitter error\b/.test(l));
+  if (internal) return { category: "aborted", nts: internal.replace(/^Error: /, "").replace(/uniform slot \d+/, "uniform slot N") };
   // **A backend's refusal by name is a refusal**, as a lowering's is: `nts
   // check` lists each function it did not emit and checks nothing. Before the
   // disagreement test, which a decline's own message can trip -- the JVM
@@ -397,7 +409,7 @@ function runCheck(dir, backend, options) {
     return { category: "refused", nts: first.replace(/^refused:\s*(?:\S+:\d+:\d+:\s+)?/, "") };
   }
   if (/agreed on every case/.test(text)) return { category: "agrees", nts: text };
-  return { category: "not-measured", nts: text || `nts check exited ${ran.status} and said nothing that decides` };
+  return { category: "not-measured", nts: text || `nts check exited ${status} and said nothing that decides` };
 }
 
 /**
@@ -459,6 +471,19 @@ function selfCheck() {
     if (!backendDeclined([words])) return `a backend's decline not read as one: ${words}`;
   }
   if (backendDeclined(["agreed on every case"])) return "an agreement read as a backend's decline";
+  // An internal emitter error outranks any partial-agreement line before it,
+  // and its uniform-slot number is normalised out; an unrelated error stays
+  // not measured (the CookieJar#evict@raises line verbatim, 2026-10-27).
+  const emitter = decideCheck([
+    "checked 12 of 29 cases; the rest were not reached",
+    "agreed on every case",
+    "Error: internal wasm emitter error in `CookieJar#evict@raises`: no callable fills uniform slot 611",
+  ], 1);
+  if (emitter.category !== "aborted" || emitter.nts !== "internal wasm emitter error in `CookieJar#evict@raises`: no callable fills uniform slot N") {
+    return `an internal emitter error read as ${JSON.stringify(emitter)}`;
+  }
+  const unrelated = decideCheck(["Error: the input file could not be read"], 1);
+  if (unrelated.category !== "not-measured") return `an unrelated error read as ${unrelated.category}`;
   const summary = (site, count = 27) => ({
     run: "check", category: "wrong-answer", node: null,
     nts: `checked 29 cases | refused: ${site} NTS1001 missing method | Error: ${count} case(s) disagree`,
