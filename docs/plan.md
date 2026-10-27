@@ -59,30 +59,52 @@ Benchmarks run through every phase.
    - a red train blames only the landing that caused it, and a failure that is
      already on `main` is reported as red on main (*done*);
    - the reference-counting and memory checks run on every compiler and runtime
-     landing, not only in the full run;
+     landing, not only in the full run (*done*);
    - deliberate crashes store no core dumps, so measurement can start beside a
-     gate;
-   - no cold build per train: tests are built with line tables only, and the
-     debug build folder is pruned within a bound.
+     gate (*done*);
+   - no cold build per train: tests are built with line tables only, at
+     opt-level 1, and the debug build folder is pruned within a bound (*done*).
 5. **The fast landing model** (approved):
    1. a change owes only the checks it can affect, so docs, records and
-      comments land in seconds, with no train;
+      comments land in seconds, with no train (*done*: the fast lane);
    2. the gate's waiting is fixed, its results are cached by their inputs, and
       only the cases a change can affect run, for a full gate near 10
-      minutes;
+      minutes. *Waiting fixed:* frontend capacity follows the CPU slots,
+      reservations only for steps that can fit, memory budgets calibrated from
+      measured peaks, and `blockers` runs in parallel. *Caching:* keyed on
+      artifact bytes, in shadow mode until its results are proved identical.
+      Next: one capture per project per run, shared by every step;
    3. then code lands after a 5–10 minute check, while a verifier gates `main`
       behind it, bisects a red and reverts the culprit automatically. Changes
-      to the gate itself stay strict.
+      to the gate itself stay strict. *The ledger and the shadow verifier are
+      on `main`;* optimistic landing waits for three shadow batches that agree
+      with their trains, then for the holds, bisection and brake.
 6. **Deterministic builds:** the same source and compiler give the same bytes
    on every backend, held by a test over all four ([cli](reference/cli.md#nts-build)). *Done.*
 7. **The documentation** as specification pages, with the notebooks in
    [`records/`](records). *Done.*
 8. **The register's wrong answers** recorded as fixtures: decorators dropped,
-   throws escaping `try` through closures in fields, and the covariant-array
-   dispatch.
+   throws escaping `try` through closures in fields, overrides and method
+   values, and a method read twice being two functions (*done*); the
+   covariant-array dispatch remains.
 9. **A citation sweep:** code comments that cite documents moved to
-    `records/`, fixed in one landing, in a quiet window (it owes the full
-    gate).
+    `records/` (*done*).
+10. **Exact verdicts:**
+    - the integrity audit counts every statement a refusal cuts, and every
+      known cut names its cause (*done*);
+    - the differential oracle compares a recorded number of cases per
+      project, measured complete, under a CPU-time bound, so what a gate
+      checks never depends on the machine's load;
+    - a wall-clock deadline decides no result anywhere in the gate.
+11. **The silent wrong answers found on the way,** in this order:
+    - an optional callable property in a structural type (the node stdio
+      setup), then one writer per stream for `console.log`,
+      `process.stdout.write` and the node `console`;
+    - a `declare` field with no visible writer is refused, not read as 0;
+    - decorators refused until implemented;
+    - a throw through any indirect call is catchable (L15);
+    - the web-platform classes keep their functional setup out of the
+      reflective setup that nts defers.
 
 ## Phase 2: foundations, native first
 
@@ -98,7 +120,10 @@ The designs and their build orders are in [`foundations/`](foundations).
      suite of fourteen, against node, Bun, C++ and Java;
    - the Unicode fixtures and the version-pin check.
 2. **Memory stages 1 and 2** (cheap counting wins; the one placement analysis,
-   facts only), beside **Unicode stage 1** (case mapping).
+   facts only), beside **Unicode stage 1** (case mapping). Stage 1 so far:
+   release by type, the count-free sort and proved-integer `Math.min` and
+   `Math.max` are on `main`; typed collector visitors are next
+   ([results](../results)).
 3. **Then:** memory stage 3 (per-site regions, json-parse first), Unicode
    stages 2–3, the strings stages D and E, numbers, and the keyed hash.
 4. **The builtins mechanism** ([builtins](foundations/builtins.md)), once
