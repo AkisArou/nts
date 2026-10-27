@@ -1,8 +1,8 @@
 // Which calls a region could serve (`hir::regions`), each beside a control
 // that differs from it in one thing. A region serves `r = f(args)` when
 // everything `f` makes can be given back at once where `r` dies: `f` stores
-// only into what it made (fact 1), keeps only what it made, literals, settled
-// globals and its arguments (fact 2), and the caller only reads `r` (fact 3).
+// only into what it made (fact 1), keeps only references made in the call or
+// immortal (fact 2), and the caller only reads `r` (fact 3).
 // `compiler/core/tests/region_sites.rs` asserts each verdict; here node checks
 // that the program means what it says.
 
@@ -90,8 +90,8 @@ export function countsWhileBuilding(count: number): number {
   return total(list) + made;
 }
 
-// Site (fact 2): an argument kept in what the call made -- the caller keeps
-// the argument alive to the reset. The head is always a cell the call made:
+// Refused (fact 2): keeping an argument alive does not balance helper counts
+// in a count-free clone. The head is always a cell the call made:
 // a call that could hand its argument back is refused, since the caller gives
 // up the result it is handed.
 function prepend(count: number, rest: Cell): Cell {
@@ -107,8 +107,8 @@ export function prependsToAnArgument(count: number): number {
   return total(list);
 }
 
-// Refused (fact 2), the control's one difference: what is kept is a field of
-// the argument, which its owner could replace and free before the reset.
+// Refused (fact 2), changing only the external edge to a field of the
+// argument: this also needs external-edge ownership.
 function prependField(count: number, holder: Holder): Cell {
   let head = new Cell(-1, holder.cell);
   for (let index = 0; index < count; index++) {
@@ -137,9 +137,8 @@ export function buildsFromATemporary(count: number): number {
   return total(list);
 }
 
-// Site: an argument the call stores straight into a field it made, which
-// ownership reads as taking the argument over. A clone counts nothing, so it
-// takes nothing over: the caller keeps its own reference and gives it up.
+// Refused: an argument stored straight into a field still needs an external
+// ownership edge. Keeping the caller alive does not establish that protocol.
 function wrap(count: number, rest: Cell): Cell {
   const head = new Cell(-1, null);
   head.next = rest;

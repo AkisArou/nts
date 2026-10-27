@@ -10,10 +10,10 @@
 //!    calls store only into objects made inside the call: no global, no field or
 //!    element of an argument, no helper that keeps what it is given somewhere
 //!    else.
-//! 2. **Everything a region object points at outside outlives the reset.** What
-//!    is stored into one is made inside the call, immortal (a literal, frame
-//!    storage), a settled global's value, or an argument -- which `g` keeps
-//!    alive to the reset.
+//! 2. **Containers keep only references made inside the call or immortal.**
+//!    A clone inserts no counts, but container helpers can retain or release
+//!    their contents. Keeping an external reference alive until reset does not
+//!    balance those counts; external edges need the later ownership protocol.
 //! 3. **`r` dies at a point, and nothing reached from it survives that point.**
 //!    `g` only reads through `r`: it stores no part of it, returns none, and
 //!    hands it only to calls that read.
@@ -29,7 +29,7 @@
 //! end. Recursion is admitted: a function that calls itself is judged by what
 //! its body does, assuming the call does the same.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -86,6 +86,8 @@ enum Helper {
     Reads,
     /// Reads its arguments, keeps none, and answers a fresh allocation.
     Makes,
+    /// Makes a shallow copy, including the source container's references.
+    Copies { from: usize },
     /// Writes into argument `into` and keeps its other reference arguments
     /// there; answers that argument, a fresh replacement, or a scalar.
     Fills { into: usize },
@@ -164,8 +166,8 @@ fn helper(name: &str) -> Option<Helper> {
         | "nts_set_new"
         | "nts_array_new"
         | "nts_array_new_uninitialized"
-        | "nts_array_slice"
         | "nts_array_join_str" => Helper::Makes,
+        "nts_array_slice" => Helper::Copies { from: 0 },
         "nts_array_push_ref"
         | "nts_array_push_value"
         | "nts_array_unshift_ref"
@@ -269,43 +271,60 @@ impl Uses {
 /// the object that holds them.
 type Slot = (HirType, Option<u32>);
 
-/// What every scope reads and none refines: the program, its names, its
-/// settled globals and each function's uses.
+/// Shared names, uses and the direct-call graph, computed once per program.
 struct Shared<'p> {
     program: &'p Program,
     by_name: FxHashMap<&'p str, usize>,
-    settled: FxHashSet<u32>,
     uses: Vec<Uses>,
+    edges: Vec<Vec<usize>>,
+    callers: Vec<Vec<usize>>,
+    components: Vec<usize>,
 }
 
 impl<'p> Shared<'p> {
     fn new(program: &'p Program) -> Self {
+        let by_name: FxHashMap<&str, usize> = program
+            .funcs
+            .iter()
+            .enumerate()
+            .map(|(at, func)| (func.name.as_str(), at))
+            .collect();
+        let edges: Vec<Vec<usize>> = program
+            .funcs
+            .iter()
+            .map(|func| {
+                func.values
+                    .iter()
+                    .filter_map(|op| match &op.kind {
+                        OpKind::Call {
+                            callee: Callee::Direct(name),
+                            ..
+                        } => by_name.get(name.as_str()).copied(),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut callers = vec![Vec::new(); program.funcs.len()];
+        for (at, callees) in edges.iter().enumerate() {
+            for callee in callees {
+                callers[*callee].push(at);
+            }
+        }
+        let components = super::strongly_connected(&edges);
         Self {
             program,
-            by_name: program
-                .funcs
-                .iter()
-                .enumerate()
-                .map(|(at, func)| (func.name.as_str(), at))
-                .collect(),
-            settled: super::own::settled_globals(program),
+            by_name,
+            edges,
+            callers,
+            components,
             uses: program.funcs.iter().map(Uses::of).collect(),
         }
     }
 
     /// The functions `at` calls directly.
-    fn callees(&self, at: usize) -> Vec<usize> {
-        self.program.funcs[at]
-            .values
-            .iter()
-            .filter_map(|op| match &op.kind {
-                OpKind::Call {
-                    callee: Callee::Direct(name),
-                    ..
-                } => self.by_name.get(name.as_str()).copied(),
-                _ => None,
-            })
-            .collect()
+    fn callees(&self, at: usize) -> &[usize] {
+        &self.edges[at]
     }
 
     /// Every function a call to `root` can run, `root` first.
@@ -318,16 +337,7 @@ impl<'p> Shared<'p> {
                 continue;
             }
             members.push(at);
-            for op in &self.program.funcs[at].values {
-                if let OpKind::Call {
-                    callee: Callee::Direct(name),
-                    ..
-                } = &op.kind
-                    && let Some(callee) = self.by_name.get(name.as_str())
-                {
-                    pending.push(*callee);
-                }
-            }
+            pending.extend(self.callees(at));
         }
         members
     }
@@ -442,18 +452,49 @@ impl<'p, 's> Facts<'p, 's> {
         }
     }
 
-    /// Refine until nothing moves. Each round moves at least one fact one step
-    /// in its one direction, and there are finitely many; the bound only guards
-    /// against a mistake here.
+    /// Bottom-up SCC worklist. Summaries flow to callers, freshness of
+    /// parameters flows to callees, and a stale slot can affect every body.
+    /// Those reverse/global dependencies requeue components explicitly.
     fn settle(&mut self) {
-        for _ in 0..256 {
-            let mut changed = false;
-            for index in 0..self.members.len() {
-                let at = self.members[index];
-                changed |= self.refine(at);
-            }
-            if !changed {
-                break;
+        self.settle_with_budget(
+            100_000usize.saturating_add(self.members.len().saturating_mul(100)),
+        );
+    }
+
+    fn settle_with_budget(&mut self, mut remaining: usize) {
+        let components = &self.shared.components;
+        let mut groups = vec![Vec::new(); components.iter().max().map_or(0, |at| at + 1)];
+        for at in &self.members {
+            groups[components[*at]].push(*at);
+        }
+        let mut pending: BTreeSet<usize> = self.members.iter().map(|at| components[*at]).collect();
+        while let Some(component) = pending.pop_first() {
+            for at in &groups[component] {
+                if remaining == 0 {
+                    // Refuse the entire dependent scope. Neither this body's
+                    // optimistic freshness nor its callers' read-only facts
+                    // can authorize a region after an incomplete proof.
+                    for member in &self.members {
+                        self.refused[*member] = Some("region analysis budget exhausted".to_owned());
+                        self.returns_fresh[*member] = false;
+                        self.fresh_params[*member].clear();
+                        self.reads_only[*member].clear();
+                    }
+                    return;
+                }
+                remaining -= 1;
+                let (changed, parameters, stale) = self.refine(*at);
+                if changed {
+                    for caller in &self.shared.callers[*at] {
+                        pending.insert(components[*caller]);
+                    }
+                }
+                for callee in parameters {
+                    pending.insert(components[callee]);
+                }
+                if stale {
+                    pending.extend(self.members.iter().map(|at| components[*at]));
+                }
             }
         }
     }
@@ -508,6 +549,7 @@ impl<'p, 's> Facts<'p, 's> {
                     helper(name),
                     Some(
                         Helper::Makes
+                            | Helper::Copies { .. }
                             | Helper::Fills { .. }
                             | Helper::Grows { .. }
                             | Helper::Takes { .. }
@@ -568,6 +610,11 @@ impl<'p, 's> Facts<'p, 's> {
                 Some(Helper::Fills { into } | Helper::Grows { into }) => {
                     args.get(into).is_some_and(|arg| fresh.contains(arg))
                 }
+                Some(Helper::Copies { from }) => args.get(from).is_some_and(|arg| {
+                    !matches!(&func.values[arg.0 as usize].ty,
+                        HirType::Managed(super::ManagedType::Array(element)) if element.may_hold_a_reference())
+                        || fresh.contains(arg)
+                }),
                 Some(Helper::Takes { from }) => args.get(from).is_some_and(|arg| {
                     fresh.contains(arg) && !self.stale.contains(&slot_of(func, *arg, None))
                 }),
@@ -577,78 +624,16 @@ impl<'p, 's> Facts<'p, 's> {
         }
     }
 
-    /// Values a region object may point at (fact 2): what the call made, an
-    /// immortal, a settled global's value, a parameter -- which the call's
-    /// callers answer for -- or a value that is not a reference at all.
-    fn allowed(&self, at: usize, fresh: &FxHashSet<ValueId>) -> FxHashSet<ValueId> {
-        let func = &self.program.funcs[at];
-        let uses = &self.shared.uses[at];
-        let mut allowed: FxHashSet<ValueId> = FxHashSet::default();
-        for (index, op) in func.values.iter().enumerate() {
-            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-            let base = !op.ty.is_counted()
-                || fresh.contains(&value)
-                || match &op.kind {
-                    OpKind::ConstString(_)
-                    | OpKind::ConstTemplate { .. }
-                    | OpKind::ClosureStatic
-                    | OpKind::ConstNull
-                    | OpKind::ConstUndefined
-                    | OpKind::Param(_)
-                    | OpKind::Erase { .. }
-                    | OpKind::Unerase { .. }
-                    | OpKind::Convert(_)
-                    | OpKind::FieldView { .. }
-                    | OpKind::BlockParam(_) => true,
-                    OpKind::GlobalGet(global) => self.shared.settled.contains(global),
-                    _ => false,
-                };
-            if base {
-                allowed.insert(value);
-            }
-        }
-        loop {
-            let before = allowed.len();
-            let kept: FxHashSet<ValueId> = allowed
-                .iter()
-                .copied()
-                .filter(|value| {
-                    let op = &func.values[value.0 as usize];
-                    if !op.ty.is_counted() || fresh.contains(value) {
-                        return true;
-                    }
-                    match &op.kind {
-                        OpKind::Erase { value: inner, .. }
-                        | OpKind::Unerase { value: inner, .. }
-                        | OpKind::Convert(inner)
-                        | OpKind::FieldView { value: inner, .. } => allowed.contains(inner),
-                        OpKind::BlockParam(_) => uses.param_at.get(value).is_some_and(|at| {
-                            uses.incoming.get(at).is_some_and(|incoming| {
-                                incoming.iter().all(|arg| allowed.contains(arg))
-                            })
-                        }),
-                        _ => true,
-                    }
-                })
-                .collect();
-            allowed = kept;
-            if allowed.len() == before {
-                return allowed;
-            }
-        }
-    }
-
     /// One round over one function: what it returns, allocates, raises, stores
-    /// into and is refused for. Returns whether anything moved.
-    fn refine(&mut self, at: usize) -> bool {
+    /// into and is refused for. Returns summary changes, refuted callee
+    /// parameters, and whether a globally shared slot became stale.
+    fn refine(&mut self, at: usize) -> (bool, Vec<usize>, bool) {
         let program = self.program;
         let func = &program.funcs[at];
         let fresh = self.fresh(at);
-        let allowed = self.allowed(at, &fresh);
         let mut judged = Judged {
             func,
             fresh: &fresh,
-            allowed: &allowed,
             allocates: false,
             raises: false,
             appends: false,
@@ -683,8 +668,11 @@ impl<'p, 's> Facts<'p, 's> {
         } = judged;
 
         let mut changed = false;
+        let mut parameters = Vec::new();
         for (callee, slot) in refuted {
-            changed |= self.fresh_params[callee].remove(&slot);
+            if self.fresh_params[callee].remove(&slot) {
+                parameters.push(callee);
+            }
         }
         if self.returns_fresh[at] && !returns_fresh {
             self.returns_fresh[at] = false;
@@ -714,8 +702,9 @@ impl<'p, 's> Facts<'p, 's> {
             self.kept[at] = kept;
             changed = true;
         }
+        let mut stale_changed = false;
         for slot in stale {
-            changed |= self.stale.insert(slot);
+            stale_changed |= self.stale.insert(slot);
         }
         if self.refused[at].is_none() && refused.is_some() {
             self.refused[at] = refused;
@@ -725,7 +714,7 @@ impl<'p, 's> Facts<'p, 's> {
             self.reads_only[at] = reads_only;
             changed = true;
         }
-        changed
+        (changed, parameters, stale_changed)
     }
 
     /// The parameter slots a function only reads through (fact 3, one call
@@ -819,13 +808,25 @@ impl<'p, 's> Facts<'p, 's> {
                 ..
             } => match helper(name) {
                 Some(Helper::Reads) => Ok(true),
+                Some(Helper::Copies { from })
+                    if args.get(from) == Some(&value)
+                        && matches!(&func.values[value.0 as usize].ty,
+                        HirType::Managed(super::ManagedType::Array(element)) if element.may_hold_a_reference()) =>
+                {
+                    Err("copies references out of the result".to_owned())
+                }
                 Some(
                     Helper::Fills { into: at }
                     | Helper::Grows { into: at }
                     | Helper::Takes { from: at },
                 ) if args.get(at) == Some(&value) => Err("writes into the result".to_owned()),
                 Some(Helper::Fills { .. }) => Err("stores part of the result".to_owned()),
-                Some(Helper::Makes | Helper::Grows { .. } | Helper::Takes { .. }) => Ok(false),
+                Some(
+                    Helper::Makes
+                    | Helper::Copies { .. }
+                    | Helper::Grows { .. }
+                    | Helper::Takes { .. },
+                ) => Ok(false),
                 Some(Helper::Raises) => Err("raises part of the result".to_owned()),
                 None => Err(format!("hands part of the result to `{name}`")),
             },
@@ -950,6 +951,7 @@ impl<'p, 's> Facts<'p, 's> {
                     helper(name),
                     Some(
                         Helper::Makes
+                            | Helper::Copies { .. }
                             | Helper::Fills { .. }
                             | Helper::Grows { .. }
                             | Helper::Takes { .. }
@@ -981,7 +983,6 @@ fn slot_of(func: &Func, container: ValueId, field: Option<u32>) -> Slot {
 struct Judged<'f> {
     func: &'f Func,
     fresh: &'f FxHashSet<ValueId>,
-    allowed: &'f FxHashSet<ValueId>,
     allocates: bool,
     raises: bool,
     appends: bool,
@@ -1035,8 +1036,8 @@ impl Judged<'_> {
         if !self.func.values[value.0 as usize].ty.is_counted() {
             return;
         }
-        if !self.allowed.contains(&value) {
-            self.refuse("stores a value read from outside the call");
+        if !self.fresh.contains(&value) {
+            self.refuse("stores a reference not made in the call");
         }
         let params = self.params(value);
         self.kept.extend(params);
@@ -1102,8 +1103,10 @@ impl Judged<'_> {
                         self.contain(*arg);
                     }
                     if facts.kept[callee].contains(&slot) {
-                        if !self.allowed.contains(arg) {
-                            self.refuse("passes a value read from outside the call to be kept");
+                        if self.func.values[arg.0 as usize].ty.is_counted()
+                            && !self.fresh.contains(arg)
+                        {
+                            self.refuse("passes a reference not made in the call to be kept");
                         }
                         let params = self.params(*arg);
                         self.kept.extend(params);
@@ -1113,6 +1116,16 @@ impl Judged<'_> {
             Callee::External(name) => match helper(name) {
                 Some(Helper::Reads) => {}
                 Some(Helper::Makes) => self.allocates = true,
+                Some(Helper::Copies { from }) => {
+                    self.allocates = true;
+                    if let Some(source) = args.get(from)
+                        && matches!(&self.func.values[source.0 as usize].ty,
+                            HirType::Managed(super::ManagedType::Array(element)) if element.may_hold_a_reference())
+                        && !self.fresh.contains(source)
+                    {
+                        self.refuse("copies references from outside the call");
+                    }
+                }
                 Some(Helper::Fills { into }) => {
                     self.allocates = true;
                     if let Some(container) = args.get(into).copied() {
@@ -1556,5 +1569,202 @@ fn serve(func: &mut Func, site: &Site, root: &str) {
             }
         };
         func.blocks[index].ops.insert(at, hold);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Block, ManagedType, Op, Param, TypeId};
+    use super::*;
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    fn origin() -> Origin {
+        Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        })
+    }
+    fn object() -> HirType {
+        HirType::Managed(ManagedType::Object(TypeId(1)))
+    }
+    fn op(kind: OpKind, ty: HirType) -> Op {
+        Op {
+            kind,
+            ty,
+            origin: origin(),
+        }
+    }
+    fn func(name: &str, values: Vec<Op>, returned: ValueId) -> Func {
+        let ops = (0..values.len())
+            .map(|v| ValueId(u32::try_from(v).unwrap_or(u32::MAX)))
+            .collect();
+        Func {
+            name: name.to_owned(),
+            params: vec![Param {
+                name: "arg".to_owned(),
+                ty: object(),
+                origin: origin(),
+                known: super::super::facts::Facts::TOP,
+                written: None,
+                shape: super::super::ParamShape::Ordinary,
+            }],
+            return_type: values[returned.0 as usize].ty.clone(),
+            values,
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops,
+                terminator: Terminator::Return(Some(returned)),
+            }],
+            origin: origin(),
+            exported: false,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+            obligations: Vec::new(),
+            exact: FxHashMap::default(),
+            written_return: None,
+            result_absent: super::super::Absent::Impossible,
+            written_return_elements: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn freshness_crosses_long_chains_and_budget_exhaustion_refuses() {
+        let funcs = (0..320)
+            .map(|at| {
+                let mut values = vec![op(OpKind::Param(0), object())];
+                let result = if at == 319 {
+                    ValueId(0)
+                } else {
+                    values.push(op(
+                        OpKind::Call {
+                            callee: Callee::Direct(format!("f{}", at + 1)),
+                            args: vec![ValueId(0)],
+                            frame: None,
+                        },
+                        object(),
+                    ));
+                    ValueId(1)
+                };
+                func(&format!("f{at}"), values, result)
+            })
+            .collect();
+        let program = Program {
+            funcs,
+            ..Program::default()
+        };
+        let shared = Shared::new(&program);
+        let mut facts = Facts::new(&shared, Scope::Program);
+        facts.settle();
+        assert!(facts.returns_fresh.iter().all(|fresh| !fresh));
+        let mut limited = Facts::new(&shared, Scope::Program);
+        limited.settle_with_budget(1);
+        assert!(limited.refused.iter().all(Option::is_some));
+        assert!(limited.returns_fresh.iter().all(|fresh| !fresh));
+        assert!(limited.reads_only.iter().all(FxHashSet::is_empty));
+    }
+
+    #[test]
+    fn a_region_cannot_keep_external_references_even_if_the_caller_keeps_them_alive() {
+        for helper in [
+            "nts_array_push_ref",
+            "nts_array_unshift_ref",
+            "nts_map_set",
+            "nts_set_add",
+        ] {
+            for fresh in [false, true] {
+                let values = vec![
+                    op(OpKind::Param(0), object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::Call {
+                            callee: Callee::External(helper.to_owned()),
+                            args: vec![ValueId(1), if fresh { ValueId(2) } else { ValueId(0) }],
+                            frame: None,
+                        },
+                        HirType::Void,
+                    ),
+                ];
+                let program = Program {
+                    funcs: vec![func("root", values, ValueId(1))],
+                    ..Program::default()
+                };
+                let shared = Shared::new(&program);
+                let mut facts = Facts::new(
+                    &shared,
+                    Scope::Region {
+                        root: 0,
+                        members: &[0],
+                    },
+                );
+                facts.settle();
+                assert_eq!(
+                    facts.refused[0].is_some(),
+                    !fresh,
+                    "{helper}, fresh={fresh}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn copying_reference_elements_is_not_a_read_only_use_of_a_region_result() {
+        for element in [object(), HirType::NUMBER] {
+            let references = element.may_hold_a_reference();
+            let array = HirType::Managed(ManagedType::Array(Box::new(element)));
+            let values = vec![
+                op(OpKind::Param(0), array.clone()),
+                op(
+                    OpKind::Call {
+                        callee: Callee::External("nts_array_slice".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    array,
+                ),
+            ];
+            let program = Program {
+                funcs: vec![func("copy", values, ValueId(1))],
+                ..Program::default()
+            };
+            let shared = Shared::new(&program);
+            let mut facts = Facts::new(&shared, Scope::Program);
+            facts.settle();
+            assert_eq!(facts.reads_only[0].contains(&0), !references);
+        }
+    }
+
+    #[test]
+    fn a_shallow_copy_does_not_make_external_elements_region_owned() {
+        let array = HirType::Managed(ManagedType::Array(Box::new(object())));
+        let values = vec![
+            op(OpKind::Param(0), array.clone()),
+            op(
+                OpKind::Call {
+                    callee: Callee::External("nts_array_slice".to_owned()),
+                    args: vec![ValueId(0)],
+                    frame: None,
+                },
+                array,
+            ),
+        ];
+        let program = Program {
+            funcs: vec![func("copy", values, ValueId(1))],
+            ..Program::default()
+        };
+        let shared = Shared::new(&program);
+        let mut facts = Facts::new(
+            &shared,
+            Scope::Region {
+                root: 0,
+                members: &[0],
+            },
+        );
+        facts.settle();
+        assert!(facts.refused[0].is_some());
+        assert!(!facts.returns_fresh[0]);
     }
 }

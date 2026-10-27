@@ -57,15 +57,15 @@
 //! pointer lifetimes before suspension and again in HIR verification, including
 //! field/element addresses and block-argument aliases; unknown uses refuse.
 
+use std::collections::VecDeque;
+
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::liveness;
 use super::{BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, ValueId};
 
-/// A bound on the call-graph iteration. Convergence takes a handful of rounds --
-/// the lattice is two points per parameter and only moves one way -- so reaching
-/// this means a bug, and looping forever would hide it.
-const ROUND_CAP: u32 = 32;
+/// Work per recursive component. Exhaustion loses placements, never lifetimes.
+const SUMMARY_BUDGET: usize = 100_000;
 
 /// Values produced by an operation that can run more than once.
 ///
@@ -314,9 +314,60 @@ fn returned_params(func: &Func) -> FxHashSet<u32> {
     slots
 }
 
+/// The same target authority as `analyze`, including virtual and closure
+/// calls. Tarjan numbers caller -> callee components bottom-up.
+struct CallGraph {
+    components: Vec<usize>,
+    members: Vec<Vec<usize>>,
+    callers: Vec<Vec<usize>>,
+}
+
+impl CallGraph {
+    fn of(
+        program: &Program,
+        by_name: &FxHashMap<&str, usize>,
+        in_slot: &FxHashMap<u32, Vec<usize>>,
+    ) -> Self {
+        let edges: Vec<Vec<usize>> = program
+            .funcs
+            .iter()
+            .map(|func| {
+                func.blocks
+                    .iter()
+                    .flat_map(|block| &block.ops)
+                    .filter_map(|value| match &func.values[value.0 as usize].kind {
+                        OpKind::Call { callee, .. } => bodies_reached(callee, by_name, in_slot),
+                        _ => None,
+                    })
+                    .flatten()
+                    .copied()
+                    .collect()
+            })
+            .collect();
+        let components = super::strongly_connected(&edges);
+        let mut members = vec![Vec::new(); components.iter().max().map_or(0, |at| at + 1)];
+        let mut callers = vec![Vec::new(); program.funcs.len()];
+        for (at, callees) in edges.iter().enumerate() {
+            members[components[at]].push(at);
+            for callee in callees {
+                callers[*callee].push(at);
+            }
+        }
+        Self {
+            components,
+            members,
+            callers,
+        }
+    }
+}
+
 /// Analyze every function, letting the answer cross between them.
 #[must_use]
 pub fn analyze_program(program: &Program) -> Vec<Escapes> {
+    analyze_program_with_budget(program, SUMMARY_BUDGET)
+}
+
+fn analyze_program_with_budget(program: &Program, budget: usize) -> Vec<Escapes> {
     let by_name: FxHashMap<&str, usize> = program
         .funcs
         .iter()
@@ -345,32 +396,56 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     // And none starts by handing its parameters' contents back.
     let mut contents_returned: Vec<FxHashSet<u32>> =
         program.funcs.iter().map(|_| FxHashSet::default()).collect();
-    let mut results: Vec<Escapes> = Vec::new();
-
-    for _ in 0..ROUND_CAP {
-        results = program
-            .funcs
-            .iter()
-            .map(|func| {
-                analyze(
-                    func,
-                    &Summaries {
-                        cycles: &cycles,
-                        by_name: &by_name,
-                        in_slot: &in_slot,
-                        arity: &arity,
-                        escaping_params: &escaping_params,
-                        handed_back: &handed_back,
-                        put_into: &put_into,
-                        leaking: &leaking,
-                        contents_returned: &contents_returned,
-                    },
-                )
-            })
-            .collect();
-
-        let mut changed = false;
-        for (index, func) in program.funcs.iter().enumerate() {
+    let mut results = vec![Escapes::default(); program.funcs.len()];
+    let CallGraph {
+        components,
+        members,
+        callers,
+    } = CallGraph::of(program, &by_name, &in_slot);
+    for (component, group) in members.iter().enumerate() {
+        let mut pending: VecDeque<usize> = group.iter().copied().collect();
+        let mut queued: FxHashSet<usize> = group.iter().copied().collect();
+        let mut remaining = budget;
+        while let Some(index) = pending.pop_front() {
+            queued.remove(&index);
+            if remaining == 0 {
+                // No partial optimistic result may leave this component.
+                // All its values escape; all three parameter summaries become
+                // top. Later caller components consume those conservative facts.
+                for at in group {
+                    let func = &program.funcs[*at];
+                    let slots: FxHashSet<u32> = (0..func.params.len())
+                        .filter_map(|slot| u32::try_from(slot).ok())
+                        .collect();
+                    escaping_params[*at].clone_from(&slots);
+                    leaking[*at].clone_from(&slots);
+                    contents_returned[*at] = slots;
+                    results[*at] = Escapes {
+                        values: (0..func.values.len())
+                            .filter_map(|v| u32::try_from(v).ok().map(ValueId))
+                            .collect(),
+                        ..Escapes::default()
+                    };
+                }
+                break;
+            }
+            remaining -= 1;
+            let func = &program.funcs[index];
+            results[index] = analyze(
+                func,
+                &Summaries {
+                    cycles: &cycles,
+                    by_name: &by_name,
+                    in_slot: &in_slot,
+                    arity: &arity,
+                    escaping_params: &escaping_params,
+                    handed_back: &handed_back,
+                    put_into: &put_into,
+                    leaking: &leaking,
+                    contents_returned: &contents_returned,
+                },
+            );
+            let mut changed = false;
             for (slot, parameter) in func
                 .parameter_values()
                 .unwrap_or_default()
@@ -378,29 +453,25 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
                 .enumerate()
                 .filter_map(|(slot, parameter)| parameter.map(|parameter| (slot, parameter)))
             {
-                let Ok(slot) = u32::try_from(slot) else {
-                    continue;
-                };
-                if results[index].escapes(parameter) && escaping_params[index].insert(slot) {
-                    changed = true;
+                if results[index].escapes(parameter)
+                    && let Ok(slot) = u32::try_from(slot)
+                {
+                    changed |= escaping_params[index].insert(slot);
                 }
             }
-            // Monotone in the same direction: a slot whose contents are shown to
-            // leave never goes back to held, so the least fixpoint is safe to
-            // read only once it has converged.
             for slot in leaks_its_fields(func, &results[index]) {
-                if leaking[index].insert(slot) {
-                    changed = true;
-                }
+                changed |= leaking[index].insert(slot);
             }
             for slot in &results[index].contents_returned {
-                if contents_returned[index].insert(*slot) {
-                    changed = true;
+                changed |= contents_returned[index].insert(*slot);
+            }
+            if changed {
+                for caller in &callers[index] {
+                    if components[*caller] == component && queued.insert(*caller) {
+                        pending.push_back(*caller);
+                    }
                 }
             }
-        }
-        if !changed {
-            break;
         }
     }
     results
@@ -599,14 +670,9 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     // benchmark checks its own answer, and nothing else here
                     // had asked a program that stores in a loop.
                     //
-                    // What fails is one slot holding many objects, and that
-                    // needs the *container* to be made once while the value is
-                    // made many times. When both are made per iteration there
-                    // is no reuse to get wrong: a fresh closure holding a fresh
-                    // cell is two slots reused in lockstep, iteration k's
-                    // container holds iteration k's value, and the pair dies
-                    // together. Refusing that case sent every object a loop
-                    // puts inside another one to the heap.
+                    // Two repeated sites need a stronger proof than two
+                    // booleans: the container must be recreated before each
+                    // stored allocation. See `store_lifetime`.
                     //
                     // The container's own escape is still decided on its own
                     // evidence, and the fixpoint below carries it to whatever
@@ -620,17 +686,10 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                     // escaped the read, which now carries the container's
                     // contents out with it (`reads_from_containers`), and sent
                     // both of `swap`'s objects to the heap.
-                    let read_back = matches!(
-                        &func.values[stored.0 as usize].kind,
-                        OpKind::FieldGet { object, .. } | OpKind::ArrayGet { array: object, .. }
-                            if object == container
-                    );
                     let confinable = matches!(
                         func.values[container.0 as usize].kind,
                         OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
-                    ) && (!repeated.contains(stored)
-                        || repeated.contains(container)
-                        || read_back)
+                    ) && store_lifetime(func, &repeated, *container, *stored)
                         && !buffers(&func.values[container.0 as usize].ty, of);
                     // A parameter stored into a parameter's field is published
                     // rather than escaped: see `stores_into`. The caller knows
@@ -1181,6 +1240,39 @@ fn bodies_reached<'a>(
     }
 }
 
+/// Can every stored instance die before this frame slot is reused?
+/// Straight-line values and reads of this container's existing contents do
+/// not introduce repeated instances. Otherwise require both definitions in
+/// the same block, container first: every execution of the stored site then
+/// creates a new container first. Nested loops and cross-block domains are
+/// deliberately not guessed. The container's own escape/carried aliases are
+/// still checked independently and propagate to its contents.
+fn store_lifetime(
+    func: &Func,
+    repeated: &FxHashSet<ValueId>,
+    container: ValueId,
+    stored: ValueId,
+) -> bool {
+    // A continuation parameter may execute in a loop without appearing in
+    // block.ops. Its allocating origins, rather than the merge or view, own
+    // the repetition domain. A merge is safe only for every incoming origin.
+    super::carried_values(func, stored).all(|source| {
+        if matches!(func.values[source.0 as usize].kind,
+            OpKind::BlockParam(_) | OpKind::Erase { .. } | OpKind::Unerase { .. }
+                | OpKind::Convert(_) | OpKind::FieldView { .. } | OpKind::NativeStringView { .. })
+            || !repeated.contains(&source)
+            || matches!(&func.values[source.0 as usize].kind,
+                OpKind::FieldGet { object, .. } | OpKind::ArrayGet { array: object, .. } if *object == container)
+        {
+            return true;
+        }
+        repeated.contains(&container) && func.blocks.iter().any(|block| {
+            let Some(container_at) = block.ops.iter().position(|value| *value == container) else { return false; };
+            block.ops[container_at + 1..].contains(&source)
+        })
+    })
+}
+
 /// The caller's half of a store into a parameter.
 ///
 /// `stores_into` says the callee put one parameter inside another and left the
@@ -1225,7 +1317,7 @@ fn put_where_it_went(
             func.values[container.0 as usize].kind,
             OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
         ) && !buffers(&func.values[container.0 as usize].ty, of);
-        let outlived = !repeated.contains(stored) || repeated.contains(container);
+        let outlived = store_lifetime(func, repeated, *container, *stored);
         if one && ours && outlived {
             reachable_from.push((*container, *stored));
         } else {
@@ -1312,6 +1404,236 @@ mod tests {
             result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         }
+    }
+
+    fn chain(count: usize, recursive: bool) -> Program {
+        let mut funcs = Vec::new();
+        for at in 0..count {
+            let mut values = vec![op(OpKind::Param(0), object())];
+            if at + 1 == count {
+                values.push(op(
+                    OpKind::GlobalSet {
+                        global: 0,
+                        value: ValueId(0),
+                    },
+                    HirType::Void,
+                ));
+            }
+            if at + 1 < count || recursive {
+                values.push(op(
+                    OpKind::Call {
+                        callee: Callee::Direct(format!("f{}", (at + 1) % count)),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ));
+            }
+            let ops = (0..values.len())
+                .map(|v| ValueId(u32::try_from(v).unwrap_or(u32::MAX)))
+                .collect();
+            funcs.push(func(
+                &format!("f{at}"),
+                1,
+                values,
+                vec![Block {
+                    params: Vec::new(),
+                    ops,
+                    terminator: Terminator::Return(None),
+                }],
+            ));
+        }
+        Program {
+            funcs,
+            ..Program::default()
+        }
+    }
+
+    #[test]
+    fn long_chains_and_recursive_components_reach_the_escape() {
+        for recursive in [false, true] {
+            let program = chain(96, recursive);
+            let answer = analyze_program(&program);
+            assert!(answer.iter().all(|result| result.escapes(ValueId(0))));
+            // Without the final global store the entire component is held.
+            let mut control = program;
+            let last = &mut control.funcs[95];
+            last.blocks[0]
+                .ops
+                .retain(|id| !matches!(last.values[id.0 as usize].kind, OpKind::GlobalSet { .. }));
+            assert!(
+                analyze_program(&control)
+                    .iter()
+                    .all(|result| result.is_frame_local(ValueId(0)))
+            );
+        }
+    }
+
+    #[test]
+    fn exhausted_component_summaries_and_their_callers_are_conservative() {
+        let mut program = chain(3, false);
+        // The last two nodes are one recursive component; a one-step budget
+        // cannot settle it. f0 must consume top, rather than a partial answer.
+        program.funcs[2].values[1].kind = OpKind::Call {
+            callee: Callee::Direct("f1".to_owned()),
+            args: vec![ValueId(0)],
+            frame: None,
+        };
+        let answer = analyze_program_with_budget(&program, 1);
+        assert!(answer.iter().all(|result| result.escapes(ValueId(0))));
+    }
+
+    #[test]
+    fn container_recreation_must_precede_every_stored_instance() {
+        for through_call in [false, true] {
+            let setter = func(
+                "set",
+                2,
+                vec![
+                    op(OpKind::Param(0), object()),
+                    op(OpKind::Param(1), object()),
+                    op(
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(1),
+                        },
+                        HirType::Void,
+                    ),
+                ],
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                    terminator: Terminator::Return(None),
+                }],
+            );
+            let store = if through_call {
+                OpKind::Call {
+                    callee: Callee::Direct("set".to_owned()),
+                    args: vec![ValueId(0), ValueId(1)],
+                    frame: None,
+                }
+            } else {
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(1),
+                }
+            };
+            let values = vec![
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(OpKind::ObjectNew { frame: false }, object()),
+                op(store, HirType::Void),
+                op(OpKind::ConstBool(true), HirType::Bool),
+            ];
+            let nested = func(
+                "nested",
+                0,
+                values.clone(),
+                vec![
+                    Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(3), ValueId(0)],
+                        terminator: Terminator::Jump {
+                            target: BlockId(1),
+                            args: Vec::new(),
+                        },
+                    },
+                    Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(1), ValueId(2)],
+                        terminator: Terminator::Branch {
+                            cond: ValueId(3),
+                            then_target: BlockId(1),
+                            then_args: Vec::new(),
+                            else_target: BlockId(0),
+                            else_args: Vec::new(),
+                        },
+                    },
+                ],
+            );
+            let control = func(
+                "lockstep",
+                0,
+                values,
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(0),
+                        args: Vec::new(),
+                    },
+                }],
+            );
+            let program = Program {
+                funcs: vec![nested, control, setter],
+                ..Program::default()
+            };
+            let answer = analyze_program(&program);
+            assert!(
+                answer[0].escapes(ValueId(1)),
+                "nested, through_call={through_call}"
+            );
+            assert!(
+                answer[1].is_frame_local(ValueId(1)),
+                "lockstep, through_call={through_call}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_merge_does_not_erase_the_allocations_repetition_domain() {
+        let program = Program {
+            funcs: vec![func(
+                "merged",
+                0,
+                vec![
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::BlockParam(0), object()),
+                    op(
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(2),
+                        },
+                        HirType::Void,
+                    ),
+                    op(OpKind::ConstBool(true), HirType::Bool),
+                ],
+                vec![
+                    Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(4), ValueId(0)],
+                        terminator: Terminator::Jump {
+                            target: BlockId(1),
+                            args: Vec::new(),
+                        },
+                    },
+                    Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(1)],
+                        terminator: Terminator::Jump {
+                            target: BlockId(2),
+                            args: vec![ValueId(1)],
+                        },
+                    },
+                    Block {
+                        params: vec![ValueId(2)],
+                        ops: vec![ValueId(3)],
+                        terminator: Terminator::Branch {
+                            cond: ValueId(4),
+                            then_target: BlockId(1),
+                            then_args: Vec::new(),
+                            else_target: BlockId(0),
+                            else_args: Vec::new(),
+                        },
+                    },
+                ],
+            )],
+            ..Program::default()
+        };
+        assert!(analyze_program(&program)[0].escapes(ValueId(1)));
     }
 
     /// `reader(o) { return o.f }` — the receiver is read through and handed

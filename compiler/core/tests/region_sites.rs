@@ -103,14 +103,14 @@ fn a_callee_that_writes_outside_what_it_made_is_not() {
 }
 
 #[test]
-fn an_argument_may_be_kept_and_a_field_of_one_may_not() {
+fn external_references_are_not_region_owned() {
     let report = report("calls-a-region-could-serve");
-    assert_eq!(verdict(&report, "prependsToAnArgument", "prepend"), Ok(()));
-    // Stored straight into a field: what ownership calls taking it over.
-    assert_eq!(verdict(&report, "wrapsAnArgument", "wrap"), Ok(()));
+    assert!(verdict(&report, "prependsToAnArgument", "prepend").is_err());
+    // A field store is subject to the same external-edge ownership rule.
+    assert!(verdict(&report, "wrapsAnArgument", "wrap").is_err());
     assert_eq!(
         verdict(&report, "prependsToAField", "prependField"),
-        Err("passes a value read from outside the call to be kept".to_owned())
+        Err("passes a reference not made in the call to be kept".to_owned())
     );
 }
 
