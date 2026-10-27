@@ -24,7 +24,7 @@
 // the source has dropped -- the Node lane's aggregate typecheck read one that was nearly
 // two hours old and reported green over a broken tree -- so counting generated
 // declarations as references would keep dead exports alive by their own shadows.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, readlinkSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const SOURCE = "runtime/web-platform/src";
@@ -33,6 +33,21 @@ const CORPUS = ["runtime", "tooling", "tests", "benchmarks"];
 /** Generated: it declares what source no longer has. */
 const GENERATED = new Set(["node_modules", ".tsbuild", "dist", "target", "build"]);
 const BARRELS = [join(SOURCE, "index.ts"), join(SOURCE, "provider.ts")];
+
+// This committed CocoaPods fixture omits these generated support files.
+// The build consumes its checked-in Pods tree; it does not run pod install.
+// Regenerate the complete tree on a Mac, then remove these exact exceptions:
+// tests/interop/macos-pods/README.md. Every other missing corpus input fails.
+const LINUX_FIXTURE_LINKS = new Map([
+  ["tests/interop/macos-pods/Pods/Headers/Public/Chirp/Chirp-umbrella.h", "../../../Target Support Files/Chirp/Chirp-umbrella.h"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Chirp/Chirp.modulemap", "../../../Target Support Files/Chirp/Chirp.modulemap"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Echo/Echo-umbrella.h", "../../../Target Support Files/Echo/Echo-umbrella.h"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Echo/Echo.modulemap", "../../../Target Support Files/Echo/Echo.modulemap"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Hum/Hum-umbrella.h", "../../../Target Support Files/Hum/Hum-umbrella.h"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Hum/Hum.modulemap", "../../../Target Support Files/Hum/Hum.modulemap"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Mix/Mix-umbrella.h", "../../../Target Support Files/Mix/Mix-umbrella.h"],
+  ["tests/interop/macos-pods/Pods/Headers/Public/Mix/Mix.modulemap", "../../../Target Support Files/Mix/Mix.modulemap"],
+]);
 
 /**
  * Names that are deliberately unreferenced, with the reason each one stays.
@@ -65,7 +80,20 @@ function sources(directory, extensions) {
     }
     for (const entry of entries) {
       const full = join(path, entry);
-      if (statSync(full).isDirectory()) {
+      let metadata;
+      try {
+        metadata = statSync(full);
+      } catch (error) {
+        let target;
+        try { target = readlinkSync(full); } catch { /* Not a symlink. */ }
+        if (process.platform === "linux" && error.code === "ENOENT" && target && LINUX_FIXTURE_LINKS.get(full) === target) {
+          console.warn(`unrouted: known Linux fixture link ${full} -> ${target}; complete Pods regeneration is owed (tests/interop/macos-pods/README.md)`);
+          continue;
+        }
+        console.error(`unrouted: cannot inspect ${full}${target ? ` -> ${target}` : ""} (${error.code ?? error.message})`);
+        process.exit(1);
+      }
+      if (metadata.isDirectory()) {
         if (GENERATED.has(entry)) continue;
         walk(full);
         continue;
