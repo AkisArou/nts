@@ -25,9 +25,11 @@ says who owns which paths and which branch prefix each uses.
 
 Work in your lane's own worktree, `~/Projects/nts-lanes/<lane>`, on branches
 `<lane>/<topic>` (`docs/workflow.md`). `~/Projects/nts` is `main` and is
-landing-only: nobody edits there. It supplies the inputs no commit carries
-(`third_party/*` corpora); the native checker is compiled into nts, and every
-tree shares the object store.
+landing-only: nobody edits there. The exception is the coordinator's
+documentation, which the user reads there (see "Documentation goes straight to
+main" below). It supplies the inputs no commit carries (`third_party/*`
+corpora); the native checker is compiled into nts, and every tree shares the
+object store.
 
 - `git stash` is shared by every worktree: commit work in progress as a `WIP:`
   commit instead.
@@ -65,6 +67,30 @@ halved until the red landing is alone, and only it is refused. One gate is
 half an hour whether it carries one landing or six, so queue a change as soon
 as it is reviewed and ready; `lane status` lists the queue. Never `git merge`
 onto `main` yourself.
+
+**Never cap the gate's parallelism for a landing:** no `NTS_JOBS`,
+`NTS_GATE_SLOTS` or `NTS_GATE_JOBS` in its environment. The gate sizes itself
+(24 slots on this machine), and its own admission guards memory. The tsrs
+switch's official runs set `NTS_JOBS=4` and took 72–100 minutes for the full
+gate (2026-10-25 to 10-27). The same gate took 26–32 minutes at 24 slots on
+10-24.
+
+**Keep the full gate out of urgent work.** Before asking for review, run
+`land.ts --dry-run` and say what the change owes. A sweep of comments over the
+gate's own scripts, or over a path with no rule in `owed.mjs`, owes the full
+gate (about 100 minutes), and it delays every landing queued behind it. Keep
+such a change in a landing of its own; the coordinator schedules it into a
+quiet window. Give an unmatched path a rule in `owed.mjs`, so that next time it
+owes only what it reaches.
+
+**Documentation goes straight to main** (user, 2026-10-27). The coordinator
+writes docs-only changes (`docs/`, `AGENTS.md`) in `~/Projects/nts` itself and
+commits them to `main` without a gate, but **only while no train is running**:
+- commit holding the landing lock (`flock -n ~/.cache/nts-land.lock`). If the
+  lock is held, a train is gating against `main`, and moving `main` would make
+  `land` refuse it at the end;
+- while a train runs, leave uncommitted edits only on files that train does
+  not change. A dirty file the fast-forward must update aborts the landing.
 
 A landing runs the core steps. The wide ones -- integrity, the profile,
 addons, interop, counting, memory and the rest (`WIDE` in `tooling/gate/owed.mjs`

@@ -36,23 +36,56 @@ Benchmarks run through every phase.
 
 ## Phase 1: settle main
 
-1. **Land the tsrs switch** through its full gate.
+1. **Land the tsrs switch** through its full gate. *Done 2026-10-26
+   (`bd0df4c64`).*
 2. **Remove what tsgo leaves outside the repository:** the `target/tsgo` binary,
    `NTS_TSGO` in landing environments and scripts, and notes that still name
-   it. No compatibility leftovers.
+   it. No compatibility leftovers. The repository part landed on 2026-10-27
+   (`dc1e57742`); the outside part is in the disk inventory, waiting for the
+   user's approval.
 3. **Land these docs** (`docs/foundations/`, this plan, `decisions.md`).
-4. **Small fixes found on the way:**
+   *Done.*
+4. **Fix the three memory defects** the outside review found
+   ([memory](foundations/memory.md), "Known defects"). The compiler agent is
+   on it.
+5. **Small fixes found on the way:**
    - documentation says plain `cargo fmt`, never `--all`, which reaches the
      vendored tsrs;
    - the gate deletes its own old test binaries after its test step, so its
-     build folder stops growing to 90 GB;
+     build folder stops growing to 90 GB. *Landed 2026-10-27;*
    - a cargo target is cleaned whole or with `cargo clean`, never file by
      file.
-5. **The agents' unlanded work:** almost all of it is already in the switch,
+6. **The agents' unlanded work:** almost all of it is already in the switch,
    rejected or unfinished (the per-agent inventories of 10-26). What is worth
    keeping moves into phase 2: the six Are We Fast Yet ports, and the held
    arena API with its first caller. Deleting the leftover branches is shared
    state, so it waits for the user's approval.
+7. **Make the gate fast again** (the coordinator's decision, 2026-10-27, at the
+   user's request).
+   - **Where the time went:** the full gate took 26–32 minutes at 24 slots
+     on 10-24. The tsrs switch's official runs set `NTS_JOBS=4` and took
+     72–100 minutes; that is now forbidden in `AGENTS.md`. The next full gate
+     at 24 slots took 28 minutes (1,677 s, `760bfbd32`, 10-27).
+   - **Why it can't simply be scheduled faster:** at 24 slots the full gate
+     is CPU-bound, at about 31,000 CPU-seconds, so going much faster means
+     doing less work.
+   - **In order, each its own landing with gate time measured before and
+     after:**
+     1. **No cold build per train.** The landing tool deletes the whole debug
+        build folder past 40 GiB, and one run makes about 88 GiB, so every
+        train rebuilds for about 7 minutes. Build the gate's tests with
+        line-table debug information only, and replace the delete with the
+        pruning plus a bound above one run.
+     2. **Compile each program once for every backend.** Six steps (examples,
+        llvm, jvm, wasm, rc, llvm-rc) compile the same ~760 programs
+        separately. They share one lowering through `nts emit --backends`.
+     3. **Cache results by what they depend on.** A case whose emitted output,
+        runtime, toolchain and step script are all unchanged is not re-run;
+        `jvm-verifies` checks only classes that changed. The full run
+        regularly runs with the cache off, so a stale entry cannot hide a
+        regression.
+     4. **Select the tests a change can affect** (`--touching`), after 2 and 3
+        have shown their numbers.
 
 ## Phase 2: foundations, native first
 

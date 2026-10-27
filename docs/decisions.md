@@ -55,6 +55,13 @@ Dates are 2026. Quotes are the user's words.
 - **The earlier Codex work's archived branches** (`refs/archive/codex/...`) are
   a quarry: port an independent fix with its own fixture and gate; never land
   a branch wholesale.
+- **Docs go straight to main** (10-27): the coordinator writes documentation
+  in `~/Projects/nts` itself, with no docs branch or worktree, and commits it
+  without a gate whenever no landing train is running. The user reads the docs
+  there.
+- **Landings are organized for speed** (10-27): changes that owe the full gate
+  for hygiene reasons (comment sweeps over gate scripts, unmatched paths) are
+  split from urgent work and scheduled into quiet windows.
 - **Apple and Windows programs may stay unrun** when a landing's only refusals
   are their platform skips; fix platform issues when they surface (10-23).
 - **Disposable under disk pressure:** `~/.cache/node-compile-cache` and a paused
