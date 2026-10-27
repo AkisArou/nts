@@ -18,7 +18,7 @@ row.
 | **Node addon** | = | = inside; no JS value held, so no cycle across heaps | copied both ways | = | = | = | = | ● node's own loop · promise exports refused | ● built |
 | **Chromium** (electron-like) | = | = · Oilpan, V8 and nts heaps · ○ cycles across heaps not collected | `StringView` in, copied out | ● Blink's DOM through `nts:dom` · no `node:*` | = | = · ◐ host Intl | = | ● Blink's loop, no libuv | ● Linux, opt-in, Chromium 154, not gated |
 | **JVM** (desktop) | JVM | ● the JVM's collector | ● `java.lang.String` · ◐ destination passing | ● `runtime/jvm` (Java 8) | ● typed `stringify` · ○ `parse` | ● JDK tables, wrong against node · ◐ own tables (D4) · ○ Intl: the TS over ICU4J exists, unreachable | ● `String.hashCode`, floodable · ○ J2 | ● own promise queue | ● 748/748 examples |
-| **Android** | JVM, DEX | ● ART's collector | = JVM | = JVM · Android provider, API 26+ | = JVM | = JVM · ICU4J bundled | = JVM | = JVM | ● APK and AAR build; no device run |
+| **Android** | JVM, DEX | ● ART's collector | = JVM | = JVM · Android provider, API 26+ | = JVM | = JVM · ICU4J bundled | = JVM | = JVM | ● APK and AAR build; compiled cases ran on ART by hand, not gated |
 | **Wasm in a JS host** (node, browsers) | Wasm | ● WasmGC | ● the host's strings, JS String Builtins | ● helpers plus host imports · ◐ host Intl, RegExp | ● typed `stringify` · ○ `parse` | ● the host's, zero bytes | ● FNV-1a 32-bit · ◐ keyed | ● own queue per export, host timers | ● 748/748 on node; browser by hand |
 | **Wasm standalone, WASI** | Wasm | ◐ WasmGC, Wasmtime first | ◐ GC UTF-16 arrays | ◐ nts's own | ◐ as hosted | ◐ own tables in data segments · ◐ no Intl (D6) | ◐ keyed | ○ WASI 0.2 or 0.3 | ○ nothing built |
 
@@ -37,14 +37,15 @@ row.
   the design.
 - **Builtins are a fixed list in the compiler,** and anything else is refused.
   The mechanism that declares a provider per target has its 11 product
-  decisions ([`decisions.md`](decisions.md)), but its design is only in a
-  scratch report, not in the repository, and most of it is unbuilt.
+  decisions ([`decisions.md`](decisions.md)) and a proposed design
+  ([builtins](foundations/builtins.md)); most of it is unbuilt.
 - **`Intl` is reachable nowhere.** It is not a provided global, so every
   backend refuses it, although TypeScript implementations over ICU4C and ICU4J
   exist in `runtime/ecmascript`.
 - **The clock and randomness are refused:** `Date.now()`, `new Date()` and
   `Math.random()`. Decision 2 says they come from the environment, seeded under
-  the differential tests; lowering still refuses them.
+  the differential tests; lowering still refuses them. The providers are
+  designed in [builtins](foundations/builtins.md#the-clock-and-randomness).
 
 ## What a program can call, per target
 

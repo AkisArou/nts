@@ -44,7 +44,8 @@ means it is on main.
 | **Control flow** | exceptions, generators, async/await, the event loop | Mostly built ([`../async.md`](../async.md)); the event loop is chosen per platform. | Gaps such as `next()` on an async generator. |
 | **RegExp** | the regular-expression engine | Not provided. | Decided: matchers generated at compile time for literal patterns, plus the TypeScript interpreter in `runtime/ecmascript` for dynamic ones. Needs the Unicode data. |
 | **JSON** | parse and stringify | `JSON.stringify` writes each layout through a writer the compiler generates. `JSON.parse` is not provided (NTS1100). | Designed: a parser generated per static type for `JSON.parse(text) as T`, simdjson's scanner on native, a new representation for untyped values. |
-| **Host boundary** | bytes, buffers, files, the network, C interop | C interop and the event loop are built. | Decided, not done: build libuv, zlib, brotli, zstd and OpenSSL from node's own sources instead of system libraries. One mechanism to declare which provider supplies each builtin on each target. |
+| **Builtins** ([design](builtins.md)) | which implementation of each global and module a target uses | One name list for every target; NTS1100 stops a build that reaches a missing builtin. | Proposed 2026-10-27: features, providers and per-target profiles, resolved at build time; the clock and randomness with deterministic providers for the tests. |
+| **Host boundary** | bytes, buffers, files, the network, C interop | C interop and the event loop are built. | Decided, not done: build libuv, zlib, brotli, zstd and OpenSSL from node's own sources instead of system libraries. |
 
 Dates, time zones and Intl are built on these foundations. On JS hosts (Wasm in
 a browser or node, Chromium) they come from the host.

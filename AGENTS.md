@@ -192,6 +192,10 @@ then a guard once fixed), `tests/memory/`.
   with `AllowedCPUs` enforces a kernel ceiling when cpuset is delegated and a
   widening probe proves it. Otherwise the log says `best-effort`: a library
   such as Mesa can widen a taskset mask. Never change an in-flight gate's mask.
+- **Runs that crash programs on purpose disable core dumps:** `ulimit -c 0`, or
+  `LimitCORE=0` for a unit. On 2026-10-27 the gate's deliberate crashes made
+  2,669 dumps in an hour (4 GB). systemd-coredump, which no mask excludes, ran
+  at 40% on CPU 5, so measurement could not start.
 - Benchmark on CPU 4 with sibling 5 idle, under
   `tooling/gate/with-lock.sh --wait`, from a worktree pinned to a commit.
   The wrapper waits only for CPUs 4–5 to be quiet and sets `NTS_BENCH_CPUS=4`;

@@ -7,6 +7,7 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 
 - [`plan.md`](plan.md): the plan: the phases, their order, and what each is waiting on.
 - [`decisions.md`](decisions.md): every product decision the user has made, in one place.
+- [`open-questions.md`](open-questions.md): every fundamental question not yet decided, across all targets, with a recommendation for each and the ten to decide first.
 - [`foundations/`](foundations): the foundations every program is built from (numbers, strings, tables, memory, ...): the map, and one design per foundation.
 
 ## How we work
