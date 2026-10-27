@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "not emitted: NTS5001 wasm declines `through`: a Managed(Array(Managed(Object(TypeId(6))))) where a Managed(Array(Managed(Object(TypeId(1))))) is wanted: no Wasm cast relates their storage",
+  "node": null,
+  "measured_with": "4ecec30d97f69d7c",
+  "source": "measured"
+}

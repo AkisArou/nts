@@ -343,6 +343,7 @@ refs/archive/compiler/snapshot/tree	compiler	91e15462e571: archive: working stat
 refs/archive/compiler/test-scratch	compiler	25b688232619: Remove native test scratch when its owner finishes	unknown	unknown
 refs/archive/gtk-constants	unknown	e8a6be106d53: bind-gir: GIR's constants and the fundamental types, folded where read	unknown	unknown
 refs/archive/gtk-record-fields	unknown	a474d829b78d: bind-gir: a boxed record's fields at the headers' offsets	unknown	unknown
+refs/archive/helper/helper/docs-stale	helper	4f1f96c9e3fc: WIP: docs fact corrections for items 1-11 of the stale-docs brief (the WIP fact corrections from the stale-docs brief)	applied in reviewed form and superseded by the docs restructure	nothing; check any seemingly-missing correction against the current docs and the verified-facts report rather than reviving the WIP
 refs/archive/jvm/abstract-face-gives-way	jvm	0fe26701fe89: JVM: a kept abstract `call` gives way to the signature's typed face	unknown	unknown
 refs/archive/jvm/clear-stale-decline-rows	jvm	1eb25374e187: wip clear stale rows	unknown	unknown
 refs/archive/jvm/instruments-fail-loud	jvm	e4970399710d: JVM tooling: invalid HIR fails jvm-verifies; check-refusals restores without git	unknown	unknown

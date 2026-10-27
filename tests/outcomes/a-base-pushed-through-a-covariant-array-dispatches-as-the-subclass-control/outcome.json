@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: a Sub pushed, not widened=22;",
+  "node": "exit 1; nts: uncaught Observed: a Sub pushed, not widened=22;",
+  "measured_with": "4ecec30d97f69d7c",
+  "source": "measured"
+}

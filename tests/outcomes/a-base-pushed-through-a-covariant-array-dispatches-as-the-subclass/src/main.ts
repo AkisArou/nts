@@ -5,12 +5,21 @@
 // without looking at the object: C and LLVM answer 2 for the `Base`, where
 // node answers 1 -- `[Sub, Base]` reads as `22`, not `21`.
 //
-// The JVM declines the program by name (NTS4001 "storing a `Base` where a `Sub`
-// is declared") since a7de5cdec's container guard, and before it the store
-// would have been an `ArrayStoreException` or a `ClassCastException`. The
-// static claim is the same everywhere; only the JVM checks it.
+// Per backend, measured 2026-10-27 on e8699405c (and identically on the
+// previous pin, 5daf04bf): C here and LLVM in the `-llvm` twin answer the
+// wrong 22. The JVM does **not** decline this shape by name: the store
+// crosses a function boundary, so a7de5cdec's container guard never sees
+// the `Sub` storage, and the program aborts with a `ClassCastException`
+// at the element read (`-jvm` twin). The guard does fire on a local alias
+// in one function (`a-base-pushed-through-a-local-covariant-alias-on-the-jvm`).
+// Wasm declines the widening by name (NTS5001, `-wasm` twin). So the static
+// claim is checked by name on one backend, enforced by a Java exception on
+// another, and not at all on C and LLVM.
 //
-// The control is the same program pushing a `Sub`, which agrees.
+// The control below pushes a `Sub` and agrees; the not-widened control is
+// `a-base-pushed-through-a-covariant-array-dispatches-as-the-subclass-control`.
+// Where `Sub` is wider than `Base` the widening itself is refused in
+// lowering on all four (`...-with-a-wider-subclass`).
 //
 // Found on 2026-10-11 by the JVM lane, probing the guard for over-refusal.
 

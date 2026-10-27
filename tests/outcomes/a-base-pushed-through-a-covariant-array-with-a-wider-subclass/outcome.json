@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 an array of Managed(Object(TypeId(15))) where an array of Managed(Object(TypeId(10))) is wanted -- the two hold different widths, so a pointer to one is not a pointer to the other",
+  "ran": "exit 1; nts: uncaught Observed: ",
+  "node": "exit 1; nts: uncaught Observed: through=NaN;",
+  "measured_with": "4ecec30d97f69d7c",
+  "source": "measured"
+}

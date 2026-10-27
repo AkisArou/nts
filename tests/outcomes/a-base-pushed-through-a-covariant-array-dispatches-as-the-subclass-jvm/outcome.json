@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Base cannot be cast to class nts.gen.Sub (nts.gen.Base and nts.gen.Sub are in unnamed module of loader 'app')",
+  "node": null,
+  "measured_with": "4ecec30d97f69d7c",
+  "source": "measured"
+}

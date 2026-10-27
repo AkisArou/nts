@@ -3,6 +3,6 @@
   "category": "wrong-answer",
   "nts": "exit 1; nts: uncaught Observed: a Base pushed=22;a Sub pushed=22;",
   "node": "exit 1; nts: uncaught Observed: a Base pushed=21;a Sub pushed=22;",
-  "measured_with": "7d1ed4b502cbc4ab",
+  "measured_with": "4ecec30d97f69d7c",
   "source": "measured"
 }
