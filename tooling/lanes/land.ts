@@ -50,6 +50,7 @@ import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
 import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_CACHE_MAX_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
+import { VerificationLedger, type Author, type LandingRecord } from "./verification-ledger.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -58,6 +59,7 @@ const LOCK = join(HOME, ".cache/nts-land.lock");
 const STATE = join(HOME, ".cache/nts-land");
 const QUEUE = join(STATE, "queue");
 const RESULTS = join(STATE, "results");
+const VERIFICATION = join(STATE, "verification");
 /** The most landings one gate carries: a red train is halved, so this bounds the gates a red one costs. */
 const TRAIN_MAX = Number(process.env.NTS_LAND_TRAIN_MAX ?? 6);
 const MAINCTL = join(HOME, ".cache/nts-parallel-20261004/mainctl");
@@ -66,7 +68,7 @@ const GATE_TREE = join(MAINCTL, "gate-tree");
 const GATE_TARGET = join(MAINCTL, "gate-target");
 const ACCEPT_SKIP = ["on-device"];
 
-type Lane = { owns: string[]; owns_globs?: string[]; not_run?: string };
+type Lane = { branch?: string; owns: string[]; owns_globs?: string[]; not_run?: string };
 const laneConfig = JSON.parse(readFileSync(new URL("./lanes.json", import.meta.url), "utf8"));
 const LANES: Record<string, Lane> = laneConfig.lanes;
 const policyUnrun: string[] = laneConfig.platforms_unrun_ok ?? [];
@@ -106,6 +108,30 @@ function say(message: string): void {
 /** The checkout every worktree shares: main lives there and only there. */
 function sharedCheckout(): string {
   return dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]));
+}
+
+function authorOf(tree: string): Author {
+  const checkedOut = spawnSync("git", ["branch", "--show-current"], {cwd:tree,encoding:"utf8"}).stdout?.trim();
+  const branch = checkedOut || process.env.NTS_LAND_AUTHOR_BRANCH || "";
+  const lane = Object.entries(LANES).find(([, lane]) => lane.branch && branch.startsWith(lane.branch))?.[0] ?? null;
+  return { lane, address: process.env.NTS_LAND_AUTHOR_ADDRESS ?? null };
+}
+
+function ledgerAt(root: string, main: string): VerificationLedger {
+  // The shared checkout is at main under this lock. Use its actual owed
+  // rules without switching the gate tree (which may hold a checked train).
+  const ledger = new VerificationLedger(VERIFICATION, root, main, (from, to) => owedSteps(root, `${from}..${to}`));
+  ledger.recover(main);
+  return ledger;
+}
+
+function finishLedger(ledger: VerificationLedger, id: string, main: string): void {
+  try { ledger.commit(id, main); }
+  catch (error) {
+    // The FF already happened. The durable prepared entry lets the next
+    // process finish it; never report that an actual landing did not land.
+    say(`LANDED, but verification bookkeeping needs restart recovery: ${String(error)}`);
+  }
 }
 
 /**
@@ -194,6 +220,7 @@ function treeOnly(tree: string, owed: Owed, short: string): string | null {
  * If main moves, release it, replay and check again; never trust the old check
  * for the new tree. This path creates no queue entry or shared gate tree. */
 async function fastLane(root: string, sha: string, tree: string): Promise<boolean> {
+  const author = authorOf(tree);
   const directory = join(STATE, "fast");
   mkdirSync(directory, { recursive: true });
   const scratch = mkdtempSync(join(directory, `${sha.slice(0, 12)}-`));
@@ -218,7 +245,7 @@ async function fastLane(root: string, sha: string, tree: string): Promise<boolea
       // unit or second lock, and no queue. 75 means replay, never gate failure.
       const final = spawnSync("flock", [LOCK, process.execPath, process.argv[1], sha], {
         cwd: tree, stdio: "inherit", env: { ...process.env, NTS_LAND_LOCKED: "1",
-          NTS_LAND_FAST: JSON.stringify({ base, tip, checked, run }) },
+          NTS_LAND_FAST: JSON.stringify({ base, tip, checked, run, author }) },
       });
       if (final.status === 75) { say("main moved: replaying and rechecking the tree-only landing"); continue; }
       if (final.status !== 0) fail("tree-only landing refused; main was not advanced");
@@ -231,7 +258,7 @@ async function fastLane(root: string, sha: string, tree: string): Promise<boolea
 }
 
 function fastForward(root: string, sha: string): void {
-  const { base, tip, checked, run } = JSON.parse(process.env.NTS_LAND_FAST!);
+  const { base, tip, checked, run, author } = JSON.parse(process.env.NTS_LAND_FAST!);
   if (lockHolder() === null || !isAncestor(lockHolder()!)) fail("fast landing does not hold the landing lock");
   if (git(["rev-parse", "main"], root) !== base) { process.exitCode = 75; return; }
   if (git(["rev-parse", "HEAD"], checked) !== tip || git(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], checked)) fail("checked tree changed before fast-forward");
@@ -242,7 +269,11 @@ function fastForward(root: string, sha: string): void {
   if (summary.verdict !== "green" || typeof observed !== "string" || !/^[0-9a-f]{12,40}$/.test(observed)
       || git(["rev-parse", "--verify", `${observed}^{commit}`], checked) !== tip || owed.steps === "all"
       || owed.steps.some(name => !summary.steps.some((s: {name: string; verdict: string}) => s.name === name && s.verdict === "PASS"))) fail("missing green checks for the exact tree-only tip");
+  const ledger = ledgerAt(root, base);
+  const transaction = ledger.prepare(base, tip, [{ id: `fast-${sha}-${Date.now()}`, submitted: sha, base, tip,
+    author: author ?? {lane:null,address:null}, owed }], "tree-only", { commit: tip, run, checks: owed });
   execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+  finishLedger(ledger, transaction, tip);
   const note = `gate green ${new Date().toISOString()} tree-only steps: ${owed.steps.join(" ")}\nlogs: ${run}`;
   spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, tip], { cwd: root });
   if (tip !== sha) spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", `${note}\nlanded as: ${tip}`, sha], { cwd: root });
@@ -342,7 +373,7 @@ function replayOnto(root: string, base: string, onto: string, sha: string): stri
 }
 
 /** A landing waiting for the lock: one file in QUEUE, named by its id. */
-type Entry = { id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks };
+type Entry = { id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks; author?: Author };
 /** What became of a landing, written by whichever process gated it. */
 type Result = { state: "landed" | "red" | "conflict" | "unrun"; message: string; landing?: string; main?: string; run?: string };
 
@@ -350,7 +381,7 @@ function enqueue(sha: string, tree: string): string {
   mkdirSync(QUEUE, { recursive: true });
   const at = Date.now();
   const id = `${at}-${process.pid}`;
-  writeFileSync(join(QUEUE, `${id}.json`), JSON.stringify({ id, sha, tree, pid: process.pid, at }));
+  writeFileSync(join(QUEUE, `${id}.json`), JSON.stringify({ id, sha, tree, pid: process.pid, at, author: authorOf(tree) }));
   return id;
 }
 
@@ -515,7 +546,7 @@ function status(fields: Record<string, unknown>): void {
 }
 
 /** How a gate of one commit ended: green, or why not. */
-type Gated = { ok: true; run: string; note: string } | { ok: false; run: string; state: "red" | "unrun"; message: string; required?: RequiredChecks };
+type Gated = { ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun"; message: string; required?: RequiredChecks };
 
 /**
  * tests.mjs prunes obsolete test executables after PASS. Keep its current set:
@@ -631,7 +662,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     const accepted = acceptUnrun.length > 0 ? `; accepted unrun: ${acceptUnrun.join(", ")} -- ${because}` : "";
     const byPolicy = [...new Set(platformLines.map(line => line.slice(0, line.indexOf(":"))).filter(name => policyUnrun.includes(name)))];
     const policyNote = byPolicy.length ? `; unrun accepted by ${laneConfig.platforms_unrun_ok_policy ?? "lanes.json policy"}: ${byPolicy.join(", ")}` : "";
-    return { ok: true, run, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}${policyNote}` };
+    return { ok: true, run, checks: owed, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}${policyNote}` };
   } finally {
     if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
   }
@@ -738,7 +769,17 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
     // Every landing takes this lock, so this is a hand-made move of main.
     fail("main moved while the gate ran, under the landing lock: someone moved it by hand");
   }
+  const ledger = ledgerAt(root, base);
+  let previous = base;
+  const landings: Omit<LandingRecord, "commits" | "state">[] = members.map(({entry,landing}) => {
+    const owed = unionChecks(owedSteps(GATE_TREE, `${previous}..${landing}`), entry.required ?? {steps:[],interop:null});
+    const record = { id: entry.id, submitted: entry.sha, base: previous, tip: landing,
+      author: entry.author ?? {lane:null,address:null}, owed };
+    previous = landing; return record;
+  });
+  const transaction = ledger.prepare(base, tip, landings, "strict", {commit:tip,run:gated.run,checks:gated.checks});
   execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+  finishLedger(ledger, transaction, tip);
   // Every member's own commit carries the note, not only the tip: a lane asks
   // `git notes --ref=land show` of the commit it landed, and a member before
   // the tip was gated as part of the tip.
@@ -815,6 +856,7 @@ async function main(): Promise<void> {
   }
 
   await underTheLock(sha, tree);
+  ledgerAt(root, git(["rev-parse", "main"], root));
   // Under the lock. A process started with the lock already held has no entry
   // yet: it queues itself here, with this process as the one to answer.
   const id = process.env.NTS_LAND_ENTRY ?? enqueue(sha, tree);

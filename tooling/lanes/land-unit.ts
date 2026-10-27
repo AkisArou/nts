@@ -19,6 +19,7 @@ try {
   }
   const root = checked("git", ["rev-parse", "--show-toplevel"], process.cwd());
   const sha = checked("git", ["rev-parse", "--verify", `${asked}^{commit}`], root);
+  const authorBranch = checked("git", ["branch", "--show-current"], root);
   const submissions = join(homedir(), ".cache/nts-land/submissions");
   mkdirSync(submissions, { recursive: true });
   const submission = mkdtempSync(join(submissions, `${name}-${sha.slice(0, 12)}-`));
@@ -39,6 +40,8 @@ try {
     "--user", "--collect", "--quiet", `--unit=${unit}`, `--working-directory=${tree}`,
     `--property=StandardOutput=file:${log}`, `--property=StandardError=file:${log}`,
     `--property=LimitCORE=${process.env.NTS_COREDUMPS === "1" ? "infinity" : "0"}`,
+    `--setenv=NTS_LAND_AUTHOR_BRANCH=${authorBranch}`,
+    ...(process.env.NTS_LAND_AUTHOR_ADDRESS ? [`--setenv=NTS_LAND_AUTHOR_ADDRESS=${process.env.NTS_LAND_AUTHOR_ADDRESS}`] : []),
     ...systemdEnvironment(), process.execPath, land, sha,
   ], root);
   console.log(`queued ${sha} as ${unit}\nlog: ${log}`);

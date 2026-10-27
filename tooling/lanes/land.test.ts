@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
+import { readLedger, VerificationLedger } from "./verification-ledger.ts";
 
 const LAND = new URL("./land.ts", import.meta.url).pathname;
 
@@ -148,6 +149,71 @@ test("tree-only changes land without a queue entry or full gate", async () => {
   assert.equal(run(s, s.root, ["rev-parse", "main"]), run(s, tree, ["rev-parse", "HEAD"]));
   assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
   assert.equal(gates(s), 0);
+  const saved = readLedger(join(s.home, ".cache/nts-land/verification"))!;
+  assert.equal(saved.mode, "strict");
+  assert.equal(saved.transactions[0].kind, "tree-only");
+  assert.equal(saved.verified.tip, run(s, s.root, ["rev-parse", "main"]));
+});
+
+test("a strict landing journals its own range and author without an optimistic path", async () => {
+  const s = scratch(), tree = lane(s, "tsrs/ledger-proof", {"one.txt":"one\n"});
+  s.env.NTS_LAND_AUTHOR_BRANCH="compiler/stale-inherited-context";
+  const tip = run(s,tree,["rev-parse","HEAD"]);
+  const result = await land(s,tree).done;
+  assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),1);
+  const saved=readLedger(join(s.home,".cache/nts-land/verification"))!;
+  assert.equal(saved.mode,"strict");
+  assert.equal(saved.verified.tip,tip);
+  assert.equal(saved.transactions[0].kind,"strict");
+  assert.equal(saved.transactions[0].state,"committed");
+  assert.deepEqual(saved.transactions[0].entries[0].commits,[tip]);
+  assert.equal(saved.transactions[0].entries[0].author.lane,"tsrs");
+});
+
+test("a failed post-FF ledger write reports the real landing and recovers on restart", async () => {
+  const s = scratch(), tree = lane(s,"ledger-restart",{"one.txt":"one\n"});
+  const tip=run(s,tree,["rev-parse","HEAD"]), directory=join(s.home,".cache/nts-land/verification");
+  const hook=join(s.root,".git/hooks/post-merge");
+  writeFileSync(hook,`#!${process.execPath}\nrequire("node:fs").chmodSync(${JSON.stringify(directory)},0o500);\n`);chmodSync(hook,0o755);
+  const first=await land(s,tree).done;
+  chmodSync(directory,0o700);rmSync(hook);
+  assert.equal(first.status,0,first.out);
+  assert.match(first.out,/LANDED, but verification bookkeeping needs restart recovery/);
+  assert.equal(run(s,s.root,["rev-parse","main"]),tip);
+  assert.equal(readLedger(directory)!.transactions[0].state,"prepared");
+  const next=lane(s,"after-ledger-restart",{"two.txt":"two\n"});
+  const second=await land(s,next).done;
+  assert.equal(second.status,0,second.out);
+  const saved=readLedger(directory)!;
+  assert.equal(saved.transactions.length,2);
+  assert.ok(saved.transactions.every(tx=>tx.state==="committed"));
+  assert.equal(saved.verified.tip,run(s,s.root,["rev-parse","main"]));
+});
+
+test("a coordinator docs commit is accounted for by the next strict train",async()=>{
+  const s=scratch(),base=run(s,s.root,["rev-parse","main"]);
+  new VerificationLedger(join(s.home,".cache/nts-land/verification"),s.root,base);
+  mkdirSync(join(s.root,"docs"));writeFileSync(join(s.root,"docs/design.md"),"design\n");
+  run(s,s.root,["add","docs/design.md"]);run(s,s.root,["commit","-qm","coordinator docs"]);
+  const tree=lane(s,"tsrs/after-docs",{"next.txt":"next\n"}), result=await land(s,tree).done;
+  assert.equal(result.status,0,result.out);
+  const saved=readLedger(join(s.home,".cache/nts-land/verification"))!;
+  assert.equal(saved.transactions[0].kind,"external");
+  assert.equal(saved.transactions[0].entries[0].author.lane,"coordinator");
+  assert.deepEqual(saved.transactions[0].entries[0].owed.steps,["fake"]);
+  assert.equal(saved.verified.tip,run(s,s.root,["rev-parse","main"]));
+});
+
+test("an unwritable verification journal refuses before any fast-forward", async () => {
+  const s=scratch(), tree=lane(s,"ledger-unavailable",{"change":"one\n"});
+  const base=run(s,s.root,["rev-parse","main"]);
+  const directory=join(s.home,".cache/nts-land");mkdirSync(directory,{recursive:true});
+  writeFileSync(join(directory,"verification"),"this is not a directory");
+  const result=await land(s,tree).done;
+  assert.notEqual(result.status,0,result.out);
+  assert.equal(run(s,s.root,["rev-parse","main"]),base);
+  assert.equal(gates(s),0);
 });
 
 test("a fast landing replays and rechecks if main moves before the short lock", async () => {

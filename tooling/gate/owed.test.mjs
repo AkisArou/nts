@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, owed, parseNameStatus, targetFiles, WIDE } from "./owed.mjs";
+import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, targetFiles, WIDE } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -31,6 +31,31 @@ const superset = (got, want, what) => {
   for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
+
+test("verdict machinery and every verifier entry point stay strict", () => {
+  for (const path of ["tooling/gate/run.mjs", "tooling/lanes/land.ts", "tooling/lanes/verify.ts", "tooling/lanes/verification-ledger.ts",
+    "tooling/lanes/revert.ts", "tooling/lanes/notify.ts", "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",
+    "tooling/differential/agree.mjs", "tooling/memory/run.sh", "results/test262/c/language.tsv"]) assert.ok(isStrictPath(path), path);
+  for (const path of ["compiler/core/src/hir/lower.rs", "runtime/c/nts_runtime.c", "docs/architecture.md"]) assert.equal(isStrictPath(path), false, path);
+});
+
+test("tool-written result outputs owe tree checks while recorded baselines retain their readers", () => {
+  const tree = new Set(["rustfmt","format","reformat","records","old-paths","primitives","config","licenses","audit"]);
+  for (const path of ["results/benchmarks/cells.tsv","results/typed-release/cells.tsv","results/suite/corpus.md","results/a-new-tool/measurements.json"]) {
+    const got=stepsFor(path);
+    assert.ok(got.length>0);
+    for(const step of got) assert.ok(tree.has(step), `${path}: ${got.join(" ")}`);
+  }
+  for (const [path,expected] of [
+    ["results/test262/c/language.tsv","test262-cases"],
+    ["results/test262/c/builtins.tsv","test262-builtins-cases"],
+    ["results/test262/c/staging.tsv","test262-rest-cases"],
+    ["results/test262/jvm/language.tsv","test262-jvm"],
+    ["results/test262/wasm/language.tsv","test262-wasm"],
+    ["results/test262/llvm/language.tsv","test262-llvm"],
+    ["results/typescript/jvm/cases.tsv","typescript-cases"],
+  ]) assert.ok(stepsFor(path).includes(expected), path);
+});
 
 function owes(path, want, { not = [] } = {}) {
   const got = stepsFor(path);

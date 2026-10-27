@@ -50,6 +50,7 @@ test("the detached launcher seals the caller's HEAD and forwards the descriptor 
   const args: string[] = JSON.parse(readFileSync(f.capture, "utf8"));
   assert.equal(args.at(-1), f.sha);
   assert.ok(args.includes("--property=LimitCORE=0"));
+  assert.ok(args.includes("--setenv=NTS_LAND_AUTHOR_BRANCH=compiler/test"));
   const directory = args.find(arg => arg.startsWith("--working-directory="))!.slice("--working-directory=".length);
   assert.equal(f.git(directory, "rev-parse", "HEAD"), f.sha);
   for (const { name } of GATE_ENVIRONMENT) {

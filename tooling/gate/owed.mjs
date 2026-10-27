@@ -86,6 +86,17 @@ import { preciseChange } from "./precise-changes.ts";
  */
 const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 
+/** Verdict machinery always gates before landing, including its verifier.
+ * Tree-only changes have already passed their entire owed gate; they never
+ * need the future optimistic path either. Keep this routing policy in one list. */
+export const STRICT_PATHS = [
+  "tooling/gate/", "tooling/lanes/", "tooling/conformance/", "tooling/census/", "tooling/differential/",
+  "tooling/memory/", "tooling/licenses/", "tooling/config/", "tooling/primitives/", "tooling/jvm/", "tooling/android/",
+  "results/", "compiler/frontend-tsrs/vendor.ts",
+];
+export const isStrictPath = path => STRICT_PATHS.some(prefix => prefix.endsWith("/") ? path.startsWith(prefix) : path === prefix);
+export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit"];
+
 /**
  * What each instrument asks, and of which kind -- because the failure this
  * file exists for is rarely "forgot to run a step". It is "ran four steps that
@@ -486,6 +497,15 @@ export const RULES = [
     arms: [],
   },
   {
+    // Tool-written measurements are outputs. Recorded conformance baselines
+    // still owe their readers through the rules and derived maps below.
+    name: "tool-written results",
+    when: p => p.startsWith("results/"),
+    settled: true,
+    steps: TREE_CHECKS,
+    arms: [],
+  },
+  {
     // A record is what its step holds a run to: re-recording one owes that
     // step on that backend, not the full gate an unmatched path would. C's
     // records need no rule -- all.sh names each one, so `stepInputs` places
@@ -655,7 +675,7 @@ export const RULES = [
     // is checked by running it -- a dry run names what a range owes and
     // touches nothing.
     name: "the landing tools",
-    when: (p) => /^tooling\/lanes\/(land|lane)\.ts$/.test(p),
+    when: (p) => /^tooling\/lanes\/(land|lane|verification-ledger)\.ts$/.test(p),
     settled: true,
     steps: [],
     arms: [{ kind: "answers", asks: "does a dry run still name what a range owes", run: "node tooling/lanes/land.ts HEAD --dry-run; node tooling/lanes/lane.ts status" }],
@@ -679,7 +699,6 @@ function nodeHarness(path) {
 
 /** Every change, whatever it touched: the gate's first two steps. */
 const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths"], arms: [] };
-export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit"];
 
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is
@@ -1065,7 +1084,11 @@ export function stepInputs() {
         // exists in the script's directory.
         const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
-        queue.push(...named(body), ...imports(input, body), ...beside);
+        // branches.test models build-output paths and writes them only in
+        // private fixture repos. Those strings do not read checked-in bench
+        // cells; keep real imports/beside-file dependencies unchanged.
+        const referenced = named(body).filter(p => !(input === "tooling/lanes/branches.test.ts" && p.startsWith("results/benchmarks/")));
+        queue.push(...referenced, ...imports(input, body), ...beside);
       }
     }
     // **Hand-overs through the runner.** run.mjs gives one step another's
@@ -1169,6 +1192,18 @@ export function owed(changes) {
   let ordinary = false;
   for (const change of changes) {
     const { path, added = false } = change;
+    if (path.startsWith("results/") && all) {
+      const readers = new Set([...covering(stepInputs(), path)]);
+      for (const name of covering(corpusInputs(), path)) for (const step of CORPORA.find(c => c.name === name).steps) readers.add(step);
+      for (const rule of rulesFor(path, added)) for (const step of rule.steps) readers.add(step);
+      const fullReader = rulesFor(path, added).some(rule => rule.full);
+      // A future compiled include or corpus input keeps its full ordinary
+      // reach. Only an output with no execution reader takes the fast lane.
+      if (!fullReader && !crateOf(path) && !covering(embedded(), path).size && [...readers].every(step => TREE_CHECKS.includes(step))) {
+        add("tool-written results", path, TREE_CHECKS, {precise:true});
+        continue;
+      }
+    }
     let precise = preciseChange(change);
     const ownCrate = crateOf(path);
     // include_str!/build inputs observe prose bytes too, not just tokens.
@@ -1391,6 +1426,7 @@ function main() {
     : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed}${docEnv} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
   const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
+  if (changes.some(c => isStrictPath(c.path))) console.log("  landing policy: strict gate-before-land (verdict machinery)");
   for (const r of rules) {
     console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
     for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);

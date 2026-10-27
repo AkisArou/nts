@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { branchHealth, healthLines } from "./health.ts";
 import { upkeepStatus } from "./topics.ts";
+import { readLedger } from "./verification-ledger.ts";
 
 type Lane = { session: string; branch: string; owns: string[] };
 type Row = {
@@ -109,11 +110,24 @@ async function status(json: boolean): Promise<void> {
   const main = git(["log", "-1", "--format=%h %s (%cr)", "main"], root);
   const health = await branchHealth(root, fileURLToPath(new URL("./archive.tsv", import.meta.url)));
   const upkeep = upkeepStatus(join(homedir(), ".cache/nts-land/upkeep.jsonl"));
+  let verification;
+  try {
+    const saved=readLedger(join(homedir(), ".cache/nts-land/verification"));
+    verification=saved ? { mode:saved.mode, verified:saved.verified, observedMain:saved.observedMain,
+      pending:saved.transactions.filter(tx=>tx.state==="prepared" || tx.state==="held" || tx.state==="committed" && tx.entries.some(e=>e.state==="unverified"))
+        .flatMap(tx=>tx.entries.map(e=>({id:e.id,tip:e.tip,lane:e.author.lane,state:tx.state==="committed"?e.state:tx.state}))) } : null;
+  }
+  catch (error) { verification = { error: String(error) }; }
   if (json) {
-    console.log(JSON.stringify({ main, gate: marker(), landing: landing(), queue: queue(), trees: rows, health, upkeep }, null, 2));
+    console.log(JSON.stringify({ main, gate: marker(), landing: landing(), queue: queue(), trees: rows, health, upkeep, verification }, null, 2));
     return;
   }
   console.log(`main: ${main}`);
+  if (verification && "error" in verification) console.log(`verification: unavailable: ${verification.error}`);
+  else if (verification) {
+    console.log(`verified: ${verification.verified.tip.slice(0,12)} (${verification.verified.origin}); product mode strict; ${verification.pending.length} pending entry(s)`);
+    for (const entry of verification.pending) console.log(`  ${entry.tip.slice(0,12)} ${entry.state} ${entry.lane??"unknown lane"}`);
+  } else console.log("verification: not initialised; product mode strict");
   console.log(`gate: ${marker() ?? "free"}`);
   const l = landing();
   if (l) console.log(`last landing: ${l.state} ${String(l.commit ?? "").slice(0, 12)} at ${l.at}`);
