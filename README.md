@@ -1,8 +1,9 @@
 # nts — Native TypeScript
 
-nts compiles TypeScript and TSX ahead of time into native code, JVM bytecode and
-WebAssembly. A compiled program carries no JavaScript engine: no interpreter, no
-JIT.
+nts compiles TypeScript and TSX ahead of time into native code and JVM
+bytecode. A compiled program carries no JavaScript engine: no interpreter, no
+JIT. WebAssembly is being rebuilt on Binaryen
+([targets](docs/targets/wasm.md)).
 
 ## Scope
 
@@ -33,7 +34,7 @@ refused by name.
 | Node.js addons | N-API native modules |
 
 Memory follows the target: reference counting with a cycle collector natively,
-and the host's own collector on the JVM and WebAssembly.
+and the host's own collector on the JVM.
 
 ## Application targets
 
