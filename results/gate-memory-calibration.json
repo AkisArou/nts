@@ -1,0 +1,458 @@
+{
+  "version": 1,
+  "rule": "ceil(max(2 * peak, peak + 1 GiB)); normalize elastic workers; retain every historical peak",
+  "coverage": "resident-worker aggregate, excluding its outside orchestrator; no partial-scope or unmeasured step is calibrated",
+  "trains": [
+    {
+      "train": "297397e974ab-1793096963133",
+      "commit": "297397e974ab",
+      "verdict": "green",
+      "summary_sha256": "238c75b0779ab7064688beeb80389e316a060a6aebe3bcf3a7e1cd82825f3189"
+    },
+    {
+      "train": "673678ceb40f-1793098703658",
+      "commit": "673678ceb40f",
+      "verdict": "green",
+      "summary_sha256": "530587968183a6734481db076ddce28629ec7c372fdb8f3aefb10bbda7c52063"
+    },
+    {
+      "train": "c8ea6c5f0300-1793102452008",
+      "commit": "c8ea6c5f0300",
+      "verdict": "green",
+      "summary_sha256": "d763ad27eb7f5e7810bb4f4f05304dc2059730bed195265f551191b4f0c7406f"
+    },
+    {
+      "train": "fb8ad42ac014-1793100546115",
+      "commit": "fb8ad42ac014",
+      "verdict": "green",
+      "summary_sha256": "a4b2d94ed42bcbfafd8857e8283e44ca80c62b7eb6cc713f05be9fbd3a295b99"
+    }
+  ],
+  "rows": [
+    {
+      "step": "test262-cases",
+      "workers": 8,
+      "mem_gib": 4,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1581072384,
+          "scope_peaks_bytes": [
+            1581072384
+          ],
+          "reserved_bytes": 8589934592
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1530572800,
+          "scope_peaks_bytes": [
+            1530572800
+          ],
+          "reserved_bytes": 8589934592
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1495855104,
+          "scope_peaks_bytes": [
+            1495855104
+          ],
+          "reserved_bytes": 8589934592
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1734742016,
+          "scope_peaks_bytes": [
+            1734742016
+          ],
+          "reserved_bytes": 8589934592
+        }
+      ]
+    },
+    {
+      "step": "test262-builtins-cases",
+      "workers": 4,
+      "mem_gib": 2,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 476278784,
+          "scope_peaks_bytes": [
+            476278784
+          ],
+          "reserved_bytes": 5368709120
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 467709952,
+          "scope_peaks_bytes": [
+            467709952
+          ],
+          "reserved_bytes": 5368709120
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 439943168,
+          "scope_peaks_bytes": [
+            439943168
+          ],
+          "reserved_bytes": 5368709120
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 477487104,
+          "scope_peaks_bytes": [
+            477487104
+          ],
+          "reserved_bytes": 5368709120
+        }
+      ]
+    },
+    {
+      "step": "test262-rest-cases",
+      "workers": 4,
+      "mem_gib": 2,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 279502848,
+          "scope_peaks_bytes": [
+            212959232,
+            279502848,
+            239149056
+          ],
+          "reserved_bytes": 5368709120
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 262402048,
+          "scope_peaks_bytes": [
+            213012480,
+            262402048,
+            227356672
+          ],
+          "reserved_bytes": 5368709120
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 280182784,
+          "scope_peaks_bytes": [
+            226029568,
+            280182784,
+            245440512
+          ],
+          "reserved_bytes": 5368709120
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 4,
+          "elastic": false,
+          "peak_bytes": 281227264,
+          "scope_peaks_bytes": [
+            213475328,
+            281227264,
+            246030336
+          ],
+          "reserved_bytes": 5368709120
+        }
+      ]
+    },
+    {
+      "step": "test262-jvm",
+      "workers": 8,
+      "mem_gib": 3,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1156829184,
+          "scope_peaks_bytes": [
+            1156829184,
+            582696960,
+            248512512,
+            451182592,
+            436162560
+          ],
+          "reserved_bytes": 8589934592
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1119981568,
+          "scope_peaks_bytes": [
+            1119981568,
+            581689344,
+            260239360,
+            481263616,
+            428732416
+          ],
+          "reserved_bytes": 8589934592
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1154445312,
+          "scope_peaks_bytes": [
+            594911232,
+            249270272,
+            440266752,
+            428290048,
+            1154445312
+          ],
+          "reserved_bytes": 8589934592
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1083441152,
+          "scope_peaks_bytes": [
+            595308544,
+            264822784,
+            435941376,
+            430809088,
+            1083441152
+          ],
+          "reserved_bytes": 8589934592
+        }
+      ]
+    },
+    {
+      "step": "test262-wasm",
+      "workers": 8,
+      "mem_gib": 4,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1990463488,
+          "scope_peaks_bytes": [
+            1990463488,
+            1090629632,
+            267481088,
+            428920832,
+            410714112
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1834274816,
+          "scope_peaks_bytes": [
+            1834274816,
+            1126055936,
+            243642368,
+            438013952,
+            425996288
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1690763264,
+          "scope_peaks_bytes": [
+            1690763264,
+            1133129728,
+            272867328,
+            433442816,
+            419258368
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1725415424,
+          "scope_peaks_bytes": [
+            238780416,
+            458739712,
+            420438016,
+            1725415424,
+            1166757888
+          ],
+          "reserved_bytes": 6442450944
+        }
+      ]
+    },
+    {
+      "step": "test262-llvm",
+      "workers": 8,
+      "mem_gib": 3,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1374199808,
+          "scope_peaks_bytes": [
+            1374199808,
+            789200896,
+            263028736,
+            523808768,
+            468328448
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1261326336,
+          "scope_peaks_bytes": [
+            1261326336,
+            759586816,
+            254099456,
+            498380800,
+            453087232
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1257054208,
+          "scope_peaks_bytes": [
+            716320768,
+            285765632,
+            506261504,
+            473415680,
+            1257054208
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 1401896960,
+          "scope_peaks_bytes": [
+            1401896960,
+            783716352,
+            248971264,
+            522321920,
+            464818176
+          ],
+          "reserved_bytes": 6442450944
+        }
+      ]
+    },
+    {
+      "step": "typescript-cases",
+      "workers": 8,
+      "mem_gib": 2,
+      "observations": [
+        {
+          "train": "297397e974ab-1793096963133",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 601042944,
+          "scope_peaks_bytes": [
+            565874688,
+            601042944,
+            474128384,
+            471388160
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "673678ceb40f-1793098703658",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 601731072,
+          "scope_peaks_bytes": [
+            565166080,
+            601731072,
+            480038912,
+            471351296
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "c8ea6c5f0300-1793102452008",
+          "verdict": "green",
+          "workers": 6,
+          "elastic": false,
+          "peak_bytes": 466702336,
+          "scope_peaks_bytes": [
+            438255616,
+            466702336,
+            365596672,
+            362774528
+          ],
+          "reserved_bytes": 6442450944
+        },
+        {
+          "train": "fb8ad42ac014-1793100546115",
+          "verdict": "green",
+          "workers": 8,
+          "elastic": false,
+          "peak_bytes": 611344384,
+          "scope_peaks_bytes": [
+            582832128,
+            611344384,
+            493764608,
+            475807744
+          ],
+          "reserved_bytes": 6442450944
+        }
+      ]
+    }
+  ]
+}

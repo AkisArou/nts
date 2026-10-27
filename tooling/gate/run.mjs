@@ -126,18 +126,19 @@ const STEPS = [
   { name: "audit", slots: 1, treeOnly: true, mem: 0.2, doc: "classification reasons, authorities and suite entries" },
   { name: "doctests", slots: 4, min: 1, mem: 4, lock: "cargo", after: ["build"], doc: "touched crates' doc examples compile and pass" },
   { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },
-  { name: "test262-cases", slots: 8, min: 4, mem: 8, nts: true, fe: true, doc: "test/language rows reproduce" },
-  { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
-  { name: "test262-rest-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
+  // Whole-group measured headroom: results/gate-memory-calibration.json.
+  { name: "test262-cases", slots: 8, min: 4, mem: 4, nts: true, fe: true, doc: "test/language rows reproduce" },
+  { name: "test262-builtins-cases", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
+  { name: "test262-rest-cases", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
   // The five records on one backend each (all.sh's test262_backend): one
   // frontend per case as on C, plus the backend's own run -- a JVM per case
   // under its fixed -Xmx, node for Wasm.
-  { name: "test262-jvm", slots: 8, min: 2, mem: 8, nts: true, fe: true, doc: "every recorded test262 row reproduces on the JVM",
+  { name: "test262-jvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on the JVM",
     capabilities: ["jvm"],
   },
-  { name: "test262-wasm", slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every recorded test262 row reproduces on Wasm" },
-  { name: "test262-llvm", slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
-  { name: "typescript-cases", slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
+  { name: "test262-wasm", slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "every recorded test262 row reproduces on Wasm" },
+  { name: "test262-llvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
+  { name: "typescript-cases", slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
     capabilities: ["jvm"],
   },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
@@ -877,6 +878,7 @@ function done() {
   }
   const green = red.length === 0;
   const wall = (Date.now() - startedAt) / 1000;
+  const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name), mem_gb: BY_NAME.get(name).mem }))) ?? { version: 1, status: "unavailable" };
 
   const lines = [];
   lines.push("");
@@ -890,6 +892,8 @@ function done() {
     const how = r.verdict === "SKIPPED" ? (r.accepted ? "  [accepted: NTS_GATE_ACCEPT_SKIP]" : `  [red; NTS_GATE_ACCEPT_SKIP=${name} accepts it]`) : "";
     const why = r.verdict === "PASS" ? "" : `  ${r.reason}${host}${how}`;
     lines.push(`  ${tag} ${name.padEnd(24)}${t}${c}${why}`);
+    const warning = costsSummary.steps?.[name]?.aggregate_memory?.warning;
+    if (warning) lines.push(color(33, `  WARNING  ${name.padEnd(24)} ${warning}`));
   }
   for (const s of slow) {
     lines.push(color(31, `  SLOWER   ${s.name.padEnd(24)} ${s.kind} ${Math.round(s.now)}s, ${s.ratio.toFixed(1)}x its baseline of ${Math.round(s.was)}s (tooling/gate/times.tsv)`));
@@ -919,7 +923,7 @@ function done() {
     accept_skip: [...ACCEPT_SKIP],
     steps: plan.map((name) => ({ name, ...results.get(name) })),
     slower: slow,
-    case_costs: caseCosts?.summary(plan.map(name => ({ name, ...results.get(name), mem_gb: BY_NAME.get(name).mem }))) ?? { version: 1, status: "unavailable" },
+    case_costs: costsSummary,
   };
   try {
     writeFileSync(join(RUN_DIR, "summary.json"), JSON.stringify(summary, null, 2) + "\n");

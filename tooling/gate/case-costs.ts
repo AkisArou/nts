@@ -1,6 +1,7 @@
 // Observations only: none of these values participates in admission or verdicts.
 import { appendFileSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { memoryWarning } from "./memory-calibration.ts";
 
 export type Observation = {
   event: string; epoch: number; step?: string; request?: number; pid?: number; context?: string;
@@ -261,6 +262,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
         })) },
       aggregate_memory: { reserved_step_mem_bytes: step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30),
         scopes, max_scope_peak_bytes: peaks.length ? Math.max(...peaks) : null,
+        warning: memoryWarning(peaks.length ? Math.max(...peaks) : null, step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30)),
         measured_scopes: peaks.length, unknown_scopes: scopes.length - peaks.length },
       coverage: { started: cases.length, completed: completed.length, incomplete: cases.length - completed.length,
         expected_program_checks: CHECK_STEPS.has(step.name) ? tokens.filter(r => r.grant !== undefined).length : null,

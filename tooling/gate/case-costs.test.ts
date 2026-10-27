@@ -153,6 +153,9 @@ test("aggregate peaks retain each scope and compare bytes with the step reservat
   assert.equal(data.aggregate_memory.measured_scopes, 2);
   assert.equal(data.aggregate_memory.unknown_scopes, 1);
   assert.deepEqual(data.aggregate_memory.scopes, scopes);
+  assert.equal(data.aggregate_memory.warning, null);
+  const tight = summarizeCosts(dir, [], [{ ...step, mem_gb: 1 }]).steps.examples as any;
+  assert.match(tight.aggregate_memory.warning, /exceeds half/);
   assert.equal(result.status, "complete");
 });
 
