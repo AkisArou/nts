@@ -56,6 +56,9 @@ const SUITE = join(ROOT, "third_party/test262");
 const REGISTRY = join(SUITE, "features.txt");
 
 const argv = process.argv.slice(2);
+// Prose/citation edits need the registry and authorities, not a compiled
+// protocol or selection. The ordinary test262 audit still checks completeness.
+const metadataOnly = argv.includes("--metadata-only");
 const flag = (name, fallback) => {
   const at = argv.indexOf(name);
   return at === -1 ? fallback : argv[at + 1];
@@ -133,11 +136,11 @@ function selection() {
 
 let lines;
 try {
-  lines = selection().split("\n").filter((line) => line !== "");
+  lines = metadataOnly ? [] : selection().split("\n").filter((line) => line !== "");
 } catch (error) {
   cannotMeasure(`the selection could not be produced: ${error.message.split("\n")[0]}`);
 }
-if (lines.length === 0) cannotMeasure(`${under} selected no test`);
+if (!metadataOnly && lines.length === 0) cannotMeasure(`${under} selected no test`);
 
 /** feature -> how many files in the selection declare it. */
 const seen = new Map();
@@ -149,6 +152,38 @@ for (const line of lines) {
 
 const problems = [];
 
+function authority(name, row) {
+  if (!row.reason) problems.push(`${name}: no reason`);
+  if (!row.authority || typeof row.authority !== "string") {
+    problems.push(`${name}: no authority`);
+    return;
+  }
+  const [file, section] = row.authority.split(" §");
+  const path = join(ROOT, file);
+  if (!existsSync(path)) problems.push(`${name}: authority names ${file}, which does not exist`);
+  else if (section) {
+    const text = readFileSync(path, "utf8");
+    if (!text.includes(`§${section}`) && !text.includes(`\n## ${section}.`) && !text.includes(`\n## ${section}`)) {
+      problems.push(`${name}: authority names §${section} of ${file}, which has no such section`);
+    }
+  }
+}
+
+const extra = JSON.parse(readFileSync(join(HERE, "test262-exclusions.json"), "utf8"));
+if (!Array.isArray(extra.exclusions)) cannotMeasure("no exclusions array");
+const exclusionKeys = new Set();
+for (const row of extra.exclusions) {
+  const name = `${row.kind}:${row.match}`;
+  authority(name, row);
+  if (exclusionKeys.has(name)) problems.push(`${name}: duplicate exclusion`);
+  exclusionKeys.add(name);
+  if (!["feature", "path", "include"].includes(row.kind) || typeof row.match !== "string" || !row.match) {
+    problems.push(`${name}: invalid exclusion kind/match`);
+  } else if (row.kind === "feature" ? !registry.has(row.match) : !existsSync(join(SUITE, row.kind === "include" ? "harness" : "", row.match))) {
+    problems.push(`${name}: exclusion names no suite entry`);
+  }
+}
+
 // --- reason ---------------------------------------------------------------
 for (const [name, row] of Object.entries(rows)) {
   if (!CLASSES.has(row.class)) {
@@ -156,25 +191,7 @@ for (const [name, row] of Object.entries(rows)) {
     continue;
   }
   if (row.class !== "inapplicable") continue;
-  if (!row.reason) {
-    problems.push(`${name}: inapplicable with no reason -- a non-goal without one reads as a gap somebody gave up on`);
-  }
-  if (!row.authority) {
-    problems.push(`${name}: inapplicable with no authority`);
-    continue;
-  }
-  const [file, section] = row.authority.split(" §");
-  const path = join(ROOT, file);
-  if (!existsSync(path)) {
-    problems.push(`${name}: authority names ${file}, which does not exist`);
-  } else if (section) {
-    const text = readFileSync(path, "utf8");
-    // `§13` of typescript.md is a numbered heading (`## 13.`); test262.md's
-    // are named, and a section is then its heading's title (`## Done, …`).
-    if (!text.includes(`§${section}`) && !text.includes(`\n## ${section}.`) && !text.includes(`\n## ${section}`)) {
-      problems.push(`${name}: authority names §${section} of ${file}, which has no such section`);
-    }
-  }
+  authority(name, row);
 }
 
 // --- registry -------------------------------------------------------------
@@ -276,12 +293,12 @@ for (const row of Object.values(rows)) {
   byClass.set(row.class, (byClass.get(row.class) ?? 0) + 1);
 }
 
-console.log(`  ${lines.length} file(s) under ${under}; ${seen.size} distinct feature(s) declared`);
+console.log(metadataOnly ? `  metadata only: registry, reasons and authorities; ${extra.exclusions.length} exclusions (no case selection)` : `  ${lines.length} file(s) under ${under}; ${seen.size} distinct feature(s) declared`);
 console.log(
   `  ${Object.keys(rows).length} classified: ` +
     [...byClass].sort().map(([name, count]) => `${count} ${name}`).join(", "),
 );
-if (unclaimed.length > 0) {
+if (!metadataOnly && unclaimed.length > 0) {
   // Printed with the population, because the failure this guards against is a
   // list that was never read rather than a list that is wrong.
   console.log(

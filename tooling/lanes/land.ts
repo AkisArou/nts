@@ -42,7 +42,7 @@
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
@@ -113,7 +113,7 @@ function sharedCheckout(): string {
  * `"all"` for the full gate (a bare `all.sh` with no list), and the interop
  * projects when it could narrow them (`NTS_INTEROP_PROJECTS`), else null.
  */
-type Owed = { steps: string[] | "all"; interop: string | null };
+type Owed = { steps: string[] | "all"; interop: string | null; doctests?: string | null };
 type RequiredChecks = { steps: string[]; interop: string | null };
 function unionChecks(a: Owed, b: Owed): Owed {
   const interop = (checks: Owed) => checks.steps === "all" || checks.steps.includes("interop");
@@ -122,6 +122,9 @@ function unionChecks(a: Owed, b: Owed): Owed {
     interop: !interop(b) ? a.interop : !interop(a) ? b.interop
       : a.interop === null || b.interop === null ? null
       : [...new Set([...a.interop.split(/\s+/), ...b.interop.split(/\s+/)])].join(" "),
+    doctests: b.steps !== "all" && !b.steps.includes("doctests") ? a.doctests
+      : a.steps !== "all" && !a.steps.includes("doctests") ? b.doctests
+      : !a.doctests || !b.doctests ? null : [...new Set([...a.doctests.split(/\s+/), ...b.doctests.split(/\s+/)])].join(" "),
   };
 }
 
@@ -137,7 +140,7 @@ function environmentProblem(tree: string, owed: Owed): string | null {
 function owedSteps(tree: string, range: string): Owed {
   const out = execFileSync("node", ["tooling/gate/owed.mjs", "--range", range], { cwd: tree, encoding: "utf8" });
   const line = out.match(/NTS_GATE_STEPS="([^"]*)"(?: NTS_INTEROP_PROJECTS="([^"]*)")?/);
-  if (line) return { steps: line[1].split(/\s+/).filter(Boolean), interop: line[2] ?? null };
+  if (line) return { steps: line[1].split(/\s+/).filter(Boolean), interop: line[2] ?? null, doctests: /NTS_DOCTEST_CRATES="([^"]*)"/.exec(out)?.[1] ?? null };
   if (/^\s*sh tooling\/gate\/all\.sh\s+# the full gate/m.test(out)) return { steps: "all", interop: null };
   fail(`owed.mjs named no steps for ${range}:\n${out}`);
 }
@@ -152,13 +155,22 @@ function owedSteps(tree: string, range: string): Owed {
  * `config` says so in 1.4 s; the trains it refused took half an hour each, and
  * one carried another lane's landing with it.
  */
-function treeOnly(tree: string, owed: Owed, short: string): void {
+function treeSteps(tree: string): string[] {
+  return execFileSync("node", ["tooling/gate/run.mjs", "--tree-only"], { cwd: tree, encoding: "utf8" }).split(/\s+/).filter(Boolean);
+}
+
+function onlyTree(tree: string, owed: Owed): boolean {
+  const listed = treeSteps(tree);
+  return owed.steps !== "all" && owed.steps.length > 0 && owed.steps.every(step => listed.includes(step));
+}
+
+function treeOnly(tree: string, owed: Owed, short: string): string | null {
   const listed = execFileSync("node", ["tooling/gate/run.mjs", "--tree-only"], { cwd: tree, encoding: "utf8" })
     .split(/\s+/)
     .filter(Boolean);
   const steps = owed.steps === "all" ? listed : listed.filter((step) => owed.steps.includes(step));
-  if (steps.length === 0) return;
-  const dir = join(STATE, "tree-only", `${short}-${process.pid}`);
+  if (steps.length === 0) return null;
+  const dir = join(STATE, "tree-only", `${short}-${process.pid}-${Date.now()}`);
   const run = spawnSync("sh", ["tooling/gate/all.sh"], {
     cwd: tree,
     stdio: "inherit",
@@ -175,6 +187,67 @@ function treeOnly(tree: string, owed: Owed, short: string): void {
     fail(`${red.join(", ")} on ${short}: the gate would refuse it (logs in ${dir})`);
   }
   say(`${steps.join(" ")} green on ${short}`);
+  return dir;
+}
+
+/** Replay and check privately. The landing lock covers only the final FF.
+ * If main moves, release it, replay and check again; never trust the old check
+ * for the new tree. This path creates no queue entry or shared gate tree. */
+async function fastLane(root: string, sha: string, tree: string): Promise<boolean> {
+  const directory = join(STATE, "fast");
+  mkdirSync(directory, { recursive: true });
+  const scratch = mkdtempSync(join(directory, `${sha.slice(0, 12)}-`));
+  const checked = join(scratch, "tree");
+  try {
+    for (;;) {
+      const base = git(["rev-parse", "main"], root);
+      const tip = replayOnto(root, base, base, sha);
+      if (!tip) fail(`${sha.slice(0, 12)} does not replay onto main: rebase onto main by hand, then land`);
+      if (tip === base) { say(`${sha.slice(0, 12)}'s changes are on main already`); return true; }
+      if (!existsSync(join(checked, ".git"))) git(["worktree", "add", "-q", "--detach", checked, tip], root);
+      else git(["switch", "-q", "--detach", tip], checked);
+      const inputs = join(checked, "tooling/lanes/inputs.sh");
+      if (existsSync(inputs)) execFileSync("sh", [inputs, "gate", root, checked], { cwd: checked });
+      const owed = owedSteps(checked, `${base}..${tip}`);
+      if (!onlyTree(checked, owed)) return false;
+      const problem = environmentProblem(checked, owed);
+      if (problem) fail(problem);
+      const run = treeOnly(checked, owed, tip.slice(0, 12));
+      if (!run) fail("tree-only landing produced no checks");
+      // Use land's existing kernel lock, with a short locked child. No outer
+      // unit or second lock, and no queue. 75 means replay, never gate failure.
+      const final = spawnSync("flock", [LOCK, process.execPath, process.argv[1], sha], {
+        cwd: tree, stdio: "inherit", env: { ...process.env, NTS_LAND_LOCKED: "1",
+          NTS_LAND_FAST: JSON.stringify({ base, tip, checked, run }) },
+      });
+      if (final.status === 75) { say("main moved: replaying and rechecking the tree-only landing"); continue; }
+      if (final.status !== 0) fail("tree-only landing refused; main was not advanced");
+      return true;
+    }
+  } finally {
+    if (existsSync(join(checked, ".git"))) spawnSync("git", ["worktree", "remove", "--force", checked], { cwd: root });
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+function fastForward(root: string, sha: string): void {
+  const { base, tip, checked, run } = JSON.parse(process.env.NTS_LAND_FAST!);
+  if (lockHolder() === null || !isAncestor(lockHolder()!)) fail("fast landing does not hold the landing lock");
+  if (git(["rev-parse", "main"], root) !== base) { process.exitCode = 75; return; }
+  if (git(["rev-parse", "HEAD"], checked) !== tip || git(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], checked)) fail("checked tree changed before fast-forward");
+  const owed = owedSteps(checked, `${base}..${tip}`);
+  if (!onlyTree(checked, owed)) fail("the checked change no longer owes only tree checks");
+  const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8"));
+  const observed = summary.identities?.commit;
+  if (summary.verdict !== "green" || typeof observed !== "string" || !/^[0-9a-f]{12,40}$/.test(observed)
+      || git(["rev-parse", "--verify", `${observed}^{commit}`], checked) !== tip || owed.steps === "all"
+      || owed.steps.some(name => !summary.steps.some((s: {name: string; verdict: string}) => s.name === name && s.verdict === "PASS"))) fail("missing green checks for the exact tree-only tip");
+  execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+  const note = `gate green ${new Date().toISOString()} tree-only steps: ${owed.steps.join(" ")}\nlogs: ${run}`;
+  spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, tip], { cwd: root });
+  if (tip !== sha) spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", `${note}\nlanded as: ${tip}`, sha], { cwd: root });
+  status({ state: "landed", commit: tip, base, run, fast: true });
+  say(`LANDED ${sha.slice(0, 12)} as ${tip.slice(0, 12)}: tree-only checks, no train`);
 }
 
 function describe(owed: Owed): string {
@@ -499,9 +572,10 @@ function gate(root: string, base: string, landing: string, members: string[], re
   status({ state: "gating", commit: landing, base, owed, run, train: members });
   try {
     const env: Record<string, string | undefined> = { ...process.env };
-    for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_") || k === "NTS_INTEROP_PROJECTS") delete env[k];
+    for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_") || k === "NTS_INTEROP_PROJECTS" || k === "NTS_DOCTEST_CRATES") delete env[k];
     if (owed.steps !== "all") env.NTS_GATE_STEPS = owed.steps.join(" ");
     if (owed.interop) env.NTS_INTEROP_PROJECTS = owed.interop;
+    if (owed.doctests) env.NTS_DOCTEST_CRATES = owed.doctests;
     Object.assign(env, {
       NTS_GATE_TREE: GATE_TREE,
       NTS_GATE_TARGET: GATE_TARGET,
@@ -712,6 +786,7 @@ async function main(): Promise<void> {
   const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
   const short = sha.slice(0, 12);
   const tree = process.cwd();
+  if (process.env.NTS_LAND_LOCKED === "1" && process.env.NTS_LAND_FAST) { fastForward(root, sha); return; }
   // Asked when the landing is queued; under the lock the tree may have moved on.
   if (process.env.NTS_LAND_LOCKED !== "1" && git(["rev-parse", "HEAD"], tree) !== sha) {
     fail(`run from a tree whose HEAD is ${short}: owed.mjs answers with the rules as that commit has them`);
@@ -731,6 +806,11 @@ async function main(): Promise<void> {
       say(`${short} ${where} owes: ${describe(owed)}`);
       treeOnly(tree, owed, short);
       return;
+    }
+    if (onlyTree(tree, owed)) {
+      const holder = lockHolder();
+      if (holder !== null && isAncestor(holder)) fail(`process ${holder}, which started this one, holds the landing lock: run land.ts bare, it takes the lock itself`);
+      if (await fastLane(root, sha, tree)) return;
     }
   }
 

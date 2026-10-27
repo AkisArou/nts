@@ -71,9 +71,10 @@
 // what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, globSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { preciseChange } from "./precise-changes.ts";
 
 /**
  * The tree whose change is asked about: the one the command is run from, not
@@ -141,6 +142,8 @@ export const ASKS = {
   build: ["hygiene", "does it build"],
   clippy: ["hygiene", "does it lint clean"],
   tests: ["answers", "do the unit tests pass, including the runtime tables"],
+  doctests: ["answers", "do the doc examples of the touched Rust crates pass"],
+  audit: ["valid", "do feature and exclusion classifications cite existing authorities and suite entries"],
   format: ["hygiene", "is runtime/c formatted"],
   rustfmt: ["hygiene", "is the Rust tree formatted"],
   examples: ["answers", "does every example answer as node does, on C"],
@@ -676,6 +679,7 @@ function nodeHarness(path) {
 
 /** Every change, whatever it touched: the gate's first two steps. */
 const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "tests", "rustfmt", "old-paths"], arms: [] };
+export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit"];
 
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is
@@ -701,7 +705,7 @@ export function changedPaths(argv) {
   const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8" });
   const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
   const commit = at("--commit");
-  if (commit) return parseNameStatus(git("diff", "--name-status", "-M", `${commit}^`, commit));
+  if (commit) return contentChanges(parseNameStatus(git("diff", "--name-status", "-M", `${commit}^`, commit)), `${commit}^`, commit);
   // Two commits and nothing else: no working tree and no untracked files. What
   // a landing gates is a commit, and a tree's uncommitted or linked files (a
   // symlinked submodule, a node_modules link) are not part of it -- read from
@@ -710,12 +714,28 @@ export function changedPaths(argv) {
   if (range) {
     const [from, to] = range.split("..");
     if (!from || !to) throw new Error(`--range wants A..B, got ${range}`);
-    return parseNameStatus(git("diff", "--name-status", "-M", from, to));
+    return contentChanges(parseNameStatus(git("diff", "--name-status", "-M", from, to)), from, to);
   }
   const since = at("--since");
   const tracked = parseNameStatus(git("diff", "--name-status", "-M", since ?? "HEAD"));
   const untracked = git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean).map((path) => ({ path, added: true, deleted: false }));
-  return [...tracked, ...untracked];
+  return [...contentChanges(tracked, since ?? "HEAD", null), ...untracked];
+}
+
+/** Compare the requested Git blobs, never today's bytes for a historical range. */
+function contentChanges(changes, from, to) {
+  const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 8 << 20 });
+  return changes.map(change => {
+    if (change.added || change.deleted) return change;
+    try {
+      const mode = rev => git("ls-tree", rev, "--", change.path).split(" ")[0];
+      const oldMode = mode(from);
+      const file = to ? null : lstatSync(join(TREE, change.path));
+      const newMode = to ? mode(to) : file.isFile() ? file.mode & 0o111 ? "100755" : "100644" : "other";
+      if (!["100644", "100755"].includes(oldMode) || oldMode !== newMode) return change;
+      return { ...change, sameMode: true, before: git("show", `${from}:${change.path}`), after: to ? git("show", `${to}:${change.path}`) : readFileSync(join(TREE, change.path), "utf8") };
+    } catch { return change; }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -747,7 +767,7 @@ export function crates() {
     const out = new Map();
     for (const p of meta.packages) {
       const dir = rel(dirname(p.manifest_path));
-      out.set(dir, { name: p.name, deps: [...new Set(p.dependencies.filter((d) => d.kind !== "dev" && d.path && byName.has(d.name)).map((d) => byName.get(d.name)))], users: [] });
+      out.set(dir, { name: p.name, doctests: p.targets.some(t => t.doctest && t.kind.some(k => ["lib", "rlib", "dylib", "proc-macro"].includes(k))), deps: [...new Set(p.dependencies.filter((d) => d.kind !== "dev" && d.path && byName.has(d.name)).map((d) => byName.get(d.name)))], users: [] });
     }
     for (const [dir, c] of out) for (const d of c.deps) out.get(d)?.users.push(dir);
     return out;
@@ -1146,7 +1166,29 @@ export function owed(changes) {
   const rulesFor = (path, added) => RULES.filter((rule) => rule.when(path, added));
   const all = crates();
 
-  for (const { path, added = false } of changes) {
+  let ordinary = false;
+  for (const change of changes) {
+    const { path, added = false } = change;
+    let precise = preciseChange(change);
+    const ownCrate = crateOf(path);
+    // include_str!/build inputs observe prose bytes too, not just tokens.
+    if (precise === "comments" && (covering(embedded(), path).size || (path.endsWith(".rs") && !ownCrate))) precise = null;
+    if (precise) {
+      const records = ["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"];
+      // A changed/removed feature also owes the full metadata selection: it
+      // can leave an upstream feature unclassified. Prose cannot do that.
+      const steps = precise === "classification meaning" ? ["audit", "test262", ...records] : [...TREE_CHECKS];
+      const row = add(precise, path, steps, { precise: true });
+      if (precise === "comments" && path.endsWith(".rs") && all?.get(ownCrate)?.doctests) {
+        const name = all?.get(ownCrate)?.name;
+        if (!name) throw new Error(`no crate name for ${path}`);
+        row.steps.push("doctests");
+        row.doctests = [...new Set([...(row.doctests ?? []), name])];
+      }
+      if (precise === "classification meaning") ordinary = true;
+      continue;
+    }
+    ordinary = true;
     let gave = 0;
     let settled = false;
     let unplaced = null; // why the path owes the full gate, when it does
@@ -1217,7 +1259,7 @@ export function owed(changes) {
       { kind: "hygiene", asks: "what does this path reach", run: "a rule in tooling/gate/owed.mjs, so the next change to it owes what it reaches and not everything" },
     ] });
   }
-  if (changes.length > 0) out.push({ ...ALWAYS, paths: [] });
+  if (ordinary) out.push({ ...ALWAYS, paths: [] });
   return out;
 }
 
@@ -1259,6 +1301,7 @@ export function interopOwed(rules) {
 
 export function gateSteps(rules) {
   if (rules.length === 0) return [];
+  if (rules.every(r => r.precise)) return [...new Set(rules.flatMap(r => r.steps))];
   // A wide step is a landing's only where a rule that is its subject owes it.
   const kept = new Set(rules.filter((r) => r.wide).flatMap((r) => r.steps));
   const landing = (s) => !WIDE.has(s) || kept.has(s);
@@ -1337,13 +1380,15 @@ function main() {
   const steps = gateSteps(rules);
   const projects = interopOwed(rules);
   const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";
+  const docCrates = [...new Set(rules.flatMap(r => r.doctests ?? []))];
+  const docEnv = docCrates.length ? ` NTS_DOCTEST_CRATES="${docCrates.join(" ")}"` : "";
   // A bare all.sh is every step there is, which only the runner and the gate
   // trees' inputs owe; the full gate is every core step, so it is a list, and
   // `land.ts` runs exactly that list (`WIDE` is the full run's).
   const every = rules.some((r) => r.full && r.wide);
   const gate = every
     ? "sh tooling/gate/all.sh   # the full gate"
-    : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
+    : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed}${docEnv} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
   const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
   for (const r of rules) {
@@ -1367,7 +1412,9 @@ function main() {
     console.log(`\n  running them in ${TREE}\n`);
     const env = { ...process.env, NTS_GATE_STEPS: steps.join(" ") };
     delete env.NTS_INTEROP_PROJECTS;
+    delete env.NTS_DOCTEST_CRATES;
     if (Array.isArray(projects)) env.NTS_INTEROP_PROJECTS = projects.join(" ");
+    if (docCrates.length) env.NTS_DOCTEST_CRATES = docCrates.join(" ");
     const run = spawnSync("sh", ["tooling/gate/all.sh"], { cwd: TREE, stdio: "inherit", env });
     const left = rules.flatMap((r) => r.arms).length;
     console.log(`\n  gate steps: ${run.status === 0 ? "green" : `FAILED (exit ${run.status ?? run.signal})`}; ${left} arm(s) above are still yours`);

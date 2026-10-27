@@ -16,8 +16,10 @@ function fixture(t: { after(fn: () => void): void }) {
   writeFileSync(join(bin, "systemd-run"), `#!${process.execPath}\nrequire("node:fs").writeFileSync(process.env.UNIT_CAPTURE, JSON.stringify(process.argv.slice(2)));\n`);
   chmodSync(join(bin, "systemd-run"), 0o755);
   writeFileSync(join(root, "tooling/lanes/land.ts"), `if (!process.argv.includes("--dry-run")) process.exit(99);
+if (!require("node:fs").existsSync(".inputs-ready")) process.exit(98);
 if (process.env.FAIL_PREFLIGHT === "1") process.exit(2);
 console.log("preflight passed");\n`);
+  writeFileSync(join(root, "tooling/lanes/inputs.sh"), '#!/bin/sh\ntest "$1" = lane\ntouch "$3/.inputs-ready"\n');
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_")));
   Object.assign(env, {
     HOME: home, PATH: `${bin}:${process.env.PATH}`, UNIT_CAPTURE: capture,

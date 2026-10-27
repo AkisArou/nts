@@ -25,10 +25,13 @@ try {
   const tree = join(submission, "tree");
   const log = join(submission, "land.log");
   checked("git", ["worktree", "add", "--detach", tree, sha], root);
+  // Owed's language lexers and tree checks use this commit's workspace links,
+  // just like a lane tree. Prepare them before the pre-queue dry run.
+  checked("sh", [join(tree, "tooling/lanes/inputs.sh"), "lane", root, tree], root);
   const land = join(tree, "tooling/lanes/land.ts");
   const preflight = spawnSync(process.execPath, [land, sha, "--dry-run"], { cwd: tree, stdio: "inherit" });
   if (preflight.error || preflight.status !== 0) {
-    checked("git", ["worktree", "remove", tree], root);
+    checked("git", ["worktree", "remove", "--force", tree], root);
     throw new Error(`landing preflight failed; nothing queued${preflight.error ? `: ${preflight.error.message}` : ""}`);
   }
   const unit = `nts-land-${name}-${submission.split("/").at(-1)!.split("-").at(-1)}`;

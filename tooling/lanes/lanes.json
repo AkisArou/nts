@@ -50,7 +50,7 @@
       "branch": "wasm/",
       "owns": [
         "compiler/codegen/wasm/",
-        "docs/wasm.md",
+        "docs/targets/wasm.md",
         "tests/wasm/",
         "benchmarks/wasm/",
         "tooling/wasm/"
@@ -63,8 +63,8 @@
         "benchmarks/jvm-rows.md",
         "compiler/codegen/jvm/",
         "compiler/jvm-emitter/",
-        "docs/jvm-android-provider.md",
-        "docs/jvm-interop.md",
+        "docs/records/notebooks/jvm-android-provider.md",
+        "docs/records/notebooks/jvm-interop.md",
         "tests/interop/android-shape/",
         "tests/interop/java-from-ts/",
         "tests/interop/ts-from-java/",
@@ -88,7 +88,7 @@
       "session": "bay-bolide",
       "branch": "chromium/",
       "owns": [
-        "docs/electron-like.md",
+        "docs/records/notebooks/electron-like.md",
         "runtime/chromium/",
         "third_party/chromium/",
         "tooling/chromium/"
@@ -98,7 +98,7 @@
       "session": "Gtk",
       "branch": "gtk/",
       "owns": [
-        "docs/gtk-lane-goal.md",
+        "docs/targets/gtk.md",
         "tests/gjs/",
         "runtime/c/nts_glib_host.c",
         "runtime/c/nts_glib_host.h",
@@ -123,7 +123,7 @@
         "build/src/dependencies/cocoapods.rs",
         "build/src/dependencies/swiftpm.rs",
         "build/src/swift.rs",
-        "docs/apple-lane-goal.md",
+        "docs/targets/apple.md",
         "docs/macos.md",
         "tests/interop/apple-binding.sh",
         "runtime/objc/",
@@ -148,7 +148,7 @@
       "branch": "windows/",
       "owns": [
         "compiler/codegen/c/tests/com.rs",
-        "docs/windows-lane-goal.md",
+        "docs/targets/windows.md",
         "runtime/c/nts_winrt.c",
         "runtime/winrt/",
         "tooling/cli/src/bind_winmd/",
@@ -167,8 +167,7 @@
       "session": "NodeJS",
       "branch": "node/",
       "owns": [
-        "docs/conformance/nodejs-plan.md",
-        "docs/conformance/nodejs.md",
+        "docs/conformance/node.md",
         "runtime/node/",
         "tooling/conformance/audit.mjs",
         "tooling/conformance/build.sh",

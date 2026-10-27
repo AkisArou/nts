@@ -284,6 +284,8 @@ format() {
 tests() {
   node "$root/tooling/gate/tests.mjs"
 }
+step "doctests" node tooling/gate/doctests.ts
+step "audit" node tooling/census/audit.ts --metadata-only
 
 # The cross-product of value kinds and the operations that read them, settled
 # by node.

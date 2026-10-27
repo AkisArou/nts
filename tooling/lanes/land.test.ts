@@ -118,6 +118,97 @@ function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; d
   return { child, done };
 }
 
+function fastGate(s: Scratch): void {
+  writeFileSync(join(s.root, "tooling/gate/run.mjs"), 'process.stdout.write(process.argv.includes("--tree-only") ? "tree-check\\n" : JSON.stringify({"tree-check":[],fake:[]}));\n');
+  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), 'process.stdout.write(\'NTS_GATE_STEPS="tree-check" sh tooling/gate/all.sh\\n\');\n');
+  writeFileSync(join(s.root, "tooling/gate/all.sh"), `#!/bin/sh
+set -eu
+mkdir -p "$NTS_GATE_RUN_DIR"
+git rev-parse HEAD >> "$LAND_TEST_FAST_CHECKS"
+if [ -n "\${LAND_TEST_FAST_WAIT:-}" ] && [ ! -e "$LAND_TEST_FAST_WAIT.done" ]; then
+  touch "$LAND_TEST_FAST_WAIT"
+  while [ ! -e "$LAND_TEST_FAST_WAIT.done" ]; do sleep 0.02; done
+fi
+verdict=green step=PASS
+if [ -e TREE_RED ]; then verdict=red step=FAIL; fi
+printf '{"verdict":"%s","identities":{"commit":"%s"},"steps":[{"name":"tree-check","verdict":"%s"}]}' "$verdict" "$(git rev-parse --short=12 HEAD)" "$step" > "$NTS_GATE_RUN_DIR/summary.json"
+[ "$verdict" = green ]
+`);
+  s.env.LAND_TEST_FAST_CHECKS = join(s.home, "fast-checks");
+  run(s, s.root, ["add", "tooling/gate"]);
+  run(s, s.root, ["commit", "-q", "-m", "tree-only rules"]);
+}
+
+test("tree-only changes land without a queue entry or full gate", async () => {
+  const s = scratch(); fastGate(s);
+  const tree = lane(s, "fast", { "docs/new.md": "doc\n" });
+  const result = await land(s, tree).done;
+  assert.equal(result.status, 0, result.out);
+  assert.match(result.out, /tree-only checks, no train/);
+  assert.equal(run(s, s.root, ["rev-parse", "main"]), run(s, tree, ["rev-parse", "HEAD"]));
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+  assert.equal(gates(s), 0);
+});
+
+test("a fast landing replays and rechecks if main moves before the short lock", async () => {
+  const s = scratch(); fastGate(s);
+  const tree = lane(s, "fast-moved", { "docs/new.md": "doc\n" });
+  const original = run(s, tree, ["rev-parse", "HEAD"]);
+  const wait = join(s.home, "checking"); s.env.LAND_TEST_FAST_WAIT = wait;
+  const pending = land(s, tree);
+  await until("private tree checks", () => existsSync(wait));
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+  writeFileSync(join(s.root, "peer.txt"), "peer\n");
+  run(s, s.root, ["add", "peer.txt"]);
+  run(s, s.root, ["commit", "-q", "-m", "a peer lands"]);
+  writeFileSync(wait + ".done", "continue");
+  const result = await pending.done;
+  assert.equal(result.status, 0, result.out);
+  assert.match(result.out, /main moved: replaying and rechecking/);
+  const observations = readFileSync(s.env.LAND_TEST_FAST_CHECKS!, "utf8").trim().split("\n");
+  assert.equal(observations.length, 2);
+  assert.equal(observations[0], original);
+  assert.equal(observations[1], run(s, s.root, ["rev-parse", "main"]));
+  assert.notEqual(observations[0], observations[1]);
+  assert.equal(readFileSync(join(s.root, "peer.txt"), "utf8"), "peer\n");
+  assert.equal(gates(s), 0);
+});
+
+test("a failed tree check refuses immediately without moving main or queueing", async () => {
+  const s = scratch(); fastGate(s);
+  const base = run(s, s.root, ["rev-parse", "HEAD"]);
+  const tree = lane(s, "fast-red", { TREE_RED: "bad\n" });
+  const result = await land(s, tree).done;
+  assert.equal(result.status, 1, result.out);
+  assert.match(result.out, /tree-check FAIL/);
+  assert.equal(run(s, s.root, ["rev-parse", "main"]), base);
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+});
+
+test("changed owed rules on main route a previously fast change through the gate", async () => {
+  const s = scratch(); fastGate(s);
+  const tree = lane(s, "fast-now-strict", { "docs/new.md": "doc\n" });
+  const wait = join(s.home, "checking"); s.env.LAND_TEST_FAST_WAIT = wait;
+  const pending = land(s, tree);
+  await until("private tree checks", () => existsSync(wait));
+  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), 'process.stdout.write(\'NTS_GATE_STEPS="fake" sh tooling/gate/all.sh\\n\');\n');
+  run(s, s.root, ["add", "tooling/gate/owed.mjs"]);
+  run(s, s.root, ["commit", "-q", "-m", "new strict obligation"]);
+  writeFileSync(wait + ".done", "continue");
+  const result = await pending.done;
+  assert.equal(result.status, 0, result.out);
+  assert.equal(gates(s), 1, result.out);
+});
+
+test("a tree-only landing refuses an ancestor holding the landing lock", () => {
+  const s = scratch(); fastGate(s);
+  const tree = lane(s, "fast-outer-lock", { "docs/new.md": "doc\n" });
+  const result = spawnSync("flock", [join(s.home, ".cache/nts-land.lock"), process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8", timeout: 10000 });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /run land.ts bare/);
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+});
+
 // A minute, not seconds: the gate runs this beside its heavy steps, where a
 // landing can take more than ten seconds to start and join the queue. Only a
 // real hang should fail here.
