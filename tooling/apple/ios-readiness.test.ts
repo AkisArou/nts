@@ -109,7 +109,9 @@ for (const mode of ["missing", "boot-fails", "boot-77", "boot-timeout"]) {
   test(`${mode} is a named failure, never a no-Mac skip`, () => {
     const f = fixture(mode);
     try {
-      const p = f.run(undefined, { NTS_IOS_READY_TIMEOUT: "1" });
+      // Only boot-timeout tests elapsed time. The other mocks report a status;
+      // their Node shims can take more than one second to start under gate load.
+      const p = f.run(undefined, { NTS_IOS_READY_TIMEOUT: mode === "boot-timeout" ? "1" : "120" });
       assert.equal(p.status, mode === "boot-timeout" ? 124 : 1, p.stderr);
       assert.match(p.stderr, /configured simulator 'Test Phone' did not become ready/);
       assert.equal(f.state(), "Shutdown");
