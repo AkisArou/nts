@@ -1,6 +1,10 @@
 //! The checked-in promise is full coverage of an explicitly recorded population.
 //! Tables belong to the fixture checkout, so a pinned compiler can check a new
 //! fixture using its checked-in record without embedding that fixture forever.
+//! Numeric rows promise complete delivery of an ordered case list. A body-only
+//! change needs no new row: every gate run measures delivery again and detects
+//! shortfalls or disagreements. Only a no-oracle row needs a source digest,
+//! because no execution checks its empty-population exception.
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_codegen_common::Backend;
@@ -43,9 +47,11 @@ pub(super) fn resolve(
     let key = super::oracle_case_key(backend, &ids, &signature)?;
     let count = ids.len();
     if let Some((root, source)) = root_and_source(entry) {
+        let command = record_command(&source);
         let path = root.join("results/oracle-counts.json");
-        let table: Value = serde_json::from_slice(&std::fs::read(&path)
-            .with_context(|| format!("oracle not measured: missing count table {path}; record it with differential tooling"))?)?;
+        let table: Value = serde_json::from_slice(&std::fs::read(&path).with_context(|| {
+            format!("oracle not measured: missing count table {path}; run: {command}")
+        })?)?;
         validate(
             &table,
             &source,
@@ -58,6 +64,19 @@ pub(super) fn resolve(
     Ok(Coverage { count, key })
 }
 
+fn record_command(source: &str) -> String {
+    let path = source.split('/').take(3).collect::<Vec<_>>().join("/");
+    let quoted = if path
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "/-_.".contains(c))
+    {
+        path
+    } else {
+        format!("'{}'", path.replace('\'', "'\\''"))
+    };
+    format!("node tooling/differential/record-oracles.ts {quoted}")
+}
+
 fn validate(
     table: &Value,
     source: &str,
@@ -66,6 +85,7 @@ fn validate(
     generated: usize,
     digest: &str,
 ) -> Result<()> {
+    let command = record_command(source);
     ensure!(
         table["version"] == 1,
         "oracle not measured: unknown count-table version"
@@ -79,7 +99,7 @@ fn validate(
         .collect();
     ensure!(
         found.len() == 1,
-        "oracle not measured: {source} ({backend}) has no unique recorded population {key}; run oracle-plan <tsconfig> and diff its ordered cases against the recorded run before recording its full count explicitly"
+        "oracle not measured: {source} ({backend}) has no unique recorded population {key}; run: {command}"
     );
     let row = found[0];
     if row["kind"] == "no-oracle" {

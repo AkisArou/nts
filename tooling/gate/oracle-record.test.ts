@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { addRecord, completeRows, noOracleRecord } from "../differential/record-oracles.ts";
+import { addRecord, canonicalDriver, completeRows, noOracleRecord, recordAll } from "../differential/record-oracles.ts";
 const plan = { version: 1, backend: "c", source: "fixture.ts", entry: "/fixture.ts", source_digest: "source-digest", seed: null,
   generator_version: 1, generator_digest: "generator", case_key: "key", case_count: 2,
   cases: ["f 0 [0.0]", "f 1 [-0.0]"], signature: [], driver: "", resolver: "" };
@@ -55,8 +57,42 @@ test("checked-in promises use compact sorted rows with complete measured identit
     }
     assert.equal(row.kind, "measured"); assert.equal(row.complete, true);
     assert.ok(Number.isInteger(row.count) && row.count >= 0);
-    assert.equal(row.node_cpu_s.length, 2);
-    assert.ok(row.node_cpu_s.every((n: number) => Number.isFinite(n) && n >= 0 && n * 2 <= 15));
+    // Legacy measured CPU provenance remains readable. New records keep it in
+    // evidence instead, so authors on different machines publish equal bytes.
+    if (row.node_cpu_s) {
+      assert.equal(row.node_cpu_s.length, 2);
+      assert.ok(row.node_cpu_s.every((n: number) => Number.isFinite(n) && n >= 0 && n * 2 <= 15));
+    }
+  }
+});
+
+test("author paths and CPU observations do not change a published promise", () => {
+  const author = (repository_root: string) => ({ ...plan, repository_root,
+    source: "tests/programs/example/src/main.ts", entry: `${repository_root}/tests/programs/example/src/main.ts`,
+    driver: `import ${JSON.stringify(`file://${repository_root}/tests/programs/example/src/main.ts`)};`,
+    resolver: `const root = ${JSON.stringify(repository_root + "/")};` });
+  const left = author("/one/checkout"), right = author("/a/deeper/author/tree");
+  assert.equal(canonicalDriver(left), canonicalDriver(right));
+  const a = addRecord({version:1,rows:[]}, left, [0.1,0.2], 2);
+  const b = addRecord({version:1,rows:[]}, right, [1.1,1.2], 2);
+  assert.deepEqual(a, b);
+  assert.equal("node_cpu_s" in a.rows[0], false);
+});
+
+test("a later shortfall publishes none of a recording's rows", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "nts-recorder-atomic-"));
+  const saved = process.env.NTS_BENCH_CPUS;
+  try {
+    process.env.NTS_BENCH_CPUS = "4";
+    const output = join(dir, "counts.json"), original = '{"version":1,"rows":[]}\n';
+    writeFileSync(output, original);
+    writeFileSync(join(dir, "plans.json"), JSON.stringify({version:1,failures:[],plans:[plan,{...plan,source:"bad.ts",driver:"different"}]}));
+    // Inject measurement results, so a unit test never uses the reserved core.
+    await assert.rejects(recordAll(dir, output, async p => ({cpu:[0.1,0.2],count:p.source === "bad.ts" ? 1 : 2})), /recording incomplete/);
+    assert.equal(readFileSync(output,"utf8"), original);
+  } finally {
+    if (saved === undefined) delete process.env.NTS_BENCH_CPUS; else process.env.NTS_BENCH_CPUS = saved;
+    rmSync(dir,{recursive:true,force:true});
   }
 });
 

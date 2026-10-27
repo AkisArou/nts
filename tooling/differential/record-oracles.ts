@@ -1,14 +1,16 @@
 // Explicit recording only. Plans come from the checker's actual population;
 // a partial oracle can never publish a smaller promise.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { homedir, setPriority } from "node:os";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
+  repository_root?: string;
   generator_version: number; generator_digest: string; case_key: string; case_count: number;
   cases: string[]; signature: unknown[]; driver: string; resolver: string };
 type Row = { kind: "measured" | "no-oracle"; source: string; signature: string;
@@ -32,10 +34,20 @@ export function writeTable(path: string, table: Table) {
   writeFileSync(temporary, header.slice(0, -1) + ',"rows":[\n' + rows.map(row => JSON.stringify({ ...row, keys: Object.fromEntries(Object.entries(row.keys).sort(([a], [b]) => a.localeCompare(b, "en"))) })).join(",\n") + "\n]}\n");
   renameSync(temporary, path);
 }
+export function canonicalDriver(plan: Plan): string {
+  const root = plan.repository_root ?? (plan.entry.endsWith("/" + plan.source) ? plan.entry.slice(0, -plan.source.length - 1) : undefined);
+  let text = plan.driver + plan.resolver;
+  if (root) {
+    // Only this invocation's repository prefix is logicalised. Code and
+    // outside inputs remain part of the digest; author worktree paths do not.
+    for (const prefix of [pathToFileURL(root + "/").href, root + "/"]) text = text.split(prefix).join("nts-repository:///");
+  }
+  return text;
+}
 function identity(plan: Plan) {
   return { source: plan.source, signature: digest(JSON.stringify([plan.signature, plan.cases])),
     keys: { [plan.backend]: plan.case_key }, cases_sha256: digest(JSON.stringify(plan.cases)),
-    driver_sha256: digest(plan.driver + plan.resolver) };
+    driver_sha256: digest(canonicalDriver(plan)) };
 }
 export function completeRows(text: string, expected: number): string[] {
   const lines = text.trimEnd().split("\n");
@@ -50,9 +62,8 @@ export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: nu
   const previous = table.rows.filter(row => row.source === plan.source && row.keys[plan.backend]);
   if (previous.some(row => (row.count ?? 0) > plan.case_count)) throw new Error("refusing to lower recorded coverage; review the population change explicitly");
   const id = identity(plan), old = table.rows.find(row => row.source === id.source && row.signature === id.signature);
-  if (old && old.driver_sha256 !== id.driver_sha256) throw new Error("driver changed for an existing signature; review the new recording explicitly");
   const row: Row = { kind: "measured", ...id, keys: { ...old?.keys, ...id.keys },
-    count: delivered, complete: true, node_cpu_s: cpu };
+    count: delivered, complete: true };
   return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(old => !(old.source === row.source && old.signature === row.signature)), row] };
 }
 export function noOracleRecord(plan: Plan, reason: string): Row {
@@ -72,12 +83,12 @@ function available() {
 async function admission() {
   while (available() < 14 * 2 ** 30) await new Promise(resolve => setTimeout(resolve, 1000));
 }
-async function planAll(binary: string, root: string, evidence: string, rc = false, only?: string) {
+async function planAll(binary: string, root: string, evidence: string, rc = false, only?: string, named?: string[]) {
   mkdirSync(evidence, { recursive: true });
-  const configs = readdirSync(join(root, "tests/programs"), { withFileTypes: true })
+  const configs = named ? named.map(name => fixtureConfig(root, evidence, name)) : readdirSync(join(root, "tests/programs"), { withFileTypes: true })
     .filter(e => e.isDirectory() && !["invalid", "unsupported"].includes(e.name))
     .map(e => join(root, "tests/programs", e.name, "tsconfig.json")).filter(existsSync);
-  for (const name of readdirSync(join(root, "benchmarks/cases"))) {
+  for (const name of named ? [] : readdirSync(join(root, "benchmarks/cases"))) {
     const dir = join(root, "benchmarks/cases", name);
     if (!existsSync(join(dir, "case.ts"))) continue;
     if (existsSync(join(dir, "tsconfig.json"))) configs.push(join(dir, "tsconfig.json"));
@@ -121,7 +132,9 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
       for (const result of results) {
         if (result.plan) {
           const plan = result.plan;
+          plan.repository_root = root;
           if (plan.version !== 1 || !plan.source || plan.cases.length !== plan.case_count) throw new Error(`invalid plan for ${config}`);
+          if (named && !named.some(name => plan.source.startsWith(relative(root, resolve(root, name.replace(/\/tsconfig\.json$/, ""))).replaceAll("\\", "/") + "/"))) throw new Error(`planner returned an unrequested source: ${plan.source}`);
           manifest.plans.push(plan);
           console.log("plan", result.backend, plan.source, plan.case_count);
         } else {
@@ -169,7 +182,7 @@ async function measureDriver(plan: Plan, evidence: string, identity: string) {
   return { cpu, count: delivered };
 
 }
-async function recordAll(evidence: string, output: string) {
+export async function recordAll(evidence: string, output: string, measure = measureDriver) {
   if (process.env.NTS_BENCH_CPUS !== "4") throw new Error("record under tooling/gate/with-lock.sh --wait; measured children use CPU 4");
   const manifest = json(join(evidence, "plans.json")) as Manifest;
   let table: Table = existsSync(output) ? json(output) : { version: 1, rows: [] };
@@ -177,7 +190,7 @@ async function recordAll(evidence: string, output: string) {
   const failed = new Map<string, Error>();
   const exceptions = new Set<string>();
   const findings: { source: string; backend: string; driver_sha256: string; error: string }[] = [];
-  for (const [at, plan] of manifest.plans.entries()) {
+  for (const plan of manifest.plans) {
     const identity = digest(plan.driver + plan.resolver);
     const exception = table.rows.find(row => row.kind === "no-oracle" && row.source === plan.source && row.keys[plan.backend] === plan.case_key && row.source_digest === plan.source_digest && plan.case_count === 0);
     if (exception) { exceptions.add(identity); console.log("no-oracle", plan.source, exception.reason); continue; }
@@ -185,14 +198,11 @@ async function recordAll(evidence: string, output: string) {
     try {
       if (failed.has(identity)) throw failed.get(identity);
       if (measurement === undefined) {
-        measurement = await measureDriver(plan, evidence, identity);
+        measurement = await measure(plan, evidence, identity);
         measured.set(identity, measurement);
       }
 
       table = addRecord(table, plan, measurement.cpu, measurement.count);
-      if ((at + 1) % 32 === 0) {
-        writeTable(output, table);
-      }
       console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
@@ -203,18 +213,76 @@ async function recordAll(evidence: string, output: string) {
     }
   }
 
-  writeTable(output, table);
   const summary = { complete_unique_drivers: measured.size, failed_unique_drivers: failed.size,
     recorded_populations: table.rows.filter(row => row.kind === "measured").length, no_oracle_unique_drivers: exceptions.size,
     worst_node_cpu_s_to_done: Math.max(0, ...[...measured.values()].flatMap(m => m.cpu)), findings,
-    preparation_failures: manifest.failures };
+    preparation_failures: manifest.failures, measurements: Object.fromEntries(measured) };
   atomic(join(evidence, "measurement-summary.json"), summary);
   console.log(JSON.stringify(summary));
   if (findings.length || manifest.failures.length) throw new Error("recording incomplete; review every not-measured project before submitting");
+  writeTable(output, table);
+}
+
+export function fixtureConfig(root: string, evidence: string, name: string): string {
+  const directory = resolve(root, name.replace(/\/tsconfig\.json$/, ""));
+  const logical = relative(root, directory).replaceAll("\\", "/");
+  if (!/^(tests\/programs|benchmarks\/cases)\/[^/]+$/.test(logical)) throw new Error(`not a named fixture: ${name}`);
+  const config = join(directory, "tsconfig.json");
+  if (existsSync(config)) return config;
+  if (!logical.startsWith("benchmarks/cases/") || !existsSync(join(directory, "case.ts"))) throw new Error(`missing fixture tsconfig: ${name}`);
+  const generated = join(evidence, `bench-${logical.split("/").at(-1)}.json`);
+  atomic(generated, { extends: join(root, "tsconfig.fixtures.json"), include: [join(directory, "case.ts")] });
+  return generated;
+}
+
+async function recordNamed(names: string[]) {
+  setPriority(process.pid, 19);
+  if (process.platform === "linux") {
+    const mask = spawnSync("taskset", ["-pc", "0-3,6-31", String(process.pid)], { encoding: "utf8" });
+    if (mask.status !== 0) throw new Error(`cannot restrict recorder affinity: ${mask.stderr}`);
+  }
+  const git = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  if (git.status !== 0) throw new Error("record named fixtures from their repository checkout");
+  const root = git.stdout.trim();
+  const cache = join(homedir(), ".cache/nts-oracle-record");
+  mkdirSync(cache, { recursive: true });
+  mkdirSync(join(cache, "tmp"), { recursive: true });
+  const evidence = mkdtempSync(join(cache, "run-"));
+  console.log(`oracle evidence: ${evidence}`);
+  names = [...new Set(names)].sort();
+  for (const name of names) fixtureConfig(root, evidence, name);
+  let binary = process.env.NTS_ORACLE_PLAN_BIN;
+  if (!binary) {
+    await admission();
+    const build = spawnSync("sh", ["-c", "ulimit -c 0; exec nice -n 19 taskset -c 0-3,6-31 cargo build --profile nts-dev -p nts-differential --bin oracle-plan"], {
+      cwd: root, stdio: "inherit", env: { ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? "4", TMPDIR: join(cache, "tmp") },
+    });
+    if (build.status !== 0) throw new Error("building the fixture planner failed");
+    binary = join(root, "target/nts-dev/oracle-plan");
+  }
+  await planAll(resolve(binary), root, evidence, false, undefined, names);
+  await planAll(resolve(binary), root, evidence, true, undefined, names);
+  const table = join(root, "results/oracle-counts.json");
+  const stage = join(evidence, "recorded-table.json");
+  const original = readFileSync(table);
+  writeFileSync(stage, original);
+  const script = fileURLToPath(import.meta.url);
+  const measure = spawnSync("sh", [join(root, "tooling/gate/with-lock.sh"), "--wait", process.execPath, script, "record", evidence, stage], { cwd: root, stdio: "inherit" });
+  if (measure.status !== 0) throw new Error(`recording refused; checked-in table unchanged; evidence: ${evidence}`);
+  const plans = (json(join(evidence, "plans.json")) as Manifest).plans;
+  const selected = new Set(plans.map(plan => plan.source));
+  const identities = new Set(plans.map(plan => `${plan.source}\0${identity(plan).signature}`));
+  if (!readFileSync(table).equals(original)) throw new Error(`count table changed during recording; nothing published; evidence: ${evidence}`);
+  const before = json(table) as Table, recorded = json(stage) as Table;
+  const result = { ...recorded, rows: [...before.rows.filter(row => !selected.has(row.source)), ...recorded.rows.filter(row => identities.has(`${row.source}\0${row.signature}`))] };
+  writeTable(table, result);
+  console.log(`recorded ${names.length} named fixture(s), ${selected.size} source(s); evidence: ${evidence}`);
 }
 async function main() {
-  const [mode, first, second, third, fourth] = process.argv.slice(2);
-  if (["plan", "plan-rc"].includes(mode) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));
+  const arguments_ = process.argv.slice(2);
+  const [mode, first, second, third, fourth] = arguments_;
+  if (/^(tests\/programs|benchmarks\/cases)\//.test(mode ?? "")) await recordNamed(arguments_);
+  else if (["plan", "plan-rc"].includes(mode) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));
   else if (mode === "no-oracle" && first && second && third && fourth) {
     const manifest = json(join(resolve(first), "plans.json")) as Manifest;
     const output = resolve(second), table: Table = existsSync(output) ? json(output) : { version: 1, rows: [] };
