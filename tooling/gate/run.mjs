@@ -82,6 +82,7 @@ import { CaseCosts } from "./case-costs.ts";
 import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
 import { TEST_BUILD_DEBUG } from "./test-artifacts.ts";
 import { frontendBudget } from "./budget.ts";
+import { fixedReservation } from "./reservation.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -487,7 +488,7 @@ function report(name) {
 // ---------------------------------------------------------------------------
 // Scheduling.
 // ---------------------------------------------------------------------------
-function used() {
+function used(includeElastic = true) {
   let slots = 0, mem = 0, fe = 0, riding = 0;
   const locks = new Set();
   let elastic = 0;
@@ -495,6 +496,7 @@ function used() {
     const s = BY_NAME.get(name);
     if (s.lock) locks.add(s.lock);
     if (r.elastic) {
+      if (!includeElastic) continue;
       // What it holds right now: a token is one process of its workers.
       const held = tok.held.get(name) ?? 0;
       elastic += 1;
@@ -691,13 +693,10 @@ function schedule() {
         // for it as elastic workers give them back, or elastic steps -- which
         // ask again every few seconds -- would take each one as it frees and
         // a fixed step would wait for a gap that never comes.
-        // Whatever it lacks -- slots, memory or frontends -- elastic workers
-        // give back as they finish (`used` charges each token its share of
-        // its step's memory and frontends), so tokens are kept back for it in
-        // every case but a lock, which tokens do not free.
-        const least = Math.min(step.min ?? Math.max(1, Math.ceil(step.slots / 2)), step.slots, SLOTS);
+        // Returning elastic grants cannot free resources held by fixed steps.
+        // Reserve only if those returns could make the candidate fit.
         if (!step.elastic && !withhold && !(step.lock && u.locks.has(step.lock))) {
-          withhold = least;
+          withhold = fixedReservation(step, used(false), { slots: SLOTS, mem: MEM, fe: FRONTENDS });
         }
         continue;
       }
