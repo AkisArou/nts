@@ -64,7 +64,10 @@ Benchmarks run through every phase.
    - deliberate crashes store no core dumps, so measurement can start beside a
      gate (*done*);
    - no cold build per train: tests are built with line tables only, at
-     opt-level 1, and the debug build folder is pruned within a bound (*done*).
+     opt-level 1, and the debug build folder is pruned within a bound (*done*);
+   - every step runs in one canonical environment, whoever launches the gate;
+   - the compile-time tripwire counts every compiler thread from the start,
+     against a threshold set from repeated runs of one binary.
 5. **The fast landing model** (approved):
    1. a change owes only the checks it can affect, so docs, records and
       comments land in seconds, with no train (*done*: the fast lane);
@@ -73,7 +76,8 @@ Benchmarks run through every phase.
       minutes. *Waiting fixed:* frontend capacity follows the CPU slots,
       reservations only for steps that can fit, memory budgets calibrated from
       measured peaks, and `blockers` runs in parallel. *Caching:* keyed on
-      artifact bytes, in shadow mode until its results are proved identical.
+      artifact bytes; the JVM verifier's results are reused, and the other
+      kinds stay in shadow mode until their results are proved identical.
       Next: one capture per project per run, shared by every step;
    3. then code lands after a 5–10 minute check, while a verifier gates `main`
       behind it, bisects a red and reverts the culprit automatically. Changes
@@ -97,7 +101,9 @@ Benchmarks run through every phase.
       project, measured complete, under a CPU-time bound, so what a gate
       checks never depends on the machine's load;
     - a wall-clock deadline decides no result anywhere in the gate.
-11. **The silent wrong answers found on the way,** in this order:
+11. **The silent wrong answers found on the way,** in this order (a store
+    that would close a cycle now keeps a counted root, so a closure that
+    captures `this` no longer leaks: *done*):
     - an optional callable property in a structural type (the node stdio
       setup), then one writer per stream for `console.log`,
       `process.stdout.write` and the node `console`;
