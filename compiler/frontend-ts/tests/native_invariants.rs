@@ -98,6 +98,192 @@ fn unrequested(snapshot: &SemanticSnapshot) -> Vec<TypeId> {
     missing
 }
 
+fn incoming_signature_edges(snapshot: &SemanticSnapshot, target: TypeId) -> Vec<String> {
+    let mut incoming = Vec::new();
+    for (index, signature) in snapshot.signatures.iter().enumerate() {
+        let mut edge = |id: TypeId, relation: String| {
+            if id == target {
+                incoming.push(format!("signature {index} -> {relation}"));
+            }
+        };
+        for (index, parameter) in signature.parameters.iter().enumerate() {
+            edge(
+                parameter.ty,
+                format!("parameter {index} {:?}", parameter.name),
+            );
+        }
+        edge(signature.return_type, "return".into());
+        for &id in &signature.type_parameters {
+            edge(id, "type parameter".into());
+        }
+        if let Some(id) = signature.this_type {
+            edge(id, "this".into());
+        }
+        if let Some(id) = signature
+            .type_predicate
+            .as_ref()
+            .and_then(|predicate| predicate.narrowed_to)
+        {
+            edge(id, "predicate".into());
+        }
+    }
+    incoming
+}
+
+fn incoming_edges(snapshot: &SemanticSnapshot, target: TypeId) -> Vec<String> {
+    let mut incoming = Vec::new();
+    for (index, record) in snapshot.types.iter().enumerate() {
+        let name = record
+            .symbol
+            .and_then(|id| snapshot.symbols[id.0 as usize].name.public_name())
+            .unwrap_or("anonymous");
+        let owner = format!("type {index} ({name})");
+        let mut edge = |id: TypeId, relation: String| {
+            if id == target {
+                incoming.push(format!("{owner} -> {relation}"));
+            }
+        };
+        match &record.kind {
+            TypeKind::Object { properties } => {
+                for property in properties {
+                    edge(property.ty, format!("property {:?}", property.name));
+                    if let PropertyKey::Symbol(id) = property.name {
+                        edge(id, "property key".into());
+                    }
+                }
+            }
+            TypeKind::Array(id) => edge(*id, "array element".into()),
+            TypeKind::Tuple(parts) | TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
+                for (part, &id) in parts.iter().enumerate() {
+                    edge(id, format!("constituent {part}"));
+                }
+            }
+            TypeKind::TypeParameter {
+                constraint: Some(id),
+                ..
+            } => edge(*id, "constraint".into()),
+            TypeKind::Conditional {
+                check,
+                extends,
+                true_type,
+                false_type,
+            } => {
+                edge(*check, "conditional check".into());
+                edge(*extends, "conditional extends".into());
+                if let Some(id) = true_type {
+                    edge(*id, "conditional true".into());
+                }
+                if let Some(id) = false_type {
+                    edge(*id, "conditional false".into());
+                }
+            }
+            TypeKind::IndexedAccess { object, index } => {
+                edge(*object, "indexed object".into());
+                edge(*index, "indexed key".into());
+            }
+            TypeKind::TemplateLiteral { types, .. } => {
+                for &id in types {
+                    edge(id, "template part".into());
+                }
+            }
+            _ => {}
+        }
+        let id = TypeId(u32::try_from(index).unwrap());
+        for &base in snapshot.base_types.get(&id).into_iter().flatten() {
+            edge(base, "base".into());
+        }
+        for (argument, &id) in snapshot
+            .type_arguments
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            edge(id, format!("type argument {argument}"));
+        }
+        for index in snapshot.index_signatures.get(&id).into_iter().flatten() {
+            edge(index.key, "index key".into());
+            edge(index.value, "index value".into());
+        }
+        if let Some(&id) = snapshot.bound_types.get(&id) {
+            edge(id, "bound type".into());
+        }
+    }
+    incoming.extend(incoming_signature_edges(snapshot, target));
+    for (id, &ty) in &snapshot.node_types {
+        if ty == target {
+            let node = &snapshot.nodes[id.0 as usize];
+            let location = node.origin.location;
+            incoming.push(format!(
+                "node {id:?} {:?} at {} {:?}",
+                node.kind, snapshot.sources[location.file.0 as usize].display_path, location.span
+            ));
+        }
+    }
+    incoming
+}
+
+fn describe_missing(snapshot: &SemanticSnapshot) -> Vec<(TypeId, Vec<String>)> {
+    unrequested(snapshot)
+        .into_iter()
+        .map(|id| (id, incoming_edges(snapshot, id)))
+        .collect()
+}
+
+#[test]
+fn collection_contracts_request_their_reachable_type_graphs() {
+    let snapshot = capture("awfy-dictionary-hole-slots");
+    assert!(
+        unrequested(&snapshot).is_empty(),
+        "{:#?}",
+        describe_missing(&snapshot)
+    );
+    assert!(!snapshot.diagnostics.iter().any(|d| d.code == "NTS0003"));
+    let mut vector_contracts = 0;
+    for record in &snapshot.types {
+        if !record
+            .symbol
+            .is_some_and(|id| snapshot.symbols[id.0 as usize].name.is_name("Vector"))
+        {
+            continue;
+        }
+        let TypeKind::Object { properties } = &record.kind else {
+            continue;
+        };
+        vector_contracts += 1;
+        for property in properties {
+            if matches!(
+                property.name.public_name(),
+                Some(
+                    "at" | "atPut"
+                        | "append"
+                        | "forEach"
+                        | "hasSome"
+                        | "getOne"
+                        | "removeFirst"
+                        | "remove"
+                        | "swap"
+                        | "sortRange"
+                        | "sort"
+                )
+            ) {
+                assert!(
+                    matches!(
+                        snapshot.types[property.ty.0 as usize].kind,
+                        TypeKind::Function(_)
+                    ),
+                    "Vector member {:?} has no callable contract",
+                    property.name
+                );
+            }
+        }
+    }
+    assert!(
+        vector_contracts > 0,
+        "the fixture must reach a Vector contract"
+    );
+}
+
 fn root() -> &'static Utf8Path {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -212,7 +398,14 @@ fn no_program_keeps_an_unrequested_reachable_type() {
                         .iter()
                         .filter(|(_, arguments)| arguments.contains(id))
                         .collect();
-                    (id, record, symbol, returns, arguments)
+                    (
+                        id,
+                        record,
+                        symbol,
+                        returns,
+                        arguments,
+                        incoming_edges(&snapshot, *id),
+                    )
                 })
                 .collect();
             problems.push(format!("{name}: {records:#?}"));

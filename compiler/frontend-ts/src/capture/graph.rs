@@ -36,18 +36,21 @@ impl<'p> Capture<'p, '_> {
         let mut forms = Vec::new();
         let mut deferred_forms = FxHashSet::default();
         let mut form_level = None;
+        let mut active_forms = FxHashSet::default();
         let mut storage = StorageDemands::default();
         loop {
             let storage_id = storage.pending.pop();
             let Some(&id) = storage_id.as_ref().or_else(|| work.get(next)) else {
-                // Concrete types get the whole first pass. Own generic forms and
-                // their discoveries advance breadth-first for three levels, as in
-                // the existing builder: never the closure of fresh instantiations.
+                // Concrete contracts get the whole first pass. Own generic
+                // declarations advance breadth-first for three levels, never
+                // the closure of fresh instantiations. Their ordinary member,
+                // callable and storage edges belong to the current level.
                 let level = form_level.map_or(0, |level| level + 1);
                 if forms.is_empty() || level == 3 {
                     break;
                 }
                 work = std::mem::take(&mut forms);
+                active_forms = work.iter().copied().collect();
                 next = 0;
                 form_level = Some(level);
                 continue;
@@ -102,7 +105,9 @@ impl<'p> Capture<'p, '_> {
             let carried = self.snapshot.types[id.0 as usize]
                 .symbol
                 .is_some_and(|symbol| carries_members(&self.snapshot.symbols[symbol.0 as usize]));
-            if !carried && generic_form(ty) && (form_level.is_none() || !self.declares_form(id, ty))
+            if !carried
+                && generic_form(ty)
+                && (!active_forms.contains(&id) || !self.declares_form(id, ty))
             {
                 self.record_arguments(id, ty, &mut work)?;
                 self.snapshot.types[id.0 as usize].kind = TypeKind::Structured;
@@ -129,11 +134,12 @@ impl<'p> Capture<'p, '_> {
             if storage_id.is_some() || self.member_boundary(id) == MemberBoundary::Provided {
                 self.follow_storage(id, &mut storage);
             }
-            if form_level.is_some() {
-                forms.extend(discoveries);
-            } else {
-                work.extend(discoveries);
-            }
+            // An expanded form promises the contracts of the members it
+            // publishes. Do not spend another form level on their arrays,
+            // unions, callables or parameters: the last level would otherwise
+            // leave those reachable arena slots unrequested. Newly discovered
+            // generic declarations still defer through `active_forms` above.
+            work.extend(discoveries);
         }
         Ok(())
     }
