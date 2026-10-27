@@ -215,12 +215,35 @@ test("a train waits for the gate resource without retaining the landing lock",as
   writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n"+readFileSync(join(s.root,"tooling/gate/pinned.sh"),"utf8"));
   run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","lock handoff"]);
   const tree=lane(s,"tsrs/resource-wait",{"one.txt":"one\n"});
+  const lock=join(s.home,".cache/nts-land.lock"),held=join(s.home,"probe-held"),release=join(s.home,"release-probe");
+  const bin=join(s.home,"bin"),probe=join(bin,"probe.ts");mkdirSync(bin);
+  // Queue publication precedes the lander's initial lock probe. Hold that
+  // probe until the test observes it: the old immediate assertion must fail
+  // here regardless of how the scheduler orders the parent and child.
+  writeFileSync(probe,`import {writeFileSync,existsSync} from "node:fs";\nimport {waitFor} from ${JSON.stringify(new URL("../gate/test-wait.ts",import.meta.url).pathname)};\nwriteFileSync(${JSON.stringify(held)},"");\nawait waitFor("the test to release the initial lock probe",()=>existsSync(${JSON.stringify(release)}));\n`);
+  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
+  // exec preserves the unrelated descriptor-8 gate-resource handoff too.
+  writeFileSync(join(bin,"flock"),`#!/bin/sh\nif [ "$#" = 3 ] && [ "$1" = -n ] && [ "$2" = ${quote(lock)} ] && [ "$3" = true ]; then\n  exec /usr/bin/flock -n "$2" ${quote(process.execPath)} ${quote(probe)}\nfi\nexec /usr/bin/flock "$@"\n`);chmodSync(join(bin,"flock"),0o755);
+  s.env.PATH=bin+":"+s.env.PATH;
   const resource=GateResource.tryAcquire(join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"))!;
   const pending=land(s,tree),queue=join(s.home,".cache/nts-land/queue");
-  await until("it to queue",()=>existsSync(queue) && readdirSync(queue).length>0);
-  assert.equal(spawnTest("flock",["-n",join(s.home,".cache/nts-land.lock"),"true"]).status,0);
-  assert.equal(gates(s),0);resource.close();
-  const result=await pending.done;assert.equal(result.status,0,result.out);
+  let result:Landed;
+  try {
+    const stopped=()=>pending.child.exitCode===null?undefined:`lander exited ${pending.child.exitCode}`;
+    await until("the lander's initial lock probe",()=>existsSync(held),{stopped});
+    assert.ok(existsSync(queue) && readdirSync(queue).length>0);
+    assert.equal(spawnTest("/usr/bin/flock",["-n",lock,"true"]).status,1,"queue publication does not prove the landing lock is free");
+    writeFileSync(release,"");
+    await until("the landing lock to be released while the gate resource is busy",()=>{
+      const checked=spawnTest("/usr/bin/flock",["-n",lock,"true"]);
+      assert.ok(checked.status===0 || checked.status===1,checked.stderr);
+      return checked.status===0;
+    },{stopped});
+    assert.equal(gates(s),0);
+  } finally {
+    writeFileSync(release,"");resource.close();result=await pending.done;
+  }
+  assert.equal(result.status,0,result.out);
 });
 
 test("an older lock holder waiting for pinned.sh cannot deadlock a new train",async()=>{
