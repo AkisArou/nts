@@ -80048,6 +80048,10 @@ impl<'a> FuncBuilder<'a> {
         // exist; `push`, `slice`, `reverse`, `join`, `splice`, `fill`,
         // `index_of` and `includes` do not — so the message names that rather
         // than a shape the program does not have.
+        if name == "with" {
+            return self.lower_array_with(id, receiver, element, arguments);
+        }
+
         if matches!(element, HirType::Erased) {
             return self.lower_erased_array_method(id, &name, receiver, arguments);
         }
@@ -81265,6 +81269,218 @@ impl<'a> FuncBuilder<'a> {
             .map(|parameter| self.represent(parameter.ty))
             .collect::<Option<Vec<_>>>()?;
         Some((parameters, self.represent(signature.return_type)?))
+    }
+
+    /// Array.prototype.with: normalize and check the relative index before
+    /// allocating a fresh array. The copy does not read the replaced slot.
+    /// <https://tc39.es/ecma262/#sec-array.prototype.with>
+    fn lower_array_with(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        element: &HirType,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if !matches!(
+            element,
+            HirType::Float { bits: 64 } | HirType::Managed(_) | HirType::Bool | HirType::Erased
+        ) && !holds_counted(element)
+        {
+            return Err(self.unsupported(id, "`with` on a typed array"));
+        }
+        // Evaluate every argument before conversion can throw, including
+        // ignored extra arguments. LengthOfArrayLike follows argument evaluation
+        // but precedes ToNumber(index), which can itself have effects.
+        let values = self.builtin_raw_arguments(arguments)?;
+        let origin = self.origin(id);
+        let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
+        let index = match values.first().copied() {
+            Some(value) => self.builtin_number_argument(
+                (id, arguments[0]),
+                NumericBuiltin::Method(MethodsOf::Array, "with"),
+                1,
+                value,
+            )?,
+            None => self.push(
+                OpKind::ConstFloat(f64::NAN),
+                HirType::NUMBER,
+                origin.clone(),
+            ),
+        };
+        let index = self.coerce(index, &HirType::NUMBER, id)?;
+        let index = self.array_with_index(id, index, length)?;
+        let replacement = match values.get(1).copied() {
+            Some(value) => value,
+            None => self.push(OpKind::ConstUndefined, HirType::Erased, origin.clone()),
+        };
+        let replacement = self.coerce(replacement, element, id)?;
+        let ty = HirType::Managed(ManagedType::Array(Box::new(element.clone())));
+        let copy = self.push(
+            OpKind::ArrayNew {
+                length,
+                fill: ArrayFill::Filled,
+            },
+            ty,
+            origin.clone(),
+        );
+        self.copy_array_with_value(id, (receiver, copy), element, (index, replacement), &origin)?;
+        Ok(copy)
+    }
+
+    fn array_with_index(
+        &mut self,
+        id: NodeId,
+        index: ValueId,
+        length: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let truncated = self.push(
+            OpKind::Unary {
+                op: UnOp::Trunc,
+                operand: index,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let nan = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: truncated,
+                rhs: truncated,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let whole = self.lower_branching_value_at(
+            id,
+            HirType::NUMBER,
+            nan,
+            Branch::Value(zero),
+            Branch::Value(truncated),
+        )?;
+        let negative = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: whole,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let from_end = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: length,
+                rhs: whole,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let actual = self.lower_branching_value_at(
+            id,
+            HirType::NUMBER,
+            negative,
+            Branch::Value(from_end),
+            Branch::Value(whole),
+        )?;
+        for (op, limit) in [(BinOp::Lt, zero), (BinOp::Ge, length)] {
+            let outside = self.push(
+                OpKind::Binary {
+                    op,
+                    lhs: actual,
+                    rhs: limit,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            self.refuse_when(id, outside, "RangeError", "Invalid index")?;
+        }
+        Ok(actual)
+    }
+
+    fn copy_array_with_value(
+        &mut self,
+        id: NodeId,
+        (source, target): (ValueId, ValueId),
+        element: &HirType,
+        (index, replacement): (ValueId, ValueId),
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let length = self.push(OpKind::Length(target), HirType::NUMBER, origin.clone());
+        let cursor = self.synthetic_symbol();
+        self.bindings.insert(cursor, zero);
+        let copying = self.begin_loop(id, &[cursor], false, origin)?;
+        let at = self.bindings[&cursor];
+        let more = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: at,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.test_loop(more, &copying);
+        self.switch_to(copying.body);
+        let replaced = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: at,
+                rhs: index,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let reading = self.new_block();
+        let writing = self.new_block();
+        let value = self.push_block_param(writing, element.clone(), origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: replaced,
+            then_target: writing,
+            then_args: vec![replacement],
+            else_target: reading,
+            else_args: Vec::new(),
+        });
+        self.switch_to(reading);
+        // Conversion cannot change source length (objects refuse); revisit this bound with ToPrimitive.
+        let original = self.push(
+            OpKind::ArrayGet {
+                array: source,
+                index: at,
+                checked: false,
+            },
+            element.clone(),
+            origin.clone(),
+        );
+        self.terminate(Terminator::Jump {
+            target: writing,
+            args: vec![original],
+        });
+        self.switch_to(writing);
+        self.push(
+            OpKind::ArraySet {
+                array: target,
+                index: at,
+                value,
+                checked: false,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let next = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: at,
+                rhs: one,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.bindings.insert(cursor, next);
+        self.end_loop(&copying, Step::None)
     }
 
     /// `toReversed()` — `reverse()` on a copy, which is what the specification
