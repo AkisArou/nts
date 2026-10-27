@@ -141,6 +141,11 @@ JSON
   # including it here would make every failure ambiguous about which half of
   # the artefact d8 refused.
   # shellcheck disable=SC2086
+  if [ -n "${NTS_GATE_SHADOW_DIR:-}" ]; then
+    # Record the exact file arguments, including --lib, for the observer only.
+    # shellcheck disable=SC2086
+    printf '%s\000' "$out/classes/nts-runtime.jar" $classes > "$out/d8.inputs" || :
+  fi
   if "$tools/d8" --min-api 29 --lib "$out/classes/nts-runtime.jar" \
        --output "$out/dex" $classes > "$out/d8.log" 2>&1; then
     d8_status=0
@@ -158,6 +163,7 @@ JSON
   if [ -n "${NTS_GATE_SHADOW_DIR:-}" ]; then
     node "$root/tooling/gate/artifact-shadow.ts" --kind dex --context "$target" \
       --inputs "$out/classes" --outputs "$out/dex" --result "$out/d8.log" --status "$d8_status" \
+      --invocation-inputs "$out/d8.inputs" \
       --script "$root/tooling/android/dexes.sh" --tool "$tools/d8" --tool-library "$tools/lib/d8.jar" \
       --java "${JAVA_HOME:+$JAVA_HOME/bin/}java" > "$out/shadow.log" 2>&1 || :
   fi

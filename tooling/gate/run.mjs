@@ -157,7 +157,7 @@ const STEPS = [
   { name: "jvm-verifies", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies",
     capabilities: ["jvm"],
   },
-  { name: "tooling", slots: 1, mem: 0.5, doc: "the gate's own tools pass their tests" },
+  { name: "tooling", slots: 1, mem: 0.5, doc: "the gate's own tools pass their tests", capabilities: ["jvm", "android"] },
   { name: "primitives", slots: 1, treeOnly: true, mem: 0.1, doc: "docs/primitives.md names exist" },
   { name: "tests", slots: 8, min: 4, mem: 8, lock: "cargo", after: ["build"], doc: "cargo test --workspace",
     capabilities: ["jvm"],

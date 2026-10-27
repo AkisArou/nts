@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { artifactFiles, artifactShadow } from "./artifact-shadow.ts";
+import { artifactFiles, artifactShadow, normalizeInputPaths } from "./artifact-shadow.ts";
 
 function fixture(t: { after: (fn: () => void) => void }) {
   const root = mkdtempSync(join(tmpdir(), "nts-artifact-shadow-"));
@@ -111,4 +111,28 @@ test("a legacy baseline payload is recovered only from a proven matching hit", t
   const later = artifactShadow("dex", inputs, env)({ status: 0, log: "different", outputs: [] })!;
   assert.equal(JSON.parse(readFileSync(later.evidence!, "utf8")).baseline.result.log, "original");
   assert.equal(readFileSync(path, "utf8"), saved, "the original comparison entry stays immutable");
+});
+
+test("only literal invocation input paths are normalized; raw logs and other differences survive", t => {
+  const { root, cache, env } = fixture(t);
+  const a = join(root, "a.class"), b = join(root, "b.class");
+  writeFileSync(a, "identical class"); writeFileSync(b, "identical class");
+  const observe = (path: string, log: string) => artifactShadow("dex", () => ({ files: [{ name: "artifact/Box.class", path }] }),
+    env, undefined, path, result => ({ ...result, log: normalizeInputPaths(result.log, [{ name: "artifact/Box.class", path }]) }))({ status: 0, log, outputs: [] })!;
+  const first = observe(a, `Warning in ${a}: missing superclass; /elsewhere/a.class\n`);
+  const second = observe(b, `Warning in ${b}: missing superclass; /elsewhere/a.class\n`);
+  assert.equal(first.status, "miss"); assert.equal(second.status, "hit-match");
+  const baseline = JSON.parse(readFileSync(join(cache, "dex", `${first.key}.json`), "utf8"));
+  assert.match(baseline.result.log, /a\.class/);
+  assert.equal(baseline.comparison_result.log, "Warning in artifact/Box.class: missing superclass; /elsewhere/a.class\n");
+  const changed = observe(b, `Warning in ${b}: missing interface; /elsewhere/a.class\n`);
+  assert.equal(changed.status, "hit-mismatch");
+  const evidence = JSON.parse(readFileSync(changed.evidence!, "utf8"));
+  assert.equal(evidence.baseline.available, true);
+  assert.ok(evidence.baseline.result.log.includes(a));
+  assert.ok(evidence.fresh.result.log.includes(b));
+  assert.deepEqual(evidence.changed_components, ["log"]);
+  assert.equal(normalizeInputPaths("/x/a[1].class.extra /x/a[1].class", [
+    { path: "/x/a[1].class", name: "artifact/a.class" }, { path: "/x/a[1].class.extra", name: "artifact/b.class" },
+  ]), "artifact/b.class artifact/a.class");
 });

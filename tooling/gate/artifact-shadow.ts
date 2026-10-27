@@ -20,6 +20,17 @@ const json = (value: unknown) => JSON.stringify(canonical(value));
 const digest = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 export const fileDigest = (path: string) => digest(readFileSync(path));
 
+export function normalizeInputPaths(log: string, inputs: File[]): string {
+  // d8 warnings embed the absolute input path; the output depends only on the bytes.
+  // Before any skipping, cached artifact names must be rendered with the
+  // current invocation's paths so a reused log never names another fixture.
+  for (const input of [...inputs].sort((a, b) => b.path.length - a.path.length)) {
+    if (!input.path || !input.name) throw new Error("empty invocation input");
+    log = log.split(input.path).join(input.name);
+  }
+  return log;
+}
+
 export function artifactFiles(root: string, prefix = "artifact"): File[] {
   const files: File[] = [];
   function walk(path: string, name: string) {
@@ -50,7 +61,7 @@ function publish(path: string, value: unknown): boolean {
   } finally { rmSync(temporary, { force: true }); }
 }
 
-export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.ProcessEnv = process.env, expectedKey?: string | null, context: string | null = null) {
+export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.ProcessEnv = process.env, expectedKey?: string | null, context: string | null = null, compare?: (result: any) => unknown) {
   if (!env.NTS_GATE_SHADOW_DIR || !env.NTS_GATE_CASE_COSTS_DIR || !env.NTS_GATE_STEP) return Object.assign((_result: unknown): ShadowRow | null => null, { key: null });
   let key: string | null = null, error: string | undefined;
   try {
@@ -65,10 +76,12 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
       if (!key || error) throw new Error(error ?? "no artifact key");
       if (expectedKey !== undefined && expectedKey !== key) throw new Error("artifact inputs changed during fresh execution");
       if (keyOf(kind, inputs()) !== key) throw new Error("artifact inputs changed during fresh execution");
-      const resultHash = digest(json(result));
+      const comparison = compare ? compare(result) : result;
+      const resultHash = digest(json(comparison));
+      const payload = { result, ...(compare ? { comparison_result: comparison, raw_sha256: digest(json(result)) } : {}) };
       const path = join(env.NTS_GATE_SHADOW_DIR!, kind, `${key}.json`);
       row.result_sha256 = resultHash;
-      if (publish(path, { version: 1, key, result_sha256: resultHash, run: row.run, context, result })) row.status = "miss";
+      if (publish(path, { version: 1, key, result_sha256: resultHash, run: row.run, context, ...payload })) row.status = "miss";
       else {
         const previous = JSON.parse(readFileSync(path, "utf8"));
         if (previous.version !== 1 || previous.key !== key || !/^[a-f0-9]{64}$/.test(previous.result_sha256)) throw new Error("invalid shadow entry");
@@ -79,7 +92,7 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
           // Upgrade digest-only entries only after proving the payload matches
           // the original digest. Never replace that immutable comparison point.
           if (row.status === "hit-match" && !Object.hasOwn(previous, "result")) {
-            publish(`${path}.result.json`, { result_sha256: resultHash, context, result });
+            publish(`${path}.result.json`, { result_sha256: resultHash, context, ...payload });
           }
           if (row.status === "hit-mismatch") {
             let baseline = previous;
@@ -87,14 +100,17 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
               try { baseline = JSON.parse(readFileSync(`${path}.result.json`, "utf8")); }
               catch { baseline = {}; }
             }
-            const available = Object.hasOwn(baseline, "result") && digest(json(baseline.result)) === previous.result_sha256;
-            const fields = available && result && typeof result === "object" && baseline.result && typeof baseline.result === "object"
-              ? [...new Set([...Object.keys(result), ...Object.keys(baseline.result)])].sort() : null;
+            const baselineComparison = Object.hasOwn(baseline, "comparison_result") ? baseline.comparison_result : baseline.result;
+            const available = Object.hasOwn(baseline, "result") && digest(json(baselineComparison)) === previous.result_sha256
+              && (!Object.hasOwn(baseline, "comparison_result") || digest(json(baseline.result)) === baseline.raw_sha256);
+            const fields = available && comparison && typeof comparison === "object" && baselineComparison && typeof baselineComparison === "object"
+              ? [...new Set([...Object.keys(comparison), ...Object.keys(baselineComparison)])].sort() : null;
             const evidence = join(env.NTS_GATE_CASE_COSTS_DIR!, `shadow-mismatch-${process.pid}-${counter++}.json`);
             writeFileSync(evidence, json({ version: 1, kind, key, context,
-              changed_components: fields?.filter(field => json((result as any)[field]) !== json(baseline.result[field])) ?? null,
-              baseline: { available, context: baseline.context ?? null, result_sha256: previous.result_sha256, result: available ? baseline.result : null },
-              fresh: { result_sha256: resultHash, result } }), { flag: "wx" });
+              changed_components: fields?.filter(field => json((comparison as any)[field]) !== json(baselineComparison[field])) ?? null,
+              baseline: { available, context: baseline.context ?? null, result_sha256: previous.result_sha256,
+                result: available ? baseline.result : null, comparison_result: available ? baselineComparison : null },
+              fresh: { result_sha256: resultHash, result, comparison_result: comparison } }), { flag: "wx" });
             row.evidence = evidence;
           }
         } catch (e) { row.evidence_error = String(e); }
@@ -137,11 +153,25 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       process.stdout.write(JSON.stringify(request.mode === "prepare" ? { key: observe.key } : observe(request.result)) + "\n");
     } else {
       const root = flag("--inputs"), output = flag("--result");
+      const invocationInputs = () => {
+        if (!process.argv.includes("--invocation-inputs")) throw new Error("missing d8 invocation inputs");
+        const files = new Map(artifactFiles(root).map(file => [resolve(file.path), file]));
+        const paths = readFileSync(flag("--invocation-inputs"), "utf8").split("\0").filter(Boolean);
+        if (!paths.length) throw new Error("empty d8 invocation inputs");
+        return paths.map(path => {
+          const file = files.get(resolve(path));
+          if (!file) throw new Error(`unrecorded d8 input: ${path}`);
+          return { name: file.name, path };
+        });
+      };
       const observe = artifactShadow(flag("--kind"), () => ({ files: [
         ...artifactFiles(root), { name: "step-script", path: flag("--script") },
         { name: "tool-library", path: flag("--tool-library") },
-      ], values: { tool: toolIdentity(flag("--tool")), java: toolIdentity(flag("--java")), flags: ["--min-api", "29"] } }), process.env, undefined,
-        process.argv.includes("--context") ? flag("--context") : null);
+        { name: "result-policy", path: fileURLToPath(import.meta.url) },
+      ], values: { tool: toolIdentity(flag("--tool")), java: toolIdentity(flag("--java")), flags: ["--min-api", "29"],
+        log_origin_policy: 1, invocation_inputs: invocationInputs().map(f => f.name) } }), process.env, undefined,
+        process.argv.includes("--context") ? flag("--context") : null,
+        result => ({ ...result, log: normalizeInputPaths(result.log, invocationInputs()) }));
       observe({ status: Number(flag("--status")), log: readFileSync(output, "utf8"), outputs: artifactFiles(flag("--outputs")).map(f => ({ name: f.name, sha256: fileDigest(f.path) })) });
     }
   } catch { /* A failed shell observation never changes the tool's verdict. */ }
