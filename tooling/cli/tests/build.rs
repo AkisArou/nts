@@ -1775,11 +1775,8 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
     );
 
     // --- nothing to evaluate -------------------------------------------------
-    // A launcher that called `module$init` unconditionally fails here, and the
-    // sabotage says where: `javac` refuses with `cannot find symbol`, because
-    // the launcher is compiled against the emitted classes. That is the build
-    // catching what would otherwise be a `NoSuchMethodError` on the machine
-    // that ran the jar.
+    // The no-evaluation arm must still build and exit successfully without
+    // requiring a module initializer in the emitted classes.
     let quiet = fixture("build-jvm-exe-quiet", JVM_EXECUTABLE);
     std::fs::write(
         quiet.join("src/main.ts"),
@@ -1804,6 +1801,75 @@ fn a_jvm_executable_is_a_runnable_jar_that_evaluates_the_module() {
         "a program with nothing to evaluate did not exit cleanly:\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
+}
+
+/// Running the packaged jar must drain promise jobs and timers after evaluation.
+/// The control changes only whether the callbacks are scheduled or called inline.
+#[test]
+fn a_runnable_jar_drains_promise_jobs_and_timers() {
+    if !jdk() {
+        skip("a JDK");
+        return;
+    }
+    let source = r#"
+function promiseJob(): void { console.log("promise"); }
+function timerJob(): void { console.log("timer"); }
+console.log("module");
+if (ASYNC) {
+    Promise.resolve(0).then(promiseJob);
+    setTimeout(timerJob, 0);
+} else {
+    promiseJob();
+    timerJob();
+}
+"#;
+    for (arm, asynchronous) in [("sync", "false"), ("async", "true")] {
+        let project = fixture(&format!("build-jvm-loop-{arm}"), JVM_EXECUTABLE);
+        let entry = project.join("src/main.ts");
+        std::fs::write(&entry, source.replace("ASYNC", asynchronous)).expect("entry");
+
+        let node = Command::new(std::env::var("NTS_NODE").unwrap_or_else(|_| "node".to_owned()))
+            .arg(&entry)
+            .output()
+            .expect("running node");
+        assert!(
+            node.status.success(),
+            "{}",
+            String::from_utf8_lossy(&node.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&node.stdout),
+            "module\npromise\ntimer\n"
+        );
+
+        let run = build(&project, &[]);
+        assert!(
+            run.ok,
+            "the {arm} build failed:\n{}{}",
+            run.stdout, run.stderr
+        );
+        assert!(
+            run.stderr.is_empty(),
+            "the {arm} build refused code:\n{}",
+            run.stderr
+        );
+        let ran = Command::new("java")
+            .arg("-Xverify:all")
+            .arg("-jar")
+            .arg(project.join(".nts/build/tool/java-17/tool.jar"))
+            .output()
+            .expect("running the jar");
+        assert!(
+            ran.status.success(),
+            "the {arm} jar failed:\n{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&ran.stdout),
+            String::from_utf8_lossy(&node.stdout),
+            "the {arm} jar did not run every callback"
+        );
+    }
 }
 
 /// Java a package contributes is compiled into the artifact, not left beside it.
