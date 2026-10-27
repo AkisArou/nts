@@ -123,7 +123,7 @@ function authorOf(tree: string): Author {
 export function ledgerAt(root: string, main: string): VerificationLedger {
   // The shared checkout is at main under this lock. Use its actual owed
   // rules without switching the gate tree (which may hold a checked train).
-  const ledger = new VerificationLedger(VERIFICATION, root, main, (from, to) => owedSteps(root, `${from}..${to}`));
+  const ledger = new VerificationLedger(VERIFICATION, root, main, (from, to) => owedSteps(root, `${from}..${to}`), treeSteps(root));
   ledger.recover(main);
   return ledger;
 }

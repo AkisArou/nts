@@ -5,7 +5,7 @@ import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {setTimeout as sleep} from "node:timers/promises";
-import {VerificationLedger,readLedger} from "./verification-ledger.ts";
+import {VerificationLedger,readLedger,type Checks} from "./verification-ledger.ts";
 
 const verifier=new URL("./verify.ts",import.meta.url).pathname;
 function fixture(t:{after(fn:()=>void):void}) {
@@ -15,8 +15,11 @@ function fixture(t:{after(fn:()=>void):void}) {
   const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith("NTS_") && !k.startsWith("GIT_")));
   Object.assign(env,{NTS_LAND_HOME:home,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"});
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8"}).trim();
-  writeFileSync(join(repo,"tooling/gate/owed.mjs"),'process.stdout.write(\'NTS_GATE_STEPS="fake" sh tooling/gate/all.sh\\n\');\n');
-  writeFileSync(join(repo,"tooling/gate/run.mjs"),'process.stdout.write(JSON.stringify({fake:[]}));\n');
+  writeFileSync(join(repo,"tooling/gate/owed.mjs"),`import {execFileSync} from "node:child_process";
+const range=process.argv[process.argv.indexOf("--range")+1];
+const paths=execFileSync("git",["diff","--name-only",range],{encoding:"utf8"}).trim().split("\\n");
+process.stdout.write('NTS_GATE_STEPS="'+(paths.every(p=>p.startsWith("docs/"))?"format":"fake")+'" sh tooling/gate/all.sh\\n');\n`);
+  writeFileSync(join(repo,"tooling/gate/run.mjs"),'process.stdout.write(process.argv.includes("--tree-only")?"format\\n":JSON.stringify({fake:[],other:[],format:[]}));\n');
   writeFileSync(join(repo,"tooling/gate/pinned.sh"),`set -eu
 # nts-gate-tree-lock-handoff: 8
 exec 9>&8
@@ -27,18 +30,18 @@ if [ -n "\${SHADOW_TEST_WAIT:-}" ]; then
  touch "$SHADOW_TEST_WAIT"
  while [ ! -f "$SHADOW_TEST_WAIT.done" ]; do sleep 0.02; done
 fi
-verdict=green step=PASS
-if [ -n "\${SHADOW_TEST_RED:-}" ]; then verdict=red step=FAIL; fi
-printf '{"verdict":"%s","identities":{"commit":"%s"},"requested":["fake"],"steps":[{"name":"fake","verdict":"%s"}]}' "$verdict" "$1" "$step" > "$NTS_GATE_RUN_DIR/summary.json"
+SHADOW_TEST_COMMIT="$1" node -e 'const fs=require("fs"),p=require("path"),e=process.env;
+const requested=(e.NTS_GATE_STEPS||"fake").split(/\\s+/).filter(Boolean);
+const steps=requested.map(name=>({name,verdict:e.SHADOW_TEST_RED||name===e.SHADOW_TEST_RED_STEP?"FAIL":"PASS"}));
+fs.writeFileSync(p.join(e.NTS_GATE_RUN_DIR,"summary.json"),JSON.stringify({verdict:steps.some(s=>s.verdict==="FAIL")?"red":"green",identities:{commit:e.SHADOW_TEST_COMMIT},requested,steps}));'
 if [ -n "\${SHADOW_TEST_BAD_EXIT:-}" ]; then exit 17; fi
-[ "$verdict" = green ]
+[ -z "\${SHADOW_TEST_RED:-}\${SHADOW_TEST_RED_STEP:-}" ]
 `);
   git("init","-qb","main");git("add","tooling");git("commit","-qm","base");
   const initial=git("rev-parse","HEAD");new VerificationLedger(store,repo,initial);
-  const append=(name:string)=>{
+  const append=(name:string,checks:Checks={steps:["fake"],interop:null})=>{
     const base=git("rev-parse","HEAD"),l=new VerificationLedger(store,repo,base);
     writeFileSync(join(repo,name),name);git("add",name);git("commit","-qm",name);const tip=git("rev-parse","HEAD");
-    const checks={steps:["fake"],interop:null};
     const id=l.prepare(base,tip,[{id:tip,submitted:tip,base,tip,author:{lane:"tsrs",address:null},owed:checks}],"strict",{commit:tip,run:`/strict/${tip}`,checks});
     l.commit(id,tip);return tip;
   };
@@ -60,6 +63,28 @@ test("a manual shadow uses frozen union and reports agreement with strict trains
   const again=await f.start().done;assert.match(again.out,/no new landed range/);
 });
 
+test("a later coordinator docs move is checked without hiding original agreement",async t=>{
+  const f=fixture(t);f.append("one");
+  mkdirSync(join(f.repo,"docs"));writeFileSync(join(f.repo,"docs/design.md"),"current design\n");
+  f.git("add","docs/design.md");f.git("commit","-qm","docs");const tip=f.git("rev-parse","HEAD");
+  const result=await f.start().done;
+  assert.equal(result.status,0,result.out);assert.match(result.out,/agree=1 .*no-expectation=1/);
+  const ledger=readLedger(f.store)!,batch=ledger.shadow!.batches[0];
+  assert.deepEqual(batch.landings!.map(e=>e.agreement),["agree","no-expectation"]);
+  assert.deepEqual(batch.checks.steps,["fake","format"]);
+  assert.equal(batch.state,"agreed");assert.equal(ledger.verified.tip,tip);
+});
+
+test("a failed step disagrees only with the landing whose original train ran it",async t=>{
+  const f=fixture(t);f.append("one");f.append("two",{steps:["other"],interop:null});
+  f.env.SHADOW_TEST_RED_STEP="fake";
+  const result=await f.start().done;
+  assert.equal(result.status,1,result.out);
+  const batch=readLedger(f.store)!.shadow!.batches[0];
+  assert.deepEqual(batch.landings!.map(e=>e.agreement),["disagree","agree"]);
+  assert.equal(batch.state,"held");assert.equal(batch.verdict,"red");
+});
+
 test("queued work defers a shadow without launching any gate",async t=>{
   const f=fixture(t);f.append("one");mkdirSync(join(f.state,"queue"),{recursive:true});
   writeFileSync(join(f.state,"queue/waiting.json"),"{}");
@@ -78,6 +103,7 @@ test("a green summary with a failed gate process cannot certify a shadow batch",
   const result=await f.start().done;assert.equal(result.status,1,result.out);
   const batch=readLedger(f.store)!.shadow!.batches[0];
   assert.equal(batch.state,"held");assert.equal(batch.verdict,"red");
+  assert.equal(batch.agreement,"unavailable");
   assert.equal(JSON.parse(readFileSync(join(batch.run!,"process.json"),"utf8")).status,17);
 });
 

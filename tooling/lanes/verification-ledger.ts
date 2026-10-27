@@ -12,6 +12,12 @@ export type LandingRecord = {
   author: Author; owed: Checks; state: "unverified" | "verified";
 };
 export type Proof = { commit: string; run: string; checks: Checks };
+export type ShadowStepVerdict = "green" | "red" | "unavailable";
+export type ShadowResult = {ok:boolean;run:string;message?:string;stepVerdicts?:Record<string,ShadowStepVerdict>};
+export type ShadowLanding = {
+  id:string; tip:string; expectation:"green"|"none"|"unknown";
+  proof?:Proof; steps?:string[]; agreement?:"agree"|"disagree"|"unavailable"|"no-expectation";
+};
 export type Transaction = {
   id: string; base: string; tip: string; kind: "strict" | "tree-only" | "external";
   state: "prepared" | "committed" | "aborted" | "held"; at: string;
@@ -22,6 +28,7 @@ export type ShadowBatch = {
   expected: "green" | "unknown"; trains: {tip:string;run:string}[];
   state: "running" | "agreed" | "held" | "interrupted";
   run?: string; verdict?: "green" | "red"; agreement?: "agree" | "disagree" | "unavailable"; message?: string;
+  landings?:ShadowLanding[]; // Absent on batches made by the older comparison.
 };
 export type Ledger = {
   version: 1; mode: "strict"; observedMain: string;
@@ -67,6 +74,19 @@ function validate(value: Ledger): Ledger {
           || (batch.agreement !== undefined && !["agree","disagree","unavailable"].includes(batch.agreement))
           || !["running","agreed","held","interrupted"].includes(batch.state)) throw new Error("invalid shadow batch");
       checks(batch.checks);
+      if (batch.landings !== undefined) {
+        if (!Array.isArray(batch.landings) || batch.landings.length !== batch.entries.length
+            || batch.landings.some((e,i)=>e.id !== batch.entries[i] || !sha(e.tip)
+              || !["green","none","unknown"].includes(e.expectation)
+              || (e.expectation === "green") !== Boolean(e.proof)
+              || (e.expectation !== "green" && e.steps !== undefined)
+              || (e.steps !== undefined && (!Array.isArray(e.steps) || !e.steps.length || e.steps.some(s=>!/^[a-z0-9-]+$/.test(s))))
+              || (e.agreement !== undefined && !["agree","disagree","unavailable","no-expectation"].includes(e.agreement)))) throw new Error("invalid shadow landing comparison");
+        for (const e of batch.landings) if (e.proof) {
+          if (!sha(e.proof.commit) || !e.proof.run) throw new Error("invalid original shadow proof");
+          checks(e.proof.checks);
+        }
+      }
     }
   }
   return value;
@@ -114,14 +134,37 @@ export function covers(have: Checks, need: Checks): boolean {
   return (!uses("interop") || scope(have.interop, need.interop)) && (!uses("doctests") || scope(have.doctests, need.doctests));
 }
 
+/** A process/setup failure cannot turn passing summary rows into agreement. */
+export function shadowStepVerdicts(tip:string, ok:boolean, summary:{
+  verdict?:string; interrupted?:unknown; identities?:{commit?:string};
+  steps?:{name:string;verdict:string}[];
+}, process:{status?:number|null;signal?:unknown;error?:unknown}):Record<string,ShadowStepVerdict>|undefined {
+  const named=summary.identities?.commit;
+  if (!named || !/^[a-f0-9]{7,40}$/.test(named) || !tip.startsWith(named)
+      || process.signal || process.error || summary.interrupted
+      || !(ok && process.status === 0 && summary.verdict === "green"
+        || !ok && process.status === 1 && summary.verdict === "red")
+      || !Array.isArray(summary.steps) || !summary.steps.length) return;
+  const verdicts:Record<string,ShadowStepVerdict>={};
+  for (const step of summary.steps) {
+    if (!/^[a-z0-9-]+$/.test(step.name) || Object.hasOwn(verdicts,step.name)) return;
+    // A successful common gate already applied its skip/platform policies.
+    // On RED, platform availability has not been checked after the failed row.
+    verdicts[step.name]=step.verdict === "PASS" && (ok || step.name !== "interop") || ok && step.verdict === "SKIPPED"
+      ? "green" : step.verdict === "FAIL" ? "red" : "unavailable";
+  }
+  return verdicts;
+}
+
 export class VerificationLedger {
   readonly directory: string;
   readonly repo: string;
   readonly externalChecks: (base: string, tip: string) => Checks;
+  readonly treeOnlySteps:readonly string[];
   state: Ledger;
-  constructor(directory: string, repo: string, main: string, externalChecks: (base: string, tip: string) => Checks = () => ({steps:"all",interop:null})) {
+  constructor(directory: string, repo: string, main: string, externalChecks: (base: string, tip: string) => Checks = () => ({steps:"all",interop:null}), treeOnlySteps:readonly string[] = []) {
     if (!sha(main)) throw new Error("verification bootstrap requires a full main SHA");
-    this.directory = directory; this.repo = repo; this.externalChecks = externalChecks;
+    this.directory = directory; this.repo = repo; this.externalChecks = externalChecks; this.treeOnlySteps=treeOnlySteps;
     const saved = readLedger(directory);
     this.state = saved ?? { version: 1, mode: "strict", observedMain: main,
       verified: { tip: main, origin: "strict-history", run: null }, transactions: [],
@@ -214,25 +257,59 @@ export class VerificationLedger {
     }
     if (this.state.transactions.some(tx=>tx.state === "held" || tx.state === "prepared")) throw new Error("recover held landing state before shadow verification");
     const committed=this.state.transactions.filter(tx=>tx.state === "committed" && this.ancestor(tx.tip,main));
-    const base=history.batches.findLast(b=>b.state === "agreed")?.tip ?? committed[0]?.base;
+    const base=history.batches.findLast(b=>b.state === "agreed" && b.verdict === "green")?.tip ?? committed[0]?.base;
     const pending=base ? committed.filter(tx=>!this.ancestor(tx.tip,base)) : [];
     if (!base || !pending.length) {this.save();return null;}
     const entries=pending.flatMap(tx=>tx.entries);
+    const landings:ShadowLanding[]=pending.flatMap(tx=>tx.entries.map(e=>{
+      if (tx.proof) {
+        let steps=tx.proof.checks.steps === "all" ? undefined : [...tx.proof.checks.steps];
+        if (!steps) {
+          try {
+            const original=JSON.parse(readFileSync(join(tx.proof.run,"summary.json"),"utf8"));
+            const named=original.identities?.commit;
+            if (typeof named === "string" && /^[a-f0-9]{7,40}$/.test(named) && tx.proof.commit.startsWith(named)
+                && original.verdict === "green" && Array.isArray(original.requested) && original.requested.length
+                && original.requested.every((s:unknown)=>typeof s === "string" && /^[a-z0-9-]+$/.test(s))) steps=[...new Set<string>(original.requested)];
+          } catch { /* Retain the proof, but missing original scope is unavailable. */ }
+        }
+        return {id:e.id,tip:e.tip,expectation:"green" as const,proof:structuredClone(tx.proof),...(steps?{steps}:{})};
+      }
+      const docs=tx.kind === "external" && e.author.lane === "coordinator" && e.owed.steps !== "all"
+        && e.owed.steps.length > 0 && e.owed.steps.every(s=>this.treeOnlySteps.includes(s)) && !e.owed.interop && !e.owed.doctests;
+      return {id:e.id,tip:e.tip,expectation:docs?"none" as const:"unknown" as const};
+    }));
+    const proven=landings.filter(e=>e.expectation === "green");
     const batch:ShadowBatch={id:randomUUID(),base,tip:main,at:new Date().toISOString(),entries:entries.map(e=>e.id),
-      checks:entries.reduce((all,e)=>unionChecks(all,e.owed),{steps:[],interop:null} as Checks),
-      expected:entries.every(e=>pending.some(tx=>tx.proof && this.ancestor(e.tip,tx.tip) && covers(tx.proof.checks,e.owed))) ? "green" : "unknown",
-      trains:pending.filter(tx=>tx.proof).map(tx=>({tip:tx.tip,run:tx.proof!.run})),state:"running"};
+      checks:landings.reduce((all,e)=>e.proof?unionChecks(all,e.proof.checks):all,
+        entries.reduce((all,e)=>unionChecks(all,e.owed),{steps:[],interop:null} as Checks)),
+      expected:proven.length > 0 && landings.every(e=>e.expectation === "none" || e.expectation === "green" && Boolean(e.steps?.length)) ? "green" : "unknown",
+      trains:pending.filter(tx=>tx.proof).map(tx=>({tip:tx.tip,run:tx.proof!.run})),landings,state:"running"};
     history.batches.push(batch);
     this.state.events.push({at:new Date().toISOString(),transaction:null,transition:"shadow-started",message:`${batch.id} ${base}..${main}`});
     this.save();return batch;
   }
 
-  finishShadow(id: string, result: {ok:boolean;run:string;message?:string}, main: string): ShadowBatch {
+  finishShadow(id: string, result: ShadowResult, main: string): ShadowBatch {
     this.recover(main);
     const batch=this.state.shadow?.batches.find(b=>b.id === id);
     if (!batch || batch.state !== "running") throw new Error("shadow batch is not active");
     batch.run=result.run;batch.verdict=result.ok ? "green" : "red";
-    batch.agreement=batch.expected === "unknown" ? "unavailable" : result.ok ? "agree" : "disagree";
+    if (batch.landings) {
+      for (const e of batch.landings) {
+        const values=e.steps?.map(s=>result.stepVerdicts?.[s]);
+        e.agreement=e.expectation === "none" ? "no-expectation"
+          : e.expectation !== "green" || !values?.length ? "unavailable"
+          : values.some(v=>v === "red") ? "disagree"
+          : values.every(v=>v === "green") ? "agree" : "unavailable";
+      }
+      const compared=batch.landings.filter(e=>e.agreement !== "no-expectation");
+      batch.agreement=compared.some(e=>e.agreement === "disagree") ? "disagree"
+        : compared.length > 0 && compared.every(e=>e.agreement === "agree") ? "agree" : "unavailable";
+    } else {
+      // Finish pre-upgrade snapshots with their original comparison semantics.
+      batch.agreement=batch.expected === "unknown" ? "unavailable" : result.ok ? "agree" : "disagree";
+    }
     batch.state=batch.agreement === "agree" ? "agreed" : "held";
     batch.message=result.message;
     if (result.ok) this.verifyThrough({commit:batch.tip,run:result.run,checks:batch.checks});

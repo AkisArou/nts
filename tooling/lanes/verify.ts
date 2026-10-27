@@ -6,7 +6,7 @@ import {homedir} from "node:os";
 import {join} from "node:path";
 import {GateResource,supportsResourceHandoff} from "./gate-resource.ts";
 import {holdsLandingLock,ledgerAt,runShadowGate,sharedCheckout} from "./land.ts";
-import {type ShadowBatch} from "./verification-ledger.ts";
+import {shadowStepVerdicts,type ShadowBatch,type ShadowResult} from "./verification-ledger.ts";
 
 const home=process.env.NTS_LAND_HOME ?? homedir();
 const state=join(home,".cache/nts-land"),lock=join(home,".cache/nts-land.lock");
@@ -61,7 +61,7 @@ async function run(): Promise<void> {
     const directory=join(state,"verification/shadow",batch.id);mkdirSync(directory,{recursive:true});
     console.log(`verify: shadow ${batch.id}, ${batch.base.slice(0,12)}..${batch.tip.slice(0,12)}; original trains ${batch.expected}`);
     writeFileSync(join(directory,"snapshot.json"),JSON.stringify(batch,null,2)+"\n");
-    let result:{ok:boolean;run:string;message?:string};
+    let result:ShadowResult;
     try {
       // Native spawnSync closes unspecified descriptors; retain this exact
       // lock description when the common gate enters pinned.sh.
@@ -82,7 +82,8 @@ async function run(): Promise<void> {
   if (finished.status !== 0) throw new Error(finished.stderr || "shadow completion needs restart recovery");
   const result=JSON.parse(finished.stdout) as ShadowBatch;
   console.log(`verify: ${result.verdict}; ${result.agreement} with original trains; ${result.run || result.message}`);
-  if (result.state !== "agreed") process.exitCode=1;
+  if (result.landings) console.log(`verify: landings ${["agree","disagree","unavailable","no-expectation"].map(a=>`${a}=${result.landings!.filter(e=>e.agreement === a).length}`).join(" ")}`);
+  if (result.state !== "agreed" || result.verdict !== "green") process.exitCode=1;
   } finally {ownership.close();}
 }
 
@@ -93,7 +94,14 @@ try {
     if (!GateResource.inherited(gateLock)) throw new Error("shadow gate lacks its resource lock");
     const directory=join(state,"verification/shadow",id);
     const batch=JSON.parse(readFileSync(join(directory,"snapshot.json"),"utf8")) as ShadowBatch;
-    const result=runShadowGate(root,batch.base,batch.tip,batch.checks);
+    const result:ShadowResult=runShadowGate(root,batch.base,batch.tip,batch.checks);
+    if (result.run) {
+      try {
+        const summary=JSON.parse(readFileSync(join(result.run,"summary.json"),"utf8"));
+        const process=JSON.parse(readFileSync(join(result.run,"process.json"),"utf8"));
+        result.stepVerdicts=shadowStepVerdicts(batch.tip,result.ok,summary,process);
+      } catch { /* Missing or malformed evidence leaves comparisons unavailable. */ }
+    }
     writeFileSync(join(directory,"outcome.json"),JSON.stringify(result,null,2)+"\n");
   } else await run();
 } catch (error) {
