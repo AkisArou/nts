@@ -2558,11 +2558,22 @@ step "compile-time" compile_time
 # readiness/failure contracts, and the memory admission both runners share
 # (tooling/gate/admission.test.ts). Seconds.
 tooling_tests() {
-  node --test tooling/gate/*.test.mjs tooling/gate/*.test.ts tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
+  if [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
+    tooling_log="$NTS_GATE_RUN_DIR/tooling-tests.raw.log"
+  else
+    tooling_log=$(mktemp "${TMPDIR:-/tmp}/nts-gate-tooling.XXXXXX")
+  fi
+  node --test tooling/gate/*.test.mjs tooling/gate/*.test.ts tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "$tooling_log" 2>&1
   status=$?
-  awk '/^(✖|ℹ (tests|pass|fail))/ { print "  " $0 }' "${TMPDIR:-/tmp}/nts-gate-tooling.$$"
-  [ $status -eq 0 ] || sed -n '/^✖ failing tests/,$p' "${TMPDIR:-/tmp}/nts-gate-tooling.$$" | head -40
-  rm -f "${TMPDIR:-/tmp}/nts-gate-tooling.$$"
+  echo "  log: $tooling_log"
+  # Node also puts expected TODO failures under this heading on exit 0.
+  # Retain their names and all assertion details, beyond any earlier TODOs.
+  awk '
+    { plain = $0; gsub(/\033\[[0-9;]*m/, "", plain) }
+    plain ~ /^✖ failing tests:/ { details = 1 }
+    details || plain ~ /^[[:space:]]*(✖|⚠|﹣)/ || plain ~ /# SKIP/ ||
+      plain ~ /^ℹ (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)/ { print "  " $0 }
+  ' "$tooling_log"
   node tooling/gate/owed.mjs --self-test || status=1
   return $status
 }
