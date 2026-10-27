@@ -27,10 +27,10 @@
 //! # What it can time out on
 //!
 //! A pool value that lands in a loop bound. `fib(2147483648)` does not return,
-//! and no analysis available here can tell which parameter is a bound. Both
-//! sides run under a timeout, and the comparison covers the cases both sides
-//! reached — reported, so a run that checked twelve cases does not read like one
-//! that checked all of them.
+//! and no analysis available here can tell which parameter is a bound. Reviewed
+//! exclusions remove specific impossible tuples. The Node oracle must finish
+//! its explicitly recorded full population under a CPU budget; a guard kill
+//! or a missing row is not measured, never a smaller passing comparison.
 
 use std::fmt::Write as _;
 
@@ -44,7 +44,11 @@ use nts_frontend_ts::Frontend;
 mod artifact_shadow;
 mod case_costs;
 mod objects;
+mod oracle_coverage;
 mod oracle_exclusions;
+#[cfg(test)]
+mod oracle_protocol_tests;
+mod oracle_run;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
 ///
@@ -129,13 +133,12 @@ const PROGRAM_MAPS_MB: u64 = 32;
 /// something else, and continuing to restart would take all day to say so.
 const REFUSALS: usize = 16;
 
-/// A child of this harness, bounded in both dimensions.
+/// A compiled arm's child, bounded in both dimensions.
 ///
-/// One place, because both sides are driven by the same hostile pool and a
-/// bound that only one of them has is a bound that reports a disagreement where
-/// there is none. `prlimit` and `timeout` rather than the equivalents in this
-/// process: the limits have to apply to the child and to whatever it spawns,
-/// and both utilities are already how this runs its children.
+/// The oracle has its own CPU budget and generous wall hang guard: its promised
+/// coverage must not shrink when the machine is loaded. These compiled arms
+/// retain their existing timeout/refusal accounting. `prlimit` and `timeout`
+/// apply the bounds to the child and its descendants.
 ///
 /// **And no core file.** A case the compiled program declines ends it by
 /// `abort` -- that is the program answering, not crashing -- and each one had
@@ -418,10 +421,95 @@ fn c_type(ty: &HirType) -> String {
 ///
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     let _trace_session = case_costs::session(tsconfig);
     let backend = Backend::from_environment()?;
+    let PreparedCheck {
+        snapshot,
+        prepared,
+        entry,
+        testable,
+    } = prepare_check(tsconfig, source, backend)?;
+    let coverage = oracle_coverage::resolve(&entry, backend, &testable)?;
+    if testable.is_empty() {
+        return Ok(Report::default());
+    }
+
+    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+        .map_err(|path| anyhow::anyhow!("temp dir is not utf-8: {}", path.display()))?
+        .join(format!("nts-check-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
+    let dir = Scratch::holding(dir);
+    let dir = &dir.path;
+
+    let mut refused = Vec::new();
+    let mut aborts = Vec::new();
+    // Cases the program did not finish in time. Counted rather than filed as
+    // declines, because those are different facts; see `stopped_with`.
+    let mut timeouts = 0usize;
+    // Which lane runs. The JVM is a sibling rather than a third arm of
+    // `render`, because a JVM program is a directory of classes driven by
+    // `java` -- a different artifact *and* a different runner, where C and
+    // LLVM differ only in what they hand the same linker.
+    let native = match backend {
+        Backend::Jvm => run_jvm(
+            dir,
+            &prepared.program,
+            &snapshot.sources,
+            &testable,
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+        )?,
+        Backend::Wasm => run_wasm(
+            dir,
+            &prepared.program,
+            &snapshot.sources,
+            &testable,
+            &mut refused,
+            &mut aborts,
+        )?,
+        Backend::C | Backend::Llvm => run_native(
+            dir,
+            &prepared.program,
+            &snapshot.sources,
+            &testable,
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+        )?,
+    };
+    let engine = case_costs::measure("oracle.total", || {
+        run_node(dir, &entry, &testable, &snapshot.sources, &coverage)
+    })?;
+    let approximate = nts_core::hir::builtin::approximating(&prepared.program);
+    let mut report = report(&native, &engine, &testable, &refused, &approximate);
+    report.aborts = aborts;
+    report.timeouts = timeouts;
+    // A timed-out case still has to leave a gap on this side so the node side
+    // trims to match by index -- so it goes into `refused` for *alignment* and
+    // comes back out of the count, which is a different question. Reporting it
+    // as both is how it read before: one line saying the program declined and
+    // one saying it ran out of time, about the same case.
+    report.refused = report.refused.saturating_sub(timeouts);
+    case_costs::event(
+        serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
+    );
+    Ok(report)
+}
+
+struct PreparedCheck {
+    snapshot: nts_semantic_schema::SemanticSnapshot,
+    prepared: hir::Prepared,
+    entry: Utf8PathBuf,
+    testable: Vec<Testable>,
+}
+
+fn prepare_check(
+    tsconfig: &Utf8Path,
+    source: &mut Frontend,
+    backend: Backend,
+) -> Result<PreparedCheck> {
     let provider =
         match backend {
             Backend::Jvm => nts_codegen_common::provider::host_gc("jvm", counting())
@@ -506,71 +594,81 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
 
     drop(selection);
     case_costs::event(serde_json::json!({"event":"population", "functions":testable.len()}));
-    if testable.is_empty() {
-        return Ok(Report::default());
-    }
+    Ok(PreparedCheck {
+        snapshot,
+        prepared,
+        entry,
+        testable,
+    })
+}
 
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .map_err(|path| anyhow::anyhow!("temp dir is not utf-8: {}", path.display()))?
-        .join(format!("nts-check-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
-    let dir = Scratch::holding(dir);
-    let dir = &dir.path;
+/// Capture the actual backend population and its Node driver without executing
+/// either arm. Differential tooling uses this to record reproducible coverage.
+/// The plan shares capture, preparation, selection and case generation with
+/// [`check`]; it is not a second model of the hostile pool.
+///
+/// # Errors
+///
+/// Returns the same capture, preparation and selection errors as [`check`].
+pub fn oracle_plan(
+    tsconfig: &Utf8Path,
+    source: &mut Frontend,
+    backend: Backend,
+) -> Result<serde_json::Value> {
+    let checked = prepare_check(tsconfig, source, backend)?;
+    let (cases, signature) = oracle_population(&checked.testable);
+    let key = oracle_case_key(backend, &cases, &signature)?;
+    let absolute = checked.entry.canonicalize_utf8()?;
+    Ok(serde_json::json!({"version":1,"backend":backend.name(),
+        "source":corpus_source(&absolute),"source_digest":oracle_coverage::source_digest(&absolute)?,
+        "entry":absolute,"seed":null,
+        "generator_version":1,"generator_digest":oracle_generator_digest(),
+        "case_key":key,"case_count":cases.len(),"cases":cases,"signature":signature,
+        "driver":driver(&format!("file://{absolute}"), &checked.testable, Engine::Node),
+        "resolver":RESOLVE_TS}))
+}
 
-    let mut refused = Vec::new();
-    let mut aborts = Vec::new();
-    // Cases the program did not finish in time. Counted rather than filed as
-    // declines, because those are different facts; see `stopped_with`.
-    let mut timeouts = 0usize;
-    // Which lane runs. The JVM is a sibling rather than a third arm of
-    // `render`, because a JVM program is a directory of classes driven by
-    // `java` -- a different artifact *and* a different runner, where C and
-    // LLVM differ only in what they hand the same linker.
-    let native = match backend {
-        Backend::Jvm => run_jvm(
-            dir,
-            &prepared.program,
-            &snapshot.sources,
-            &testable,
-            &mut refused,
-            &mut aborts,
-            &mut timeouts,
-        )?,
-        Backend::Wasm => run_wasm(
-            dir,
-            &prepared.program,
-            &snapshot.sources,
-            &testable,
-            &mut refused,
-            &mut aborts,
-        )?,
-        Backend::C | Backend::Llvm => run_native(
-            dir,
-            &prepared.program,
-            &snapshot.sources,
-            &testable,
-            &mut refused,
-            &mut aborts,
-            &mut timeouts,
-        )?,
-    };
-    let engine = case_costs::measure("oracle.total", || {
-        run_node(dir, &entry, &testable, &snapshot.sources)
-    })?;
-    let approximate = nts_core::hir::builtin::approximating(&prepared.program);
-    let mut report = report(&native, &engine, &testable, &refused, &approximate);
-    report.aborts = aborts;
-    report.timeouts = timeouts;
-    // A timed-out case still has to leave a gap on this side so the node side
-    // trims to match by index -- so it goes into `refused` for *alignment* and
-    // comes back out of the count, which is a different question. Reporting it
-    // as both is how it read before: one line saying the program declined and
-    // one saying it ran out of time, about the same case.
-    report.refused = report.refused.saturating_sub(timeouts);
-    case_costs::event(
-        serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
-    );
-    Ok(report)
+fn oracle_population(testable: &[Testable]) -> (Vec<String>, Vec<serde_json::Value>) {
+    let cases = interleaved(testable)
+        .into_iter()
+        .map(|(one, at, tuple)| format!("{} {at} {tuple:?}", one.name))
+        .collect::<Vec<_>>();
+    let signature = testable
+        .iter()
+        .map(|one| {
+            serde_json::json!({"name":one.name, "returns":format!("{:?}",one.returns),
+            "absent":format!("{:?}",one.result_absent),
+            "params":one.params.iter().map(|(ty,_)|format!("{ty:?}")).collect::<Vec<_>>()})
+        })
+        .collect::<Vec<_>>();
+    (cases, signature)
+}
+
+fn oracle_generator_digest() -> String {
+    // Hash the pool policy, not unrelated checker implementation. The ordered
+    // actual population and signature are also in every key, so a changed
+    // generator result always needs an explicit new record.
+    let policy = serde_json::json!({"version":1,"pool_bits":POOL.iter().map(|n|n.to_bits()).collect::<Vec<_>>(),
+        "quiet_bits":QUIET.to_bits(),"strings":STRINGS,
+        "exclusions":include_str!("../oracle-exclusions.json")});
+    format!(
+        "{:032x}",
+        xxhash_rust::xxh3::xxh3_128(policy.to_string().as_bytes())
+    )
+}
+
+fn oracle_case_key(
+    backend: Backend,
+    cases: &[String],
+    signature: &[serde_json::Value],
+) -> Result<String> {
+    let bytes = serde_json::to_vec(&serde_json::json!({"backend":backend.name(),
+        "generator":oracle_generator_digest(),"cases":cases,"signature":signature}))?;
+    Ok(format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&bytes)))
+}
+
+fn corpus_source(entry: &Utf8Path) -> Option<String> {
+    oracle_coverage::root_and_source(entry).map(|(_, source)| source)
 }
 
 fn pool_options(backend: Backend, provider: hir::Provider) -> hir::Options<'static> {
@@ -2379,6 +2477,7 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
     let load = engine.load_module(import);
     let mut driver = format!(
         "import {{ openSync, writeSync, closeSync }} from \"node:fs\";\n\
+         import {{ setImmediate as completeTurn }} from \"node:timers\";\n\
          // Results to their own file, as on the compiled side: stdout is the\n\
          // program's, and its `console.log` is compared as output, never\n\
          // mistaken for a case.\n\
@@ -2495,7 +2594,10 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
     // after three cases must not read as a run of three.
     let _ = writeln!(
         driver,
-        "emit(\"done {}\\n\"); closeSync(resultsFd);",
+        "emit(\"done {}\\n\"); closeSync(resultsFd); \
+         await new Promise(resolve => completeTurn(resolve)); \
+         await Promise.all([process.stdout, process.stderr].map(stream => \
+           new Promise(resolve => stream.write(\"\", resolve)))); process.exit(0);",
         interleaved(testable).len()
     );
     driver
@@ -2684,55 +2786,74 @@ fn run_node(
     entry: &Utf8Path,
     testable: &[Testable],
     sources: &[nts_diagnostics::SourceFile],
+    coverage: &oracle_coverage::Coverage,
 ) -> Result<Run> {
     let absolute = entry
         .canonicalize_utf8()
         .with_context(|| format!("locating {entry}"))?;
-    let driver = driver(&format!("file://{absolute}"), testable, Engine::Node);
     let path = dir.join("check_driver.mjs");
-    std::fs::write(&path, driver)?;
+    std::fs::write(
+        &path,
+        driver(&format!("file://{absolute}"), testable, Engine::Node),
+    )?;
     let hook = dir.join("resolve_ts.mjs");
     std::fs::write(&hook, RESOLVE_TS)?;
     let shadow = artifact_shadow::oracle(dir, sources);
-
     let results_path = dir.join("results-node.txt");
-    // **The spawner truncates, the harness appends.** A file left by a previous
-    // run at this path would read as this run's results, so it goes before
-    // node starts -- here, where the run boundary is known.
     let _ = std::fs::remove_file(&results_path);
-    let run = case_costs::child("oracle.execute", || {
-        without_colour(bounded("node"))
-            .env("NTS_DIFF_RESULTS", results_path.as_str())
-            // Node strips types by default, which *refuses* the two TypeScript
-            // constructs that are not erasable: a parameter property and an `enum`.
-            // `constructor(private x: number)` is `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX
-            // ... not supported in strip-only mode`, and the oracle cannot run the
-            // program at all.
-            //
-            // Transform mode compiles them instead of refusing them, which is what
-            // `tsc` does and what the language says they mean. Without it, two
-            // features on the goal's list are unverifiable rather than unimplemented
-            // -- and "unmeasured is not done" would make them permanently not done
-            // for a reason that has nothing to do with this compiler.
-            //
-            // Everything already passing is unaffected: an erasable program is
-            // stripped identically either way, which the 89 examples check.
-            .arg("--experimental-transform-types")
-            .arg("--import")
-            .arg(format!("file://{hook}"))
-            .arg(&path)
-            .output()
-            .context("running node")
-    });
-    let result = run.and_then(|run| {
-        let results = node_results("node", &results_path, &run)?;
+    let mut command = std::process::Command::new("prlimit");
+    command
+        .arg(format!("--as={}", MEMORY_MB << 20))
+        .arg("--core=0")
+        .arg(format!(
+            "--cpu={}:{}",
+            oracle_coverage::CPU_SECONDS,
+            oracle_coverage::CPU_SECONDS + 1
+        ))
+        .arg("node")
+        .arg("--experimental-transform-types")
+        .arg("--import")
+        .arg(format!("file://{hook}"))
+        .arg(&path)
+        .env("NTS_DIFF_RESULTS", &results_path);
+    let mut status = serde_json::Value::Null;
+    let mut completion = serde_json::Value::Null;
+    let result = case_costs::child("oracle.execute", || {
+        let finished = oracle_run::run(
+            without_colour(command),
+            std::time::Duration::from_millis(oracle_coverage::WALL_MILLIS),
+        )?;
+        status = finished.status;
+        Ok::<_, anyhow::Error>(finished.output)
+    })
+    .and_then(|output| {
+        let mut rows = std::fs::read(&results_path)
+            .map(|bytes| lines(&bytes))
+            .unwrap_or_default();
+        let done = rows.last()
+            .and_then(|line| line.strip_prefix("done "))
+            .and_then(|n| n.parse::<usize>().ok());
+        if done.is_some() {
+            rows.pop();
+        }
+        let delivered = rows.len();
+        let measured = oracle_coverage::measured_rows(rows, done, &status, coverage);
+        completion = serde_json::json!({"required":coverage.count,"delivered":delivered,
+            "done":done,"case_key":coverage.key,"measured":measured.is_ok()});
+        if measured.is_err() {
+            completion["raw_results"] = std::fs::read_to_string(&results_path).ok().into();
+            completion["stderr"] = String::from_utf8_lossy(&output.stderr).into_owned().into();
+            completion["stdout"] = String::from_utf8_lossy(&output.stdout).into_owned().into();
+        }
+        case_costs::event(serde_json::json!({"event":"oracle.result","required":coverage.count,
+            "delivered":delivered,"done":done,"case_key":coverage.key,"status":status,"measured":measured.is_ok()}));
         Ok(Run {
-            results,
-            output: lines(&run.stdout),
+            results: measured?,
+            output: lines(&output.stdout),
             thrown: Vec::new(),
         })
     });
-    artifact_shadow::finish_oracle(shadow, &result);
+    artifact_shadow::finish_oracle(shadow, &result, &status, &completion);
     result
 }
 
@@ -2753,9 +2874,9 @@ fn without_colour(mut command: std::process::Command) -> std::process::Command {
     command
 }
 
-/// Node's results file, judged: the `done` line stripped, and its absence
-/// split by how node ended. Apart from `run_node` so the rules about a
-/// truncated file sit in one place.
+/// The compiled Wasm driver's results, with its existing termination accounting.
+/// The Node oracle uses `oracle_coverage::measured_rows` instead: it must deliver
+/// its complete recorded population, even when this compiled arm stopped early.
 fn node_results(
     engine: &str,
     results_path: &Utf8Path,

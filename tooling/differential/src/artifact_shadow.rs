@@ -130,13 +130,21 @@ pub(crate) fn oracle(dir: &Utf8Path, sources: &[nts_diagnostics::SourceFile]) ->
         files,
         absent,
         vec!["node".into(), "timeout".into(), "prlimit".into()],
-        json!({"timeout":super::TIMEOUT,"memory_mb":super::MEMORY_MB,"flags":["--experimental-transform-types","--import"]}),
+        json!({"cpu_limit_s":super::oracle_coverage::CPU_SECONDS,"wall_limit_ms":super::oracle_coverage::WALL_MILLIS,"memory_mb":super::MEMORY_MB,"flags":["--experimental-transform-types","--import"],"supervisor":include_str!("oracle_run.rs")}),
     )
 }
 
-pub(crate) fn finish_oracle(pending: Option<Pending>, run: &Result<super::Run>) {
+pub(crate) fn finish_oracle(
+    pending: Option<Pending>,
+    run: &Result<super::Run>,
+    status: &Value,
+    completion: &Value,
+) {
     if let Some(pending) = pending {
-        pending.finish(outcome(run));
+        let mut result = outcome(run);
+        result["oracle_status"] = status.clone();
+        result["oracle_completion"] = completion.clone();
+        pending.finish(result);
     }
 }
 
