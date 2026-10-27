@@ -895,37 +895,35 @@ export class ReadableStream<T> {
     return this.values(options);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    // Web IDL static operations are enumerable on the interface object, the same as member
-    // operations are on the prototype. `ReadableStream.from` is the only one here, and the
-    // prototype pass could not reach it because it walks `this.prototype`.
-    for (const key of Object.getOwnPropertyNames(this)) {
-      if (key === "length" || key === "name" || key === "prototype") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      if (typeof descriptor.value !== "function") continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ReadableStream",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; ReadableStream prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(ReadableStream.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStream.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStream.prototype, key, descriptor);
+}
+// Web IDL static operations are enumerable on the interface object, the same as member
+// operations are on the prototype. `ReadableStream.from` is the only one here, and the
+// prototype pass could not reach it because it walks `ReadableStream.prototype`.
+for (const key of Object.getOwnPropertyNames(ReadableStream)) {
+  if (key === "length" || key === "name" || key === "prototype") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStream, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  if (typeof descriptor.value !== "function") continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStream, key, descriptor);
+}
+Object.defineProperty(ReadableStream.prototype, Symbol.toStringTag, {
+  value: "ReadableStream",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 type AsyncIteratorRequest<T> =
   | {
@@ -939,33 +937,6 @@ type AsyncIteratorRequest<T> =
     };
 
 class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
-  static {
-    // Web IDL 3.7.11: the async iterator prototype object for an asynchronously iterable
-    // declaration inherits from %AsyncIteratorPrototype% and carries exactly `next` and
-    // `return`, each a writable, enumerable, configurable data property.
-    //
-    // A class prototype is none of those things. Its [[Prototype]] is `Object.prototype`, its
-    // methods are non-enumerable, and it has an own `constructor` -- so
-    // `Object.getOwnPropertyNames` answered `constructor,next,return` where the specification
-    // says `next,return`. `async-iterator.any.js` asserts all three and this is what it was
-    // catching; it is a real defect and not the realm mismatch the `headers-basic` iterator
-    // checks turn out to be.
-    //
-    // %AsyncIteratorPrototype% has no global binding, so this expression is the only way to
-    // reach it. Once the chain is right, `[Symbol.asyncIterator]` returning `this` is inherited
-    // from it as well.
-    const asyncIteratorPrototype = Object.getPrototypeOf(
-      Object.getPrototypeOf(async function* (): AsyncGenerator<never, void, unknown> {}).prototype,
-    ) as object;
-    Object.setPrototypeOf(this.prototype, asyncIteratorPrototype);
-    delete (this.prototype as { constructor?: unknown }).constructor;
-    for (const key of ["next", "return"]) {
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-  }
 
   #stream: ReadableStream<T> | null;
   #reader: ReadableStreamDefaultReader<T> | null;
@@ -1079,6 +1050,32 @@ class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
     this.#reader = null;
   }
 }
+// Web IDL 3.7.11: the async iterator prototype object for an asynchronously iterable
+// declaration inherits from %AsyncIteratorPrototype% and carries exactly `next` and
+// `return`, each a writable, enumerable, configurable data property.
+//
+// A class prototype is none of those things. Its [[Prototype]] is `Object.prototype`, its
+// methods are non-enumerable, and it has an own `constructor` -- so
+// `Object.getOwnPropertyNames` answered `constructor,next,return` where the specification
+// says `next,return`. `async-iterator.any.js` asserts all three and this is what it was
+// catching; it is a real defect and not the realm mismatch the `headers-basic` iterator
+// checks turn out to be.
+//
+// %AsyncIteratorPrototype% has no global binding, so this expression is the only way to
+// reach it. Once the chain is right, `[Symbol.asyncIterator]` returning `this` is inherited
+// from it as well.
+const asyncIteratorPrototype = Object.getPrototypeOf(
+  Object.getPrototypeOf(async function* (): AsyncGenerator<never, void, unknown> {}).prototype,
+) as object;
+Object.setPrototypeOf(ReadableStreamAsyncIterator.prototype, asyncIteratorPrototype);
+delete (ReadableStreamAsyncIterator.prototype as { constructor?: unknown }).constructor;
+for (const key of ["next", "return"]) {
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStreamAsyncIterator.prototype, key);
+  if (descriptor === undefined) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStreamAsyncIterator.prototype, key, descriptor);
+}
+
 
 class ReadableStreamIteratorSource<T> implements UnderlyingSource<T> {
   readonly #iterator: IteratorLike<T>;
@@ -1168,35 +1165,33 @@ export class ReadableStreamDefaultController<T> {
     this.#stream[kStreamFail](reason);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    // Web IDL: `undefined enqueue(optional any chunk)` -- one optional argument, so the
-    // required count is zero. A declared parameter reports one.
-    Object.defineProperty(this.prototype.enqueue, "length", {
-      value: 0,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ReadableStreamDefaultController",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(ReadableStreamDefaultController.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStreamDefaultController.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStreamDefaultController.prototype, key, descriptor);
+}
+// Web IDL: `undefined enqueue(optional any chunk)` -- one optional argument, so the
+// required count is zero. A declared parameter reports one.
+Object.defineProperty(ReadableStreamDefaultController.prototype.enqueue, "length", {
+  value: 0,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(ReadableStreamDefaultController.prototype, Symbol.toStringTag, {
+  value: "ReadableStreamDefaultController",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 type ByteViewKind =
   | "data"
@@ -1403,26 +1398,24 @@ export class ReadableStreamBYOBRequest {
     this.#view = null;
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ReadableStreamBYOBRequest",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; ReadableStreamBYOBRequest prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(ReadableStreamBYOBRequest.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStreamBYOBRequest.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStreamBYOBRequest.prototype, key, descriptor);
+}
+Object.defineProperty(ReadableStreamBYOBRequest.prototype, Symbol.toStringTag, {
+  value: "ReadableStreamBYOBRequest",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export class ReadableByteStreamController {
   readonly #state: ReadableByteStreamState;
@@ -1460,27 +1453,25 @@ export class ReadableByteStreamController {
     this.#state.stream[kStreamFail](reason);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ReadableByteStreamController",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(ReadableByteStreamController.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableByteStreamController.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableByteStreamController.prototype, key, descriptor);
+}
+Object.defineProperty(ReadableByteStreamController.prototype, Symbol.toStringTag, {
+  value: "ReadableByteStreamController",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export class ReadableStreamBYOBReader {
   #stream: ReadableStreamBYOBHost | null;
@@ -1580,26 +1571,24 @@ export class ReadableStreamBYOBReader {
     this.#closedCapability.reject(error);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ReadableStreamBYOBReader",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; ReadableStreamBYOBReader prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(ReadableStreamBYOBReader.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStreamBYOBReader.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStreamBYOBReader.prototype, key, descriptor);
+}
+Object.defineProperty(ReadableStreamBYOBReader.prototype, Symbol.toStringTag, {
+  value: "ReadableStreamBYOBReader",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 class ReadableByteStreamState {
   readonly stream: ReadableByteStreamHost;
@@ -2320,26 +2309,24 @@ export class ReadableStreamDefaultReader<T> {
     this.#closedCapability.reject(error);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ReadableStreamDefaultReader",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; ReadableStreamDefaultReader prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(ReadableStreamDefaultReader.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ReadableStreamDefaultReader.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ReadableStreamDefaultReader.prototype, key, descriptor);
+}
+Object.defineProperty(ReadableStreamDefaultReader.prototype, Symbol.toStringTag, {
+  value: "ReadableStreamDefaultReader",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 function startPipe<T>(
   source: ReadableStream<T>,

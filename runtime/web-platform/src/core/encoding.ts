@@ -117,48 +117,46 @@ export class TextEncoder {
     utf8Write(destination, input, 0, destination.length, progress);
     return progress;
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
-    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
-    // are non-enumerable, so every one of these was wrong. Safe to do here and not
-    // everywhere, because this class has no non-standard members left on its prototype --
-    // its internals are private identifiers. Doing it on a class that still exposes
-    // internals would enumerate those too, making one deviation worse to fix the other.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    // Web IDL: an operation's `length` is its required-argument count. The `...args` tuple
-    // that keeps an omitted argument distinguishable from an explicit `undefined` reports
-    // zero, so the two required arguments are declared.
-    Object.defineProperty(this.prototype.encodeInto, "length", {
-      value: 2,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "TextEncoder",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+// and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+// are non-enumerable, so every one of these was wrong. Safe to do here and not
+// everywhere, because TextEncoder class has no non-standard members left on its prototype --
+// its internals are private identifiers. Doing it on a class that still exposes
+// internals would enumerate those too, making one deviation worse to fix the other.
+for (const key of Object.getOwnPropertyNames(TextEncoder.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TextEncoder.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TextEncoder.prototype, key, descriptor);
+}
+// Web IDL: an operation's `length` is its required-argument count. The `...args` tuple
+// that keeps an omitted argument distinguishable from an explicit `undefined` reports
+// zero, so the two required arguments are declared.
+Object.defineProperty(TextEncoder.prototype.encodeInto, "length", {
+  value: 2,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+// Web IDL member attributes; TextEncoder prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(TextEncoder.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TextEncoder.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TextEncoder.prototype, key, descriptor);
+}
+Object.defineProperty(TextEncoder.prototype, Symbol.toStringTag, {
+  value: "TextEncoder",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export interface TextDecoderOptions {
   fatal?: boolean;
@@ -418,31 +416,29 @@ export class TextDecoder {
     pieces.push(ascii);
     return pieces.join("");
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
-    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
-    // are non-enumerable, so every one of these was wrong. Safe to do here and not
-    // everywhere, because this class has no non-standard members left on its prototype --
-    // its internals are private identifiers. Doing it on a class that still exposes
-    // internals would enumerate those too, making one deviation worse to fix the other.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "TextDecoder",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+// and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+// are non-enumerable, so every one of these was wrong. Safe to do here and not
+// everywhere, because TextDecoder class has no non-standard members left on its prototype --
+// its internals are private identifiers. Doing it on a class that still exposes
+// internals would enumerate those too, making one deviation worse to fix the other.
+for (const key of Object.getOwnPropertyNames(TextDecoder.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TextDecoder.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TextDecoder.prototype, key, descriptor);
+}
+Object.defineProperty(TextDecoder.prototype, Symbol.toStringTag, {
+  value: "TextDecoder",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export const utf8 = new TextEncoder();
 

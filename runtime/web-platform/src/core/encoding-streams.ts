@@ -91,28 +91,27 @@ export class TextDecoderStream {
     return this.#transform.writable;
   }
 
-  static {
-    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
-    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
-    // are non-enumerable, so every one of these was wrong. Safe to do here and not
-    // everywhere, because this class has no non-standard members left on its prototype --
-    // its internals are private identifiers. Doing it on a class that still exposes
-    // internals would enumerate those too, making one deviation worse to fix the other.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "TextDecoderStream",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+// and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+// are non-enumerable, so every one of these was wrong. Safe to do here and not
+// everywhere, because TextDecoderStream class has no non-standard members left on its prototype --
+// its internals are private identifiers. Doing it on a class that still exposes
+// internals would enumerate those too, making one deviation worse to fix the other.
+for (const key of Object.getOwnPropertyNames(TextDecoderStream.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TextDecoderStream.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TextDecoderStream.prototype, key, descriptor);
+}
+Object.defineProperty(TextDecoderStream.prototype, Symbol.toStringTag, {
+  value: "TextDecoderStream",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /**
  * A `TransformStream` whose chunks are UTF-8 bytes.
@@ -194,25 +193,24 @@ export class TextEncoderStream {
     return this.#transform.writable;
   }
 
-  static {
-    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
-    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
-    // are non-enumerable, so every one of these was wrong. Safe to do here and not
-    // everywhere, because this class has no non-standard members left on its prototype --
-    // its internals are private identifiers. Doing it on a class that still exposes
-    // internals would enumerate those too, making one deviation worse to fix the other.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "TextEncoderStream",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+// and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+// are non-enumerable, so every one of these was wrong. Safe to do here and not
+// everywhere, because TextEncoderStream class has no non-standard members left on its prototype --
+// its internals are private identifiers. Doing it on a class that still exposes
+// internals would enumerate those too, making one deviation worse to fix the other.
+for (const key of Object.getOwnPropertyNames(TextEncoderStream.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TextEncoderStream.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TextEncoderStream.prototype, key, descriptor);
+}
+Object.defineProperty(TextEncoderStream.prototype, Symbol.toStringTag, {
+  value: "TextEncoderStream",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

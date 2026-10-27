@@ -452,32 +452,30 @@ export class WebSocketStream {
     return this.#state === "closed";
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "WebSocketStream",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; WebSocketStream prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(WebSocketStream.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(WebSocketStream.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(WebSocketStream.prototype, key, descriptor);
+}
+Object.defineProperty(WebSocketStream.prototype, Symbol.toStringTag, {
+  value: "WebSocketStream",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(WebSocketStream, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 function readProtocols(input: Iterable<string> | null | undefined): string[] {
   if (input === undefined) return [];

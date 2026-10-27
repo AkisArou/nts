@@ -33,30 +33,28 @@ export class ByteLengthQueuingStrategy implements QueuingStrategy<
     return size;
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ByteLengthQueuingStrategy",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(ByteLengthQueuingStrategy.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ByteLengthQueuingStrategy.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ByteLengthQueuingStrategy.prototype, key, descriptor);
+}
+Object.defineProperty(ByteLengthQueuingStrategy.prototype, Symbol.toStringTag, {
+  value: "ByteLengthQueuingStrategy",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(ByteLengthQueuingStrategy, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

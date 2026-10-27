@@ -60,13 +60,21 @@ export class WebSocket extends EventTarget {
   static readonly CLOSING = 2;
   static readonly CLOSED = 3;
   // Web IDL puts constants on the interface object **and** the interface prototype object.
-  // Declared as instance fields these were neither: `WebSocket.prototype.CONNECTING` was
-  // undefined and every instance carried four own properties it should not have. Defined on
-  // the prototype in the static block below.
-  declare readonly CONNECTING: 0;
-  declare readonly OPEN: 1;
-  declare readonly CLOSING: 2;
-  declare readonly CLOSED: 3;
+  // These getters carry the values; the statements after the class redefine them as the
+  // exact Web IDL data properties (configurable, so replaceable). Where that reflective
+  // loop is cut (nts), the getters stay, so `this.OPEN` and `ws.OPEN` still answer 1 (R-1).
+  get CONNECTING(): 0 {
+    return 0;
+  }
+  get OPEN(): 1 {
+    return 1;
+  }
+  get CLOSING(): 2 {
+    return 2;
+  }
+  get CLOSED(): 3 {
+    return 3;
+  }
   readonly #url: string;
   private state = 0;
   private amount = 0;
@@ -348,48 +356,46 @@ export class WebSocket extends EventTarget {
     this.registered = false;
     this.context.unregisterWebSocket(this);
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL constants: on the prototype, non-writable, enumerable, non-configurable.
-    for (const [name, value] of [
-      ["CONNECTING", 0],
-      ["OPEN", 1],
-      ["CLOSING", 2],
-      ["CLOSED", 3],
-    ] as const) {
-      Object.defineProperty(this.prototype, name, {
-        value,
-        writable: false,
-        enumerable: true,
-        configurable: false,
-      });
-    }
-    // Web IDL member attributes. Safe now: the dispatch algorithm's grip on this object and
-    // the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
-    // only the interface's own members and its constants.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "WebSocket",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL constants: on the prototype, non-writable, enumerable, non-configurable.
+for (const [name, value] of [
+  ["CONNECTING", 0],
+  ["OPEN", 1],
+  ["CLOSING", 2],
+  ["CLOSED", 3],
+] as const) {
+  Object.defineProperty(WebSocket.prototype, name, {
+    value,
+    writable: false,
+    enumerable: true,
+    configurable: false,
+  });
+}
+// Web IDL member attributes. Safe now: the dispatch algorithm's grip on WebSocket object and
+// the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
+// only the interface's own members and its constants.
+for (const key of Object.getOwnPropertyNames(WebSocket.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(WebSocket.prototype, key, descriptor);
+}
+Object.defineProperty(WebSocket.prototype, Symbol.toStringTag, {
+  value: "WebSocket",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(WebSocket, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 function isSocketMessageEvent(event: Event): event is MessageEvent<WebSocketData> {
   if (!(event instanceof MessageEvent)) return false;

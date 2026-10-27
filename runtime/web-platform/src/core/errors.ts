@@ -182,26 +182,24 @@ export class DOMException extends Error {
         return 0;
     }
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "DOMException",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; DOMException prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(DOMException.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(DOMException.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(DOMException.prototype, key, descriptor);
+}
+Object.defineProperty(DOMException.prototype, Symbol.toStringTag, {
+  value: "DOMException",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export function abortError(): DOMException {
   return new DOMException("The operation was aborted", "AbortError");

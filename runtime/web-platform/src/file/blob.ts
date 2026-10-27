@@ -603,27 +603,25 @@ export class Blob {
     return new ReadableStream(source, { highWaterMark: 0 });
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "Blob",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(Blob.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(Blob.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(Blob.prototype, key, descriptor);
+}
+Object.defineProperty(Blob.prototype, Symbol.toStringTag, {
+  value: "Blob",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /** Construct a Blob over internal reopenable storage without copying it. */
 export function _createBlobFromExternalSource(source: BlobExternalSource, type = ""): Blob {
@@ -661,30 +659,28 @@ export class File extends Blob {
     return this.#modificationTime;
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "File",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 2,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(File.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(File.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(File.prototype, key, descriptor);
+}
+Object.defineProperty(File.prototype, Symbol.toStringTag, {
+  value: "File",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(File, "length", {
+  value: 2,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

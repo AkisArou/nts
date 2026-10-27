@@ -674,27 +674,25 @@ export class WritableStream<W = unknown> {
     return new WritableStreamDefaultWriter(this);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "WritableStream",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(WritableStream.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(WritableStream.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(WritableStream.prototype, key, descriptor);
+}
+Object.defineProperty(WritableStream.prototype, Symbol.toStringTag, {
+  value: "WritableStream",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /** @internal */
 export function isWritableStream<W>(value: unknown): value is WritableStream<W> {
@@ -792,27 +790,25 @@ export class WritableStreamDefaultWriter<W = unknown> {
     }
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "WritableStreamDefaultWriter",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(WritableStreamDefaultWriter.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(WritableStreamDefaultWriter.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(WritableStreamDefaultWriter.prototype, key, descriptor);
+}
+Object.defineProperty(WritableStreamDefaultWriter.prototype, Symbol.toStringTag, {
+  value: "WritableStreamDefaultWriter",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /** @internal */
 export function acquireWritableStreamDefaultWriter<W>(
@@ -954,24 +950,22 @@ export class WritableStreamDefaultController<W = unknown> {
     this.#stream.error(reason);
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "WritableStreamDefaultController",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(WritableStreamDefaultController.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(WritableStreamDefaultController.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(WritableStreamDefaultController.prototype, key, descriptor);
+}
+Object.defineProperty(WritableStreamDefaultController.prototype, Symbol.toStringTag, {
+  value: "WritableStreamDefaultController",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

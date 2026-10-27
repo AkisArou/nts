@@ -1,7 +1,7 @@
 // Web IDL surface shape: `@@toStringTag` and constructor arity.
 //
-// This file holds the rule. The classes hold the calls, and they are written inline in a
-// `static {}` block rather than through a helper exported from here -- see below for why.
+// This file holds the rule. The classes hold the calls, written inline as module-level
+// statements after each class rather than through a helper exported from here -- below.
 //
 // **The tag.** Web IDL requires every interface prototype object to carry `@@toStringTag`
 // as a *data* property whose value is the interface's identifier, non-writable,
@@ -17,14 +17,15 @@
 // argument from an explicit `undefined`. Web IDL requires that distinction too, and it
 // matters more than the arity, so the tuple stays and the arity is declared.
 //
-// **Why inline rather than a helper.** Both were written and measured. Passing a class or a
-// prototype to a function is `a class used as a value`, which this compiler does not lower
-// yet: the helper form cost two primary refusals per interface and the module-scope form
-// cost one, across thirty-five interfaces. The `static {}` block costs none, because `this`
-// inside it is not the class used as a value. Both forms are equally correct, so the choice
-// is between two spec-conformant spellings and not a way around a missing feature -- and the
-// static block is the better placement anyway, since the declaration sits with the class
-// instead of at the bottom of the file.
+// **Why inline rather than a helper.** Passing a class or a prototype to a function is
+// `a class used as a value`, which this compiler does not lower yet: the helper form costs
+// refusals per interface. The calls used to sit in a `static {}` block inside each class,
+// which the refusal count then favoured; the integrity audit later showed the cost that
+// hides: nts refuses the descriptor constructs, and inside a class declaration that cut
+// the whole class, functional static setup with it, while the same statements at module
+// scope are cut one by one and the class compiles. So the reflective statements now stand
+// after each class, in their original order (R-1); under node the point in module
+// evaluation is the same one the static block ran at.
 //
 // **What keeps thirty-five copies of the descriptor honest** is
 // `runtime/web-platform/test/webidl-surface.test.ts`, which asserts the exact

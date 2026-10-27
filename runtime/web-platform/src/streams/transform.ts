@@ -439,27 +439,25 @@ export class TransformStream<I = unknown, O = unknown> {
     return this.#state.writable;
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "TransformStream",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(TransformStream.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TransformStream.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TransformStream.prototype, key, descriptor);
+}
+Object.defineProperty(TransformStream.prototype, Symbol.toStringTag, {
+  value: "TransformStream",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export class TransformStreamDefaultController<O = unknown> {
   readonly [transformControllerBrand] = true;
@@ -490,32 +488,30 @@ export class TransformStreamDefaultController<O = unknown> {
     this.#state.terminate();
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
-    // reaches only the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    // Web IDL: `undefined enqueue(optional any chunk)` -- one optional argument, so the
-    // required count is zero. A declared parameter reports one.
-    Object.defineProperty(this.prototype.enqueue, "length", {
-      value: 0,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "TransformStreamDefaultController",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. This prototype carries no non-standard names, so the pass
+// reaches only the interface's own members.
+for (const key of Object.getOwnPropertyNames(TransformStreamDefaultController.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(TransformStreamDefaultController.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(TransformStreamDefaultController.prototype, key, descriptor);
+}
+// Web IDL: `undefined enqueue(optional any chunk)` -- one optional argument, so the
+// required count is zero. A declared parameter reports one.
+Object.defineProperty(TransformStreamDefaultController.prototype.enqueue, "length", {
+  value: 0,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(TransformStreamDefaultController.prototype, Symbol.toStringTag, {
+  value: "TransformStreamDefaultController",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

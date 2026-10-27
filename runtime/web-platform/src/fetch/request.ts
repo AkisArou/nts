@@ -576,28 +576,26 @@ export class Request extends Body {
     return result;
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; safe here because this prototype now carries no
-    // non-standard names -- the body's MIME hook is symbol-keyed and invisible to
-    // `getOwnPropertyNames`.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "Request",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; safe here because Request prototype now carries no
+// non-standard names -- the body's MIME hook is symbol-keyed and invisible to
+// `getOwnPropertyNames`.
+for (const key of Object.getOwnPropertyNames(Request.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(Request.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(Request.prototype, key, descriptor);
+}
+Object.defineProperty(Request.prototype, Symbol.toStringTag, {
+  value: "Request",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /**
  * @internal Construct a Request owned by an explicit context.

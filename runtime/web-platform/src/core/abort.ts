@@ -305,29 +305,27 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       else source.#releaseDependentSignal(this);
     }
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. Safe here now: the two members other modules need are
-    // symbol-keyed and `getOwnPropertyNames` does not report symbols. This walks
-    // `AbortSignal.prototype` only -- `EventTarget`'s inherited members still carry its own
-    // internals and are not touched.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "AbortSignal",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. Safe here now: the two members other modules need are
+// symbol-keyed and `getOwnPropertyNames` does not report symbols. This walks
+// `AbortSignal.prototype` only -- `EventTarget`'s inherited members still carry its own
+// internals and are not touched.
+for (const key of Object.getOwnPropertyNames(AbortSignal.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(AbortSignal.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(AbortSignal.prototype, key, descriptor);
+}
+Object.defineProperty(AbortSignal.prototype, Symbol.toStringTag, {
+  value: "AbortSignal",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export class AbortController {
   private readonly controllerSignal = createAbortSignal();
@@ -339,26 +337,24 @@ export class AbortController {
   abort(reason?: unknown): void {
     this.controllerSignal[abortSignalTrigger](reason);
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "AbortController",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; AbortController prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(AbortController.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(AbortController.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(AbortController.prototype, key, descriptor);
+}
+Object.defineProperty(AbortController.prototype, Symbol.toStringTag, {
+  value: "AbortController",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /** @internal Creates an un-aborted signal without exposing its illegal constructor. */
 export function createAbortSignal(): AbortSignal {

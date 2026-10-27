@@ -257,28 +257,26 @@ export class Response extends Body {
     return result;
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; safe here because this prototype now carries no
-    // non-standard names -- the body's MIME hook is symbol-keyed and invisible to
-    // `getOwnPropertyNames`.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "Response",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; safe here because Response prototype now carries no
+// non-standard names -- the body's MIME hook is symbol-keyed and invisible to
+// `getOwnPropertyNames`.
+for (const key of Object.getOwnPropertyNames(Response.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(Response.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(Response.prototype, key, descriptor);
+}
+Object.defineProperty(Response.prototype, Symbol.toStringTag, {
+  value: "Response",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /**
  * Construct a Response owned by an explicit context.

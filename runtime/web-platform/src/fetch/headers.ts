@@ -318,33 +318,31 @@ export class Headers {
     return this.entries();
   }
 
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
-    // and attribute accessors `{ enumerable: true, configurable: true }`. Safe here now that
-    // this prototype carries no non-standard names: the internals other modules need are
-    // symbol-keyed, and `getOwnPropertyNames` does not report symbols, so this loop cannot
-    // reach them.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "Headers",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 0,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+// and attribute accessors `{ enumerable: true, configurable: true }`. Safe here now that
+// Headers prototype carries no non-standard names: the internals other modules need are
+// symbol-keyed, and `getOwnPropertyNames` does not report symbols, so this loop cannot
+// reach them.
+for (const key of Object.getOwnPropertyNames(Headers.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(Headers.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(Headers.prototype, key, descriptor);
+}
+Object.defineProperty(Headers.prototype, Symbol.toStringTag, {
+  value: "Headers",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(Headers, "length", {
+  value: 0,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

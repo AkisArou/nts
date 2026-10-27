@@ -465,29 +465,27 @@ export class EventSource extends EventTarget {
     this.registered = false;
     this.context.unregisterEventSource(this);
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "EventSource",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; EventSource prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(EventSource.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(EventSource.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(EventSource.prototype, key, descriptor);
+}
+Object.defineProperty(EventSource.prototype, Symbol.toStringTag, {
+  value: "EventSource",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(EventSource, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+

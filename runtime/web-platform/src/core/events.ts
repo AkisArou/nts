@@ -244,51 +244,49 @@ export class Event {
   get [eventStoppedBeforeTarget](): boolean {
     return this.propagationStopped;
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL constants are data properties on the interface prototype object as well as on
-    // the interface object: non-writable, enumerable, **non-configurable**. Getters returning
-    // the static value read correctly and have the wrong shape -- the same accessor-for-data
-    // mistake as `@@toStringTag`, which this file already had.
-    for (const [name, value] of [
-      ["NONE", 0],
-      ["CAPTURING_PHASE", 1],
-      ["AT_TARGET", 2],
-      ["BUBBLING_PHASE", 3],
-    ] as const) {
-      Object.defineProperty(this.prototype, name, {
-        value,
-        writable: false,
-        enumerable: true,
-        configurable: false,
-      });
-    }
-    // Web IDL member attributes. Safe now: the dispatch algorithm's grip on this object and
-    // the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
-    // only the interface's own members and its constants.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "Event",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL constants are data properties on the interface prototype object as well as on
+// the interface object: non-writable, enumerable, **non-configurable**. Getters returning
+// the static value read correctly and have the wrong shape -- the same accessor-for-data
+// mistake as `@@toStringTag`, which this file already had.
+for (const [name, value] of [
+  ["NONE", 0],
+  ["CAPTURING_PHASE", 1],
+  ["AT_TARGET", 2],
+  ["BUBBLING_PHASE", 3],
+] as const) {
+  Object.defineProperty(Event.prototype, name, {
+    value,
+    writable: false,
+    enumerable: true,
+    configurable: false,
+  });
+}
+// Web IDL member attributes. Safe now: the dispatch algorithm's grip on Event object and
+// the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
+// only the interface's own members and its constants.
+for (const key of Object.getOwnPropertyNames(Event.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(Event.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(Event.prototype, key, descriptor);
+}
+Object.defineProperty(Event.prototype, Symbol.toStringTag, {
+  value: "Event",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(Event, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export interface CustomEventInit<T> extends EventInit {
   detail?: T | null;
@@ -334,32 +332,30 @@ export class CustomEvent<T = unknown> extends Event {
       this.customDetail = detail;
     }
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "CustomEvent",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; CustomEvent prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(CustomEvent.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(CustomEvent.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(CustomEvent.prototype, key, descriptor);
+}
+Object.defineProperty(CustomEvent.prototype, Symbol.toStringTag, {
+  value: "CustomEvent",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(CustomEvent, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export type EventListener = (this: EventTarget, event: Event) => void;
 
@@ -789,28 +785,26 @@ export class EventTarget {
     }
     this.listeners.length = write;
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes. Safe now: the members subclasses need are symbol-keyed and
-    // the two used only here are private identifiers, so `getOwnPropertyNames` reaches
-    // nothing but the interface's own members.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "EventTarget",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes. Safe now: the members subclasses need are symbol-keyed and
+// the two used only here are private identifiers, so `getOwnPropertyNames` reaches
+// nothing but the interface's own members.
+for (const key of Object.getOwnPropertyNames(EventTarget.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(EventTarget.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(EventTarget.prototype, key, descriptor);
+}
+Object.defineProperty(EventTarget.prototype, Symbol.toStringTag, {
+  value: "EventTarget",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 /**
  * @internal Register an `EventTarget` listener whose lifetime is bounded by a
@@ -1011,32 +1005,30 @@ export class MessageEvent<T = unknown> extends Event {
     this.messageSource = source;
     this.messagePorts = convertedPorts;
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "MessageEvent",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; MessageEvent prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(MessageEvent.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(MessageEvent.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(MessageEvent.prototype, key, descriptor);
+}
+Object.defineProperty(MessageEvent.prototype, Symbol.toStringTag, {
+  value: "MessageEvent",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(MessageEvent, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export interface CloseEventInit extends EventInit {
   code?: number;
@@ -1086,32 +1078,30 @@ export class CloseEvent extends Event {
   get wasClean(): boolean {
     return this.clean;
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "CloseEvent",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; CloseEvent prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(CloseEvent.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(CloseEvent.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(CloseEvent.prototype, key, descriptor);
+}
+Object.defineProperty(CloseEvent.prototype, Symbol.toStringTag, {
+  value: "CloseEvent",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(CloseEvent, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
 
 export interface ErrorEventInit extends EventInit {
   colno?: number;
@@ -1181,29 +1171,27 @@ export class ErrorEvent extends Event {
   get message(): string {
     return this.errorMessage;
   }
-
-  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-  // written inline rather than through a helper.
-  static {
-    // Web IDL member attributes; this prototype carries no non-standard names.
-    for (const key of Object.getOwnPropertyNames(this.prototype)) {
-      if (key === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
-      if (descriptor === undefined || descriptor.enumerable) continue;
-      descriptor.enumerable = true;
-      Object.defineProperty(this.prototype, key, descriptor);
-    }
-    Object.defineProperty(this.prototype, Symbol.toStringTag, {
-      value: "ErrorEvent",
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-    Object.defineProperty(this, "length", {
-      value: 1,
-      writable: false,
-      enumerable: false,
-      configurable: true,
-    });
-  }
 }
+// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+// written inline rather than through a helper.
+// Web IDL member attributes; ErrorEvent prototype carries no non-standard names.
+for (const key of Object.getOwnPropertyNames(ErrorEvent.prototype)) {
+  if (key === "constructor") continue;
+  const descriptor = Object.getOwnPropertyDescriptor(ErrorEvent.prototype, key);
+  if (descriptor === undefined || descriptor.enumerable) continue;
+  descriptor.enumerable = true;
+  Object.defineProperty(ErrorEvent.prototype, key, descriptor);
+}
+Object.defineProperty(ErrorEvent.prototype, Symbol.toStringTag, {
+  value: "ErrorEvent",
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+Object.defineProperty(ErrorEvent, "length", {
+  value: 1,
+  writable: false,
+  enumerable: false,
+  configurable: true,
+});
+
