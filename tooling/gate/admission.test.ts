@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -104,34 +105,47 @@ test("token pool: a running case finishes through a hold, and the next waits for
   }
 });
 
-test("conformance feed: the running case finishes, the next path waits, the last input closes at once", async () => {
+test("conformance feed: a delayed running case finishes, the next path waits, the last input closes at once", async () => {
   const { gb, admission } = scripted(20);
-  // A worker as attempt262-worker.ts is one: it reads a path, works, writes a row.
+  // A real pipe, with a response deliberately later than the old 700 ms
+  // readiness sleep. Scheduling latency must not decide whether it completed.
   const worker = spawn(
     process.execPath,
-    ["-e", `require("readline").createInterface({ input: process.stdin }).on("line", (p) => setTimeout(() => console.log(JSON.stringify({ path: p, at: Date.now() })), 300));`],
+    ["-e", `require("readline").createInterface({ input: process.stdin }).on("line", (p) => setTimeout(() => console.log(JSON.stringify({ path: p, at: Date.now() })), 1200));`],
     { stdio: ["pipe", "pipe", "inherit"] },
   );
   let exited = false;
-  const closed = new Promise<number | null>((resolve) => worker.on("exit", (code) => { exited = true; resolve(code); }));
+  worker.on("exit", () => { exited = true; });
+  const closed = once(worker, "close"); // Includes the last stdout row.
   const queue = createFeed(["a", "b"], admission, 20);
   const feed = () => queue.feed({ write: (p) => worker.stdin.write(`${p}\n`), end: () => worker.stdin.end(), exited: () => exited });
   const rows: { path: string; at: number }[] = [];
-  createInterface({ input: worker.stdout }).on("line", (line) => {
+  const output = createInterface({ input: worker.stdout });
+  output.on("line", (line) => {
     rows.push(JSON.parse(line));
     if (rows.length === 1) gb.value = 10; // the hold starts as the first case comes back
     void feed();
   });
-  await feed();
-  assert.equal(queue.dispatched, 1);
-  await sleep(700);
-  assert.equal(rows.length, 1, "the first case completed");
-  assert.equal(queue.dispatched, 1, "b was not dispatched below 12 GB");
-  const resumed = Date.now();
-  gb.value = 14;
-  assert.equal(await closed, 0, "the worker's input closed after b without waiting on memory");
-  assert.deepEqual(rows.map((r) => r.path), ["a", "b"]);
-  assert.ok(rows[1].at >= resumed, "b started only after the resume");
+  try {
+    const firstRow = once(output, "line");
+    await feed();
+    assert.equal(queue.dispatched, 1);
+    await Promise.race([firstRow, closed.then(() => { throw new Error("worker closed before its first row"); })]);
+    assert.equal(rows.length, 1, "the first case completed");
+    assert.equal(queue.dispatched, 1, "b was not dispatched below 12 GB");
+    const resumed = Date.now();
+    gb.value = 14;
+    assert.equal((await closed)[0], 0, "the worker's input closed after b without waiting on memory");
+    assert.deepEqual(rows.map((r) => r.path), ["a", "b"]);
+    assert.ok(rows[1].at >= resumed, "b started only after the resume");
+  } finally {
+    // Cancel a waiting feed before closing stdin, even when an assertion fails.
+    exited = true;
+    gb.value = 14;
+    worker.stdin.end();
+    await closed;
+    output.close();
+  }
 });
 
 test("conformance feed: a worker that exits while it waits is never written to", async () => {
