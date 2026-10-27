@@ -19,6 +19,7 @@ set -eu
 LC_ALL=C
 export LC_ALL
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+jar_date=$(cat "$root/jar-date.txt")
 jar_path=${1:-$root/nts-runtime.jar}
 # **The classes go to a directory of this run's own.** They went to
 # `$root/classes`, removed first and last: two builds at once -- the drift test
@@ -34,7 +35,7 @@ rm -f "$out/sources.txt"
   cd "$out"
   find . -name '*.class' | sed 's|^\./||' | sort > "$out.list"
   jar --create --file "$jar_path" \
-      --date=2020-01-01T00:00:00Z \
+      --date="$jar_date" \
       $(cat "$out.list")
   rm -f "$out.list"
 )

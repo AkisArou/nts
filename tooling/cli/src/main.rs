@@ -5632,6 +5632,20 @@ fn refuse_unpackaged(name: &str, kind: &str, target: &nts_build::config::Target)
 /// would look for a file that is not there, reporting a path nobody typed.
 const RUNTIME_JAR: &str = nts_codegen_jvm::RUNTIME_JAR_NAME;
 
+const REPRODUCIBLE_JAR_DATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../runtime/jvm/jar-date.txt"
+));
+
+/// Use the runtime jar's fixed entry date for every JVM archive we create.
+fn create_jar() -> std::process::Command {
+    let mut command = std::process::Command::new("jar");
+    command
+        .arg("--create")
+        .arg(format!("--date={}", REPRODUCIBLE_JAR_DATE.trim()));
+    command
+}
+
 /// Package the emitted classes into the jar the product names.
 ///
 /// **Two artifacts, not one, and the choice is deliberate.**
@@ -5655,8 +5669,8 @@ fn package_jvm(
     extra: &[String],
 ) -> Result<Utf8PathBuf> {
     let artifact = out.join(format!("{name}.jar"));
-    let mut command = std::process::Command::new("jar");
-    command.arg("--create").arg("--file").arg(artifact.as_str());
+    let mut command = create_jar();
+    command.arg("--file").arg(artifact.as_str());
     // **The root of the package the emitter wrote into, not the literal `nts`.**
     // This said `nts` and a product declaring `javaPackage: "com.acme.sdk"`
     // produced a jar with nothing in it: the classes were on disk under
@@ -5766,9 +5780,8 @@ fn package_aar(
     }
 
     let artifact = out.join(format!("{name}.aar"));
-    let mut command = std::process::Command::new("jar");
+    let mut command = create_jar();
     command
-        .arg("--create")
         .arg("--file")
         .arg(artifact.as_str())
         .arg("-C")
@@ -6211,9 +6224,8 @@ fn package_runnable_jar(
     // unpack above happens first and it would work today, which is exactly the
     // kind of ordering that survives until somebody reorders two lines.
     let assembled = staged.join("executable.jar");
-    let mut package = std::process::Command::new("jar");
+    let mut package = create_jar();
     package
-        .arg("--create")
         .arg("--file")
         .arg(assembled.as_str())
         .arg("--main-class")

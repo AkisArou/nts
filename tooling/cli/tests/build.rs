@@ -1946,6 +1946,61 @@ if (ASYNC) {
     }
 }
 
+/// Archive bytes are independent of paths and ZIP's two-second clock ticks.
+#[test]
+fn jvm_archives_have_reproducible_entry_dates() {
+    if !jdk() {
+        skip("a JDK");
+        return;
+    }
+    let config = r#"
+import { defineConfig, library, app, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    sdk: library.jvm({ entry: "./src/main.ts", release: 8 }),
+    tool: app({ kind: "executable", entry: "./src/main.ts", targets: [target.jvm({ release: 17 })] })
+  }
+});
+"#;
+    let projects = [
+        fixture("deterministic-jvm-left", config),
+        fixture("deterministic-jvm-longer/right", config),
+    ];
+    for (index, project) in projects.iter().enumerate() {
+        if index > 0 {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+        }
+        let zone = if index == 0 {
+            "UTC"
+        } else {
+            "Pacific/Kiritimati"
+        };
+        let run = output_of(
+            Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg("build")
+                .arg(project.join("tsconfig.json"))
+                .env("TZ", zone),
+        )
+        .expect("building jars in different time zones");
+        assert!(
+            run.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+    }
+    for artifact in ["sdk/java-8/sdk.jar", "tool/java-17/tool.jar"] {
+        let bytes = projects.each_ref().map(|project| {
+            std::fs::read(project.join(".nts/build").join(artifact)).expect("built jar")
+        });
+        assert!(!bytes[0].is_empty(), "empty {artifact}");
+        assert!(
+            bytes[0] == bytes[1],
+            "{artifact} depends on its path, build time or time zone"
+        );
+    }
+}
+
 /// Java a package contributes is compiled into the artifact, not left beside it.
 ///
 /// **The assertion is the archive, because the build directory lies.** `javac`

@@ -206,6 +206,11 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
     let runtime = scratch.join("jvm");
     copy_tree(&root.join("runtime/jvm/src"), &runtime.join("src"));
     std::fs::copy(root.join("runtime/jvm/build.sh"), runtime.join("build.sh")).unwrap();
+    std::fs::copy(
+        root.join("runtime/jvm/jar-date.txt"),
+        runtime.join("jar-date.txt"),
+    )
+    .unwrap();
 
     for sabotage in SABOTAGES {
         let source_path = runtime.join("src").join(sabotage.file);
