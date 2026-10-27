@@ -48,7 +48,7 @@ does less than its source says for a missing builtin.
 | `emit-c` | printed on stderr; exit 0 | printed on stderr; exit 0 | fatal where it leaves the C inconsistent |
 | `emit-llvm` | printed on stderr; exit 0 | printed on stderr; exit 0 | printed on stderr; with `--out`, fatal |
 | `emit-jvm` | printed on stderr; exit 0 | printed on stderr; exit 0 | printed as `declined:` on stderr; exit 0 |
-| `emit-wasm` | any error stops it; nothing is written | the same | the same |
+| `emit-wasm` | retired: always the notice below, exit 1, nothing written | the same | the same |
 | `check` | printed on stderr as `refused:`; the rest is compared | the same | the same |
 | `hir`, `refusals`, `stats` | listed in the output | listed | not reached |
 
@@ -64,11 +64,11 @@ That a lowering refusal does not stop `nts build` is an open question (L20 in
 | `--out <path>` | `build`, `emit-*`, `bind*` | where output goes; each command gives its default |
 | `--entry <name[,name]>` | `build`, `emit-*`, `hir`, `stats`, `regions`, `expect-ir` | the reachability roots, by function name; repeatable. Module evaluation stays a root |
 | `--product <name>` | the same | the product of `nts.config.ts` to use where it declares several |
-| `--rc` | the same, and `check` | count references (C and LLVM). The JVM and Wasm refuse it: `NTS2001`, memory belongs to the host's collector |
+| `--rc` | the same, and `check` | count references (C and LLVM). The JVM refuses it: `NTS2001`, memory belongs to the host's collector |
 | `--main` | `emit-*`, `hir`, `stats`, `regions`, `expect-ir` | the program is an executable: module evaluation is the root, and `emit-*` writes an entry point |
 | `--napi` | the same | the program is a Node addon: `emit-c` writes the Node-API wrapper |
 | `--glib` | the same | an executable driven by GLib's main loop instead of libuv's |
-| `--backend c\|llvm\|jvm\|wasm` | `hir`, `stats`, `regions` | whose preparation to show; default `c` |
+| `--backend c\|llvm\|jvm` | `hir`, `stats`, `regions` | whose preparation to show; default `c` |
 
 **Memory provider.** `nts build` counts references, because that is what
 ships; `--nogc` builds the never-freeing provider instead, which is for tests
@@ -114,11 +114,11 @@ Builds every product `nts.config.ts` declares, for every target each names.
 - **Reproducible.** The same source, compiler and options give the same bytes
   on every backend, whatever the project's directory, the working directory,
   `TMPDIR`, the time zone or the time of day: native objects, libraries and
-  executables, class files and jars, Wasm modules and their glue. Native tools
+  executables, class files and jars. Native tools
   run in the build directory with relative inputs, a bare absolute shared
   library keeps its path, jar entries carry one fixed date, and source names
   are relative to the project root. A test builds a fixture twice under
-  different conditions on all four backends and compares every artifact
+  different conditions on every backend and compares every artifact
   (`tooling/cli/tests/determinism.rs`).
 
 ### `nts check`
@@ -133,7 +133,7 @@ and compares the answers.
   integer, fractions and `NaN`; empty, wide and astral strings.
 - **How:** by bit pattern. The `Math` functions the specification leaves
   approximate match within 4 ULP ([numbers](../foundations/numbers.md#math)).
-- **Backend:** `NTS_BACKEND` (`c` by default, or `llvm`, `jvm`, `wasm`).
+- **Backend:** `NTS_BACKEND` (`c` by default, or `llvm`, `jvm`).
   References are counted under `--rc` or `NTS_RC=1`.
 - **Prints** the number of cases checked, up to 20 disagreements (`nts` and
   `node` lines), up to 5 aborts, and separate counts for cases the program
@@ -156,9 +156,8 @@ Emits several backends from one frontend capture and one raw lowering.
 
 | flag | effect |
 |---|---|
-| `--backends <list>` | required: a comma-separated subset of `c,llvm,jvm,wasm`, each once; also `--backends=<list>` |
+| `--backends <list>` | required: a comma-separated subset of `c,llvm,jvm`, each once; also `--backends=<list>` |
 | `--out <dir>` | required: each backend writes into `<out>/<backend>/`; also `--out=<dir>` |
-| `--host node\|browser` | the Wasm glue's host; also `--host=<host>` |
 | `--os <os>` | the LLVM backend's target OS |
 | `--text` | the JVM listing |
 
@@ -207,17 +206,12 @@ Renders the program as class files.
 
 ### `nts emit-wasm`
 
-Renders a WebAssembly module and its JavaScript glue.
-
-- **`--out <dir>`** is required. It receives `program.wasm`, the glue
-  (`program.mjs`, `program.instance.mjs`), the manifest `program.wasm.json` and
-  `program.origins.json`, which maps instructions back to sources.
-- **`--host node|browser`** chooses the glue; default `node`. Also
-  `--host=<host>`.
-- Prints the module's size and its exports and globals, and each export the
-  module does not publish, with why.
-- **Exit status:** 1, with nothing written, when preparation or the emitter
-  declines anything.
+Retired. Every invocation, whatever its arguments, prints `the Wasm backend
+is being rebuilt on Binaryen; see docs/targets/wasm.md` on stderr and exits
+1, writing nothing; `nts build --target wasm` fails the same way. Naming
+`wasm` as a backend anywhere else (`--backend`, `--backends`,
+`NTS_BACKEND`) is an unknown-backend error. The design the Binaryen backend
+will build is [Wasm](../targets/wasm.md).
 
 ## Bindings
 
@@ -356,7 +350,7 @@ the others report what the frontend captured either way.
 |---|---|---|
 | `NTS_CHECKERS` | every compiling command | the checker pool's size, 1 to 256 |
 | `NTS_NO_ACQUIRE` | every compiling command | `1` skips dependency acquisition |
-| `NTS_BACKEND` | `check` | the backend: `c`, `llvm`, `jvm` or `wasm`; an unknown name is an error |
+| `NTS_BACKEND` | `check` | the backend: `c`, `llvm` or `jvm`; an unknown name is an error |
 | `NTS_RC` | `check` | `1` counts references |
 | `NTS_NODE` | anything that reads `nts.config.ts` | the node that evaluates the config; default `node` |
 | `CC` | `build` | the C compiler command line, such as `zig cc`; default `clang`. ThinLTO only when it is clang |

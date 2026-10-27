@@ -124,7 +124,7 @@ fixtures, examples and blockers did not.
 Before you land, run the gate's own commands, not look-alikes:
 `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`;
 `cargo test --no-fail-fast` over every crate you touched *and the backend
-crates* (`-p nts-codegen-{c,llvm,jvm,wasm}`), with `NTS_CHECKERS=1`
+crates* (`-p nts-codegen-{c,llvm,jvm}`), with `NTS_CHECKERS=1`
 set to bound each test process's checker pool and memory; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
 you edited. A core change that passes core's tests has broken a backend's more
 than once. Frontend tests always run: an in-process capture failure is a
@@ -132,7 +132,7 @@ failure, never a missing executable to skip. Without `--no-fail-fast` cargo stop
 skips the rest. After committing, read `git show --name-status HEAD`: a new
 file left untracked is a commit nobody can build.
 
-`node tooling/gate/inner.ts` runs all of these, then agree on four backends
+`node tooling/gate/inner.ts` runs all of these, then agree on the three backends (C, LLVM and the JVM)
 against main's pinned compiler, building the tests in the incremental
 `nts-dev` profile: the workspace's tests built cold in 6 minutes and ran in 8
 on 2026-10-22, where the release build took about 40 beside a gate. The gate
@@ -167,9 +167,8 @@ then a guard once fixed), `tests/memory/`.
 - A change to the semantic schema (a field added, removed or retyped in
   `compiler/semantic-schema/src/schema.rs`) bumps `SCHEMA_VERSION` in the same
   commit, to the next number even if another lane bumped it today.
-- A new C runtime helper owes a row in four tables in four crates, and every
-  function the header declares one more in the Wasm catalog, each checked by a
-  test in *its* crate: follow the checklist at the top of the helper block in
+- A new C runtime helper owes a row in four tables in four crates, each checked
+  by a test in *its* crate: follow the checklist at the top of the helper block in
   `runtime/c/nts_runtime.h`. A forgotten row reds a lane that never calls the
   helper.
 - A new `OpKind` reaches every `_ =>` match over ops; audit them before the

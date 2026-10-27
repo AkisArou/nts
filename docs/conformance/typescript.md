@@ -77,7 +77,7 @@ Two things differ:
 ### Records and the gate
 
 A record is [`results/typescript/<backend>/cases.tsv`](../../results/typescript),
-one each for `c`, `llvm`, `jvm` and `wasm`: every case that ran, with what it
+one each for `c`, `llvm` and `jvm`: every case that ran, with what it
 did, in test262's record format ([records](test262.md#records)).
 
 The gate's `typescript-cases` step, a core step, holds each backend to its
@@ -94,8 +94,6 @@ with.
 # As the gate does, one backend at a time
 node tooling/census/conformance262.ts --suite typescript \
   --recorded results/typescript/c/cases.tsv
-node tooling/census/conformance262.ts --suite typescript --backend wasm \
-  --recorded results/typescript/wasm/cases.tsv
 
 # Every case, or one family
 node tooling/census/conformance262.ts --suite typescript

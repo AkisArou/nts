@@ -15,7 +15,7 @@ HIR lowering        typed SSA; every operation carries its source origin
 HIR preparation     specialization · simplification · escape and ownership
       │             analysis · reference counting where selected · verification
       ▼
-C (→ clang) · LLVM IR · JVM class files (→ DEX) · WasmGC · N-API addons
+C (→ clang) · LLVM IR · JVM class files (→ DEX) · N-API addons
 ```
 
 `compiler/frontend-tsrs` owns the native checker's sessions and borrowed views.
@@ -26,7 +26,7 @@ differently.
 **Memory is chosen per build, not per backend.** `hir::Provider` has three:
 
 - `NoGc` allocates and never frees: for testing, never shipped.
-- `HostGc` leaves the heap to a managed host: the JVM or ART collector, or WasmGC.
+- `HostGc` leaves the heap to a managed host: the JVM or ART collector.
 - `ReferenceCounting` counts, with a cycle collector behind it.
 
 `nts build` counts references on native targets unless told `--nogc`; the
@@ -43,7 +43,6 @@ Each backend has one runtime, linked or bundled only where a program uses it:
 
 - `runtime/c`: the C runtime that C and LLVM programs share, with the vendored libraries it builds on (zmij, ffc, simdjson and others: [foundations](foundations/README.md)).
 - `runtime/jvm`: the JVM runtime (`nts.rt`), in Java 8.
-- The Wasm backend generates its helpers inside each module and imports the rest from the JS host.
 - `runtime/ecmascript` and `runtime/web-platform`: builtins written in TypeScript, compiled with the program that uses them (Intl, Temporal, RegExp, the web APIs).
 - `runtime/node`: node's APIs, for native programs.
 - Platform runtimes beside them: `runtime/gtk`, `runtime/objc`, `runtime/winrt`, `runtime/chromium`, `runtime/react`.
@@ -51,7 +50,7 @@ Each backend has one runtime, linked or bundled only where a program uses it:
 ## Repository layout
 
 ```text
-compiler/       frontend-ts (capture), frontend-tsrs (safe native adapter), semantic-schema, core (HIR), codegen/{c,llvm,jvm,wasm,napi,common},
+compiler/       frontend-ts (capture), frontend-tsrs (safe native adapter), semantic-schema, core (HIR), codegen/{c,llvm,jvm,napi,common},
                 jvm-emitter (class files), diagnostics
 runtime/        c, jvm, node, ecmascript, web-platform, native, chromium, react, gtk, objc, winrt, sdk
 tooling/        cli (the `nts` binary), gate, conformance, census, bench, differential, suite, deps,

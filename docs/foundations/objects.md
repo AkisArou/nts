@@ -99,7 +99,8 @@ descriptors with identical rows share one table.
 
 The JVM writes the inferred `implements` into each class file and calls through
 `invokeinterface`; field families on the JVM are declined by name (`NTS4001`)
-until its stateful interfaces exist. Wasm dispatches through typed references.
+until its stateful interfaces exist. Wasm, by design, dispatches through
+typed references.
 The design, its measurements and its alternatives (Go's itabs, Java's
 itables) are in [the interfaces notebook](../records/notebooks/interfaces-by-shape.md).
 

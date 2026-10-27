@@ -151,12 +151,11 @@ which is a different number from the SDK it compiles against.
 | `target.node(o?)` | `node-api-<apiVersion>` | `linux` by default | `x86_64` | `c` | `apiVersion` (default `8`), `os`, `arch` |
 | `target.chromium(o?)` | `linux-gnu` | `linux` | `x86_64` | `c` | as `linux`; adds the DOM's declarations and its native half ([Chromium](../targets/chromium.md)) |
 
-- **Architectures** are `x86_64`, `aarch64` and `armv7`. There is no `wasm32`:
-  no target produces Wasm, so Wasm is reached through
-  [`nts emit-wasm`](cli.md#nts-emit-wasm), not a config (S-1 in
+- **Architectures** are `x86_64`, `aarch64` and `armv7`. There is no
+  `wasm32` and no Wasm target: the Wasm backend is being rebuilt on Binaryen
+  and builds nothing today ([Wasm](../targets/wasm.md); S-1 in
   [open questions](../open-questions.md)).
-- **Backends** a target names are `c`, `llvm` and `jvm`. The compiler's fourth
-  backend, Wasm, is experimental and outside the gated set.
+- **Backends** a target names are `c`, `llvm` and `jvm`.
 - **`cpu`:** an x86-64 target builds for x86-64-v3 (AVX2, BMI2, FMA) unless it
   says `cpu: "baseline"`; the program stops with a sentence on an older CPU
   ([numbers](../foundations/numbers.md#how-native-code-is-built)).
@@ -284,7 +283,7 @@ SDK and set of inputs**, by the platform's binder, and kept in a shared store,
 ## Not in the config
 
 - **Memory management.** Shipped native programs count references; the JVM
-  and Wasm use their host's collector. Nothing in a config chooses otherwise.
+  uses its host's collector. Nothing in a config chooses otherwise.
 - **Providers and Intl's locales.** Choosing a builtin's provider per product
   (`providers`), and the locales Intl carries, are designed in
   [builtins](../foundations/builtins.md#profiles), not built.

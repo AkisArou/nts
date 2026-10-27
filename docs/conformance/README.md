@@ -40,5 +40,5 @@ programs compared with node, refusals, recorded outcomes and memory cases.
 
 - Upstream code (node's tests, test262, React) is kept as upstream wrote it,
   and the gap is reported ([log](../records/notebooks/decisions-log.md#team-and-process)).
-- test262 runs on every backend, the JVM and Wasm included
-  ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
+- test262 runs on every built backend, the JVM included; Wasm rejoins when
+  its Binaryen backend exists.

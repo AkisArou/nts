@@ -80,8 +80,8 @@ included, is register [L14](../open-questions.md#1-language-and-compiler).
 A raising copy exists only where the compiler can see which function a call
 reaches. Where it cannot, the throw is not carried to the handler: it ends the
 program as an uncaught error, where node would catch it. These are silent wrong
-answers, recorded as outcomes; the first is confirmed on C, LLVM, the JVM and
-Wasm:
+answers, recorded as outcomes; the first is confirmed on C, LLVM and
+the JVM:
 
 | The call inside the `try` | Recorded as |
 |---|---|
@@ -109,9 +109,7 @@ nts: uncaught Error: boom
 The line names the class and the message of an error object, or prints a
 thrown string, number, boolean, `null` or `undefined` as itself. Output the
 program wrote before the throw is kept. Node also prints the throwing source
-line and the stack; nts has neither (below). On Wasm an uncaught throw is not
-reported yet:
-the run ends with status 1 and a decline (NTS5001). A promise rejection that no
+line and the stack; nts has neither (below). A promise rejection that no
 handler takes by the end of its turn is reported the same way, naming an error
 object's class without its message (`nts: uncaught RangeError`;
 [async.md](async.md#unhandled-rejections)). The report format is

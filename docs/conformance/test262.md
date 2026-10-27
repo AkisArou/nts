@@ -84,7 +84,7 @@ units evaluated in one realm". They are never concatenated into a function or
 a CommonJS wrapper, and none imports another.
 
 The program is built by the backend's own command with `--main` (`emit-c`,
-`emit-llvm`, `emit-jvm`, or `emit-wasm --host node`), linked where the backend
+`emit-llvm`, or `emit-jvm`), linked where the backend
 links, and run. A run ends with exit status 0, or with
 `nts: uncaught <Class>: <message>`.
 
@@ -187,7 +187,7 @@ not attempted.
 ## Records
 
 A record is `results/test262/<backend>/<slice>.tsv`, one per backend (`c`,
-`llvm`, `jvm`, `wasm`) and slice (`language`, `builtins`, `annexb`, `staging`,
+`llvm`, `jvm`) and slice (`language`, `builtins`, `annexb`, `staging`,
 `harness`). It holds every case that ran, one line each: the path, `pass` or
 `fail`, and for a fail its uncaught line. Refused and unsupported cases are
 not recorded: they move with every compiler change, and the rankings are
@@ -218,7 +218,7 @@ All of these are core steps, which every landing runs.
 | `test262-cases` | C, `test/language`: its record, a floor on its pass count and a ceiling on its accepted negatives |
 | `test262-builtins-cases` | C, `test/built-ins`: the same, with its own floor and ceiling |
 | `test262-rest-cases` | C, `test/annexB`, `test/staging` and `test/harness`: each with its own record, floor and ceiling |
-| `test262-llvm`, `test262-jvm`, `test262-wasm` | that backend's five records, each held to itself; the record is the ratchet, so there is no floor |
+| `test262-llvm`, `test262-jvm` | that backend's five records, each held to itself; the record is the ratchet, so there is no floor |
 
 The floors and ceilings are variables in `tooling/gate/all.sh`. A pass count
 above its floor, or accepted negatives below their ceiling, prints a note to
@@ -290,8 +290,8 @@ or variant.
   ([log](../records/notebooks/decisions-log.md#test262-09-29-10-02)).
 - Module tests are in the lane, each run once as module code
   ([log](../records/notebooks/decisions-log.md#test262-09-29-10-02)).
-- test262 runs on every backend, the JVM and Wasm included
-  ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
+- test262 runs on every built backend, the JVM included; Wasm rejoins when
+  its Binaryen backend exists.
 - The records keep gating, and no new test262 family starts until the
   foundations are solid
   ([log](../records/notebooks/decisions-log.md#priorities-and-order)).

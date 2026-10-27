@@ -25,12 +25,13 @@ one page that changes as work goes; the designs it builds are in
   and measure:
   - **compiler:** the core and lowering;
   - **runtime:** `runtime/c`, allocation and benchmarks;
-  - **runtime2:** the CLI and the JVM packaging;
+  - **runtime2:** the JVM and the gate's telemetry;
   - **tsrs:** the frontend and the gate tooling;
-  - **fixtures:** recorded wrong answers;
-  - **helper:** documentation and repository upkeep, with no gate runs.
+  - **helper:** fixtures, documentation, the TypeScript runtimes and the
+    Are We Fast Yet ports.
 
-  The JVM and Wasm lanes are paused.
+  The JVM is maintained while its new work waits for phase 4; the direct Wasm
+  backend is retired.
 - **The machine:** one shared 32 GB box. At most two heavy jobs run at once,
   CPUs 4–5 are kept for measurement, and every build checks the disk floor
   first ([`../AGENTS.md`](../AGENTS.md)).
@@ -80,7 +81,7 @@ Benchmarks run through every phase.
       on `main`;* optimistic landing waits for three shadow batches that agree
       with their trains, then for the holds, bisection and brake.
 6. **Deterministic builds:** the same source and compiler give the same bytes
-   on every backend, held by a test over all four ([cli](reference/cli.md#nts-build)). *Done.*
+   on every backend, held by a test over each of them ([cli](reference/cli.md#nts-build)). *Done.*
 7. **The documentation** as specification pages, with the notebooks in
    [`records/`](records). *Done.*
 8. **The register's wrong answers** recorded as fixtures: decorators dropped,
@@ -131,7 +132,7 @@ The designs and their build orders are in [`foundations/`](foundations).
 
 ## Phase 3: conformance-driven development
 
-When it resumes, there are **four suites, on all four backends:**
+When it resumes, there are **four suites, on every backend:**
 
 | suite | checks | oracle |
 |---|---|---|
@@ -158,7 +159,7 @@ When it resumes, there are **four suites, on all four backends:**
 | the core gate per landing, the wide steps in the full run | built |
 | `inner.ts`, the gate's own commands before review | built |
 | the full run (`tooling/census/full.ts`) | built |
-| test262 records on C, LLVM, the JVM and Wasm | built |
+| test262 records on C, LLVM and the JVM | built |
 | the TypeScript conformance suite, with records per backend | built |
 | `emit --backends`, and choosing the cases a change touches (`--touching`) | partly built |
 | a persistent cache of frontend results | none: the frontend captures every request |

@@ -1,7 +1,8 @@
 # Memory management (native)
 
 **Status:** decided (M1–M5 below); the new analysis is not built yet. This
-page covers C and LLVM; the JVM and Wasm use their host's garbage collector.
+page covers C and LLVM; the JVM uses its host's garbage collector, as
+Wasm's design does.
 
 How nts decides where every object lives and when its memory comes back, so
 that compiled TypeScript allocates less, frees faster and stays smaller than

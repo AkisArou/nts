@@ -185,7 +185,8 @@ behind these flags are in the
 
 The JVM computes in `int`, `long` and `double`, with BigInt to 128 bits and the
 same stop past it; its number-to-text formatter is a Grisu2 port, and a port of
-zmij is decided. Wasm computes in `i32`, `i64` and `f64`, holds a bigint as one
+zmij is decided. Wasm, by design, computes in `i32`, `i64` and `f64` and
+holds a bigint as one
 `v128` and stops past 128 bits, and gives erased small integers `i31`.
 [The JVM and Wasm](jvm-and-wasm.md) has each backend's state and proposals,
 including `Math` on the JVM (J3).

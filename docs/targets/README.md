@@ -18,7 +18,7 @@ and builtins. Each environment has a page of its own, listed at the end.
 | **[Chromium](chromium.md)** (electron-like) | C, LLVM | = · Oilpan, V8 and nts heaps · ○ cycles across heaps not collected | `StringView` in, copied out | ● Blink's DOM through `nts:dom` · no `node:*` | = | = · ◐ host Intl | = | ● Blink's loop, no libuv | ● Linux, opt-in, Chromium 154, not gated |
 | **[JVM](jvm.md)** (desktop) | JVM | ● the JVM's collector | ● `java.lang.String` · ◐ destination passing | ● `runtime/jvm` (Java 8) | ● typed `stringify` · ○ `parse` | ● JDK tables, wrong against node · ◐ own tables (D4) · ○ Intl: the TS over ICU4J exists, unreachable | ● `String.hashCode`, floodable · ○ J2 | ● own promise queue | ● gated |
 | **[Android](jvm.md#android)** | JVM, DEX | ● ART's collector | = JVM | = JVM · Android provider, API 29+ | = JVM | = JVM · ICU4J bundled | = JVM | = JVM | ● APK and AAR build; compiled cases run on ART by hand, not gated |
-| **[Wasm in a JS host](wasm.md)** (node, browsers) | Wasm | ● WasmGC | ● the host's strings, JS String Builtins | ● helpers plus host imports · ◐ host Intl, RegExp | ● typed `stringify` · ○ `parse` | ● the host's, zero bytes | ● FNV-1a 32-bit · ◐ keyed | ● own queue per export, host timers | ● gated on node; browser by hand |
+| **[Wasm in a JS host](wasm.md)** (node, browsers) | Wasm (Binaryen) | ◐ WasmGC | ◐ the host's strings, JS String Builtins | ◐ helpers plus host imports · ◐ host Intl, RegExp | ◐ typed `stringify` · ○ `parse` | ◐ the host's, zero bytes | ◐ FNV-1a 32-bit · ◐ keyed | ◐ own queue per export, host timers | ○ being rebuilt on Binaryen; nothing built ([Wasm](wasm.md)) |
 | **[Wasm standalone, WASI](wasm.md#standalone-and-wasi)** | Wasm | ◐ WasmGC, Wasmtime first | ◐ GC UTF-16 arrays | ◐ nts's own | ◐ as hosted | ◐ own tables in data segments · ◐ no Intl (D6) | ◐ keyed | ○ WASI 0.2 or 0.3 | ○ nothing built |
 
 ## Gaps every environment shares
@@ -30,8 +30,8 @@ and builtins. Each environment has a page of its own, listed at the end.
 - **RegExp** has no engine on any backend. Decided: compile-time matchers plus
   the TypeScript interpreter in `runtime/ecmascript`, and the host's on JS
   hosts and in Chromium.
-- **Holes in arrays of numbers** read as 0 on C, a recorded wrong answer, and
-  are refused on Wasm. The proposed fix is X1; the rule is register
+- **Holes in arrays of numbers** read as 0 on C, a recorded wrong answer.
+  The proposed fix is X1; the rule is register
   [L4](../open-questions.md#1-language-and-compiler).
 - **Map hashing** is unseeded everywhere; [hashing](../foundations/hashing.md)
   has the design.
@@ -59,7 +59,7 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
 
 ### ECMAScript
 
-| | Native | Node addon | Chromium | JVM | Wasm, JS host | Wasm standalone |
+| | Native | Node addon | Chromium | JVM | Wasm, JS host (Binaryen design) | Wasm standalone |
 |---|---|---|---|---|---|---|
 | Object, Function, Array, Symbol, Map, Set | C | = | = | J | W | ◐ |
 | String | C · `normalize`, `localeCompare`, locale case R | = | = | J | H and W | ◐ |
@@ -80,7 +80,7 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
 
 ### Web platform
 
-| | Native | Node addon | Chromium | JVM | Wasm, JS host | Wasm standalone |
+| | Native | Node addon | Chromium | JVM | Wasm, JS host (Binaryen design) | Wasm standalone |
 |---|---|---|---|---|---|---|
 | console (strings only) | C | C | C (stdout, not DevTools) | J | W | ◐ |
 | timers | C on the platform's loop | node's loop | B | J | W, host timers | ○ |
@@ -134,7 +134,8 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
   [log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)).
 - Native (C and LLVM) comes first; the JVM and Wasm are designed after it
   ([log](../records/notebooks/decisions-log.md#priorities-and-order)).
-- test262 runs on every backend, the JVM and Wasm included
+- test262 runs on every built backend, the JVM included; Wasm rejoins when
+  its Binaryen backend exists
   ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
 - Apple and Windows programs may stay unrun at a landing whose only refusals
   are their platform skips

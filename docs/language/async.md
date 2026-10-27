@@ -11,7 +11,7 @@ targets themselves are in [targets/](../targets/README.md).
 | Layer | Who owns it | How many |
 |---|---|---|
 | `async`/`await` and generators | the compiler | one lowering, shared by every backend |
-| promise semantics, microtasks and the checkpoint | the runtime | three implementations, one contract: the C runtime (for C and LLVM), the JVM's (`nts.rt.NtsPromise`), and one generated into each Wasm module |
+| promise semantics, microtasks and the checkpoint | the runtime | two implementations built, one contract: the C runtime (for C and LLVM) and the JVM's (`nts.rt.NtsPromise`); a third is designed to be generated into each Wasm module |
 | the loop, timers and I/O completions | the host | one per environment (table below) |
 
 Promise ordering is specified and observable, so it is never handed to a
@@ -132,7 +132,7 @@ microtask queue.
 | Chromium (opt-in, Linux x86-64) | Blink's; nts uses Blink's microtask queue | Blink's, through `nts:dom` |
 | a Node addon | none of nts's: the addon installs no host, so a timer the program posts stops it by name ("before a host was installed"); `runtime/node`'s own modules use node's timers | none ([node addons](../targets/node-addon.md)) |
 | the JVM | the program's own thread runs the runtime's queue and timer heap (`NtsEnv`) | the runtime's, on a virtual clock in the default environment |
-| Wasm | the JavaScript host's | the host's `setTimeout` and `setInterval` |
+| Wasm (Binaryen design) | the JavaScript host's | the host's `setTimeout` and `setInterval` |
 
 `nts check` links a deterministic test host instead, with virtual time and no
 I/O, so promise ordering is reproducible.
@@ -140,22 +140,23 @@ I/O, so promise ordering is reproducible.
 On the JVM, the default environment (the one a runnable jar uses) advances a
 virtual clock: a timer fires when nothing else is runnable, in deadline order,
 without waiting out its delay as node would. A promise does not cross a Node addon's boundary
-(register [I-4](../open-questions.md#5-interop-and-hosts)), and on Wasm a
-promise an export returns becomes a JavaScript promise, whose reactions run on
-the host's queue (register [C-5](../open-questions.md#4-concurrency-and-async)).
+(register [I-4](../open-questions.md#5-interop-and-hosts)), and on Wasm, by
+design, a promise an export returns becomes a JavaScript promise, whose
+reactions run on the host's queue (register
+[C-5](../open-questions.md#4-concurrency-and-async)).
 
 ## Timers
 
 `setTimeout`, `setInterval`, `clearTimeout` and `clearInterval` are provided on
-C, LLVM, the JVM and Wasm.
+C, LLVM and the JVM, and designed for Wasm.
 
 - **The delay**, on native targets and the JVM, is truncated to whole
   milliseconds, with `NaN` or a negative read as 0 and a cap at 2^53, by one
   rule in the runtime (`nts_delay`) rather than in each host. There is no
   floor of 1 ms, so `setTimeout(a, 1); setTimeout(b, 0)` runs `b` first, where
   node runs `a` first (register
-  [C-6](../open-questions.md#4-concurrency-and-async)). Wasm hands the delay to
-  the JavaScript host, and Chromium applies HTML's rule.
+  [C-6](../open-questions.md#4-concurrency-and-async)). Wasm, by design, hands the delay
+  to the JavaScript host, and Chromium applies HTML's rule.
 - **Equal deadlines** fire in the order the timers were created.
 - **Refused:** a timer that forwards arguments to its callback
   (`setTimeout(f, 10, x)`), a callback that is not a function, a timer id that
@@ -170,7 +171,8 @@ A promise rejected with no handler is a candidate; at the end of the outermost
 checkpoint, every candidate still unhandled ends the program as an uncaught
 error. On C, LLVM and the JVM the line is `nts: uncaught RangeError` for an
 error object (its class, without the message) or the thrown value itself, and
-the exit status is 1. On Wasm the reason is thrown to the JavaScript host.
+the exit status is 1. On Wasm, by design, the reason is thrown to the
+JavaScript host.
 
 ## Threads
 

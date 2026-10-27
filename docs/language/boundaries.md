@@ -32,7 +32,8 @@ layout, fixed at compile time: a header, then the fields at offsets the
 compiler chose. In the native runtime the header holds the type's descriptor,
 a word the memory provider owns, flags and a length. The descriptor holds the
 size, which offsets hold references, the method table and the type's name. The
-JVM and Wasm keep the same model as one class or one struct per type.
+The JVM keeps the same model as one class per type, and Wasm's design as
+one struct per type.
 
 There is no prototype pointer and no property map, so reading a property of a
 known type is a load at a known offset. What that rules out, a typed program

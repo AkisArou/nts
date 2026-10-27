@@ -10,7 +10,7 @@ are listed in [`tooling/conformance/README.md`](../../tooling/conformance/README
 ## Scope
 
 - `node:*` is for native targets only, for now, and never for a Chromium
-  renderer. The JVM and Wasm refuse it.
+  renderer. The JVM refuses it.
 - No target provides it to a program yet. Each module compiles on its own, as
   the Node addon its tests load; a program's own `import "node:…"` does not
   resolve to `runtime/node`.

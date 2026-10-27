@@ -1,9 +1,10 @@
 # Wasm
 
-TypeScript compiled to WebAssembly: one WasmGC backend with two profiles, a
-JS-hosted one for browsers and node, which is built, and a standalone one for
-JS-free engines and WASI, which is designed and not built. For anyone
-shipping a Wasm module or working on the backend. The open foundations
+TypeScript compiled to WebAssembly: one WasmGC backend, built through
+Binaryen, with two profiles: a JS-hosted one for browsers and node, and a
+standalone one for JS-free engines and WASI. Both are designed; neither is
+built. The direct backend that built the JS-hosted profile is retired, so nts
+builds no Wasm today. For anyone working on the Binaryen backend. The open foundations
 (weak references, strings, JSON, the engine) are on
 [JVM and Wasm](../foundations/jvm-and-wasm.md).
 
@@ -11,7 +12,7 @@ shipping a Wasm module or working on the backend. The open foundations
 
 | profile | runs in | strings | boundary | state |
 |---|---|---|---|---|
-| **JS-hosted** | browsers (the first priority), node and Bun | the host's strings, through the JS String Builtins | generated ES-module glue; DOM and Web API bindings | built for node and the browser; the DOM is not bound |
+| **JS-hosted** | browsers (the first priority), node and Bun | the host's strings, through the JS String Builtins | generated ES-module glue; DOM and Web API bindings | designed; the retired direct backend built it for node and the browser, without the DOM |
 | **standalone** | a qualified WasmGC engine, Wasmtime first | GC-owned UTF-16 arrays | explicit host imports | designed, not built |
 | **WASI** | the standalone core with WIT adapters | WIT strings at the boundary | the canonical ABI, linear memory only at the WIT boundary | designed, not built |
 
@@ -20,15 +21,20 @@ the profile is resolved once, when the build is composed, and never discovered
 inside an operation. A capability the engine lacks stays visible; nothing
 silently falls back to another heap or to JavaScript.
 
-## Building a module
+## Today
+
+`nts emit-wasm` and `nts build --target wasm` exit with "the Wasm backend is
+being rebuilt on Binaryen; see docs/targets/wasm.md". The retired direct
+backend, its tests, its browser runner and its comparison benchmarks (C++ to
+WASI, AssemblyScript) are kept at `refs/archive/wasm/direct-backend`, with
+their catalogue row in `tooling/lanes/archive.tsv`. The rest of this page is
+the design the Binaryen backend is built to.
+
+## A module and its glue
 
 There is no Wasm target or product in `nts.config.ts` (register
-[S-1](../open-questions.md#6-bindings-products-toolchains-dependencies)), so
-`nts build` builds none. `nts emit-wasm` writes a module and its glue:
-
-```sh
-nts emit-wasm . --out out --host browser     # or --host node, the default
-```
+[S-1](../open-questions.md#6-bindings-products-toolchains-dependencies)). A
+module is written with its glue, as the retired backend wrote it:
 
 | file | what it is |
 |---|---|
@@ -88,6 +94,8 @@ for Wasm. Values the program imports are proposal W5.
 
 ## Inside the module
 
+As the retired backend built it, and as the Binaryen backend is designed:
+
 - **Objects, arrays and closures** are WasmGC structs and arrays, in one
   recursive type group; there is no linear memory. Every function, import,
   global and helper exists only if the program asks for it, so a scalar
@@ -114,32 +122,28 @@ for Wasm. Values the program imports are proposal W5.
   ([async](../language/async.md#the-event-loop-on-each-target)).
 - **Exceptions:** an uncaught throw leaves the module as the thrown JavaScript
   value, through `WebAssembly.JSTag`; a compiled object leaves as a named
-  refusal carrying its class's name and message. A whole program run by
-  `tooling/wasm/run-program.ts` ends as a C program does: status 0 when every
-  job and timer has run, or 1 after `nts: uncaught <Class>: <message>`.
+  refusal carrying its class's name and message. A whole program ends as a C program does: status 0 when every job and timer
+  has run, or 1 after `nts: uncaught <Class>: <message>`.
 
 ## Emission
 
-- **Built:** lowering to a thin symbolic IR, encoded directly with
-  `wasm-encoder` and validated with `wasmparser`.
-- **Decided, not adopted:** the compiler lowers prepared HIR straight to
-  Binaryen IR, and Binaryen optimizes the module and writes it. Binaryen is
-  pinned and kept behind a small adapter; the pin must construct `try_table`
-  and `throw_ref` through its C API (W7). Running `wasm-opt` over the current
-  output is a measuring tool, not a second pipeline, and the direct encoder is
-  replaced, not kept beside Binaryen (register
+- **Decided:** the compiler lowers prepared HIR straight to Binaryen IR, and
+  Binaryen optimizes the module and writes it. Binaryen is pinned and kept
+  behind a small adapter; the pin must construct `try_table` and `throw_ref`
+  through its C API (W7) (register
   [D-2](../open-questions.md#6-bindings-products-toolchains-dependencies)).
+- **Retired:** the direct encoder, which lowered to a thin symbolic IR, encoded
+  it with `wasm-encoder` and validated it with `wasmparser`.
 - **Not chosen:** Emscripten, or LLVM to linear memory, as the foundation. LLVM
   stays a candidate only for narrow numeric and bulk kernels that pass simple
   values or spans and cross no managed ownership.
 
 ## Running in the browser
 
-`tooling/wasm/browser/run.mjs <script>` runs a check script in headless
-Chromium as node would run it, and `NTS_WASM_BROWSER=1 cargo test -p
-nts-codegen-wasm` runs every execution test on the browser glue. The first
-product milestone is browser applications with DOM and JS integration; the DOM
-is not bound (registers
+The first product milestone is browser applications with DOM and JS
+integration. The retired backend's headless-Chromium runner and its browser
+test mode are in the archive for the Binaryen backend to start from; the DOM
+was never bound (registers
 [G17](../open-questions.md#2-builtins-and-globals),
 [I-8](../open-questions.md#5-interop-and-hosts)).
 
@@ -179,7 +183,10 @@ relied on.
   [log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)).
 - No Intl on standalone Wasm for now (D6,
   [log](../records/notebooks/decisions-log.md#unicode-10-27)).
-- test262 runs on every backend, Wasm included
+- test262 runs on every backend, Wasm included once the Binaryen backend
+  exists ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
+- The direct backend is retired: removed from the tree, the workspace and the
+  gate, and archived, rather than kept unbuilt
   ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
 - Native comes first; Wasm is designed after it
   ([log](../records/notebooks/decisions-log.md#priorities-and-order)).

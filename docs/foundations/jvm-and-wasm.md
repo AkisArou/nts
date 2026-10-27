@@ -11,7 +11,9 @@ The backends' own pages hold the detail: [Wasm](../targets/wasm.md), and
 ## Where they stand
 
 **Built** works today; *decided* is settled but not built; open has no
-decision yet.
+decision yet. In the Wasm columns, **built** entries are evidence from the
+retired direct backend for the Binaryen design that replaces it, not
+something on main ([Wasm](../targets/wasm.md)).
 
 | | JVM (desktop, Android) | Wasm, JS-hosted (node, browsers) | Wasm, standalone and WASI |
 |---|---|---|---|
@@ -26,8 +28,8 @@ decision yet.
 | **Map and Set** | **built:** `NtsTable`, insertion-ordered; string hash `String.hashCode` × constant, floodable | **built:** a WasmGC table; 32-bit FNV-1a, unseeded, recomputed every lookup; *decided:* the shared keyed definition | *decided:* the shared keyed definition |
 | **async** | **built:** nts's own promise queue (`NtsPromise`, `NtsEnv`) | **built:** nts's own queue, drained at each export; timers through the host | open: the WASI version (0.2 or 0.3, which adds async) |
 | **host interop** | **built:** `nts bind` from class files, `java:` imports, TypeScript called from Java; a Java exception reaching a `catch`: open. Class openness: open. Emitted classes admit Java subclasses, and nts's closed-world direct calls bypass a Java override; one policy for openness and devirtualisation is needed (default-closed classes, with explicit Java-extension declarations, is the candidate) | **built:** generated ES-module glue; JS objects, functions, symbols and BigInts at the boundary: open | open: WIT, including lone surrogates |
-| **emission** | **built:** class files for Java 8, no `invokedynamic` | **built:** a direct encoder; *decided:* lower to Binaryen IR and let Binaryen optimize and write the module | as hosted |
-| **status** | `jvm` 748/748; test262 language 4255/4333; 2398/2398 classes verify; Android APK and AAR build, `dex` 852/852 | `wasm` 748/748 on node; test262 language 4255/4333; the browser checked by hand | nothing built |
+| **emission** | **built:** class files for Java 8, no `invokedynamic` | *decided:* lower to Binaryen IR and let Binaryen optimize and write the module | as hosted |
+| **status** | `jvm` 748/748; test262 language 4255/4333; 2398/2398 classes verify; Android APK and AAR build, `dex` 852/852 | the direct backend is retired and archived; nothing built ([Wasm](../targets/wasm.md)) | nothing built |
 
 ## Proposed decisions
 
@@ -47,7 +49,7 @@ Each is a recommendation; the user approves or changes it.
 | W6 | **The standalone engine is Wasmtime first,** with reclamation tests (cycles included) before any program is promised to run. WIT strings replace lone surrogates with U+FFFD, as `TextEncoder` does. | A standalone program's memory is only as good as the engine's collector. Research first: whether Wasmtime's collector reclaims cycles. |
 | W7 | **The Binaryen pin** is the first release whose C API constructs `try_table` and `throw_ref`, with WasmGC and imported strings. | The Binaryen decision stands; only the version is open. |
 | W8 | **JSON on Wasm:** typed `JSON.parse(text) as T` is the parser the compiler generates per type, as on native, reading the text once copied into a GC `i16` array (SIMD where the engine has it). Untyped `parse` on a JS host is research's choice between the host's `JSON.parse` plus conversion, and the same generated parser. | Native's simdjson cannot link into WasmGC, since it needs linear memory, so no external library fits. Research first: whether the host's parse, plus converting its objects, beats parsing inside Wasm. |
-| X1 | **Holes in arrays of numbers, every backend:** a reserved NaN bit pattern marks a hole, as V8's holey double arrays do. Stores into an array that may have holes canonicalize NaN, and reads check only where the compiler cannot prove the slot was written. | Native C reads a hole as 0, a recorded wrong answer (`tests/outcomes/a-hole-in-an-array-of-numbers-reads-as-zero`), and Wasm refuses those reads instead. One representation fixes both. Research first: V8's technique and its cost. |
+| X1 | **Holes in arrays of numbers, every backend:** a reserved NaN bit pattern marks a hole, as V8's holey double arrays do. Stores into an array that may have holes canonicalize NaN, and reads check only where the compiler cannot prove the slot was written. | Native C reads a hole as 0, a recorded wrong answer (`tests/outcomes/a-hole-in-an-array-of-numbers-reads-as-zero`), One representation fixes both. Research first: V8's technique and its cost. |
 
 ## Research
 
@@ -60,6 +62,7 @@ before they are decided.
   standalone profiles. The compiler hands its code to Binaryen, which
   optimizes it, and linear memory is only for buffers and kernels
   ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
-- **test262 runs on every backend,** the JVM and Wasm included.
+- **test262 runs on every built backend,** the JVM included; Wasm rejoins
+  when its Binaryen backend exists.
 - **W3:** `stringref` is rejected. **W4:** erased values keep i31 for small
   integers ([log](../records/notebooks/decisions-log.md#team-and-process)).

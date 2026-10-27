@@ -34,7 +34,8 @@ adds a checked fact; it does not change what an operator computes.
 
 Conversions give node's answer, digit for digit, because each is the
 specification's algorithm rather than a C library's. On native targets and
-the JVM nts's runtime implements them; on Wasm the JavaScript host does. How
+the JVM nts's runtime implements them; on Wasm, by design, the JavaScript
+host does. How
 is [foundations/numbers.md](../foundations/numbers.md#number-and-text).
 
 | Conversion | The answer |
@@ -54,7 +55,8 @@ For the approximated functions (`sin`, `exp`, `log`, `pow` and their kin) the
 specification allows any close answer, and node's come from V8's port of
 fdlibm. Today native targets call the C library's `libm` and the JVM
 `java.lang.StrictMath`, so their answers can differ from node's in the last
-bits; Wasm calls the host's `Math`. Shipping V8's functions so that `Math`
+bits; Wasm, by design, calls the host's `Math`. Shipping V8's functions
+so that `Math`
 matches node bit for bit is decided, not built
 ([foundations/numbers.md](../foundations/numbers.md#math)).
 
