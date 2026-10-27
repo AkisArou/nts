@@ -33,6 +33,7 @@ fi
 if [ -n "\${LAND_TEST_CHECKERS:-}" ]; then
   test "$NTS_CHECKERS" = "1"
 fi
+printf '%s' "\${CARGO_PROFILE_DEV_DEBUG-unset}" > "$NTS_GATE_RUN_DIR/test-debug-mode"
 echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
@@ -127,6 +128,70 @@ async function until(what: string, ok: () => boolean): Promise<void> {
   }
   assert.fail(`timed out waiting for ${what}`);
 }
+
+test("a landing keeps its warm test cache and uses line-table debug information", async () => {
+  const s = scratch();
+  const tree = lane(s, "warm-tests", { "change": "one\n" });
+  const cache = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target/debug/build/generated/out");
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, "private.rs"), "generated cache content\n");
+  const result = await land(s, tree).done;
+  assert.equal(result.status, 0, result.out);
+  assert.equal(readFileSync(join(cache, "private.rs"), "utf8"), "generated cache content\n");
+  const runs = join(s.home, ".cache/nts-land/runs");
+  const run = readdirSync(runs)[0];
+  assert.equal(readFileSync(join(runs, run, "test-debug-mode"), "utf8"), "line-tables-only");
+});
+
+test("an oversized Cargo cache is cleaned whole and the train proceeds", async () => {
+  const s = scratch();
+  writeFileSync(join(s.root, "Cargo.toml"), "[workspace]\n");
+  run(s, s.root, ["add", "Cargo.toml"]);
+  run(s, s.root, ["commit", "-q", "-m", "Cargo workspace"]);
+  const tree = lane(s, "cache-limit", { "change": "one\n" });
+  const cache = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target/debug/build/generated/out");
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, "private.rs"), "obsolete generated output\n");
+  const target = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target");
+  mkdirSync(join(target, "debug/.fingerprint/old"), { recursive: true });
+  writeFileSync(join(target, "debug/.fingerprint/old/state"), "obsolete Cargo state\n");
+  mkdirSync(join(target, "release"));
+  writeFileSync(join(target, "release/nts"), "keep release\n");
+  assert.equal(existsSync(join(target, "CACHEDIR.TAG")), false);
+  const bin = join(s.home, "bin");
+  mkdirSync(bin);
+  // Exercise the real landing guard without allocating seventy GiB.
+  writeFileSync(join(bin, "du"), "#!/bin/sh\nprintf '73400320\\tcache\\n'\n");
+  chmodSync(join(bin, "du"), 0o755);
+  s.env.PATH = `${bin}:${s.env.PATH}`;
+  const result = await land(s, tree).done;
+  assert.equal(result.status, 0, result.out);
+  assert.match(result.out, /Cargo dev-profile clean removed 70.0 GiB/);
+  assert.equal(existsSync(join(target, "debug")), false);
+  assert.equal(readFileSync(join(target, "release/nts"), "utf8"), "keep release\n");
+  assert.match(readFileSync(join(target, "CACHEDIR.TAG"), "utf8"), /^Signature: 8a477f597d28d172789f06886806bc55\n/);
+  assert.equal(gates(s), 1, "the train runs after cleaning the obsolete profile");
+});
+
+test("low disk still refuses a train and keeps a warm profile", () => {
+  const s = scratch();
+  writeFileSync(join(s.root, "Cargo.toml"), "[workspace]\n");
+  run(s, s.root, ["add", "Cargo.toml"]);
+  run(s, s.root, ["commit", "-q", "-m", "Cargo workspace"]);
+  const tree = lane(s, "disk-floor", { "change": "one\n" });
+  const cache = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target/debug/keep");
+  mkdirSync(dirname(cache), { recursive: true });
+  writeFileSync(cache, "keep the warm profile\n");
+  // Replace the free-space observation without filling the shared disk. The
+  // preload must survive the lander's re-entry under its own flock.
+  const preload = join(s.home, "low-disk.ts");
+  writeFileSync(preload, `import fs from "node:fs";\nimport { syncBuiltinESMExports } from "node:module";\nconst actual = fs.statfsSync;\nfs.statfsSync = (...args) => ({ ...actual(...args), bavail: 1 });\nsyncBuiltinESMExports();\n`);
+  const result = spawnSync(process.execPath, [LAND, "HEAD"], { cwd: tree, env: { ...s.env, NODE_OPTIONS: `--import=${preload}` }, encoding: "utf8" });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /working space above the 40 GiB disk floor/);
+  assert.equal(readFileSync(cache, "utf8"), "keep the warm profile\n");
+  assert.equal(gates(s), 0);
+});
 
 test("missing gate environment refuses before queueing or waiting for a held lock", async () => {
   const s = scratch();

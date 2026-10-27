@@ -42,11 +42,12 @@
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
 import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
+import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_CACHE_MAX_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 
@@ -444,27 +445,38 @@ function status(fields: Record<string, unknown>): void {
 type Gated = { ok: true; run: string; note: string } | { ok: false; run: string; state: "red" | "unrun"; message: string; required?: RequiredChecks };
 
 /**
- * The gate's debug build gains the artifacts of every compiler version gated,
- * and cargo never deletes one: 69 GB on 2026-10-14, with the disk at 99%.
- * Nothing but a landing uses it and this one holds the lock, so past
- * DEBUG_TARGET_MAX_GB it is started over. Its cold build is minutes of the
- * `tests` step, beside an `interop` step that takes the whole gate.
+ * tests.mjs prunes obsolete test executables after PASS. Keep its current set:
+ * deleting the whole profile at 40 GiB discarded even one healthy 88 GiB run.
+ * The line-table profile measures 32.44 GiB. Past a larger safety bound,
+ * Cargo cleans the whole regenerable profile, including its build state.
  */
-const DEBUG_TARGET_MAX_GB = 40;
-function trimGateTarget(): void {
+function checkGateTarget(root: string): void {
+  // A stand-in/non-Cargo gate has no Rust build cache to admit.
+  if (!existsSync(join(root, "Cargo.toml"))) return;
   const debug = join(GATE_TARGET, "debug");
-  if (!existsSync(debug)) return;
-  const kb = Number(execFileSync("du", ["-xsk", debug], { encoding: "utf8" }).split("\t")[0]);
-  if (kb > DEBUG_TARGET_MAX_GB * 1024 * 1024) {
-    say(`the gate's debug build is ${Math.round(kb / 1048576)} GB, over ${DEBUG_TARGET_MAX_GB}: starting it over`);
-    rmSync(debug, { recursive: true, force: true });
+  const allocated = () => existsSync(debug)
+    ? Number(execFileSync("du", ["-xsk", debug], { encoding: "utf8" }).split("\t")[0]) * 1024
+    : 0;
+  let cacheBytes = allocated();
+  if (cacheBytes > TEST_CACHE_MAX_BYTES) {
+    say(`the gate's dev profile is ${(cacheBytes / 2 ** 30).toFixed(1)} GiB, over the 64 GiB safety bound; cleaning it with Cargo`);
+    const output = cleanDevProfile(root, GATE_TARGET);
+    if (output.trim()) say(output.trim());
+    const remaining = allocated();
+    say(`Cargo dev-profile clean removed ${((cacheBytes - remaining) / 2 ** 30).toFixed(1)} GiB`);
+    cacheBytes = remaining;
   }
+  let diskPath = GATE_TARGET;
+  while (!existsSync(diskPath)) diskPath = dirname(diskPath);
+  const disk = statfsSync(diskPath);
+  const problem = testBuildAdmissionProblem(cacheBytes, disk.bavail * disk.bsize);
+  if (problem) fail(problem);
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
 function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed): Gated {
   const short = landing.slice(0, 12);
-  trimGateTarget();
+  checkGateTarget(root);
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
   const setup = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], {
@@ -497,6 +509,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
       NTS_GATE_RUN_DIR: run,
       NTS_CHECKERS: "1",
       CARGO_INCREMENTAL: "0",
+      CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
     });
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);
     const affinity = launch.cpus === null ? launch.mechanism : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded; ${launch.mechanism}`;

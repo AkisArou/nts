@@ -77,6 +77,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTokenPool } from "./tokenpool.mjs";
 import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
+import { TEST_BUILD_DEBUG } from "./test-artifacts.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -403,6 +404,9 @@ function stepEnv(step, slots) {
   e.NTS_SUITE_BIN = pinned.suite ?? suiteBin;
   e.NTS_CHECKERS = "1";
   e.CARGO_TARGET_DIR = target;
+  // Match tests.mjs and the lander, including Cargo calls in frontend-tsrs.
+  e.CARGO_INCREMENTAL ??= "0";
+  e.CARGO_PROFILE_DEV_DEBUG ??= TEST_BUILD_DEBUG;
   // clippy checks the same tree in a profile nothing else builds, so its
   // artefacts live apart and it runs beside the release build and `cargo test`
   // instead of queueing on their lock. What it lints is unchanged.

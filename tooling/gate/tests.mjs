@@ -23,9 +23,9 @@
 // The verdict fails closed: the first pass must exit 0 (a compile error or a
 // failing doctest fails it), at least one binary must have been recorded, and
 // every replayed binary must exit 0. A binary that crashes or is killed fails.
-// Only then are obsolete test executables pruned. The official lander sets
-// CARGO_INCREMENTAL=0; match that setting in standalone runs to avoid building
-// a second variant before pruning. Fingerprints identify either variant, so
+// Only then are obsolete test executables pruned. The build defaults to the
+// lander's line-table debug information and CARGO_INCREMENTAL=0, avoiding a
+// second variant in standalone runs. Explicit standalone overrides still work;
 // old incremental/feature variants are reclaimed after a successful run too.
 
 import { spawn, spawnSync } from "node:child_process";
@@ -34,7 +34,7 @@ import { cpus, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
-import { pruneTestArtifacts } from "./test-artifacts.ts";
+import { pruneTestArtifacts, TEST_BUILD_DEBUG } from "./test-artifacts.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
@@ -66,7 +66,12 @@ chmodSync(recorder, 0o755);
 const started = Date.now();
 const first = spawnSync("cargo", ["test", "--workspace", "--no-fail-fast"], {
   cwd: ROOT,
-  env: { ...process.env, [runnerVar]: recorder },
+  env: {
+    ...process.env,
+    CARGO_INCREMENTAL: process.env.CARGO_INCREMENTAL ?? "0",
+    CARGO_PROFILE_DEV_DEBUG: process.env.CARGO_PROFILE_DEV_DEBUG ?? TEST_BUILD_DEBUG,
+    [runnerVar]: recorder,
+  },
   encoding: "utf8",
   maxBuffer: 1 << 28,
 });

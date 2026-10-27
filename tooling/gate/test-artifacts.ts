@@ -2,8 +2,37 @@
 // The caller owns the target for the whole build/replay/cleanup interval.
 // Fingerprints identify *test* targets; an executable bit alone also finds
 // build scripts, normal binaries and proc macros, which must stay untouched.
-import { lstatSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, lstatSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+
+export const TEST_BUILD_DEBUG = "line-tables-only";
+const GIB = 2 ** 30;
+// Measured with all 300 test binaries on 2026-10-27: 32.44 GiB including
+// Cargo state. Keep room for a new artifact set above the 40 GiB disk floor.
+export const TEST_BUILD_WORKING_BYTES = 33 * GIB;
+export const TEST_CACHE_MAX_BYTES = 64 * GIB;
+export const TEST_DISK_FLOOR_BYTES = 40 * GIB;
+
+/** Free disk must fund a replacement artifact set, even after a cache clean. */
+export function testBuildAdmissionProblem(cacheBytes: number, availableBytes: number): string | null {
+  const working = Math.max(TEST_BUILD_WORKING_BYTES, cacheBytes);
+  if (availableBytes < TEST_DISK_FLOOR_BYTES + working) {
+    return `only ${(availableBytes / GIB).toFixed(1)} GiB free: the test build needs ${(working / GIB).toFixed(1)} GiB working space above the 40 GiB disk floor (cache kept)`;
+  }
+  return null;
+}
+
+/** The caller holds the target's lock; Cargo removes the entire dev profile. */
+export function cleanDevProfile(root: string, target: string): string {
+  const tag = join(target, "CACHEDIR.TAG");
+  if (!existsSync(tag)) {
+    writeFileSync(tag, "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n", { flag: "wx" });
+  }
+  return execFileSync("cargo", ["clean", "--profile", "dev", "--target-dir", target], {
+    cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  });
+}
 
 function stat(path: string) {
   try { return lstatSync(path); } catch (e) {
