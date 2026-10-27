@@ -14,9 +14,9 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { Admission, createFeed, memAvailableGB } from "./admission.ts";
 import { createTokenPool } from "./tokenpool.mjs";
+import { waitFor } from "./test-wait.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** An admission reading `gb.value`, so a test moves memory by assignment. */
 function scripted(start: number) {
@@ -73,34 +73,45 @@ test("token pool: a running case finishes through a hold, and the next waits for
     claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,
     known: () => true,
   });
-  const recheck = setInterval(() => pool.grant(), 50);
   const addr = await pool.start();
   // Held-token state is cleared: inside the gate this test itself runs under a token.
   const env = { ...process.env, NTS_GATE_TOKENS: addr, NTS_GATE_STEP: "s", NTS_GATE_TOKEN_HELD: "" };
-  const run = (script: string) =>
-    new Promise<{ status: number | null; at: number }>((resolve) => {
-      const child = spawn(join(HERE, "token.sh"), ["sh", "-c", script], { env, stdio: "ignore" });
-      child.on("close", (status) => resolve({ status, at: Date.now() }));
-    });
+  const run = (script: string, delayStart = false) => {
+    const command=join(HERE, "token.sh");
+    // The first token request arrives after the old 300 ms assumption.
+    const args=delayStart ? ["-c", 'sleep 0.35; exec "$@"', "_", command, "sh", "-c", script] : ["sh", "-c", script];
+    const child = spawn(delayStart ? "sh" : command, args, { env, stdio: ["pipe", "pipe", "inherit"] });
+    let output = "";
+    child.stdout.on("data", chunk => { output += chunk; });
+    const done = new Promise<number | null>(resolve => child.on("close", resolve));
+    return { child, done, output: () => output };
+  };
+  const running = run("printf ready; read release", true);
+  let queued: ReturnType<typeof run> | undefined;
   try {
-    const running = run("sleep 1");
-    await sleep(300); // it holds its token now
+    await waitFor("the token holder's ready output", () => running.output() === "ready");
     gb.value = 10; // below 12: no new case may start
-    const t0 = Date.now();
-    const queued = run("true");
-    const first = await running;
-    assert.equal(first.status, 0, "the running case was not stopped by the hold");
-    await sleep(500);
+    queued = run("printf resumed");
+    await waitFor("the second token request", () => pool.waiting.length === 1);
+    running.child.stdin.end("release\n");
+    assert.equal(await running.done, 0, "the running case was not stopped by the hold");
+    await waitFor("the running token's release", () => pool.total === 0);
+    pool.grant();
     assert.equal(pool.total, 0, "nothing was granted below 12 GB");
+    assert.equal(queued.output(), "");
     gb.value = 13; // held: 13 is not enough
-    await sleep(400);
+    pool.grant();
     assert.equal(pool.total, 0, "13 GB does not resume a held pool");
+    assert.equal(pool.waiting.length, 1);
     gb.value = 14;
-    const second = await queued;
-    assert.equal(second.status, 0);
-    assert.ok(second.at - t0 >= 900, `the queued case waited for the resume (${second.at - t0} ms)`);
+    pool.grant();
+    assert.equal(await queued.done, 0);
+    assert.equal(queued.output(), "resumed");
   } finally {
-    clearInterval(recheck);
+    if (!running.child.stdin.writableEnded) running.child.stdin.end("release\n");
+    gb.value = 14; pool.grant();
+    await running.done;
+    if (queued) await queued.done;
     pool.close();
   }
 });
@@ -154,7 +165,6 @@ test("conformance feed: a worker that exits while it waits is never written to",
   let exited = false;
   const queue = createFeed(["a"], admission, 10);
   const pending = queue.feed({ write: (p) => writes.push(p), end: () => writes.push("<end>"), exited: () => exited });
-  await sleep(50);
   exited = true;
   gb.value = 20;
   await pending;
@@ -169,7 +179,6 @@ test("conformance feed: two workers waiting for the last path -- one gets it, th
   const queue = createFeed(["last"], admission, 10);
   const a = queue.feed({ write: (p) => one.push(p), end: () => one.push("<end>"), exited: () => false });
   const b = queue.feed({ write: (p) => two.push(p), end: () => two.push("<end>"), exited: () => false });
-  await sleep(30);
   gb.value = 20;
   await Promise.all([a, b]);
   assert.deepEqual([...one, ...two].sort(), ["<end>", "last"]);

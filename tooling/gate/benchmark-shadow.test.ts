@@ -1,5 +1,5 @@
+import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -8,7 +8,7 @@ import { test } from "node:test";
 
 const HERE = dirname(fileURLToPath(import.meta.url)), ROOT = resolve(HERE, "../..");
 
-test("benchmark shadows compare fresh JVM and imported-source oracle results without supplying verdicts", { timeout: 120_000 }, t => {
+test("benchmark shadows compare fresh JVM and imported-source oracle results without supplying verdicts", t => {
   const root = mkdtempSync(join(tmpdir(), "nts-benchmark-shadow-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
@@ -21,7 +21,7 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
   const cache = join(root, "cache");
   const run = (name: string) => {
     const directory = join(root, name), costs = join(directory, "costs"); mkdirSync(costs, { recursive: true });
-    const result = spawnSync(bin, ["check", config], { cwd: ROOT, encoding: "utf8", timeout: 60_000,
+    const result = spawnTest(bin, ["check", config], { cwd: ROOT, encoding: "utf8",
       env: { ...process.env, NTS_BACKEND: "jvm", NTS_CHECKERS: "1", NTS_GATE_STEP: "bench-agree",
         NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_SHADOW_DIR: cache,
         NTS_GATE_SHADOW_HELPER: join(HERE, "artifact-shadow.ts") } });

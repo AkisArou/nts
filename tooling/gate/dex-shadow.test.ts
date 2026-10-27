@@ -1,5 +1,5 @@
+import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -8,7 +8,7 @@ import { test } from "node:test";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-test("the two real identical Box artifacts match despite d8 warning origin paths", { timeout: 120_000 }, t => {
+test("the two real identical Box artifacts match despite d8 warning origin paths", t => {
   const root = mkdtempSync(join(tmpdir(), "nts-dex-shadow-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
@@ -16,7 +16,7 @@ test("the two real identical Box artifacts match despite d8 warning origin paths
   assert.ok(process.env.ANDROID_HOME, "this integration test requires the declared Android SDK capability");
   const cache = join(root, "cache"), costs = join(root, "costs"); mkdirSync(costs);
   const fixtures = ["a-decorator-option-needs-a-decorator", "a-fieldless-class-needs-no-define-option"];
-  const result = spawnSync("sh", ["tooling/android/dexes.sh", ...fixtures], { cwd: ROOT, encoding: "utf8", timeout: 110_000,
+  const result = spawnTest("sh", ["tooling/android/dexes.sh", ...fixtures], { cwd: ROOT, encoding: "utf8",
     env: { ...process.env, NTS_BIN: bin, NTS_CHECKERS: "1", NTS_GATE_JOBS: "1", NTS_ART_WORK: join(root, "work"),
       NTS_GATE_STEP: "dex", NTS_GATE_RUN_DIR: root, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_SHADOW_DIR: cache } });
   assert.equal(result.status, 0, result.stdout + result.stderr);

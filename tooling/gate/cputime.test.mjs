@@ -1,3 +1,4 @@
+import { waitFor } from "./test-wait.ts";
 // How compile-time.mjs reads perf, on outputs captured from this box.
 //
 //   node --test tooling/gate/cputime.test.mjs
@@ -60,14 +61,9 @@ test("counts are taken raw: the scaled ones cannot be undone", () => {
 
 /** Resolves once `pid` is stopped (state `T` in /proc), which `kill -STOP $$` makes it. */
 function stopped(pid) {
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const poll = setInterval(() => {
-      let state = "";
-      try { state = readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /s, "")[0]; } catch {}
-      if (state === "T") { clearInterval(poll); resolve(); }
-      else if (Date.now() - started > 10_000) { clearInterval(poll); reject(new Error(`${pid} never stopped (state ${state || "gone"})`)); }
-    }, 5);
+  return waitFor(`perf control ${pid} to stop`, () => {
+    try {return readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /s, "")[0] === "T";}
+    catch {throw new Error(`perf control ${pid} exited before its stop event`);}
   });
 }
 

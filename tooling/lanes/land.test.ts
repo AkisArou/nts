@@ -1,3 +1,4 @@
+import { spawnTest, waitFor } from "../gate/test-wait.ts";
 // land.ts against a scratch repository and a stand-in gate: the train.
 //
 //   node --test tooling/lanes/land.test.ts
@@ -8,7 +9,7 @@
 // lock is held while the landings queue, so whoever takes it next finds them
 // all waiting, as a lane does behind a half-hour gate.
 
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -87,7 +88,7 @@ function scratch(): Scratch {
 }
 
 function run(s: Scratch, cwd: string, args: string[]): string {
-  const r = spawnSync("git", args, { cwd, env: s.env, encoding: "utf8" });
+  const r = spawnTest("git", args, { cwd, env: s.env, encoding: "utf8" });
   assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
   return r.stdout.trim();
 }
@@ -217,7 +218,7 @@ test("a train waits for the gate resource without retaining the landing lock",as
   const resource=GateResource.tryAcquire(join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"))!;
   const pending=land(s,tree),queue=join(s.home,".cache/nts-land/queue");
   await until("it to queue",()=>existsSync(queue) && readdirSync(queue).length>0);
-  assert.equal(spawnSync("flock",["-n",join(s.home,".cache/nts-land.lock"),"true"]).status,0);
+  assert.equal(spawnTest("flock",["-n",join(s.home,".cache/nts-land.lock"),"true"]).status,0);
   assert.equal(gates(s),0);resource.close();
   const result=await pending.done;assert.equal(result.status,0,result.out);
 });
@@ -301,22 +302,14 @@ test("changed owed rules on main route a previously fast change through the gate
 test("a tree-only landing refuses an ancestor holding the landing lock", () => {
   const s = scratch(); fastGate(s);
   const tree = lane(s, "fast-outer-lock", { "docs/new.md": "doc\n" });
-  const result = spawnSync("flock", [join(s.home, ".cache/nts-land.lock"), process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8", timeout: 10000 });
+  const result = spawnTest("flock", [join(s.home, ".cache/nts-land.lock"), process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8",});
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /run land.ts bare/);
   assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
 });
 
-// A minute, not seconds: the gate runs this beside its heavy steps, where a
-// landing can take more than ten seconds to start and join the queue. Only a
-// real hang should fail here.
-async function until(what: string, ok: () => boolean): Promise<void> {
-  for (let i = 0; i < 1200; i++) {
-    if (ok()) return;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  assert.fail(`timed out waiting for ${what}`);
-}
+// Check the state itself; the common guard reports a hung fixture by name.
+const until = waitFor;
 
 test("a landing keeps its warm cache and uses one optimized line-table variant", async () => {
   const s = scratch();
@@ -377,7 +370,7 @@ test("low disk still refuses a train and keeps a warm profile", () => {
   // preload must survive the lander's re-entry under its own flock.
   const preload = join(s.home, "low-disk.ts");
   writeFileSync(preload, `import fs from "node:fs";\nimport { syncBuiltinESMExports } from "node:module";\nconst actual = fs.statfsSync;\nfs.statfsSync = (...args) => ({ ...actual(...args), bavail: 1 });\nsyncBuiltinESMExports();\n`);
-  const result = spawnSync(process.execPath, [LAND, "HEAD"], { cwd: tree, env: { ...s.env, NODE_OPTIONS: `--import=${preload}` }, encoding: "utf8" });
+  const result = spawnTest(process.execPath, [LAND, "HEAD"], { cwd: tree, env: { ...s.env, NODE_OPTIONS: `--import=${preload}` }, encoding: "utf8" });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /working space above the 40 GiB disk floor/);
   assert.equal(readFileSync(cache, "utf8"), "keep the warm profile\n");
@@ -393,10 +386,10 @@ test("missing gate environment refuses before queueing or waiting for a held loc
   s.env.ANDROID_HOME = "";
   const lock = join(s.home, ".cache/nts-land.lock");
   writeFileSync(lock, "");
-  const holder = spawn("flock", [lock, "sleep", "60"], { detached: true });
+  const holder = spawn("flock", [lock, process.execPath, "-e", "process.stdin.resume()"], { detached: true });
   try {
     await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
-    const result = spawnSync(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8", timeout: 30_000 });
+    const result = spawnTest(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8",});
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /ANDROID_HOME is missing; required by step dex/);
     assert.match(result.stderr, /node tooling\/lanes\/land-unit.ts/);
@@ -427,7 +420,7 @@ async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
   const lock = join(s.home, ".cache/nts-land.lock");
   writeFileSync(lock, "");
   // Its own process group: `sleep` inherits the lock from `flock`, so both go.
-  const holder = spawn("flock", [lock, "sleep", "60"], { detached: true });
+  const holder = spawn("flock", [lock, process.execPath, "-e", "process.stdin.resume()"], { detached: true });
   await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
   // One at a time, so the queue's order is the order given.
   const queue = join(s.home, ".cache/nts-land/queue");
@@ -441,7 +434,7 @@ async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
 }
 
 const gates = (s: Scratch) => (existsSync(s.gates) ? readFileSync(s.gates, "utf8").trim().split("\n").length : 0);
-const onMain = (s: Scratch, path: string) => spawnSync("git", ["cat-file", "-e", `main:${path}`], { cwd: s.root, env: s.env }).status === 0;
+const onMain = (s: Scratch, path: string) => spawnTest("git", ["cat-file", "-e", `main:${path}`], { cwd: s.root, env: s.env }).status === 0;
 
 test("native inputs link the upstream TypeScript corpus without an external compiler", () => {
   const s = scratch();
@@ -450,7 +443,7 @@ test("native inputs link the upstream TypeScript corpus without an external comp
   writeFileSync(join(corpus, "marker"), "upstream corpus\n");
   const a = lane(s, "native-inputs", { "pnpm-lock.yaml": "importers: {}\n" });
   for (const mode of ["lane", "gate"]) {
-    const prepared = spawnSync("sh", [new URL("./inputs.sh", import.meta.url).pathname, mode, s.root, a], { env: s.env, encoding: "utf8" });
+    const prepared = spawnTest("sh", [new URL("./inputs.sh", import.meta.url).pathname, mode, s.root, a], { env: s.env, encoding: "utf8" });
     assert.equal(prepared.status, 0, prepared.stderr);
     assert.equal(realpathSync(join(a, "third_party/typescript")), corpus);
   }
@@ -664,7 +657,7 @@ test("a landing lands the commit it was queued with, though its tree moves on wh
   const a = lane(s, "a", { "a.txt": "a\n" });
   const lock = join(s.home, ".cache/nts-land.lock");
   writeFileSync(lock, "");
-  const holder = spawn("flock", [lock, "sleep", "60"], { detached: true });
+  const holder = spawn("flock", [lock, process.execPath, "-e", "process.stdin.resume()"], { detached: true });
   await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
   const landing = land(s, a);
   const queue = join(s.home, ".cache/nts-land/queue");

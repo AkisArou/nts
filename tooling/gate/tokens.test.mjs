@@ -1,3 +1,4 @@
+import { waitFor } from "./test-wait.ts";
 // The gate's tokens, end to end: tokenpool.mjs's server with token.sh and
 // tokens.mjs as clients, the same code run.mjs uses.
 //
@@ -29,19 +30,19 @@ async function pool(n, opts = {}) {
   return p;
 }
 
-function run(cmd, args, env, input) {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+function run(cmd, args, env, input, holdInput = false) {
+  const child = spawn(cmd, args, { env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  const done = new Promise((resolve, reject) => {
+    child.on("error", reject);
     let out = "";
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (out += d));
-    if (input !== undefined) child.stdin.end(input); else child.stdin.end();
+    if (!holdInput) child.stdin.end(input);
     child.on("close", (status, signal) => resolve({ status, signal, out, pid: child.pid }));
-    resolve.child = child;
   });
+  return Object.assign(done, { child });
 }
 const tokenEnv = (p, step = "examples") => ({ NTS_GATE_TOKENS: p.addr, NTS_GATE_STEP: step, NTS_GATE_TOKEN_HELD: "" });
-const settle = () => new Promise((r) => setTimeout(r, 200));
 
 test("no more commands run at once than there are tokens, and every one runs", async () => {
   // Measured on the commands themselves, not on the server's count: a client
@@ -49,30 +50,39 @@ test("no more commands run at once than there are tokens, and every one runs", a
   // budget.
   const p = await pool(3);
   const dir = mkdtempSync(join(tmpdir(), "nts-tokens-"));
+  const script = `const fs=require('node:fs'),base=process.argv[1];
+fs.writeFileSync(base+'.start',String(process.hrtime.bigint()));
+process.stdin.resume();process.stdin.on('end',()=>{
+fs.writeFileSync(base+'.end',String(process.hrtime.bigint()));console.log('done '+process.argv[2]);});`;
   const runs = Array.from({ length: 10 }, (_, i) =>
-    run(TOKEN, ["sh", "-c", `date +%s%N > ${dir}/${i}.start; sleep 0.3; date +%s%N > ${dir}/${i}.end; echo done ${i}`], tokenEnv(p)));
+    run(TOKEN, [process.execPath, "-e", script, `${dir}/${i}`, String(i)], tokenEnv(p), undefined, true));
+  try {
+    await waitFor("three actual token holders and seven queued commands", () =>
+      runs.filter((_,i) => {try {readFileSync(`${dir}/${i}.start`);return true;}catch{return false;}}).length===3 && p.waiting.length===7);
+  } finally {for (const r of runs) r.child.stdin.end();}
   const results = await Promise.all(runs);
   for (const [i, r] of results.entries()) {
     assert.equal(r.status, 0);
     assert.equal(r.out.trim(), `done ${i}`);
   }
-  const spans = results.map((_, i) => [Number(readFileSync(`${dir}/${i}.start`, "utf8")), Number(readFileSync(`${dir}/${i}.end`, "utf8"))]);
+  const spans = results.map((_, i) => [BigInt(readFileSync(`${dir}/${i}.start`, "utf8")), BigInt(readFileSync(`${dir}/${i}.end`, "utf8"))]);
   const most = Math.max(...spans.map(([s]) => spans.filter(([a, b]) => a <= s && s < b).length));
   rmSync(dir, { recursive: true, force: true });
   assert.equal(most, 3);
   assert.equal(p.peakTotal(), 3);
-  await settle();
+  await waitFor("all token releases",()=>p.total===0);
   assert.equal(p.total, 0);
   p.close();
 });
 
 test("a token comes back when its holder is SIGKILLed", async () => {
   const p = await pool(1);
-  const child = spawn(TOKEN, ["sleep", "30"], { env: { ...process.env, ...tokenEnv(p) }, stdio: "ignore" });
-  while (p.total === 0) await settle();
+  const child = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...process.env, ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
+  const closed=new Promise(resolve=>child.on("close",resolve));
+  await waitFor("the token holder to be granted",()=>p.total===1);
   child.kill("SIGKILL");
-  await new Promise((r) => child.on("close", r));
-  await settle();
+  await closed;
+  await waitFor("all token releases",()=>p.total===0);
   assert.equal(p.total, 0);
   const r = await run(TOKEN, ["true"], tokenEnv(p));
   assert.equal(r.status, 0);
@@ -104,10 +114,10 @@ test("outside a gate the command runs; inside one, a runner that is gone is an e
 
 test("a runner that accepted and then died: every waiting worker exits non-zero, none runs", async () => {
   const p = await pool(1);
-  const holder = spawn(TOKEN, ["sleep", "30"], { env: { ...process.env, ...tokenEnv(p) }, stdio: "ignore" });
-  while (p.total === 0) await settle();
+  const holder = spawn(TOKEN, [process.execPath, "-e", "process.stdin.resume()"], { env: { ...process.env, ...tokenEnv(p) }, stdio: ["pipe", "ignore", "ignore"] });
+  await waitFor("the token holder to be granted",()=>p.total===1);
   const waiting = Array.from({ length: 3 }, () => run(TOKEN, ["sh", "-c", "echo ran"], tokenEnv(p)));
-  while (p.waiting.length < 3) await settle();
+  await waitFor("three queued token clients",()=>p.waiting.length===3);
   // The runner goes: its server and every connection it held.
   p.close();
   for (const w of p.waiting) w.sock.destroy();
@@ -133,11 +143,11 @@ test("the highest claim among waiting steps gets the freed token", async () => {
   });
   const holder = spawn(TOKEN, ["sh", "-c", "read _"], { env: { ...process.env, ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
   const released = new Promise((r) => holder.on("close", r));
-  while (p.total === 0) await settle();
+  await waitFor("the token holder to be granted",()=>p.total===1);
   const a = run(TOKEN, ["sh", "-c", "echo short"], tokenEnv(p, "short")).then((r) => assert.equal(r.status, 0));
-  await settle();
+  await waitFor("the short client to queue",()=>p.waiting.length===1);
   const b = run(TOKEN, ["sh", "-c", "echo long"], tokenEnv(p, "long")).then((r) => assert.equal(r.status, 0));
-  while (p.waiting.length < 2) await settle();
+  await waitFor("both competing token requests",()=>p.waiting.length===2);
   holder.stdin.end();
   await Promise.all([a, b, released]);
   assert.deepEqual(order, ["long", "short"]);
@@ -149,15 +159,18 @@ test("tokens.mjs holds a token around fn and returns it", async () => {
   process.env.NTS_GATE_TOKENS = p.addr;
   process.env.NTS_GATE_STEP = "integrity";
   delete process.env.NTS_GATE_TOKEN_HELD;
-  const { withToken } = await import(`./tokens.mjs?${Date.now()}`);
+  const { withToken } = await import(`./tokens.mjs?callback-hold-test`);
   let inside = 0, most = 0;
-  await Promise.all(Array.from({ length: 6 }, () => withToken(async () => {
+  const release=Promise.withResolvers();
+  const running=Promise.all(Array.from({ length: 6 }, () => withToken(async () => {
     inside += 1; most = Math.max(most, inside);
-    await new Promise((r) => setTimeout(r, 100));
+    await release.promise;
     inside -= 1;
   })));
+  try {await waitFor("two admitted callbacks and four queued requests",()=>inside===2 && p.waiting.length===4);}
+  finally {release.resolve();await running;}
   assert.equal(most, 2);
-  await settle();
+  await waitFor("all token releases",()=>p.total===0);
   assert.equal(p.total, 0);
   assert.equal(await withToken(async () => 42), 42);
   // What the tool spawns inherits the guard, so it does not ask again.
@@ -174,7 +187,7 @@ test("a failed telemetry observer changes neither grants nor the command's exit"
     const r = await run(TOKEN, ["sh", "-c", "printf original; exit 7"], tokenEnv(p));
     assert.equal(r.status, 7);
     assert.equal(r.out, "original");
-    await settle();
+    await waitFor("the token release",()=>p.total===0);
     assert.equal(p.total, 0);
   } finally { p.close(); }
 });

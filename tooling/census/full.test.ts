@@ -1,5 +1,6 @@
+import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -12,9 +13,9 @@ mkdirSync(scratch, { recursive: true });
 test("missing full-run environment refuses before history, lock or setup", t => {
   const home = mkdtempSync(join(scratch, "missing-env-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
-  const result = spawnSync(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
+  const result = spawnTest(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
     env: { ...process.env, HOME: home, ANDROID_HOME: "", JAVA_HOME: "", DEBUGINFOD_URLS: "" },
-    encoding: "utf8", timeout: 30_000,
+    encoding: "utf8",
   });
   assert.equal(result.status, 2, result.stdout + result.stderr);
   for (const name of ["ANDROID_HOME", "JAVA_HOME", "DEBUGINFOD_URLS"]) assert.match(result.stdout, new RegExp(`${name} is missing`));
@@ -81,7 +82,7 @@ test("candidate setup consumes a sealed sha and cannot write main's records or f
   const env = fullEnvironment(plan, ["corpus"], { ...f.env, NTS_GATE_RECORD_TIMES: "1", NTS_GATE_TREE: f.root, NTS_GATE_SETUP_ONLY: "1" });
   assert.equal(env.NTS_GATE_RECORD_TIMES, "0");
   assert.equal(env.NTS_GATE_RUN_DIR, plan.run);
-  const result = spawnSync("sh", [join(f.root, "tooling/gate/pinned.sh"), plan.commit], { cwd: f.root, env, encoding: "utf8", timeout: 30_000 });
+  const result = spawnTest("sh", [join(f.root, "tooling/gate/pinned.sh"), plan.commit], { cwd: f.root, env, encoding: "utf8",});
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: plan.tree, encoding: "utf8" }).trim(), f.candidate);
   assert.equal(readFileSync(join(plan.tree, "results/setup-marker"), "utf8"), "CANDIDATE");

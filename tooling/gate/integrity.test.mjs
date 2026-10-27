@@ -1,5 +1,5 @@
+import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -22,11 +22,8 @@ const argv=process.argv.slice(2);
 appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv})+"\\n");
 if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
 if(process.env.NTS_INTEGRITY_KEEP && argv[1]==="--prepared") {
-  const deadline=Date.now()+5000;
-  while(!existsSync(process.env.CONTROL_COUNTERS+"."+process.pid+".ready")) {
-    if(Date.now()>=deadline)process.exit(4);
-    await new Promise(resolve=>setTimeout(resolve,5));
-  }
+  const {waitFor}=await import(${JSON.stringify(new URL("./test-wait.ts",import.meta.url).href)});
+  await waitFor('the perf attachment to the prepared child',()=>existsSync(process.env.CONTROL_COUNTERS+"."+process.pid+".ready"));
 }
 `);
     chmodSync(compiler, 0o755);
@@ -38,11 +35,9 @@ import {appendFileSync,existsSync,writeFileSync} from "node:fs";
 const argv=process.argv.slice(2),pid=Number(argv[argv.indexOf("-p")+1]);
 appendFileSync(process.env.CONTROL_COUNTERS,JSON.stringify({pid,argv})+"\\n");
 writeFileSync(process.env.CONTROL_COUNTERS+"."+pid+".ready","");
-const timer=setInterval(()=>{
-  if(existsSync("/proc/"+pid))return;
-  clearInterval(timer);
-  writeFileSync(argv[argv.indexOf("-o")+1],"123456,,instructions:u,1,100,,\\n");
-},5);
+const {waitFor}=await import(${JSON.stringify(new URL("./test-wait.ts",import.meta.url).href)});
+await waitFor('the measured integrity child to finish',()=>!existsSync("/proc/"+pid));
+writeFileSync(argv[argv.indexOf("-o")+1],"123456,,instructions:u,1,100,,\\n");
 `);
     chmodSync(perf, 0o755);
     for (const keep of [false, true]) {
@@ -55,8 +50,8 @@ const timer=setInterval(()=>{
       delete env.NTS_INTEGRITY_KEEP;
       delete env.NTS_GATE_TOKENS;
       if (keep) env.NTS_INTEGRITY_KEEP = join(arm, "listings");
-      const result = spawnSync(process.execPath, ["tooling/conformance/integrity.ts", "runtime/node/integrity-control"],
-        { cwd: ROOT, env, encoding: "utf8", timeout: 15_000 });
+      const result = spawnTest(process.execPath, ["tooling/conformance/integrity.ts", "runtime/node/integrity-control"],
+        { cwd: ROOT, env, encoding: "utf8",});
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       assert.match(result.stdout, /1 of 1 project\(s\) measured, 1 function\(s\)/);
       const calls = readFileSync(commands, "utf8").trim().split("\n").map(JSON.parse);

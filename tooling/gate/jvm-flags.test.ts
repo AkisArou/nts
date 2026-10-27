@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnTest } from "./test-wait.ts";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -27,7 +27,7 @@ test("installed JVM tool launchers accept the shared flags", () => {
   for (const name of ["java", "javac", "javap", "jar", "keytool", "d8", "apksigner"]) {
     const tool = ["d8", "apksigner"].includes(name) ? join(tools, name) : process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin", name) : name;
     const version = name === "java" || name === "javac" || name === "javap" ? "-version" : name === "keytool" ? "-help" : "--version";
-    const result = spawnSync(tool, [...vmToolFlags(tool), version], { encoding: "utf8", timeout: 30_000 });
+    const result = spawnTest(tool, [...vmToolFlags(tool), version], { encoding: "utf8",});
     assert.equal(result.status, 0, `${name}: ${result.error?.message ?? result.stdout + result.stderr}`);
   }
 });

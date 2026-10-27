@@ -1,7 +1,7 @@
+import { spawnTest } from "../gate/test-wait.ts";
 // Black-box contracts for the Mac/simulator boundary; no VM or SDK required.
 // NTS_TEST_IOS_RUNNER selects the saved old helper for the negative control.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +44,7 @@ if (args[1] === "bootstatus") {
   if (mode === "boot-77") process.exit(77);
   if (mode === "boot-timeout") await new Promise((resolve) => setTimeout(resolve, 60_000));
   if (mode === "slow-ready") await new Promise((resolve) => setTimeout(resolve, 3_200));
+  if (mode === "delayed-direct") await new Promise((resolve) => setTimeout(resolve, 13_000));
   writeFileSync(process.env.TEST_DIR + "/state", "Booted");
   console.log("Device is Booted");
 } else {
@@ -74,8 +75,8 @@ if (args[1] === "bootstatus") {
     bundle,
     state: () => readFileSync(join(dir, "state"), "utf8"),
     events: () => readFileSync(join(dir, "events"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]),
-    run: (args = ["--reachable"], extra: Record<string, string> = {}) => spawnSync("bash", [runner, ...args], {
-      encoding: "utf8", timeout: 12_000,
+    run: (args = ["--reachable"], extra: Record<string, string> = {}) => spawnTest("bash", [runner, ...args], {
+      encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XDG_CACHE_HOME: dir,
         NTS_APPLE_SSH: "test-mac", NTS_IOS_DEVICE: "Test Phone", TEST_DIR: dir,
         TEST_EVENTS: join(dir, "events"), TEST_MODE: mode, ...extra },
@@ -136,6 +137,16 @@ test("readiness does not consume the application budget", () => {
   } finally { f.clean(); }
 });
 
+test("a direct artifact can finish after the former 12-second test wrapper", () => {
+  const f = fixture("delayed-direct");
+  try {
+    const p = f.run([f.bundle]);
+    assert.equal(p.status, 0, p.stderr);
+    assert.equal(p.stdout, "golden application output\n");
+    assert.equal(f.state(), "Booted");
+  } finally { f.clean(); }
+});
+
 test("an application still times out under its own unchanged budget", () => {
   const f = fixture("app-timeout");
   try {
@@ -190,8 +201,8 @@ test("successful interop retains only the named stage clocks", () => {
       ] : ["native control"];
       writeFileSync(join(project, "build.sh"), `#!/bin/sh\nprintf '%s\\n' ${output.map(quote).join(" ")}\n`);
     }
-    const p = spawnSync("sh", [join(gate, "all.sh"), "--call", "interop"], {
-      encoding: "utf8", timeout: 12_000,
+    const p = spawnTest("sh", [join(gate, "all.sh"), "--call", "interop"], {
+      encoding: "utf8",
       env: { ...process.env, TMPDIR: join(dir, "tmp"), NTS_INTEROP_PROJECTS: "ios-clock native-control",
         NTS_INTEROP_LOCAL_LANES: "1", NTS_INTEROP_LOCK: join(dir, "interop.lock"),
         NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_COSTS_DIR: join(dir, "costs") },

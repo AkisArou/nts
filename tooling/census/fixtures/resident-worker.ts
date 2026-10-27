@@ -1,3 +1,4 @@
+import { waitFor, testProcessResult, TEST_HANG_MS } from "../../gate/test-wait.ts";
 // Fake compiler input for the real resident worker pool's kernel controls.
 import { createInterface } from "node:readline";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -5,18 +6,11 @@ import { join } from "node:path";
 import { compileSync, inResidentWorker } from "../worker-memory.ts";
 if (!inResidentWorker()) throw new Error("fixture outside resident scope");
 const directory = process.argv[2];
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const deadlineWait = async (path: string) => {
-  const deadline = Date.now() + 15_000;
-  while (!existsSync(path)) {
-    if (Date.now() >= deadline) throw new Error(`fixture barrier timeout: ${path}`);
-    await wait(10);
-  }
-};
+const deadlineWait = (path: string) => waitFor(`resident fixture barrier ${path}`,()=>existsSync(path));
 for await (const path of createInterface({ input: process.stdin })) {
   let held: Buffer | undefined;
   if (path === "oom") {
-    const result = compileSync({ memoryCapKb: 96 * 1024 }, "python3", ["-c", "chunks=[]\nwhile True: chunks.append(bytearray(8*1024*1024))"], { encoding: "utf8", timeout: 5000 });
+    const result = testProcessResult(compileSync({ memoryCapKb: 96 * 1024 }, "python3", ["-c", "chunks=[]\nwhile True: chunks.append(bytearray(8*1024*1024))"], { encoding: "utf8", timeout: TEST_HANG_MS }), "the fixture allocation to reach its resident cap");
     // The parent must override this non-memory result from the kernel counter.
     process.stdout.write(`${JSON.stringify({ path, bucket: "compiler-result", status: result.status })}\n`);
     continue;

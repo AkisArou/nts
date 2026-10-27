@@ -1,5 +1,6 @@
+import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,8 +37,8 @@ console.log("preflight passed");\n`);
   writeFileSync(join(tree, "feature"), "caller HEAD\n");
   git(tree, "add", "feature"); git(tree, "commit", "-qm", "feature");
   const sha = git(tree, "rev-parse", "HEAD");
-  const launch = () => spawnSync(process.execPath, [new URL("./land-unit.ts", import.meta.url).pathname, "HEAD", "flags"], {
-    cwd: tree, env, encoding: "utf8", timeout: 30_000,
+  const launch = () => spawnTest(process.execPath, [new URL("./land-unit.ts", import.meta.url).pathname, "HEAD", "flags"], {
+    cwd: tree, env, encoding: "utf8",
   });
   return { root, tree, home, capture, env, git, sha, launch };
 }

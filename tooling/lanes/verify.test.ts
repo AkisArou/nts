@@ -4,7 +4,7 @@ import {spawn,spawnSync,execFileSync} from "node:child_process";
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {setTimeout as sleep} from "node:timers/promises";
+import {waitFor} from "../gate/test-wait.ts";
 import {VerificationLedger,readLedger,type Checks} from "./verification-ledger.ts";
 
 const verifier=new URL("./verify.ts",import.meta.url).pathname;
@@ -27,6 +27,7 @@ flock -n 9
 if [ -e "$NTS_GATE_TREE/.git" ]; then git -C "$NTS_GATE_TREE" checkout -q --detach --force "$1"; else git worktree add -q --detach "$NTS_GATE_TREE" "$1"; fi
 [ -n "\${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
 if [ -n "\${SHADOW_TEST_WAIT:-}" ]; then
+ [ -z "\${SHADOW_TEST_DELAY:-}" ] || sleep "$SHADOW_TEST_DELAY"
  touch "$SHADOW_TEST_WAIT"
  while [ ! -f "$SHADOW_TEST_WAIT.done" ]; do sleep 0.02; done
 fi
@@ -109,15 +110,21 @@ test("a green summary with a failed gate process cannot certify a shadow batch",
 
 test("shadow releases the landing lock while its frozen batch is running",async t=>{
   const f=fixture(t),tip=f.append("one"),wait=join(f.home,"wait");f.env.SHADOW_TEST_WAIT=wait;
+  // Cross the old 15-second readiness limit, with the same real lock test.
+  f.env.SHADOW_TEST_DELAY="16";
   const running=f.start();
-  const end=Date.now()+15000;while (!existsSync(wait) && Date.now()<end) await sleep(20);
-  assert.ok(existsSync(wait),"stand-in gate started");
-  const duplicate=await f.start().done;
-  assert.equal(duplicate.status,0,duplicate.out);assert.match(duplicate.out,/another shadow batch/);
-  assert.equal(spawnSync("flock",["-n",join(f.home,".cache/nts-land.lock"),"true"]).status,0);
-  const second=f.append("two");writeFileSync(wait+".done","");
-  const result=await running.done;assert.equal(result.status,0,result.out);
+  let result;
+  try {
+    await waitFor("the frozen shadow gate to start",()=>existsSync(wait),{
+      stopped:()=>running.child.exitCode !== null || running.child.signalCode !== null ? `verifier exited ${running.child.signalCode ?? running.child.exitCode}` : undefined,
+    });
+    const duplicate=await f.start().done;
+    assert.equal(duplicate.status,0,duplicate.out);assert.match(duplicate.out,/another shadow batch/);
+    assert.equal(spawnSync("flock",["-n",join(f.home,".cache/nts-land.lock"),"true"]).status,0);
+    f.append("two");
+  } finally {writeFileSync(wait+".done","");result=await running.done;}
+  assert.equal(result.status,0,result.out);
   const saved=readLedger(f.store)!;
-  assert.equal(saved.shadow!.batches[0].tip,tip);assert.equal(saved.observedMain,second);
+  assert.equal(saved.shadow!.batches[0].tip,tip);assert.equal(saved.observedMain,f.git("rev-parse","HEAD"));
   assert.equal(saved.transactions.length,2);
 });

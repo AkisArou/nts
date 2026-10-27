@@ -1,5 +1,5 @@
+import { spawnTest, testProcessResult, TEST_HANG_MS } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -19,25 +19,25 @@ const scratch = () => {
 };
 const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(join(CGROUP, group, "memory.events"), "utf8"))![1]);
 
-test("a real step records its aggregate memory.peak before the cgroup is removed", { timeout: 20_000 }, t => {
+test("a real step records its aggregate memory.peak before the cgroup is removed", { timeout: TEST_HANG_MS }, t => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const costs = join(directory, "costs"); mkdirSync(costs);
   const module = new URL("./worker-memory.ts", import.meta.url).href;
   const code = `import { MemoryRun } from ${JSON.stringify(module)};
 import { readFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import {spawnTest} from ${JSON.stringify(new URL("../gate/test-wait.ts",import.meta.url).href)};
 const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20 });
 let peak;
 try {
  const worker = run.worker(0, 128 * 2 ** 20);
  const scope = worker.scope('python3', ['-c', 'held=bytearray(24*1024**2); print(len(held))']);
- const child = spawnSync('systemd-run', scope.argv, { env: scope.env, encoding: 'utf8', timeout: 10_000 });
+ const child = spawnTest('systemd-run', scope.argv, { env: scope.env, encoding: 'utf8',});
  if (child.status !== 0) throw new Error(child.stderr);
  peak = Number(readFileSync('/sys/fs/cgroup' + run.group + '/memory.peak', 'utf8'));
 } finally { run.close(); }
 console.log(JSON.stringify({ peak, group: run.group }));`;
-  const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", timeout: 15_000,
+  const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",
     env: { ...process.env, NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
   assert.equal(result.status, 0, result.stderr);
   const { peak, group } = JSON.parse(result.stdout);
@@ -54,18 +54,18 @@ test("compiler reserves 32 GiB under a resident cap while executed programs reta
   t.after(() => memoryRun().close());
   const code = "import mmap,resource; held=mmap.mmap(-1,32*1024**3,flags=mmap.MAP_PRIVATE|mmap.MAP_ANONYMOUS,prot=mmap.PROT_READ|mmap.PROT_WRITE); print(resource.getrlimit(resource.RLIMIT_AS)[0])";
   const tools = { memoryCapKb: 64 * 1024 };
-  const before = spawnSync("sh", capped(tools, "python3", ["-c", code]), { encoding: "utf8" });
+  const before = spawnTest("sh", capped(tools, "python3", ["-c", code]), { encoding: "utf8" });
   assert.notEqual(before.status, 0, "the old compiler address cap rejects its virtual reservation");
-  const compiled = compileSync(tools, "python3", ["-c", code], { encoding: "utf8", timeout: 10_000 });
+  const compiled = testProcessResult(compileSync(tools, "python3", ["-c", code], { encoding: "utf8", timeout: TEST_HANG_MS }), "the resident compiler control");
   assert.equal(compiled.status, 0, compiled.stderr);
   assert.equal(compiled.stdout.trim(), "-1", "compiler inherits no RLIMIT_AS");
   assert.equal(compiled.memoryKilled, false);
-  const executed = spawnSync("sh", capped(tools, "python3", ["-c", "import resource; print(resource.getrlimit(resource.RLIMIT_AS)[0])"]), { encoding: "utf8" });
+  const executed = spawnTest("sh", capped(tools, "python3", ["-c", "import resource; print(resource.getrlimit(resource.RLIMIT_AS)[0])"]), { encoding: "utf8" });
   assert.equal(executed.status, 0, executed.stderr);
   assert.equal(executed.stdout.trim(), String(64 * 2 ** 20));
 });
 
-test("a compiler OOM loses only its in-flight case and restarts that worker", { timeout: 30_000 }, async (t) => {
+test("a compiler OOM loses only its in-flight case and restarts that worker", { timeout: TEST_HANG_MS }, async (t) => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "worker-oom-control" });
@@ -79,7 +79,7 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
   assert.equal(existsSync(join(CGROUP, memory.group)), false, "run cgroup is removed");
 });
 
-test("aggregate OOM retains a survivor verdict and per-worker counters outlive scopes", { timeout: 30_000 }, async (t) => {
+test("aggregate OOM retains a survivor verdict and per-worker counters outlive scopes", { timeout: TEST_HANG_MS }, async (t) => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const memory = new MemoryRun({ budgetBytes: 256 * 2 ** 20, id: "aggregate-oom-control" });
@@ -105,14 +105,14 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
 test("an unavailable user bus refuses to compile instead of running uncapped", () => {
   const module = new URL("./worker-memory.ts", import.meta.url).href;
   const code = `import {compileSync} from ${JSON.stringify(module)}; compileSync({memoryCapKb:65536},"sh",["-c","echo UNCAPPED"],{encoding:"utf8"});`;
-  const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent-nts-user-bus" }, timeout: 10_000 });
+  const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: "unix:path=/nonexistent-nts-user-bus" },});
   assert.notEqual(result.status, 0);
   assert.ok(!result.stdout.includes("UNCAPPED"));
   assert.match(result.stderr, /resident cap: user manager failed/);
 });
 
 test("a serial runner shares one scope across compiles and removes every cgroup", () => {
-  const result = spawnSync(process.execPath, [join(HERE, "fixtures/resident-serial.ts")], { encoding: "utf8", timeout: 10_000 });
+  const result = spawnTest(process.execPath, [join(HERE, "fixtures/resident-serial.ts")], { encoding: "utf8",});
   assert.equal(result.status, 0, result.stderr);
   const { groups, own, boundary } = JSON.parse(result.stdout);
   assert.deepEqual(groups, [own, own]);
@@ -220,7 +220,7 @@ async function fakeManager(mode, module) {
 for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanup"]) {
   test(`slice setup with fake manager: ${mode}`, () => {
     const code = `(${fakeManager.toString()})(${JSON.stringify(mode)},${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});`;
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", timeout: 10000 });
+    const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",});
     assert.equal(result.status, 0, result.stderr);
     const actual = JSON.parse(result.stdout);
     assert.equal(actual.rootLookups, 0);

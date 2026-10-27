@@ -1,3 +1,4 @@
+import { waitFor } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,12 +22,10 @@ async function main(){
  }
  const text=fs.readFileSync(process.env.STUB_OUTPUT,'utf8');
  if(process.env.STUB_PAUSE==='1'){
+  await new Promise(resolve=>setTimeout(resolve,2200));
   process.stdout.write('  guard ok    first\\n');
-  const deadline=Date.now()+10000;
-  while(!fs.existsSync(process.env.STUB_RELEASE)){
-   if(Date.now()>deadline)throw new Error('stub release was not written');
-   await new Promise(resolve=>setTimeout(resolve,10));
-  }
+  const {waitFor}=await import(${JSON.stringify(new URL("./test-wait.ts",import.meta.url).href)});
+  await waitFor('the blockers test release file',()=>fs.existsSync(process.env.STUB_RELEASE));
  }
  process.stdout.write(text);process.exitCode=Number(process.env.STUB_STATUS??0);
 }
@@ -52,16 +51,12 @@ main().catch(e=>{console.error(e);process.exitCode=1;});
 test("fixture log grows before the interpreter completes",async t=>{
   const h=harness(t),suffix="  2 fixture(s), 2 as expected, 0 needing a person\n";
   const pending=h.run(suffix,0,true);
-  let progressed=false;
   try {
-    const deadline=Date.now()+2000;
-    while(Date.now()<deadline){
-      if(existsSync(h.log) && readFileSync(h.log,"utf8").includes("guard ok    first")){progressed=true;break;}
-      await new Promise(resolve=>setTimeout(resolve,10));
-    }
+    await waitFor("the live blockers fixture log",()=>existsSync(h.log) && readFileSync(h.log,"utf8").includes("guard ok    first"),{
+      stopped:()=>pending.closed()?"interpreter closed before writing progress":undefined,
+    });
     assert.equal(pending.closed(),false,"interpreter must still be waiting");
   } finally {writeFileSync(h.release,"");await pending.done;}
-  assert.equal(progressed,true,"fixture progress file did not grow before completion");
   assert.equal(readFileSync(h.log,"utf8"),"  guard ok    first\n"+suffix);
 });
 

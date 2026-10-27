@@ -1,5 +1,6 @@
+import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +44,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     const candidate = git("rev-parse", "HEAD");
     git("checkout", "--detach", "-q", owner);
     const held=inherited ? GateResource.tryAcquire(`${tree}.lock`)! : null;
-    const result = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), candidate], { cwd: root, env:{...env,...(held?{NTS_GATE_LOCK_FD:"8"}:{})}, encoding: "utf8", timeout: 30_000,
+    const result = spawnTest("sh", [join(root, "tooling/gate/pinned.sh"), candidate], { cwd: root, env:{...env,...(held?{NTS_GATE_LOCK_FD:"8"}:{})}, encoding: "utf8",
       ...(held ? {stdio:held.stdio("pipe")} : {}) });
     held?.close();
     if (refuses) {

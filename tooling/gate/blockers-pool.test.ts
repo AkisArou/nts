@@ -1,3 +1,4 @@
+import { waitFor } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -31,24 +32,17 @@ function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
   const compiler = join(root, "compiler");
   writeFileSync(compiler, `#!${process.execPath}
 const fs = require('node:fs'), path = require('node:path');
+async function main() {
+const {waitFor}=await import(${JSON.stringify(new URL("./test-wait.ts",import.meta.url).href)});
 const name = path.basename(path.dirname(process.argv.at(-1)));
 const event = stage => fs.appendFileSync(process.env.TRACE, JSON.stringify({name,stage})+'\\n');
 event('start');
 if(name==='a-slow' && process.env.ORDER_BARRIER==='1') {
- const deadline=Date.now()+10000;
- while(!fs.existsSync(process.env.TRACE+'.fast-finished')) {
-  if(Date.now()>deadline) throw new Error('the other admitted fixture did not finish');
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
- }
+ await waitFor('the other admitted fixture to finish',()=>fs.existsSync(process.env.TRACE+'.fast-finished'));
 }
-Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,{'a-slow':250,'b-fast':1,'c-middle':80}[name] ?? 1);
 if(process.env.FAIL_FIXTURE===name){
- const deadline=Date.now()+10000;
  for(const other of (process.env.FAILURE_WAITS_FOR??'').split(',').filter(Boolean)) {
-  while(!fs.existsSync(process.env.TRACE+'.'+other+'.finished')) {
-   if(Date.now()>deadline) throw new Error('the preceding fixtures did not finish');
-   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
-  }
+  await waitFor('the preceding fixture '+other,()=>fs.existsSync(process.env.TRACE+'.'+other+'.finished'));
  }
  console.error('original compiler failure');process.exit(7);
 }
@@ -56,6 +50,8 @@ console.log(process.env.BAD_FIXTURE === name ? 'NTS1001 test refusal' : 'nothing
 event('end');
 fs.writeFileSync(process.env.TRACE+'.'+name+'.finished','');
 if(name==='b-fast') fs.writeFileSync(process.env.TRACE+'.fast-finished','');
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});
 `, {mode:0o755});
   const run = (jobs: number, extra = {}) => new Promise<{status:number|null;stdout:string;stderr:string}>((resolve, reject) => {
     const child = spawn(process.execPath, [join(root, "tooling/conformance/blockers-check.mjs")], {
@@ -79,7 +75,7 @@ test("real fixture workers hold one token each, obey admission, and report in fi
   await pool.start();
   t.after(()=>pool.close());
   const ran=h.run(3,{ORDER_BARRIER:"1",NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
-  await new Promise(resolve=>setTimeout(resolve,100));
+  await waitFor("all three blocked fixture requests",()=>pool.waiting.length===3);
   assert.equal(readFileSync(h.trace,"utf8"),"", "no compiler before token admission");
   open=true; pool.grant();
   const result=await ran;
@@ -113,14 +109,20 @@ test("a changed expectation keeps the serial fixture messages, counts, and nonfa
 test("a failed fixture stops feeding, drains admitted work, and cannot become a green result", async () => {
   const started: string[]=[];
   let drained=false;
+  const drain=Promise.withResolvers<void>();
   const reported: string[]=[];
-  await assert.rejects(fixturePool(names,2,async name=>{
+  const running=fixturePool(names,2,async name=>{
     started.push(name);
     if(name==="a-slow") throw new Error("original compiler failure");
-    await new Promise(resolve=>setTimeout(resolve,20));
+    await drain.promise;
     drained=true;
     return {stdout:name,stderr:"",unexpected:0,retainRun:false};
-  },result=>reported.push(result.stdout)),/original compiler failure/);
+  },result=>reported.push(result.stdout));
+  const rejected=assert.rejects(running,/original compiler failure/);
+  try {
+    await waitFor("both admitted fixture callbacks",()=>started.length===2);
+    assert.equal(drained,false,"the second fixture is still held at its event barrier");
+  } finally {drain.resolve();await rejected;}
   assert.deepEqual(started,names.slice(0,2));
   assert.equal(drained,true);
   assert.deepEqual(reported,[],"no row after the failed first fixture is reported");
