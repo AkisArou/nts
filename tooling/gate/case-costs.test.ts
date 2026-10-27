@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CaseCosts, distribution, summarizeCosts, waitingBreakdown, waitCause, type Observation } from "./case-costs.ts";
+import { CaseCosts, distribution, recordAggregatePeak, summarizeCosts, waitingBreakdown, waitCause, type Observation } from "./case-costs.ts";
 
 const epoch = 1_700_000_000;
 const step = { name: "examples", started_at: new Date(epoch * 1000).toISOString(), wall: 10 };
@@ -136,4 +136,33 @@ test("percentiles retain slow tails and an empty population is explicit", () => 
   assert.deepEqual(distribution([]), { n:0,sum:0,p50:null,p95:null,p99:null,max:null });
   const d = distribution([...Array(99).fill(1), 100]);
   assert.equal(d.p50,1); assert.equal(d.p99,1); assert.equal(d.max,100); assert.equal(d.sum,199);
+});
+
+test("aggregate peaks retain each scope and compare bytes with the step reservation", t => {
+  const dir = fixture(t);
+  const scopes = [
+    { cgroup: "/run/a", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: 512 * 2 ** 20 },
+    { cgroup: "/run/b", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: 768 * 2 ** 20 },
+    { cgroup: "/run/c", scope_budget_bytes: 6 * 2 ** 30, peak_bytes: null },
+  ];
+  writeFileSync(join(dir, "aggregate-1-0.jsonl"), scopes.map(row => JSON.stringify({ event: "aggregate.peak", step: "examples", ...row })).join("\n") + "\n");
+  const result = summarizeCosts(dir, [], [{ ...step, mem_gb: 6 }]);
+  const data = result.steps.examples as any;
+  assert.equal(data.aggregate_memory.reserved_step_mem_bytes, 6 * 2 ** 30);
+  assert.equal(data.aggregate_memory.max_scope_peak_bytes, 768 * 2 ** 20);
+  assert.equal(data.aggregate_memory.measured_scopes, 2);
+  assert.equal(data.aggregate_memory.unknown_scopes, 1);
+  assert.deepEqual(data.aggregate_memory.scopes, scopes);
+  assert.equal(result.status, "complete");
+});
+
+test("unreadable aggregate peaks stay unknown and a failed observation cannot throw", t => {
+  const dir = fixture(t);
+  const env = { NTS_GATE_CASE_COSTS_DIR: dir, NTS_GATE_STEP: "examples" };
+  recordAggregatePeak("/nonexistent-nts-peak", 1024, env);
+  const result = summarizeCosts(dir, [], [step]);
+  const data = result.steps.examples as any;
+  assert.equal(data.aggregate_memory.max_scope_peak_bytes, null);
+  assert.equal(data.aggregate_memory.unknown_scopes, 1);
+  assert.doesNotThrow(() => recordAggregatePeak("/nonexistent-nts-peak", 1024, { ...env, NTS_GATE_CASE_COSTS_DIR: join(dir, "absent") }));
 });

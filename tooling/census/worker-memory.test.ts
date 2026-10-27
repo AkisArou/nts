@@ -19,6 +19,37 @@ const scratch = () => {
 };
 const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(join(CGROUP, group, "memory.events"), "utf8"))![1]);
 
+test("a real step records its aggregate memory.peak before the cgroup is removed", { timeout: 20_000 }, t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const costs = join(directory, "costs"); mkdirSync(costs);
+  const module = new URL("./worker-memory.ts", import.meta.url).href;
+  const code = `import { MemoryRun } from ${JSON.stringify(module)};
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20 });
+let peak;
+try {
+ const worker = run.worker(0, 128 * 2 ** 20);
+ const scope = worker.scope('python3', ['-c', 'held=bytearray(24*1024**2); print(len(held))']);
+ const child = spawnSync('systemd-run', scope.argv, { env: scope.env, encoding: 'utf8', timeout: 10_000 });
+ if (child.status !== 0) throw new Error(child.stderr);
+ peak = Number(readFileSync('/sys/fs/cgroup' + run.group + '/memory.peak', 'utf8'));
+} finally { run.close(); }
+console.log(JSON.stringify({ peak, group: run.group }));`;
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", timeout: 15_000,
+    env: { ...process.env, NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_STEP: "peak-control" } });
+  assert.equal(result.status, 0, result.stderr);
+  const { peak, group } = JSON.parse(result.stdout);
+  const files = readdirSync(costs); assert.equal(files.length, 1);
+  const observation = JSON.parse(readFileSync(join(costs, files[0]), "utf8"));
+  assert.equal(observation.peak_bytes, peak);
+  assert.ok(peak >= 24 * 2 ** 20 && peak <= 128 * 2 ** 20);
+  assert.equal(observation.scope_budget_bytes, 128 * 2 ** 20);
+  assert.equal(observation.step, "peak-control");
+  assert.equal(existsSync(join(CGROUP, group)), false);
+});
+
 test("compiler reserves 32 GiB under a resident cap while executed programs retain RLIMIT_AS", (t) => {
   t.after(() => memoryRun().close());
   const code = "import mmap,resource; held=mmap.mmap(-1,32*1024**3,flags=mmap.MAP_PRIVATE|mmap.MAP_ANONYMOUS,prot=mmap.PROT_READ|mmap.PROT_WRITE); print(resource.getrlimit(resource.RLIMIT_AS)[0])";

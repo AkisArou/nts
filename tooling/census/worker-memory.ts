@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import { recordAggregatePeak } from "../gate/case-costs.ts";
 
 const CGROUP = "/sys/fs/cgroup";
 const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -85,8 +86,10 @@ export class MemoryRun {
   readonly directory: string;
   #workers: MemoryWorker[] = [];
   #closed = false;
+  #recordPeak = false;
   constructor({ budgetBytes = Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) } = {}) {
     this.budgetBytes = integer(budgetBytes, "resident run budget");
+    this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
     this.prefix = `ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`;
     this.slice = `${this.prefix}.slice`;
     this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
@@ -136,6 +139,7 @@ export class MemoryRun {
     for (const worker of this.#workers) {
       try { worker.close(); } catch (error) { failure ??= error; }
     }
+    if (this.group && this.#recordPeak) recordAggregatePeak(this.group, this.budgetBytes);
     try { manager("StopUnit", "ss", this.slice, "replace"); } catch (error) { failure ??= error; }
     if (this.group) {
       const deadline = Date.now() + 3000;

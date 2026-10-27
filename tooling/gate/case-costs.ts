@@ -12,7 +12,23 @@ type Phase = { phase: string; wall_s: number; self_cpu_s: number | null; child_c
 export type Check = { project: string; binary_sha: string; pid: number; step: string; start: number; end: number;
   wall_s: number; cpu_resolution_s: number | null; self_peak_rss_kb: number | null;
   child_peak_rss_kb: number | null; phases: Phase[]; complete: boolean };
-export type TimedStep = { name: string; started_at?: string; wall?: number };
+export type TimedStep = { name: string; started_at?: string; wall?: number; mem_gb?: number };
+let aggregateCounter = 0;
+
+export function recordAggregatePeak(group: string, scopeBudgetBytes: number, env: NodeJS.ProcessEnv = process.env): void {
+  if (!env.NTS_GATE_CASE_COSTS_DIR || !env.NTS_GATE_STEP) return;
+  let peak: number | null = null;
+  try {
+    const text = readFileSync(join("/sys/fs/cgroup", group, "memory.peak"), "utf8").trim();
+    if (/^\d+$/.test(text)) peak = peakRss(Number(text));
+  } catch { /* Unsupported or unreadable observations remain unknown. */ }
+  try {
+    appendFileSync(join(env.NTS_GATE_CASE_COSTS_DIR, `aggregate-${process.pid}-${aggregateCounter++}.jsonl`), JSON.stringify({
+      event: "aggregate.peak", epoch: Date.now() / 1000, pid: process.pid, step: env.NTS_GATE_STEP,
+      cgroup: group, scope_budget_bytes: scopeBudgetBytes, peak_bytes: peak,
+    }) + "\n");
+  } catch { /* Telemetry cannot change a worker's result or cleanup. */ }
+}
 const CHECK_STEPS = new Set(["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc"]);
 const GROUPS: Record<string, string[]> = {
   capture:["capture"], lowering:["lower"], preparation:["prepare"],
@@ -180,6 +196,18 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
   const errors = [...initialErrors];
   let checks: Check[] = [];
   try { checks = readChecks(root, errors); } catch (e) { errors.push(`reading case costs: ${(e as Error).message}`); }
+  const aggregates: Record<string, unknown>[] = [];
+  try {
+    for (const name of readdirSync(root).filter(n => /^aggregate-\d+-\d+\.jsonl$/.test(n))) {
+      for (const line of readFileSync(join(root, name), "utf8").split("\n").filter(Boolean)) {
+        try {
+          const row = JSON.parse(line);
+          if (row.event === "aggregate.peak" && typeof row.step === "string") aggregates.push(row);
+          else errors.push(`invalid aggregate observation: ${name}`);
+        } catch { errors.push(`partial JSON: ${name}`); }
+      }
+    }
+  } catch (e) { errors.push(`reading aggregate costs: ${(e as Error).message}`); }
   const reqs = requests(events);
   const byStep: Record<string, unknown> = {};
   let missingChecks = 0;
@@ -201,7 +229,14 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
     missingChecks += missing.length;
     const completedAt = tokens.flatMap(r => r.grant === undefined || r.release === undefined ? [] : [r.release]).sort((a, b) => a - b);
     const end = Date.parse(step.started_at ?? "") / 1000 + (step.wall ?? 0);
+    const scopes = aggregates.filter(row => row.step === step.name).map(row => ({
+      cgroup: row.cgroup, scope_budget_bytes: peakRss(row.scope_budget_bytes), peak_bytes: peakRss(row.peak_bytes),
+    }));
+    const peaks = scopes.flatMap(row => row.peak_bytes === null ? [] : [row.peak_bytes]);
     byStep[step.name] = {
+      aggregate_memory: { reserved_step_mem_bytes: step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30),
+        scopes, max_scope_peak_bytes: peaks.length ? Math.max(...peaks) : null,
+        measured_scopes: peaks.length, unknown_scopes: scopes.length - peaks.length },
       coverage: { started: cases.length, completed: completed.length, incomplete: cases.length - completed.length,
         expected_program_checks: CHECK_STEPS.has(step.name) ? tokens.filter(r => r.grant !== undefined).length : null,
         missing_program_checks: missing.map(r => r.project), unpooled: unpooled.length },
@@ -231,6 +266,8 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       "CPU is process-wide self and waited children, at the recorded clock-tick resolution; absent CPU is unknown.",
       "Self peak RSS is Linux VmHWM in KiB at standalone check completion: lifetime process peak, excluding children; child peak RSS is currently unknown.",
       "RSS distributions count measured completed checks only; sums of per-check peaks are not simultaneous resident memory.",
+      "Aggregate memory.peak is read before removing each real step's resident-worker cgroup; it includes that group's descendants, not its outside orchestrator.",
+      "max_scope_peak_bytes is the maximum over observed scopes, not the sum of concurrent scopes; missing scopes and peaks remain unknown.",
       "Complete describes telemetry, never program agreement; missing telemetry never changes a gate verdict."], steps: byStep };
 }
 

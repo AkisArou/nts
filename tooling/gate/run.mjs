@@ -914,7 +914,7 @@ function done() {
     accept_skip: [...ACCEPT_SKIP],
     steps: plan.map((name) => ({ name, ...results.get(name) })),
     slower: slow,
-    case_costs: caseCosts?.summary(plan.map(name => ({ name, ...results.get(name) }))) ?? { version: 1, status: "unavailable" },
+    case_costs: caseCosts?.summary(plan.map(name => ({ name, ...results.get(name), mem_gb: BY_NAME.get(name).mem }))) ?? { version: 1, status: "unavailable" },
   };
   try {
     writeFileSync(join(RUN_DIR, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
