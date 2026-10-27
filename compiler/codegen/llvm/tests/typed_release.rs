@@ -1,5 +1,5 @@
-//! Typed field cleanup must execute across the C/LLVM runtime boundary, under
-//! both native providers; source-only assertions cannot check a callback ABI.
+//! Typed cleanup and collector tracing must execute across the C/LLVM runtime
+//! boundary under both providers; source assertions cannot check a callback ABI.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
@@ -11,7 +11,21 @@ use std::process::Command;
 mod scratch;
 use scratch::ScratchDir;
 
-const SOURCE: &str = include_str!("../../../../tests/programs/typed-release-fields/src/main.ts");
+const SOURCE: &str = concat!(
+    include_str!("../../../../tests/programs/typed-release-fields/src/main.ts"),
+    // Returned identity-bearing objects keep these environments and tuples
+    // materialized. Scalar-only captures would not test managed-field tracing.
+    r#"
+export function ownedClosure(x: number): () => Leaf {
+  const leaf = new Leaf(x);
+  return () => leaf;
+}
+export function ownedTuple(x: number): [Leaf, Leaf, unknown] {
+  const leaf = new Leaf(x);
+  return [leaf, leaf, BigInt(x)];
+}
+"#
+);
 const DRIVER: &str = r#"
 #include "nts_runtime.h"
 #include <stdio.h>
@@ -19,11 +33,24 @@ extern double typedGraph(double);
 extern double cycleGraph(double);
 extern double deepGraph(double);
 extern NtsHeader *ownedGraph(double);
+extern NtsHeader *ownedClosure(double);
+extern NtsHeader *ownedTuple(double);
 extern size_t descriptorSize(void);
 extern size_t releaseFieldsOffset(void);
+extern size_t traceFieldsOffset(void);
+size_t nts_test_trace_calls;
+#ifdef NTS_PROVIDER_RC
+static NtsHeader *seen[4];
+static size_t seen_count;
+static void visit(NtsHeader *child) {
+  if (seen_count < 4) seen[seen_count] = child;
+  seen_count++;
+}
+#endif
 int main(void) {
   if (descriptorSize() != sizeof(NtsDescriptor) ||
-      releaseFieldsOffset() != offsetof(NtsDescriptor, release_fields)) return 2;
+      releaseFieldsOffset() != offsetof(NtsDescriptor, release_fields) ||
+      traceFieldsOffset() != offsetof(NtsDescriptor, trace_fields)) return 2;
   NtsHeader *owned = ownedGraph(5);
   const NtsDescriptor *descriptor = owned->descriptor;
   if (!descriptor->release_fields) {
@@ -34,6 +61,51 @@ int main(void) {
   if (!descriptor->references || !descriptor->erased) return 4;
   nts_release(owned);
 #ifdef NTS_PROVIDER_RC
+  for (int n = 4; n < 8; n++) {
+    owned = ownedGraph(n);
+    descriptor = owned->descriptor;
+    if (!descriptor->trace_fields) {
+      nts_release(owned);
+      fputs("missing typed trace callback\n", stderr);
+      return 6;
+    }
+    /* Two inherited/private fields share a leaf. The erased slot alternates
+     * between that leaf, string, boxed bigint and a scalar. Read expectations
+     * through the ABI tables, independently of the callback's baked addresses. */
+    if (descriptor->references != 2 || descriptor->erased != 1) return 7;
+    NtsHeader *expected[3];
+    uintptr_t counts[3];
+    for (int i = 0; i < 2; i++)
+      expected[i] = *(NtsHeader **)((char *)owned + descriptor->offsets[i]);
+    NtsValue value = *(NtsValue *)((char *)owned + descriptor->erased_offsets[0]);
+    expected[2] = NTS_TAG_IS_MANAGED(nts_value_tag(value))
+                    ? nts_value_reference(value) : NULL;
+    for (int i = 0; i < 3; i++) counts[i] = expected[i] ? expected[i]->reserved : 0;
+    seen_count = 0;
+    size_t calls = nts_test_trace_calls;
+    descriptor->trace_fields(owned, visit);
+    if (nts_test_trace_calls != calls + 1 || seen_count != (n == 7 ? 2u : 3u) ||
+        seen[0] != expected[0] || seen[1] != expected[1] ||
+        expected[0] != expected[1] || (n != 7 && seen[2] != expected[2])) return 8;
+    for (int i = 0; i < 3; i++)
+      if (expected[i] && expected[i]->reserved != counts[i]) return 9;
+    calls = nts_test_trace_calls;
+    nts_release(owned);
+    if (nts_test_trace_calls != calls) return 10;
+  }
+  NtsHeader *fixed[2] = {ownedClosure(5), ownedTuple(5)};
+  for (int i = 0; i < 2; i++) {
+    owned = fixed[i];
+    if (!owned->descriptor->trace_fields) return 14;
+    seen_count = 0;
+    owned->descriptor->trace_fields(owned, visit);
+    if (seen_count != (i == 0 ? 1u : 3u)) return 15;
+    if (i == 1 && (owned->descriptor->kind != NTS_KIND_TUPLE ||
+                   seen[0] != seen[1] || seen[0] == seen[2])) return 16;
+    size_t calls = nts_test_trace_calls;
+    nts_release(owned);
+    if (nts_test_trace_calls != calls) return 17;
+  }
   /* The generic walk skips null slots before calling nts_release. The typed
    * callback must do so too: calls count even when the payload is null. */
   NtsHeader *empty = nts_object_new(descriptor);
@@ -42,10 +114,18 @@ int main(void) {
   nts_counting_reset();
   nts_release(empty);
   if (nts_counted_releases() != 1) return 5;
+#else
+  if (descriptor->trace_fields) return 11;
 #endif
   for (int i = 0; i < 24; i++) {
+    size_t calls = nts_test_trace_calls;
     printf("%.0f %.0f %.0f\n", typedGraph(i), cycleGraph(i), deepGraph(i));
     nts_collect_cycles();
+#ifdef NTS_PROVIDER_RC
+    if (nts_test_trace_calls <= calls) return 12;
+#else
+    if (nts_test_trace_calls != calls) return 13;
+#endif
   }
 #ifdef NTS_PROVIDER_RC
   if (nts_live_count() != 0 || nts_live_bytes() != 0) return 1;
@@ -55,13 +135,18 @@ int main(void) {
 "#;
 
 const C_ABI_QUERY: &str = "\nsize_t descriptorSize(void) { return sizeof(NtsDescriptor); }\n\
-    size_t releaseFieldsOffset(void) { return offsetof(NtsDescriptor, release_fields); }\n";
+    size_t releaseFieldsOffset(void) { return offsetof(NtsDescriptor, release_fields); }\n\
+    size_t traceFieldsOffset(void) { return offsetof(NtsDescriptor, trace_fields); }\n";
 const LLVM_ABI_QUERY: &str = "\ndefine i64 @descriptorSize() {\n\
     %p = getelementptr %NtsDescriptor, ptr null, i64 1\n\
     %size = ptrtoint ptr %p to i64\n\
     ret i64 %size\n}\n\
     define i64 @releaseFieldsOffset() {\n\
     %p = getelementptr %NtsDescriptor, ptr null, i32 0, i32 14\n\
+    %offset = ptrtoint ptr %p to i64\n\
+    ret i64 %offset\n}\n\
+    define i64 @traceFieldsOffset() {\n\
+    %p = getelementptr %NtsDescriptor, ptr null, i32 0, i32 15\n\
     %offset = ptrtoint ptr %p to i64\n\
     ret i64 %offset\n}\n";
 
@@ -117,9 +202,14 @@ fn run_native(
         run.status,
         String::from_utf8_lossy(&run.stderr)
     );
-    if expected_exit == 3 {
-        assert_eq!(run.stderr, b"missing typed contents callback\n");
-        eprintln!("{input}: NULL callback slots rejected at execution (exit 3)");
+    if matches!(expected_exit, 3 | 6) {
+        let message = if expected_exit == 3 {
+            b"missing typed contents callback\n".as_slice()
+        } else {
+            b"missing typed trace callback\n".as_slice()
+        };
+        assert_eq!(run.stderr, message);
+        eprintln!("{input}: NULL callback slots rejected at execution (exit {expected_exit})");
     } else {
         assert!(run.stderr.is_empty(), "{input}: {:?}", run.stderr);
     }
@@ -129,18 +219,18 @@ fn run_native(
 /// Leave the definitions intact, but disconnect every descriptor. The C
 /// conditional still references the function so -Wunused-function cannot
 /// substitute for the executed descriptor guard this control must reach.
-fn without_descriptor_callbacks(source: &str, llvm: bool) -> String {
+fn without_descriptor_callbacks(source: &str, llvm: bool, prefix: &str) -> String {
     let mut changed = 0;
     let lines: Vec<String> = source
         .lines()
         .map(|line| {
             let (descriptor, marker) = if llvm {
-                ("constant %NtsDescriptor", "ptr @nts_release_fields_")
+                ("constant %NtsDescriptor", format!("ptr @{prefix}_"))
             } else {
-                ("static const NtsDescriptor", "nts_release_fields_")
+                ("static const NtsDescriptor", format!("{prefix}_"))
             };
             if line.contains(descriptor)
-                && let Some(start) = line.rfind(marker)
+                && let Some(start) = line.rfind(&marker)
             {
                 let end = start
                     + marker.len()
@@ -166,15 +256,49 @@ fn without_descriptor_callbacks(source: &str, llvm: bool) -> String {
 }
 
 fn check_unwired(dir: &Utf8Path, c: &str, llvm: &str, sources: &[std::path::PathBuf]) {
-    for (input, source, is_llvm) in [("unwired.c", c, false), ("unwired.ll", llvm, true)] {
-        let query = if is_llvm { LLVM_ABI_QUERY } else { C_ABI_QUERY };
-        std::fs::write(
-            dir.join(input),
-            format!("{}{query}", without_descriptor_callbacks(source, is_llvm)),
-        )
-        .unwrap();
-        run_native(dir, hir::Provider::ReferenceCounting, input, sources, 3);
+    for (prefix, exit) in [("nts_release_fields", 3), ("nts_trace_fields", 6)] {
+        for (extension, source, is_llvm) in [("c", c, false), ("ll", llvm, true)] {
+            let query = if is_llvm { LLVM_ABI_QUERY } else { C_ABI_QUERY };
+            let input = format!("unwired-{prefix}.{extension}");
+            std::fs::write(
+                dir.join(&input),
+                format!(
+                    "{}{query}",
+                    without_descriptor_callbacks(source, is_llvm, prefix)
+                ),
+            )
+            .unwrap();
+            run_native(dir, hir::Provider::ReferenceCounting, &input, sources, exit);
+        }
     }
+}
+
+/// Observe actual collector dispatch in test copies only. A correct answer
+/// with unused callback definitions is insufficient: the generic walk could
+/// have produced it. Every instrumented definition is counted at entry.
+fn count_traces(source: &str, llvm: bool) -> String {
+    let mut out = if llvm {
+        "@nts_test_trace_calls = external global i64\n".to_owned()
+    } else {
+        "extern unsigned long nts_test_trace_calls;\n".to_owned()
+    };
+    let mut entry = false;
+    for line in source.lines() {
+        out.push_str(line);
+        out.push('\n');
+        if llvm {
+            if line.starts_with("define internal void @nts_trace_fields_") {
+                entry = true;
+            } else if entry && line == "entry:" {
+                out.push_str("  %test.before = load i64, ptr @nts_test_trace_calls\n  %test.after = add i64 %test.before, 1\n  store i64 %test.after, ptr @nts_test_trace_calls\n");
+                entry = false;
+            }
+        } else if line.starts_with("static void nts_trace_fields_") {
+            out.push_str("    nts_test_trace_calls++;\n");
+        }
+    }
+    assert!(!entry, "trace callback had no entry block");
+    out
 }
 
 fn cross_compile(dir: &Utf8Path, program: &hir::Program) {
@@ -262,16 +386,26 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
             llvm.text
                 .contains("define internal void @nts_release_fields_")
         );
+        let counted = provider == hir::Provider::ReferenceCounting;
+        assert_eq!(
+            c.writer.text().contains("static void nts_trace_fields_"),
+            counted
+        );
+        assert_eq!(
+            llvm.text
+                .contains("define internal void @nts_trace_fields_"),
+            counted
+        );
         // Foreign tags must not take the generated managed-edge path.
         assert!(!c.writer.text().contains("nts_value_release(slot_"));
         std::fs::write(
             dir.join("program.c"),
-            format!("{}{C_ABI_QUERY}", c.writer.text()),
+            format!("{}{C_ABI_QUERY}", count_traces(c.writer.text(), false)),
         )
         .unwrap();
         std::fs::write(
             dir.join("program.ll"),
-            format!("{}{LLVM_ABI_QUERY}", llvm.text),
+            format!("{}{LLVM_ABI_QUERY}", count_traces(&llvm.text, true)),
         )
         .unwrap();
         let mut sources = Vec::new();

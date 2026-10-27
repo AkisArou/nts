@@ -553,6 +553,7 @@ const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
                                     NULL,
                                     nts_array_to_string,
                                     NULL,
+                                    NULL,
                                     NULL};
 /* The same array of references, for one whose elements the compiler proved
    can never lead back to it (`Cycles::array`): never buffered as a cycle
@@ -572,13 +573,14 @@ const NtsDescriptor nts_desc_ref_acyclic = {NTS_KIND_ARRAY,
                                             NULL,
                                             nts_array_to_string,
                                             NULL,
+                                            NULL,
                                             NULL};
 const NtsDescriptor nts_desc_string1 = {
-    NTS_KIND_STRING,   1,  0,    0,    0,    0,   "string", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL};
+    NTS_KIND_STRING,   1,  0,    0,    0,    0,    "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL, NULL};
 const NtsDescriptor nts_desc_string2 = {
-    NTS_KIND_STRING,   2,  0,    0,    0,    0,   "string", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL};
+    NTS_KIND_STRING,   2,  0,    0,    0,    0,    "string", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL, NULL};
 
 static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
                                               (uint32_t)sizeof(NtsBigIntBox),
@@ -591,6 +593,7 @@ static const NtsDescriptor nts_desc_bigint = {NTS_KIND_BIGINT,
                                               0,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
+                                              NULL,
                                               NULL,
                                               NULL,
                                               NULL,
@@ -1429,8 +1432,8 @@ void nts_register_holders(uint32_t family, const NtsHolders *holders) {
  * this descriptor in its header, and the collector recognises it by address.
  * Cyclic, since holding is what puts it in a cycle. */
 const NtsDescriptor nts_holder_descriptor = {
-    NTS_KIND_OBJECT,   0,  0,    1,    0,    0,   "holder", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL};
+    NTS_KIND_OBJECT,   0,  0,    1,    0,    0,    "holder", 0u, 0,
+    NTS_ARRAY_UNKNOWN, 0u, NULL, NULL, NULL, NULL, NULL};
 
 static bool nts_is_holder(const NtsHeader *object) {
   return object->descriptor == &nts_holder_descriptor;
@@ -1516,6 +1519,10 @@ static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
     nts_each_holder(object, visit);
   }
   if (descriptor->references == 0 && descriptor->erased == 0) {
+    return;
+  }
+  if (edges == NTS_EDGES_TRACED && descriptor->trace_fields) {
+    descriptor->trace_fields(object, visit);
     return;
   }
   /* The references in its erased slots -- a map's, an erased array's, an
@@ -3014,6 +3021,7 @@ static const NtsDescriptor nts_desc_number_array = {NTS_KIND_ARRAY,
                                                     0u,
                                                     NULL,
                                                     nts_array_to_string,
+                                                    NULL,
                                                     NULL,
                                                     NULL};
 
@@ -7228,6 +7236,7 @@ static const NtsDescriptor nts_desc_boxed = {NTS_KIND_BOXED,
                                              NULL,
                                              NULL,
                                              NULL,
+                                             NULL,
                                              NULL};
 
 NtsHeader *nts_boxed_new(void *boxed, void (*free)(void *boxed, size_t data),
@@ -8946,6 +8955,7 @@ static const NtsDescriptor nts_desc_map = {NTS_KIND_MAP,
                                            NULL,
                                            nts_map_to_string,
                                            NULL,
+                                           NULL,
                                            NULL};
 
 /* A table: an object used as a dictionary (`Record<string, T>`, an index
@@ -8967,6 +8977,7 @@ static const NtsDescriptor nts_desc_table = {NTS_KIND_MAP,
                                              0u,
                                              NULL,
                                              nts_object_to_string,
+                                             NULL,
                                              NULL,
                                              NULL};
 
@@ -9017,6 +9028,7 @@ static const NtsDescriptor nts_desc_date = {NTS_KIND_OBJECT,
                                             0,
                                             NTS_ARRAY_UNKNOWN,
                                             0u,
+                                            NULL,
                                             NULL,
                                             NULL,
                                             NULL,
@@ -9077,6 +9089,7 @@ static const NtsDescriptor nts_desc_buffer = {NTS_KIND_BUFFER,
                                               0u,
                                               NULL,
                                               nts_buffer_to_string,
+                                              NULL,
                                               NULL,
                                               NULL};
 
@@ -9245,6 +9258,7 @@ static const NtsDescriptor nts_desc_dataview = {NTS_KIND_OBJECT,
                                                 0u,
                                                 NULL,
                                                 nts_dataview_to_string,
+                                                NULL,
                                                 NULL,
                                                 NULL};
 
@@ -9553,7 +9567,7 @@ static const NtsDescriptor nts_desc_view = {
     /* One reference, at offset zero: the buffer. Cyclic because a view is an
        ordinary managed object and a program may put one in a cycle. */
     (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)}, 0, "TypedArray",
-    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL, NULL};
+    0u, 0, NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL, NULL, NULL};
 
 /* Beside the descriptor it compares against, rather than with the other
  * `nts_is_*` helpers: a file-scope `static const` has no forward declaration
@@ -10099,6 +10113,7 @@ static const NtsDescriptor nts_desc_symbol = {NTS_KIND_SYMBOL,
                                               0,
                                               NTS_ARRAY_UNKNOWN,
                                               0u,
+                                              NULL,
                                               NULL,
                                               NULL,
                                               NULL,
@@ -11771,6 +11786,7 @@ static const NtsDescriptor nts_desc_reaction = {NTS_KIND_OBJECT,
                                                 NULL,
                                                 NULL,
                                                 NULL,
+                                                NULL,
                                                 NULL};
 
 /* The settlement payload is *not* here: it is an erased slot, listed below, and
@@ -11798,6 +11814,7 @@ static const NtsDescriptor nts_desc_promise = {NTS_KIND_OBJECT,
                                                0u,
                                                NULL,
                                                nts_promise_to_string,
+                                               NULL,
                                                NULL,
                                                NULL};
 
@@ -12153,6 +12170,7 @@ static const NtsDescriptor nts_desc_combinator = {
     NULL,
     NULL,
     NULL,
+    NULL,
     NULL};
 
 static const uint32_t nts_combinator_slot_offsets[] = {
@@ -12172,6 +12190,7 @@ static const NtsDescriptor nts_desc_combinator_slot = {
     0,
     NTS_ARRAY_UNKNOWN,
     0u,
+    NULL,
     NULL,
     NULL,
     NULL,
@@ -12370,6 +12389,7 @@ static const NtsDescriptor nts_desc_adoption = {NTS_KIND_OBJECT,
                                                 NULL,
                                                 NULL,
                                                 NULL,
+                                                NULL,
                                                 NULL};
 
 static void nts_adoption_drop(void *state) { nts_release((NtsHeader *)state); }
@@ -12472,6 +12492,7 @@ static const NtsDescriptor nts_desc_callback = {NTS_KIND_OBJECT,
                                                 0,
                                                 NTS_ARRAY_UNKNOWN,
                                                 0u,
+                                                NULL,
                                                 NULL,
                                                 NULL,
                                                 NULL,

@@ -1,8 +1,25 @@
-//! The owned managed edges of one physical layout, shared by native emitters.
+//! The owned managed edges of one physical layout, shared by native emitters
+//! for destruction and cycle tracing.
 //!
 //! Foreign edges keep the runtime's finalization protocol. An erased slot is
 //! visited only when its tag names managed storage; it is not a pointer field.
 use nts_core::hir::{HirType, Layout};
+
+#[derive(Debug, Clone, Copy)]
+pub enum Action {
+    Release,
+    Trace,
+}
+
+impl Action {
+    #[must_use]
+    pub const fn symbol_prefix(self) -> &'static str {
+        match self {
+            Self::Release => "nts_release_fields",
+            Self::Trace => "nts_trace_fields",
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Fields {

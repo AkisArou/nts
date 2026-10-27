@@ -184,6 +184,7 @@ int main(void) {
                                        0,
                                        NULL,
                                        NULL,
+                                       NULL,
                                        NULL};
   retained = 0;
   released = 0;

@@ -122,6 +122,22 @@ fn checks(report: &str) -> usize {
 }
 
 #[test]
+fn typed_tracing_preserves_collector_and_holder_protocols() {
+    for flags in [
+        vec!["-DNTS_PROVIDER_RC"],
+        vec![
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    ] {
+        let report = run_suite("typed_trace", &flags);
+        assert!(checks(&report) >= 26, "{report}");
+    }
+}
+
+#[test]
 fn typed_contents_cleanup_preserves_the_runtime_death_protocol() {
     for flags in [
         vec!["-DNTS_PROVIDER_RC"],

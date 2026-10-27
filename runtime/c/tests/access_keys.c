@@ -46,6 +46,7 @@ static void objects_run_no_code(void) {
                                            NULL,
                                            unexpected,
                                            NULL,
+                                           NULL,
                                            NULL};
   NtsHeader object = {&descriptor, NTS_IMMORTAL, 0, 0};
   expect("object description omitted",

@@ -24,6 +24,7 @@ static const NtsDescriptor leaf = {NTS_KIND_OBJECT,
                                    0,
                                    0,
                                    0,
+                                   NULL,
                                    NULL};
 static const NtsDescriptor refs = {NTS_KIND_ARRAY,
                                    sizeof(NtsHeader *),
@@ -39,6 +40,7 @@ static const NtsDescriptor refs = {NTS_KIND_ARRAY,
                                    0,
                                    0,
                                    0,
+                                   NULL,
                                    NULL};
 
 static NtsArray *array(bool grown) {

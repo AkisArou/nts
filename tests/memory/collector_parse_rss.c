@@ -31,6 +31,7 @@ static const NtsDescriptor value_desc = {NTS_KIND_OBJECT,
                                          0,
                                          0,
                                          0,
+                                         NULL,
                                          NULL};
 static const NtsDescriptor refs = {NTS_KIND_ARRAY,
                                    sizeof(NtsHeader *),
@@ -46,6 +47,7 @@ static const NtsDescriptor refs = {NTS_KIND_ARRAY,
                                    0,
                                    0,
                                    0,
+                                   NULL,
                                    NULL};
 
 static size_t rss(void) {

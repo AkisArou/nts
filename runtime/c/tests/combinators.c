@@ -73,6 +73,7 @@ static const NtsDescriptor desc_step = {NTS_KIND_OBJECT,
                                         NULL,
                                         NULL,
                                         NULL,
+                                        NULL,
                                         NULL};
 
 /* The result array of an `all` over number payloads. */
@@ -87,6 +88,7 @@ static const NtsDescriptor desc_numbers = {NTS_KIND_ARRAY,
                                            0,
                                            NTS_ARRAY_FLOAT,
                                            0u,
+                                           NULL,
                                            NULL,
                                            NULL,
                                            NULL,

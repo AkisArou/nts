@@ -63,6 +63,7 @@ pub mod signatures_arm64_linux;
 pub mod signatures_arm64_windows;
 pub mod signatures_win64;
 
+use nts_codegen_common::release::Action;
 use nts_core::hir::JsText;
 use std::fmt::Write as _;
 
@@ -807,9 +808,9 @@ fn literal_table(program: &Program) -> Vec<JsText> {
 ///
 /// And `to_string`, how an object of the type prints (`Program::printed`), and
 /// `function_name`, what a function of it is called (`Program::function_names`),
-/// and `release_fields`, its owned managed-edge cleanup, last.
+/// and the owned managed-edge release/trace callbacks, last.
 const DESCRIPTOR_TYPE: &str = "%NtsDescriptor = type { i32, i32, i32, i32, ptr, ptr, ptr, i32, \
-     ptr, i32, i32, ptr, ptr, ptr, ptr }";
+     ptr, i32, i32, ptr, ptr, ptr, ptr, ptr }";
 
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
@@ -966,7 +967,13 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         let reference_table = offsets("refs", &references);
         let erased_table = offsets("erased", &erased);
         let (foreign, foreign_table) = foreign_slots(&mut out, layout, &placed.offsets, &tag);
-        let release_fields = release_fields(&mut out, &tag, &references, &erased);
+        let release_fields =
+            reference_fields(&mut out, &tag, &references, &erased, Action::Release);
+        let trace_fields = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            reference_fields(&mut out, &tag, &references, &erased, Action::Trace)
+        } else {
+            "ptr null".to_owned()
+        };
         // The class's dispatch table, where the hierarchy has one. A slot the
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at
@@ -1023,7 +1030,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {}, \
-                 {function_name}, {release_fields}",
+                 {function_name}, {release_fields}, {trace_fields}",
                 erased.len(),
                 to_string_slot(program, layout, class)
             )
@@ -1040,17 +1047,27 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
     out
 }
 
-/// Like the C callback, this releases managed edges only. The runtime owns
-/// the drain, freeing and the separate foreign-slot finalization protocol.
-fn release_fields(out: &mut String, tag: &str, managed: &[u32], erased: &[u32]) -> String {
+/// Render the same managed-edge and tag tests for release and trace actions.
+/// The runtime owns collection, the dying drain and foreign finalization.
+fn reference_fields(
+    out: &mut String,
+    tag: &str,
+    managed: &[u32],
+    erased: &[u32],
+    action: nts_codegen_common::release::Action,
+) -> String {
     use nts_core::hir::tags;
     if managed.is_empty() && erased.is_empty() {
         return "ptr null".to_owned();
     }
-    let callback = format!("nts_release_fields_{tag}");
+    let callback = format!("{}_{tag}", action.symbol_prefix());
+    let (parameters, visit) = match action {
+        nts_codegen_common::release::Action::Release => ("ptr %object", "@nts_release"),
+        nts_codegen_common::release::Action::Trace => ("ptr %object, ptr %visit", "%visit"),
+    };
     let _ = writeln!(
         out,
-        "define internal void @{callback}(ptr %object) {{\nentry:"
+        "define internal void @{callback}({parameters}) {{\nentry:"
     );
     for (at, offset) in managed.iter().enumerate() {
         let _ = writeln!(
@@ -1063,7 +1080,7 @@ fn release_fields(out: &mut String, tag: &str, managed: &[u32], erased: &[u32]) 
             out,
             "  br i1 %m{at}.live, label %m{at}.release, label %m{at}.next\nm{at}.release:"
         );
-        let _ = writeln!(out, "  call void @nts_release(ptr %m{at})");
+        let _ = writeln!(out, "  call void {visit}(ptr %m{at})");
         let _ = writeln!(out, "  br label %m{at}.next\nm{at}.next:");
     }
     for (at, offset) in erased.iter().enumerate() {
@@ -1086,7 +1103,7 @@ fn release_fields(out: &mut String, tag: &str, managed: &[u32], erased: &[u32]) 
             "  br i1 %owned{at}, label %release{at}, label %next{at}\nrelease{at}:"
         );
         let _ = writeln!(out, "  %p{at} = inttoptr i64 %bits{at} to ptr");
-        let _ = writeln!(out, "  call void @nts_release(ptr %p{at})");
+        let _ = writeln!(out, "  call void {visit}(ptr %p{at})");
         let _ = writeln!(out, "  br label %next{at}\nnext{at}:");
     }
     let _ = writeln!(out, "  ret void\n}}");
@@ -1122,7 +1139,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
             *out,
             "@{descriptor} = internal constant %NtsDescriptor {{ i32 0, i32 {size}, i32 0, i32 {}, ptr null, ptr null, \
              ptr @{descriptor}.name, i32 0, ptr null, i32 {}, i32 1, ptr @{descriptor}.slot, ptr null, \
-             ptr null, ptr null }}",
+             ptr null, ptr null, ptr null }}",
             u32::from(family.holds_closures()),
             nts_codegen_common::counting::ARRAY_FOREIGN
         );
@@ -1169,7 +1186,7 @@ fn array_descriptors(out: &mut String, program: &Program) {
                 *out,
                 "@nts_desc_arr_{tag} = internal constant %NtsDescriptor {{ i32 0, i32 {}, \
                  i32 0, i32 {erased}, ptr null, ptr null, ptr @nts_name_arr_{tag}, i32 {erased}, \
-                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null }}",
+                 ptr null, i32 {}, i32 0, ptr null, ptr @nts_array_to_string, ptr null, ptr null, ptr null }}",
                 shape.size,
                 nts_codegen_common::counting::array_element(element)
             );

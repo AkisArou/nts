@@ -14,7 +14,7 @@
 //! failure has to be visible.
 
 pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
-use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
+use nts_codegen_common::{CodeWriter, Copy, block_order, destruct, release::Action};
 use nts_core::hir::native::NativeAbi;
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, FunctionName, HirType, ManagedType, OpKind, Printed, Program,
@@ -3656,7 +3656,13 @@ fn emit_object_descriptors(
             references.len()
         );
         let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
-        let release_fields = emit_release_fields(writer, origin, layout, &name, &release);
+        let release_fields =
+            emit_reference_fields(writer, origin, layout, &name, &release, Action::Release);
+        let trace_fields = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            emit_reference_fields(writer, origin, layout, &name, &release, Action::Trace)
+        } else {
+            "NULL".to_owned()
+        };
         // How an object of this layout, or of one class sharing it, prints
         // (`Program::printing`), which the runtime reads off the descriptor. A
         // function this program does not define is null, as a table entry is,
@@ -3690,7 +3696,7 @@ fn emit_object_descriptors(
         let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
             format!(
                 "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {}, \
-                 {function_name}, {release_fields}",
+                 {function_name}, {release_fields}, {trace_fields}",
                 erased.len(),
                 to_string(class)
             )
@@ -3745,27 +3751,31 @@ fn construction_hole(name: &str, descriptor: &str) -> String {
 
 /// Managed edges only: foreign values retain the runtime's separate,
 /// clear-before-release finalization order, including those in erased slots.
-fn emit_release_fields(
+fn emit_reference_fields(
     writer: &mut CodeWriter,
     origin: &Origin,
     layout: &nts_core::hir::Layout,
     name: &str,
     fields: &nts_codegen_common::release::Fields,
+    action: nts_codegen_common::release::Action,
 ) -> String {
     if fields.is_empty() {
         return "NULL".to_owned();
     }
-    let callback = format!("nts_release_fields_{name}");
-    writer.line(
-        origin,
-        format!("static void {callback}(NtsHeader *object) {{"),
-    );
+    let callback = format!("{}_{name}", action.symbol_prefix());
+    let (parameters, visit) = match action {
+        nts_codegen_common::release::Action::Release => ("NtsHeader *object", "nts_release"),
+        nts_codegen_common::release::Action::Trace => {
+            ("NtsHeader *object, void (*visit)(NtsHeader *)", "visit")
+        }
+    };
+    writer.line(origin, format!("static void {callback}({parameters}) {{"));
     writer.line(origin, format!("    {name} *self = ({name} *)object;"));
     for at in &fields.managed {
         let field = c_member_at(layout, *at);
         writer.line(
             origin,
-            format!("    if (self->{field}) nts_release((NtsHeader *)self->{field});"),
+            format!("    if (self->{field}) {visit}((NtsHeader *)self->{field});"),
         );
     }
     for at in &fields.erased {
@@ -3779,7 +3789,7 @@ fn emit_release_fields(
         );
         writer.line(
             origin,
-            format!("        nts_release(nts_value_reference(slot_{at}));"),
+            format!("        {visit}(nts_value_reference(slot_{at}));"),
         );
         writer.line(origin, "    }");
     }
@@ -3863,7 +3873,7 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, {erased}, 0, 0, \"{element}[]\", {erased}, 0, {}, 0u, 0, nts_array_to_string, NULL, NULL, NULL }};",
                 descriptor_name(element),
                 array_element_kind(element),
             ),
@@ -7122,7 +7132,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
             writer.line(
                 origin,
                 format!(
-                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL }};"
+                    "static const NtsDescriptor {descriptor} = {{ NTS_KIND_ARRAY, sizeof(void *), 0u, {cyclic}u, 0, 0, \"{family_name}[]\", 0u, 0, NTS_ARRAY_FOREIGN, 1u, {descriptor}_slot, NULL, NULL, NULL, NULL }};"
                 ),
             );
         }

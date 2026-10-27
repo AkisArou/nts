@@ -330,8 +330,15 @@ typedef struct NtsDescriptor {
    * This never frees the receiver or recurses through destruction: child
    * releases join the runtime's iterative dying list. The cycle collector
    * must not call it, because trial deletion already accounted for its edges.
-   * Trailing for source compatibility with handwritten descriptors. */
+   * Appended after the legacy fields for handwritten source compatibility. */
   void (*release_fields)(struct NtsHeader *object);
+  /* Enumerate the same owned managed fields during cycle collection, without
+   * clearing slots or releasing children. The runtime supplies the action for
+   * each edge; duplicate edges are visited separately. Erased fields select
+   * managed tags only. Holder edges remain the runtime's to enumerate first.
+   * NULL keeps the generic walk. Ordinary destruction never calls this. */
+  void (*trace_fields)(struct NtsHeader *object,
+                       void (*visit)(struct NtsHeader *child));
 } NtsDescriptor;
 
 /* What an array's slots hold.
