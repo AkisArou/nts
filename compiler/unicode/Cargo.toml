@@ -1,0 +1,11 @@
+[package]
+name = "nts-unicode"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The compiler's Unicode model: case mappings and properties parsed from the vendored UCD, one version, read by every emitter."
+
+[lints]
+workspace = true
