@@ -36,8 +36,15 @@ object store.
 - Sabotage and control experiments run only after the fix is committed:
   restoring the "before" state with `git checkout` has destroyed the fix
   itself. A control is usually a pin (`tooling/conformance/pin.ts`), not a tree.
-- Never `pkill -f` or `pgrep -f` a pattern: it matches other lanes' processes
-  and your own shell. Kill exact PIDs you started.
+- **Stop your own work by its systemd unit, never by a list of PIDs.** Start
+  every long run in a named unit (`systemd-run --user --scope --unit=<name>` or
+  `land-unit.ts`) and stop it with `systemctl --user stop <name>`: the cgroup
+  holds exactly its processes. Never send a signal to PIDs worked out from
+  `ps`, and never `pkill -f` or `pgrep -f` a pattern. On 2026-10-27 a
+  descendant walk over `ps` started from PID 1, and its `kill -TERM` reached
+  the systemd user manager, which ended the session and every agent, tmux
+  pane and gate with it. A pattern matches other lanes' processes and your
+  own shell the same way.
 
 Until your lane has moved into its tree, you share the checkout's one git
 index with everyone still in it: commit with

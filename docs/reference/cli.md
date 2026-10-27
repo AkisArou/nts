@@ -111,6 +111,15 @@ Builds every product `nts.config.ts` declares, for every target each names.
   <root>`, with `missing <k> refused function(s)` when lowering refused any.
 - **Writes the build-system hooks** `integrate` names, after the artifacts.
 - **Exit status:** 0 when every target built; 1 at the first that could not.
+- **Reproducible.** The same source, compiler and options give the same bytes
+  on every backend, whatever the project's directory, the working directory,
+  `TMPDIR`, the time zone or the time of day: native objects, libraries and
+  executables, class files and jars, Wasm modules and their glue. Native tools
+  run in the build directory with relative inputs, a bare absolute shared
+  library keeps its path, jar entries carry one fixed date, and source names
+  are relative to the project root. A test builds a fixture twice under
+  different conditions on all four backends and compares every artifact
+  (`tooling/cli/tests/determinism.rs`).
 
 ### `nts check`
 

@@ -5,9 +5,8 @@ backends are paused until phase 4 of the [plan](../plan.md). Their foundations
 are settled first, so that native decisions meant for every backend are checked
 against them while still cheap to change.
 
-The backends' own documents hold the detail: [`../wasm.md`](../targets/wasm.md),
-[`../jvm-interop.md`](../targets/jvm.md),
-[`../jvm-android-provider.md`](../targets/jvm.md#android).
+The backends' own pages hold the detail: [Wasm](../targets/wasm.md), and
+[the JVM](../targets/jvm.md) with [Android](../targets/jvm.md#android).
 
 ## Where they stand
 
@@ -38,7 +37,7 @@ Each is a recommendation; the user approves or changes it.
 |---|---|---|
 | J1 | **Weak references on the JVM:** `WeakRef` is a `java.lang.ref.WeakReference`, with targets read during a job held until the job ends, as the specification's KeepDuringJob requires. `FinalizationRegistry` runs from a `ReferenceQueue` that `NtsEnv` drains between jobs, never on a collector thread. `WeakMap` and `WeakSet` are ephemerons by the **transposed representation**: the entry lives on the key, in a hidden slot of nts objects, and the map holds nothing strongly. | Java has no ephemerons. A `WeakHashMap` leaks whenever a value refers to its key, which M3 rejects. Holding the entry on the key is exact under any tracing collector. Keys that are foreign Java objects need research first. |
 | J2 | **Map hashing on the JVM:** keep the cached `String.hashCode` for strings and add the per-table tree fallback of [hashing](hashing.md); numbers and BigInts use the shared keyed definition (today's `hi*31+lo` for BigInt goes). An amendment of hashing's "one definition" for this one case, measured on the map rows before it is final. | A keyed hash cannot be cached in `java.lang.String`, so every lookup would rehash its probe string, while the cached hash costs nothing. The tree fallback bounds flooding to O(log n) whatever the hash, as Java's own `HashMap` does with tree bins. |
-| J3 | **`Math` on the JVM:** match node bit for bit, per decisions.md: research whether `StrictMath` (fdlibm) equals V8's `ieee754` ports function by function, and port V8's where it does not. | `StrictMath` and V8 both descend from fdlibm, but "both descend" is not "bit-identical". |
+| J3 | **`Math` on the JVM:** match node bit for bit, as [numbers](numbers.md#decisions) decides: research whether `StrictMath` (fdlibm) equals V8's `ieee754` ports function by function, and port V8's where it does not. | `StrictMath` and V8 both descend from fdlibm, but "both descend" is not "bit-identical". |
 | J4 | **A Java exception reaching TypeScript** is a catchable `Error` (`JavaError`) carrying the throwable as `cause`. | Declining makes every throwing Java API unusable from TypeScript. |
 | W1 | **Weak references on Wasm:** JS-hosted uses the host's `WeakRef`, `FinalizationRegistry` and `WeakMap` through imports, since WasmGC objects are JavaScript objects. Standalone does not provide `WeakRef` or `FinalizationRegistry` (as D6 does for Intl), and gives `WeakMap` and `WeakSet` the transposed representation of J1. | Hosted engines already implement ephemerons and finalization exactly. WasmGC has no weak references, so a standalone engine gives nothing to hook. Research confirms both premises first. |
 | W2 | **Character reads of hosted strings:** the host's strings stay the representation. A loop the compiler proves scans many characters copies them once into a GC `i16` array (`intoCharCodeArray`) and reads that. | The `strings` row is 34x C today. Whether per-character import calls are the cause is research's first question, so this is measured before it is built. |

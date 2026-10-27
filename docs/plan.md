@@ -74,8 +74,7 @@ Benchmarks run through every phase.
       behind it, bisects a red and reverts the culprit automatically. Changes
       to the gate itself stay strict.
 6. **Deterministic builds:** the same source and compiler give the same bytes
-   on every backend. Native build paths and jar timestamps are fixed; source
-   URIs and a guard test over all four backends are landing.
+   on every backend, held by a test over all four ([cli](reference/cli.md#nts-build)). *Done.*
 7. **The documentation** as specification pages, with the notebooks in
    [`records/`](records). *Done.*
 8. **The register's wrong answers** recorded as fixtures: decorators dropped,

@@ -163,7 +163,7 @@ Ranked by how much each blocks or how much harm it does today.
 |---|---|---|---|
 | X-1 | Debug and profile builds | no DWARF or `#line` from C or LLVM | `#line` plus line tables by default; frame pointers on (measured); an unoptimized debug profile |
 | X-2 | `Error.stack`, and the report of an uncaught error | `stack` refused. C, LLVM and the JVM print `nts: uncaught Error: boom` and exit 1, as node does, though node also prints the source line and the stack. Wasm exits 1 with a decline (NTS5001) | `stack` symbolized from line tables on demand; node's report format. **research:** cost |
-| X-3 | Deterministic builds | untested | *Decided 10-27:* required (the result cache, reproducible releases and A/B measurement depend on it); being measured by diffing two builds per backend |
+| X-8 | Vendored assertions in release builds | kept: release builds define no `NDEBUG`, so a vendored `assert` (zmij's, for one) stays in shipped code | Keep them, since they guard vendored code nts does not edit, unless a benchmark row shows their cost; then decide per library |
 | X-4 | Hash flooding | unseeded | The pending A/B and J2 |
 | X-5 | Bounds checks | proved or checked; a rule only in records | Record the rule in `decisions.md`, with L4's answer for out-of-range reads |
 | X-6 | Stack exhaustion | aborts; Windows has no handler | L14 |
@@ -205,6 +205,10 @@ Ranked by how much each blocks or how much harm it does today.
 - `tests/refusals/a-lone-surrogate-in-a-string-literal` expects three U+FFFD,
   while the semantic schema now keeps lone surrogates.
 - Code comments cite documents that moved to `docs/records/notebooks/` in the
-  documentation restructure, and `docs/lib-dom.md`, which no longer exists. A
-  citation sweep fixes them in one landing, in a quiet window: it owes the full
-  gate.
+  documentation restructure. The sweep is prepared (`helper/docs-citations`)
+  and lands through the fast lane for comment-only changes.
+- The `nts` help text says "See docs/nts-config.md" (`tooling/cli/src/main.rs`);
+  the page is `docs/reference/nts-config.md`.
+- Eighteen `runtime/node/*/not-applicable` files give reasons citing
+  `typescript.md` §13; their boundaries are now sections of
+  `docs/language/boundaries.md`.
