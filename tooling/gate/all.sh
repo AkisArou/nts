@@ -58,6 +58,15 @@ set -eu
 # `no frontend at /tmp/.../target/tsgo` before the native switch. That was tried.
 {
 
+# Expected refusal/crash probes must not store/compress thousands of core dumps
+# beside timed work. Opt in only when
+# deliberately debugging one crash: NTS_COREDUMPS=1 sh tooling/gate/all.sh ...
+if [ "${NTS_COREDUMPS:-0}" = 1 ]; then
+  ulimit -c unlimited
+else
+  ulimit -c 0
+fi
+
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
 

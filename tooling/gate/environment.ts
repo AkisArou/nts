@@ -18,6 +18,7 @@ export const GATE_ENVIRONMENT: readonly Variable[] = [
   { name: "JAVA_HOME", capability: "jvm" },
   { name: "JDK_HOME" },
   { name: "DEBUGINFOD_URLS", capability: "valgrind" },
+  { name: "NTS_COREDUMPS" },
 ];
 
 export const GATE_LAUNCHER = "node tooling/lanes/land-unit.ts <commit> <name>";

@@ -35,6 +35,7 @@ try {
   checked("systemd-run", [
     "--user", "--collect", "--quiet", `--unit=${unit}`, `--working-directory=${tree}`,
     `--property=StandardOutput=file:${log}`, `--property=StandardError=file:${log}`,
+    `--property=LimitCORE=${process.env.NTS_COREDUMPS === "1" ? "infinity" : "0"}`,
     ...systemdEnvironment(), process.execPath, land, sha,
   ], root);
   console.log(`queued ${sha} as ${unit}\nlog: ${log}`);

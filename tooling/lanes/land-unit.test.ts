@@ -47,6 +47,7 @@ test("the detached launcher seals the caller's HEAD and forwards the descriptor 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const args: string[] = JSON.parse(readFileSync(f.capture, "utf8"));
   assert.equal(args.at(-1), f.sha);
+  assert.ok(args.includes("--property=LimitCORE=0"));
   const directory = args.find(arg => arg.startsWith("--working-directory="))!.slice("--working-directory=".length);
   assert.equal(f.git(directory, "rev-parse", "HEAD"), f.sha);
   for (const { name } of GATE_ENVIRONMENT) {
@@ -55,6 +56,16 @@ test("the detached launcher seals the caller's HEAD and forwards the descriptor 
   assert.equal(args.some(arg => arg.includes("UNRELATED_SECRET") || arg.includes("never forward this")), false);
   assert.match(result.stdout, new RegExp(`queued ${f.sha} as nts-land-flags-`));
   assert.match(result.stdout, /log: .*land\.log/);
+});
+
+test("core dumps require an explicit debugging opt-in", t => {
+  const f = fixture(t);
+  f.env.NTS_COREDUMPS = "1";
+  const result = f.launch();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const args: string[] = JSON.parse(readFileSync(f.capture, "utf8"));
+  assert.ok(args.includes("--property=LimitCORE=infinity"));
+  assert.ok(args.includes("--setenv=NTS_COREDUMPS=1"));
 });
 
 test("a failed detached preflight never starts a unit and removes its own submission tree", t => {
