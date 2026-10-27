@@ -123,6 +123,8 @@ pub struct Report {
     pub moves: usize,
     /// Loads that needed neither, because the slot they read stayed put.
     pub borrows: usize,
+    /// Blocks whose store-move search exhausted its work budget.
+    pub move_budget_exhaustions: usize,
 }
 
 pub fn insert(program: &mut Program) -> Report {
@@ -156,6 +158,7 @@ pub fn insert(program: &mut Program) -> Report {
         report.releases += one.releases;
         report.moves += one.moves;
         report.borrows += one.borrows;
+        report.move_budget_exhaustions += one.move_budget_exhaustions;
     }
     report
 }
@@ -878,6 +881,7 @@ fn count_ops(
     let mut ops = Vec::with_capacity(original.len());
     let mut moved = rustc_hash::FxHashSet::default();
     let mut repackaged = rustc_hash::FxHashMap::default();
+    let mut transfers = StoreMoves::default();
 
     for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
@@ -1036,7 +1040,7 @@ fn count_ops(
                 // says 9.
                 && !map.borrowed(*stored)
                 && live.dies_in(at, *stored)
-                && moved.insert(*stored)
+                && transfers.take(func, layouts, &kind, *stored, &mut moved, report)
             {
                 report.moves += 1;
             } else {
@@ -1161,6 +1165,104 @@ struct Counted {
     /// Values an erasure took the reference of, with the erased value that
     /// holds it now. Each is in `moved` as well.
     repackaged: rustc_hash::FxHashMap<ValueId, ValueId>,
+}
+
+/// Store moves transfer a local's count to its container. Moving every local
+/// into a cycle leaves no root to decrement, so the cycle collector never
+/// sees the abandoned graph. Keep a count where a move closes that cycle.
+///
+/// This follows only this block's transfers and same-pointer views, not heap
+/// aliases. Exhaustion keeps the counted fallback for the remaining stores.
+struct StoreMoves {
+    into: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
+    budget: usize,
+    exhausted: bool,
+}
+
+impl Default for StoreMoves {
+    fn default() -> Self {
+        Self {
+            into: rustc_hash::FxHashMap::default(),
+            budget: 32_768,
+            exhausted: false,
+        }
+    }
+}
+
+impl StoreMoves {
+    fn take(
+        &mut self,
+        func: &Func,
+        layouts: &[Layout],
+        store: &OpKind,
+        value: ValueId,
+        moved: &mut rustc_hash::FxHashSet<ValueId>,
+        report: &mut Report,
+    ) -> bool {
+        let was_exhausted = self.exhausted;
+        let take = !moved.contains(&value)
+            && self.admit(func, layouts, store, value)
+            && moved.insert(value);
+        report.move_budget_exhaustions += usize::from(!was_exhausted && self.exhausted);
+        take
+    }
+
+    fn spend(&mut self) -> Option<()> {
+        if let Some(left) = self.budget.checked_sub(1) {
+            self.budget = left;
+            Some(())
+        } else {
+            self.exhausted = true;
+            None
+        }
+    }
+
+    fn name(&mut self, func: &Func, mut value: ValueId) -> Option<ValueId> {
+        loop {
+            self.spend()?;
+            value = match func.values[value.0 as usize].kind {
+                OpKind::Convert(inner)
+                | OpKind::FieldView { value: inner, .. }
+                | OpKind::Erase { value: inner, .. }
+                | OpKind::Unerase { value: inner, .. } => inner,
+                _ => return Some(value),
+            };
+        }
+    }
+
+    fn admit(&mut self, func: &Func, layouts: &[Layout], store: &OpKind, value: ValueId) -> bool {
+        let container = match store {
+            OpKind::FieldSet { object, .. } => *object,
+            OpKind::ArraySet { array, .. } => *array,
+            // A global remains an external root. A frame container likewise
+            // retains its explicit field walk even when its contents move.
+            _ => return true,
+        };
+        if !own::counted(func, layouts, container) {
+            return true;
+        }
+        let Some(source) = self.name(func, value) else {
+            return false;
+        };
+        let Some(container) = self.name(func, container) else {
+            return false;
+        };
+        let mut pending = vec![container];
+        let mut seen = rustc_hash::FxHashSet::default();
+        while let Some(next) = pending.pop() {
+            if self.spend().is_none() {
+                return false;
+            }
+            if next == source {
+                return false;
+            }
+            if seen.insert(next) {
+                pending.extend(self.into.get(&next).into_iter().flatten().copied());
+            }
+        }
+        self.into.entry(source).or_default().push(container);
+        true
+    }
 }
 
 /// The value an operation answers another name for: what an erasure or an
@@ -2351,5 +2453,96 @@ mod tests {
             .iter()
             .position(|k| matches!(k, OpKind::Release(ValueId(1))));
         assert!(retained.is_some() && retained < released, "{kinds:?}");
+    }
+
+    #[test]
+    fn a_store_cycle_keeps_a_root_until_the_last_borrow() {
+        let node = HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(1)));
+        for closes_cycle in [false, true] {
+            let mut program = straight(op(OpKind::ConstInt(0), number()), Vec::new());
+            program.layouts = vec![Layout {
+                types: vec![nts_semantic_schema::TypeId(1)],
+                name: "Link".to_owned(),
+                interfaces: Vec::new(),
+                fields: vec![crate::hir::Field {
+                    name: "next".to_owned().into(),
+                    ty: node.clone(),
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                }],
+                methods: Vec::new(),
+                base: None,
+            }];
+            let func = &mut program.funcs[0];
+            func.values = vec![
+                op(OpKind::Param(0), number()),
+                op(OpKind::ObjectNew { frame: false }, node.clone()),
+                op(OpKind::ObjectNew { frame: false }, node.clone()),
+                op(OpKind::ObjectNew { frame: false }, node.clone()),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(2),
+                        field: 0,
+                        value: ValueId(1),
+                    },
+                    HirType::Void,
+                ),
+                op(
+                    OpKind::FieldSet {
+                        object: ValueId(if closes_cycle { 1 } else { 3 }),
+                        field: 0,
+                        value: ValueId(2),
+                    },
+                    HirType::Void,
+                ),
+                call("later", vec![ValueId(1)], number()),
+            ];
+            func.blocks[0].ops = (0..7).map(ValueId).collect();
+            func.blocks[0].terminator = Terminator::Return(Some(ValueId(6)));
+            insert(&mut program);
+            let kinds = counted_kinds(&program);
+            let retained = kinds
+                .iter()
+                .position(|kind| matches!(kind, OpKind::Retain(ValueId(2))));
+            let released = kinds
+                .iter()
+                .position(|kind| matches!(kind, OpKind::Release(ValueId(2))));
+            if closes_cycle {
+                let called = kinds.iter().position(|kind| matches!(kind, OpKind::Call { callee: Callee::External(name), .. } if name == "later"));
+                assert!(
+                    retained.is_some() && retained < called && called < released,
+                    "{kinds:?}"
+                );
+            } else {
+                assert!(retained.is_none(), "{kinds:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_store_move_budget_exhaustion_keeps_the_count() {
+        let program = straight(op(OpKind::ConstInt(0), number()), Vec::new());
+        let mut transfers = StoreMoves {
+            into: rustc_hash::FxHashMap::default(),
+            budget: 0,
+            exhausted: false,
+        };
+        let mut moved = rustc_hash::FxHashSet::default();
+        let mut report = Report::default();
+        assert!(!transfers.take(
+            &program.funcs[0],
+            &[],
+            &OpKind::FieldSet {
+                object: ValueId(1),
+                field: 0,
+                value: ValueId(1)
+            },
+            ValueId(1),
+            &mut moved,
+            &mut report,
+        ));
+        assert_eq!(report.move_budget_exhaustions, 1);
+        assert!(moved.is_empty());
     }
 }

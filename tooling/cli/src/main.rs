@@ -2909,6 +2909,10 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
         println!("rc.retains {}", counting.retains);
         println!("rc.releases {}", counting.releases);
         println!("rc.moves {}", counting.moves);
+        println!(
+            "rc.move_budget_exhaustions {}",
+            counting.move_budget_exhaustions
+        );
         println!("rc.borrows {}", counting.borrows);
         let regions = &prepared.regions;
         println!("regions.candidates {}", regions.candidates);
