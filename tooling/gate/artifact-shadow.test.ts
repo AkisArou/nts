@@ -63,3 +63,15 @@ test("disabled observation does not even inspect inputs", () => {
   assert.equal(artifactShadow("assemble", () => { inspected = true; throw new Error("must not run"); }, {})({ status: 0 }), null);
   assert.equal(inspected, false);
 });
+
+test("a prepared key and absent package observations are rechecked after fresh execution", t => {
+  const { root, env } = fixture(t), file = join(root, "artifact"), absent = join(root, "package.json");
+  writeFileSync(file, "before");
+  const inputs = () => ({ files: [{ name: "ir", path: file }], absent: [absent] });
+  const before = artifactShadow("assemble", inputs, env).key;
+  writeFileSync(file, "after");
+  assert.equal(artifactShadow("assemble", inputs, env, before)({ status: 0 })!.status, "unavailable");
+  const current = artifactShadow("assemble", inputs, env);
+  writeFileSync(absent, "{}");
+  assert.equal(current({ status: 0 })!.status, "unavailable");
+});

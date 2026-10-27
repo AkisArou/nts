@@ -1,12 +1,12 @@
 // Observe prospective cache hits. This module never executes or skips work.
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 type File = { name: string; path: string };
-type Inputs = { files: File[]; values?: unknown };
+type Inputs = { files: File[]; absent?: string[]; values?: unknown };
 type Status = "miss" | "hit-match" | "hit-mismatch" | "unavailable";
 export type ShadowRow = { event: "artifact.shadow"; kind: string; step: string; epoch: number;
   status: Status; key: string | null; run: string | null; baseline_run?: string | null;
@@ -33,9 +33,10 @@ export function artifactFiles(root: string, prefix = "artifact"): File[] {
 }
 
 function keyOf(kind: string, input: Inputs): string {
+  if (input.absent?.some(path => existsSync(path))) throw new Error("an absent input appeared during fresh execution");
   const files = input.files.map(f => ({ name: f.name, sha256: fileDigest(f.path) })).sort((a, b) => a.name.localeCompare(b.name));
   if (new Set(files.map(f => f.name)).size !== files.length) throw new Error("duplicate artifact input name");
-  return digest(json({ version: 1, kind, files, values: input.values }));
+  return digest(json({ version: 1, kind, files, absent: input.absent ?? [], values: input.values }));
 }
 
 function publish(path: string, value: unknown): boolean {
@@ -48,18 +49,19 @@ function publish(path: string, value: unknown): boolean {
   } finally { rmSync(temporary, { force: true }); }
 }
 
-export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.ProcessEnv = process.env) {
-  if (!env.NTS_GATE_SHADOW_DIR || !env.NTS_GATE_CASE_COSTS_DIR || !env.NTS_GATE_STEP) return (_result: unknown): ShadowRow | null => null;
+export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.ProcessEnv = process.env, expectedKey?: string | null) {
+  if (!env.NTS_GATE_SHADOW_DIR || !env.NTS_GATE_CASE_COSTS_DIR || !env.NTS_GATE_STEP) return Object.assign((_result: unknown): ShadowRow | null => null, { key: null });
   let key: string | null = null, error: string | undefined;
   try {
     if (!/^[a-z0-9-]+$/.test(kind)) throw new Error("invalid shadow kind");
     key = keyOf(kind, inputs());
   } catch (e) { error = String(e); }
-  return (result: unknown): ShadowRow => {
+  return Object.assign((result: unknown): ShadowRow => {
     const row: ShadowRow = { event: "artifact.shadow", kind, step: env.NTS_GATE_STEP!, epoch: Date.now() / 1000,
       status: "unavailable", key, run: env.NTS_GATE_RUN_DIR ?? null };
     try {
       if (!key || error) throw new Error(error ?? "no artifact key");
+      if (expectedKey !== undefined && expectedKey !== key) throw new Error("artifact inputs changed during fresh execution");
       if (keyOf(kind, inputs()) !== key) throw new Error("artifact inputs changed during fresh execution");
       const resultHash = digest(json(result));
       const path = join(env.NTS_GATE_SHADOW_DIR!, kind, `${key}.json`);
@@ -76,7 +78,7 @@ export function artifactShadow(kind: string, inputs: () => Inputs, env: NodeJS.P
     try { appendFileSync(join(env.NTS_GATE_CASE_COSTS_DIR!, `shadow-${process.pid}-${counter++}.jsonl`), json(row) + "\n"); }
     catch { /* Observations cannot affect the fresh verdict. */ }
     return row;
-  };
+  }, { key });
 }
 
 // Cache version discovery within this run only, keyed by the tool's own bytes
@@ -101,11 +103,19 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   // Shell consumers call this after unconditional fresh execution.
   const flag = (name: string) => process.argv[process.argv.indexOf(name) + 1];
   try {
-    const root = flag("--inputs"), output = flag("--result");
-    const observe = artifactShadow(flag("--kind"), () => ({ files: [
-      ...artifactFiles(root), { name: "step-script", path: flag("--script") },
-      { name: "tool-library", path: flag("--tool-library") },
-    ], values: { tool: toolIdentity(flag("--tool")), java: toolIdentity(flag("--java")), flags: ["--min-api", "29"] } }));
-    observe({ status: Number(flag("--status")), log: readFileSync(output, "utf8"), outputs: artifactFiles(flag("--outputs")).map(f => ({ name: f.name, sha256: fileDigest(f.path) })) });
+    if (process.argv.includes("--request")) {
+      const request = JSON.parse(readFileSync(flag("--request"), "utf8"));
+      const observe = artifactShadow(request.kind, () => ({ files: request.files, absent: request.absent,
+        values: { ...request.values, tools: request.tools.map(toolIdentity) } }), process.env,
+        request.mode === "finish" ? request.expected_key : undefined);
+      process.stdout.write(JSON.stringify(request.mode === "prepare" ? { key: observe.key } : observe(request.result)) + "\n");
+    } else {
+      const root = flag("--inputs"), output = flag("--result");
+      const observe = artifactShadow(flag("--kind"), () => ({ files: [
+        ...artifactFiles(root), { name: "step-script", path: flag("--script") },
+        { name: "tool-library", path: flag("--tool-library") },
+      ], values: { tool: toolIdentity(flag("--tool")), java: toolIdentity(flag("--java")), flags: ["--min-api", "29"] } }));
+      observe({ status: Number(flag("--status")), log: readFileSync(output, "utf8"), outputs: artifactFiles(flag("--outputs")).map(f => ({ name: f.name, sha256: fileDigest(f.path) })) });
+    }
   } catch { /* A failed shell observation never changes the tool's verdict. */ }
 }

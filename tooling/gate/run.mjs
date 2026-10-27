@@ -427,6 +427,7 @@ function stepEnv(step, slots) {
   if (caseCosts?.available) e.NTS_GATE_CASE_COSTS_DIR = caseCosts.root;
   if (caseCosts?.available && ["assembles", "jvm-verifies", "dex", "bench-agree", "examples", "rc", "llvm", "llvm-rc", "jvm", "wasm"].includes(step.name)) {
     e.NTS_GATE_SHADOW_DIR ??= join(homedir(), ".cache/nts-gate/artifact-shadow/v1");
+    e.NTS_GATE_SHADOW_HELPER = join(HERE, "artifact-shadow.ts");
   } else delete e.NTS_GATE_SHADOW_DIR;
   e.NTS_GATE_CASE_BINARY_SHA = identities.nts?.sha256;
   // An elastic step's workers ask for tokens; any other step already holds

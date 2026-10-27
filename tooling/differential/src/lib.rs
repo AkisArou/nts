@@ -41,6 +41,7 @@ use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
 use nts_frontend_ts::Frontend;
 
+mod artifact_shadow;
 mod case_costs;
 mod objects;
 
@@ -588,7 +589,9 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
             &mut timeouts,
         )?,
     };
-    let engine = case_costs::measure("oracle.total", || run_node(dir, &entry, &testable))?;
+    let engine = case_costs::measure("oracle.total", || {
+        run_node(dir, &entry, &testable, &snapshot.sources)
+    })?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
     let mut report = report(&native, &engine, &testable, &refused, &approximate);
     report.aborts = aborts;
@@ -2123,8 +2126,9 @@ fn run_jvm(
     std::fs::write(&cases_path, cases)?;
 
     let classpath = format!("{dir}:{jar}");
-    let _execution = case_costs::span("program.total");
-    collect_restarting(
+    let shadow = artifact_shadow::jvm(dir, &emitted, &jar, &cases_path);
+    let execution = case_costs::span("program.total");
+    let run = collect_restarting(
         dir,
         &results(testable),
         refused,
@@ -2143,7 +2147,10 @@ fn run_jvm(
                     .context("running the compiled classes")
             })
         },
-    )
+    );
+    drop(execution);
+    artifact_shadow::finish_jvm(shadow, &run, refused, aborts, *timeouts);
+    run
 }
 
 /// Whether a pool value is one the parameter's proved type can hold.
@@ -2588,7 +2595,12 @@ impl Engine {
     }
 }
 
-fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Run> {
+fn run_node(
+    dir: &Utf8Path,
+    entry: &Utf8Path,
+    testable: &[Testable],
+    sources: &[nts_diagnostics::SourceFile],
+) -> Result<Run> {
     let absolute = entry
         .canonicalize_utf8()
         .with_context(|| format!("locating {entry}"))?;
@@ -2597,6 +2609,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
     std::fs::write(&path, driver)?;
     let hook = dir.join("resolve_ts.mjs");
     std::fs::write(&hook, RESOLVE_TS)?;
+    let shadow = artifact_shadow::oracle(dir, sources);
 
     let results_path = dir.join("results-node.txt");
     // **The spawner truncates, the harness appends.** A file left by a previous
@@ -2626,13 +2639,17 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
             .arg(&path)
             .output()
             .context("running node")
-    })?;
-    let results = node_results("node", &results_path, &run)?;
-    Ok(Run {
-        results,
-        output: lines(&run.stdout),
-        thrown: Vec::new(),
-    })
+    });
+    let result = run.and_then(|run| {
+        let results = node_results("node", &results_path, &run)?;
+        Ok(Run {
+            results,
+            output: lines(&run.stdout),
+            thrown: Vec::new(),
+        })
+    });
+    artifact_shadow::finish_oracle(shadow, &result);
+    result
 }
 
 /// The node oracle, uncoloured whatever shell launched it.
