@@ -2,7 +2,7 @@
 
 Historical `tsgo` commands below are pre-switch (tsgo); the current frontend is in process.
 
-Facts specific to the C, LLVM, JVM and N-API backends and their runtimes, and to WasmGC on V8, kept for the Binaryen backend: the direct Wasm backend these were learned on is retired and archived at `refs/archive/wasm/direct-backend`.
+Facts specific to the C, LLVM, JVM and N-API backends and their runtimes, and to WasmGC on V8, kept for the Binaryen backend: the first, direct Wasm implementation these were learned on was removed and archived at `refs/archive/wasm/direct-backend`.
 
 Each line is a rule and the reason it exists. Add one when something costs you time that a rule would have saved; delete one when it stops being true.
 

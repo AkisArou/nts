@@ -15,7 +15,7 @@ HIR lowering        typed SSA; every operation carries its source origin
 HIR preparation     specialization · simplification · escape and ownership
       │             analysis · reference counting where selected · verification
       ▼
-C (→ clang) · LLVM IR · JVM class files (→ DEX) · N-API addons
+C (→ clang) · LLVM IR · JVM class files (→ DEX) · WasmGC (via Binaryen IR) · N-API addons
 ```
 
 `compiler/frontend-tsrs` owns the native checker's sessions and borrowed views.
@@ -26,7 +26,7 @@ differently.
 **Memory is chosen per build, not per backend.** `hir::Provider` has three:
 
 - `NoGc` allocates and never frees: for testing, never shipped.
-- `HostGc` leaves the heap to a managed host: the JVM or ART collector.
+- `HostGc` leaves the heap to a managed host: the JVM or ART collector, or WasmGC.
 - `ReferenceCounting` counts, with a cycle collector behind it.
 
 `nts build` counts references on native targets unless told `--nogc`; the

@@ -152,8 +152,8 @@ which is a different number from the SDK it compiles against.
 | `target.chromium(o?)` | `linux-gnu` | `linux` | `x86_64` | `c` | as `linux`; adds the DOM's declarations and its native half ([Chromium](../targets/chromium.md)) |
 
 - **Architectures** are `x86_64`, `aarch64` and `armv7`. There is no
-  `wasm32` and no Wasm target: the Wasm backend is being rebuilt on Binaryen
-  and builds nothing today ([Wasm](../targets/wasm.md); S-1 in
+  `wasm32` and no Wasm target constructor yet: both return with the Wasm
+  backend, which is being rebuilt on Binaryen IR and builds nothing today ([Wasm](../targets/wasm.md); S-1 in
   [open questions](../open-questions.md)).
 - **Backends** a target names are `c`, `llvm` and `jvm`.
 - **`cpu`:** an x86-64 target builds for x86-64-v3 (AVX2, BMI2, FMA) unless it

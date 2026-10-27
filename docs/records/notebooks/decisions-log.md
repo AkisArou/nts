@@ -188,12 +188,16 @@ storage; no run-time ropes unless a row proves them.
   only for buffers and kernels ([`wasm.md`](../../targets/wasm.md)). No backward
   compatibility with the current emitter is owed.
 - test262 runs on every backend, the JVM and Wasm included (10-14).
-- **The direct Wasm backend is retired** (the user, 10-27): it is removed from
+- **The direct Wasm implementation is removed** (the user, 10-27): it is removed from
   the tree, the workspace and the gate, and archived at
   `refs/archive/wasm/direct-backend`, rather than kept in the tree unbuilt.
   The Binaryen backend replaces it later and starts from the design. Until
   then, fixtures and agreement cover C, LLVM and the JVM, and the gate loses
   the Wasm steps, which were often the longest step of a core train.
+- **WebAssembly is a target and always will be** (the user, 10-28):
+  "WebAssembly IS a target and will always be, like before. we just deleted
+  the previous implementation because we are gonna build it on top of
+  binaryen-IR". The 10-27 removal was of the implementation, not the target.
 
 ## Unicode (10-27)
 

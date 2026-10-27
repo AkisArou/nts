@@ -48,7 +48,7 @@ does less than its source says for a missing builtin.
 | `emit-c` | printed on stderr; exit 0 | printed on stderr; exit 0 | fatal where it leaves the C inconsistent |
 | `emit-llvm` | printed on stderr; exit 0 | printed on stderr; exit 0 | printed on stderr; with `--out`, fatal |
 | `emit-jvm` | printed on stderr; exit 0 | printed on stderr; exit 0 | printed as `declined:` on stderr; exit 0 |
-| `emit-wasm` | retired: always the notice below, exit 1, nothing written | the same | the same |
+| `emit-wasm` | being rebuilt: always the notice below, exit 1, nothing written | the same | the same |
 | `check` | printed on stderr as `refused:`; the rest is compared | the same | the same |
 | `hir`, `refusals`, `stats` | listed in the output | listed | not reached |
 
@@ -209,7 +209,7 @@ Renders the program as class files.
 
 ### `nts emit-wasm`
 
-Retired. Every invocation, whatever its arguments, prints `the Wasm backend
+Being rebuilt on Binaryen IR. Every invocation, whatever its arguments, prints `the Wasm backend
 is being rebuilt on Binaryen; see docs/targets/wasm.md` on stderr and exits
 1, writing nothing; `nts build --target wasm` fails the same way. Naming
 `wasm` as a backend anywhere else (`--backend`, `--backends`,

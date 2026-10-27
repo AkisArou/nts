@@ -17,7 +17,7 @@ collide, making every insert and lookup scan the whole table, so a `Map` or a
 | numbers, references | the same mixer, unseeded | the same |
 | BigInt keys | `mix(low) ^ mix(high) ^ tag` (`runtime/c/nts_runtime.c`, the `NTS_TAG_BIGINT` case) | **swapping the halves gives the same hash, and equal halves cancel**: structural collisions, whatever the seed |
 | JVM tables | `String.hashCode` times a constant, then a shift (`runtime/jvm/src/nts/rt/NtsTable.java`, `hashString`) | Java's string hash collides trivially (`"Aa"` and `"BB"`), and a mixer cannot separate keys that already collide: **the JVM table can be flooded** |
-| Wasm | nothing built; the retired backend's 32-bit FNV-1a is the Binaryen design's starting evidence | unseeded, and a different definition from native |
+| Wasm | nothing built; the first implementation's 32-bit FNV-1a is the Binaryen backend's starting evidence | unseeded, and a different definition from native |
 | the table | insertion-ordered entries plus an open-addressing index holding each entry's hash; growth rebuilds from the cached hashes | rebuilding from cached hashes cannot separate full collisions |
 
 ## The design

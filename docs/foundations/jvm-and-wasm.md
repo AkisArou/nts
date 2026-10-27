@@ -12,7 +12,7 @@ The backends' own pages hold the detail: [Wasm](../targets/wasm.md), and
 
 **Built** works today; *decided* is settled but not built; open has no
 decision yet. In the Wasm columns, **built** entries are evidence from the
-retired direct backend for the Binaryen design that replaces it, not
+first, direct implementation for the Binaryen backend now being built, not
 something on main ([Wasm](../targets/wasm.md)).
 
 | | JVM (desktop, Android) | Wasm, JS-hosted (node, browsers) | Wasm, standalone and WASI |
@@ -29,7 +29,7 @@ something on main ([Wasm](../targets/wasm.md)).
 | **async** | **built:** nts's own promise queue (`NtsPromise`, `NtsEnv`) | **built:** nts's own queue, drained at each export; timers through the host | open: the WASI version (0.2 or 0.3, which adds async) |
 | **host interop** | **built:** `nts bind` from class files, `java:` imports, TypeScript called from Java; a Java exception reaching a `catch`: open. Class openness: open. Emitted classes admit Java subclasses, and nts's closed-world direct calls bypass a Java override; one policy for openness and devirtualisation is needed (default-closed classes, with explicit Java-extension declarations, is the candidate) | **built:** generated ES-module glue; JS objects, functions, symbols and BigInts at the boundary: open | open: WIT, including lone surrogates |
 | **emission** | **built:** class files for Java 8, no `invokedynamic` | *decided:* lower to Binaryen IR and let Binaryen optimize and write the module | as hosted |
-| **status** | `jvm` 748/748; test262 language 4255/4333; 2398/2398 classes verify; Android APK and AAR build, `dex` 852/852 | the direct backend is retired and archived; nothing built ([Wasm](../targets/wasm.md)) | nothing built |
+| **status** | `jvm` 748/748; test262 language 4255/4333; 2398/2398 classes verify; Android APK and AAR build, `dex` 852/852 | being rebuilt on Binaryen IR: nothing built yet, the first implementation archived ([Wasm](../targets/wasm.md)) | nothing built |
 
 ## Proposed decisions
 
