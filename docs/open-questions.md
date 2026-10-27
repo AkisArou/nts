@@ -53,10 +53,9 @@ Ranked by how much each blocks or how much harm it does today.
 | L21 | Diagnostics: marking permanence, and early errors | inconsistent wording, no code registry (NTS5001 means three things: the scalar check, an LLVM internal error, a Wasm decline); 1,315 negative test262 cases accepted | A diagnostic registry (code, permanent or not, message); complete the early errors (phase 3) |
 | L22 | Separate and incremental compilation | whole program only; no cache | Closed world for executables; libraries declare an export surface with L9's fallback; a validated cache later. **research:** Kotlin/Native, Swift |
 | L23 | Which oracle wins when test262 and node disagree | unstated | Node: the promise is "behaves like node"; the boundary set is written down |
-| L24 | How `globalThis` costs nothing where unused | refused; in scope since 10-27 (user), deferred | A static `globalThis.X` folds to the binding; only a dynamic read or write builds a global object, holding just the globals the program can reach |
-| L25 | How `Proxy` and `Reflect` cost nothing where unused | refused; in scope since 10-27 (user), deferred | Only values a `new Proxy` can reach take the trap path, which the compiler proves; every other access stays direct |
-| L26 | How object integrity (`Object.freeze`, `seal`, `preventExtensions` and their predicates) costs nothing where unused | refused; in scope since 10-27 (user), deferred | A flag in the object's header, checked on a write only where a freeze can reach the object |
-| L27 | A function's source text (`Function.prototype.toString`) | `function NAME() { [native code] }` on every backend; node gives the source; test262's `toString` cases count as failures | Keep the source only for functions whose `toString` the compiler finds reachable, so other programs pay nothing |
+| L24 | How `globalThis` costs nothing where unused | refused; in scope for later (user, 10-27): after the static foundations, and discussed before any design | A static `globalThis.X` folds to the binding; only a dynamic read or write builds a global object, holding just the globals the program can reach |
+| L25 | How `Proxy` and `Reflect` cost nothing where unused | refused; in scope for later (user, 10-27): after the static foundations, and discussed before any design | Only values a `new Proxy` can reach take the trap path, which the compiler proves; every other access stays direct |
+| L26 | How object integrity (`Object.freeze`, `seal`, `preventExtensions` and their predicates) costs nothing where unused | refused; in scope for later (user, 10-27): after the static foundations, and discussed before any design | A flag in the object's header, checked on a write only where a freeze can reach the object |
 
 ## 2. Builtins and globals
 
@@ -88,7 +87,7 @@ Ranked by how much each blocks or how much harm it does today.
 |---|---|---|---|
 | M-1 | How much a region or reuse may keep alive | "a bound per active call", no number | Set it from stage 0's census |
 | M-2 | The 16-byte header: where the candidate index goes | later | Stage 6, measured |
-| M-3 | Collector pauses, and returning memory to the OS | a fixed 10,000-candidate trigger; glibc's thresholds | Pause-time and RSS rows in stage 0; an adaptive trigger; purging with stage 6 |
+| M-3 | The cycle collector: its throughput, its pauses, and returning memory to the OS | trial deletion with a fixed 10,000-candidate trigger; glibc's thresholds. `cyclic-churn` is 8.4× node, two thirds of its cycles in the collector, where the JVM is 1.1× | Typed visitors in memory stage 1; then pause-time and RSS rows, an adaptive trigger, and purging with stage 6. **research:** trial deletion against a backup tracing pass for cyclic garbage |
 | M-4 | Cycles through Objective-C blocks | design open | **research:** whether a block's retains can be observed |
 | M-5 | Weak references off native | J1 and W1 proposed | **research** (the JVM/Wasm request) |
 

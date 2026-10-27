@@ -130,7 +130,9 @@ test262's `test/annexB` directory is in the strict lane.
 
 ## In scope, not yet built
 
-The user has put these in scope, deferred. Each is to cost nothing in a program that does not use it. The compiler proves
+The user has put these in scope for later: they come after the static
+foundations are solid, and only after a discussion that shows they will not
+slow the static design. Each is to cost nothing in a program that does not use it. The compiler proves
 which values a use can reach, and only those values pay.
 
 | feature | today | how it is to cost nothing |
@@ -143,14 +145,12 @@ which values a use can reach, and only those values pay.
 The compiler's reflection message calls this family a representation
 boundary. This page, not the message, states the scope.
 
-Their test262 cases stay excluded from the counts until the exclusion set is
-changed to match this section, which is a pending change: `features.json`
-still classes `Proxy`, `Reflect`, `Reflect.construct`, `globalThis` and
+Until then their test262 cases stay excluded from the counts: `features.json`
+classes `Proxy`, `Reflect`, `Reflect.construct`, `globalThis` and
 `nonextensible-applies-to-private` as `inapplicable`, and
-`test262-exclusions.json` still excludes every case that includes
-`propertyHelper.js`. Once the files change, those cases count in the in-scope
-denominator as gaps. Node tests that a module lists as not applicable for
-these features are in scope in the same way.
+`test262-exclusions.json` excludes every case that includes
+`propertyHelper.js`. The node tests a module lists as not applicable for them
+stay excluded too.
 
 ## Not boundaries
 
@@ -165,14 +165,19 @@ a boundary:
 - decorators (L10) and proper tail calls (L3);
 - a function's `length`;
 - a function's source text: `toString` gives `function NAME() { [native code] }`
-  on every backend, where node gives the source (L27);
+  on every backend, where node gives the source. Decided: the source is kept for
+  each function whose `toString` the compiler can see is called, so no other
+  program pays for it (not built);
 - `Intl`, which is in scope with locale subsets, and Temporal;
 - `Atomics` and `SharedArrayBuffer`, which come with workers.
 
 ## Decisions
 
-- `globalThis`, `Proxy` with `Reflect`, and object integrity are in scope,
-  deferred, each to cost nothing where a program does not use it
+- `globalThis`, `Proxy` with `Reflect`, object integrity and the property
+  descriptors are in scope for later, each to cost nothing where a program
+  does not use it. They come after the static foundations, and only after a
+  discussion ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- A function's source text is kept only where its `toString` is reachable
   ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
 - test262's permanent boundaries are property descriptors, the metaobject
   protocol, the global object and realms, and the redirect hooks

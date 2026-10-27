@@ -220,10 +220,10 @@ From [`foundations/memory.md`](../../foundations/memory.md):
 
 - **`globalThis`, `Proxy` with `Reflect`, and object integrity**
   (`Object.freeze`, `seal`, `preventExtensions` and their predicates) are in
-  scope, deferred. _The coordinator reads "etc." to include_ the
-  property-descriptor family (`Object.defineProperty`, `defineProperties`,
-  `getOwnPropertyDescriptor`, `getOwnPropertyDescriptors`), since `Reflect`
-  and the integrity levels are defined in terms of it. Each is to cost nothing where a program does not use it,
+  scope, deferred, and so is the property-descriptor family
+  (`Object.defineProperty`, `defineProperties`, `getOwnPropertyDescriptor`,
+  `getOwnPropertyDescriptors`), on which `Reflect` and the integrity levels
+  are defined ("yes, descriptors included"). Each is to cost nothing where a program does not use it,
   with the compiler proving which values a use can reach
   ([open questions](../../open-questions.md) L24 to L26).
 - **An exception that escapes a callback a host invokes** (a GTK signal, a
@@ -242,6 +242,29 @@ From [`foundations/memory.md`](../../foundations/memory.md):
     callback that must return a value to the host, and throws instead, is
     fatal on every target, since no value can be made up.
   - An unhandled promise rejection follows the same split.
+
+- **The dynamic features come later:** "we should include those dynamic
+  features later, with great care for performance. First lets tackle the solid
+  typescript things as we did up until now. at some point when we feel
+  confident that those dynamic features wont pollute our performance oriented
+  static design, we discuss." Their test262 cases stay excluded until then.
+- **A function's source text** (L27): kept only for functions whose
+  `toString` the compiler can see is called, so no other program pays for it
+  ("go with L27 as recommended").
+
+## Gate and landing (10-27)
+
+- **The fast landing model,** all three parts ("yes I agree with all those 3
+  parts about the gate. lets do it this way!"):
+  1. a change owes only the checks it can affect, and a change that owes only
+     tree checks lands at once;
+  2. the gate itself is made fast: its waiting fixed, results cached by their
+     inputs, and only the cases a change can affect run;
+  3. land, then verify: code lands after a short check, a verifier gates
+     `main` behind it, and a red landing is reverted automatically. Changes to
+     the gate itself stay strict.
+
+  It replaces "land only through the gate" for code once its tools exist.
 
 ## Lanes (09-23, 09-24)
 

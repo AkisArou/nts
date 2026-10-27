@@ -174,5 +174,8 @@ recorded case on every backend ([conformance](../conformance/typescript.md)).
   See the [log](../records/notebooks/decisions-log.md#team-and-process).
 - **Reporting:** showing every benchmark result, and keeping the user in the
   loop ([log](../records/notebooks/decisions-log.md#the-bar)).
+- **The fast landing model** is approved: precise rules with a fast lane, a
+  faster gate, and land-then-verify for code. This page changes when its
+  tools land ([log](../records/notebooks/decisions-log.md#gate-and-landing-10-27)).
 - **The process itself** is record 0355
   ([one worktree per lane, and landing by tool](../records/0355-one-worktree-per-lane-and-land-by-tool.md)).

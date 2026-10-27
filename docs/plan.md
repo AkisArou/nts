@@ -64,33 +64,24 @@ Benchmarks run through every phase.
      gate;
    - no cold build per train: tests are built with line tables only, and the
      debug build folder is pruned within a bound.
-5. **Make the gate fast again,** each step its own landing, with gate time
-   measured before and after:
-   1. compile each program once for every backend: six steps compile the same
-      ~760 programs separately, and they share one lowering through
-      `nts emit --backends`;
-   2. cache results by what they depend on: a case whose emitted output,
-      runtime, toolchain and step script are unchanged is not re-run. The full
-      run regularly runs with the cache off, so a stale entry cannot hide a
-      regression;
-   3. select the tests a change can affect (`--touching`), once 1 and 2 have
-      shown their numbers.
+5. **The fast landing model** (approved):
+   1. a change owes only the checks it can affect, so docs, records and
+      comments land in seconds, with no train;
+   2. the gate's waiting is fixed, its results are cached by their inputs, and
+      only the cases a change can affect run, for a full gate near 10
+      minutes;
+   3. then code lands after a 5–10 minute check, while a verifier gates `main`
+      behind it, bisects a red and reverts the culprit automatically. Changes
+      to the gate itself stay strict.
 6. **Deterministic builds:** the same source and compiler give the same bytes
-   on every backend. Being fixed cause by cause:
-   - native build paths;
-   - jar timestamps;
-   - Wasm source URIs;
-   - then a guard test.
+   on every backend. Native build paths and jar timestamps are fixed; source
+   URIs and a guard test over all four backends are landing.
 7. **The documentation** as specification pages, with the notebooks in
-   [`records/`](records). *In progress.*
+   [`records/`](records). *Done.*
 8. **The register's wrong answers** recorded as fixtures: decorators dropped,
    throws escaping `try` through closures in fields, and the covariant-array
    dispatch.
-9. **Count what is now in scope.** test262's `Proxy`, `Reflect`, `globalThis`,
-   object-integrity and property-descriptor cases leave the exclusion set
-   (`tooling/census/features.json`, `test262-exclusions.json`) and count as
-   gaps, with the records re-recorded in the same landing.
-10. **A citation sweep:** code comments that cite documents moved to
+9. **A citation sweep:** code comments that cite documents moved to
     `records/`, fixed in one landing, in a quiet window (it owes the full
     gate).
 

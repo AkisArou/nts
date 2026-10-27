@@ -92,7 +92,7 @@ The marks are features, not tests. The measured state is in `results/`
 | recursion | compiled | no depth limit: stack exhaustion stops by name |
 | `async` functions and `await` | compiled | [async.md](async.md) |
 | generators | partly | the value of a `yield` is refused |
-| a function's source text (`String(f)`) | partly | `function f() { [native code] }` on every backend, where node gives the source (register [L27](../open-questions.md#1-language-and-compiler)) |
+| a function's source text (`String(f)`) | partly | `function f() { [native code] }` on every backend, where node gives the source; decided: the source is kept for each function whose `toString` the compiler can see is called ([boundaries](boundaries.md#not-boundaries)) |
 
 ## Classes and objects
 
@@ -110,7 +110,7 @@ The marks are features, not tests. The measured state is in `results/`
 | `new.target` | not yet | refused, as `a meta property` (register [L12](../open-questions.md#1-language-and-compiler)) |
 | decorators | not yet | standard decorators are compiled away silently today (register [L10](../open-questions.md#1-language-and-compiler)); `experimentalDecorators` is refused |
 | auto-accessors (`accessor x = 1`) | not yet | the `accessor` modifier is not read, so the member compiles as a plain field (L10) |
-| `Object.freeze`, `seal`, `preventExtensions`; property descriptors (`Object.defineProperty`, `getOwnPropertyDescriptor`); `Proxy` and `Reflect`; `globalThis` | not yet | in scope, deferred ([boundaries.md](boundaries.md#in-scope-not-yet-built); registers [L24 to L26](../open-questions.md#1-language-and-compiler)) |
+| `Object.freeze`, `seal`, `preventExtensions`; property descriptors (`Object.defineProperty`, `getOwnPropertyDescriptor`); `Proxy` and `Reflect`; `globalThis` | not yet | in scope later, after the static foundations and a discussion ([boundaries.md](boundaries.md#in-scope-not-yet-built); registers [L24 to L26](../open-questions.md#1-language-and-compiler)) |
 | the prototype chain: `Object.getPrototypeOf`, `setPrototypeOf`, `__proto__`, `Object.create(proto)` | out of scope | [boundaries.md](boundaries.md#the-prototype-chain); `Object.create(null)` compiles |
 | redirect hooks: `Symbol.toPrimitive`, `Symbol.hasInstance`, `Symbol.unscopables` | out of scope | the static type decides conversion and `instanceof` ([boundaries.md](boundaries.md#redirect-hooks)) |
 | the wrapper objects (`new String`, `new Number`, `new Boolean`) | not yet | |
@@ -242,6 +242,7 @@ The whole protocol is register [L16](../open-questions.md#1-language-and-compile
   `FinalizationRegistry` are represented, not designed around (decision 4);
   RegExp literals get matchers generated at compile time, with the TypeScript
   interpreter for dynamic patterns (decision 5). Same entry; none is built.
-- `globalThis`, `Proxy` with `Reflect`, and object integrity are in scope,
-  deferred, each costing nothing where a program does not use it (10-27,
+- `globalThis`, `Proxy` with `Reflect`, object integrity and the property
+  descriptors are in scope for later, after the static foundations and a
+  discussion, each costing nothing where a program does not use it (10-27,
   [Language and hosts](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
