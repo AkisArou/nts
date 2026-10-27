@@ -217,6 +217,9 @@ Noted, not scheduled:
 - `Map<K, number>` values stored unboxed (Bun 3.9× and Java 3.1× faster on
   `map-literal-keys`);
 - integer accumulators, so that `(a + b) | 0` stays in int32;
+- argument ranges through recursion: an index computed as `(3 - from) - to`
+  across recursive calls widens to an unbounded range with `NaN`, so the
+  recursive methods of `awfy-towers` keep double indices and check them twice;
 - `Array.prototype.flat`;
 - intersection-typed parameters, a refusal family;
 - one exit-code convention across commands, and the command line parsed once;
