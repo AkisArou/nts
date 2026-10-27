@@ -45,7 +45,7 @@ impl Frontend {
             self.options.cwd.join(config)
         };
         native::run(self.options.clone(), |session| {
-            driver::inspect(session, config, visitor)
+            driver::inspect(session, &config, visitor)
         })
     }
 
@@ -117,7 +117,7 @@ impl Frontend {
             self.options.cwd.join(config)
         };
         let snapshot = native::run(self.options.clone(), |session| {
-            driver::capture(self, session, config)
+            driver::capture(self, session, &config)
         })?;
         self.stats = driver::stats(&snapshot, started.elapsed());
         Ok(snapshot)

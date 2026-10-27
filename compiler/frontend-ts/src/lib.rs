@@ -42,13 +42,10 @@ include!(concat!(env!("OUT_DIR"), "/frontend_stamp.rs"));
 /// # Why this takes the snapshot rather than composing a URI
 ///
 /// The obvious version formats `nts-workspace:///{file}` and hands that over,
-/// and it matched nothing. `SourceFile::uri` is `workspace_uri(cwd, path)`,
-/// which strips the tsconfig's directory off an absolute checker path -- and
-/// `cwd` is `tsconfig.parent()`, so it is *relative* whenever the tsconfig
-/// argument was. `strip_prefix` then fails, `unwrap_or(path)` keeps the whole
-/// thing, and every URI in the snapshot reads
-/// `nts-workspace:////home/someone/proj/src/main.ts`. A composed URI is a
-/// guess about a normalization that does not always happen.
+/// and it matched nothing. `SourceFile::uri` is relative to the requested
+/// config's directory, including `..` for imported sources outside it. Callers
+/// may supply absolute paths or paths relative to another working directory;
+/// composing a URI from that spelling would guess at the source identity.
 ///
 /// So the match is made here, where both halves are in hand, and what goes back
 /// is whatever string that source actually carries. Callers compare it for

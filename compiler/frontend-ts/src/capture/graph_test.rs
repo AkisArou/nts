@@ -29,9 +29,14 @@ fn with_capture(count: u16, check: impl FnOnce(&mut Capture<'_, '_>) + Send) {
             .collect();
         let checked = checked.start_diagnostics(native::DiagnosticScope::Files(&paths));
         let project = checked.projects().next().unwrap();
-        let cwd = project.cwd().to_owned();
+        let project_root = project
+            .config_path()
+            .parent()
+            .unwrap()
+            .canonicalize_utf8()
+            .unwrap();
         let mut capture = Capture::syntax(
-            &cwd,
+            &project_root,
             project
                 .files()
                 .filter(|file| paths.contains(&file.path().to_owned())),

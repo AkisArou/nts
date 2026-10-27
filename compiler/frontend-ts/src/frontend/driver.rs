@@ -34,7 +34,15 @@ enum Phase {
     Capture,
 }
 
+fn canonical_config(config: &camino::Utf8Path) -> Result<Utf8PathBuf, SnapshotError> {
+    // Resolve symlinks before the checker's lexical path normalization sees `..`.
+    config.canonicalize_utf8().map_err(|error| {
+        SnapshotError::Project(format!("cannot resolve project config {config}: {error}"))
+    })
+}
+
 struct Driver {
+    project_root: Utf8PathBuf,
     phase: Phase,
     original_roots: Vec<String>,
     generated: Option<Vec<Utf8PathBuf>>,
@@ -46,9 +54,10 @@ struct Driver {
 
 pub(super) fn inspect<R: Send, E: From<SnapshotError> + Send>(
     session: &mut Session,
-    config: Utf8PathBuf,
+    config: &camino::Utf8Path,
     mut visitor: impl FnMut(&TransformInput<'_>, &NodeTypes<'_>) -> Result<R, E>,
 ) -> Result<Vec<R>, E> {
+    let config = canonical_config(config).map_err(E::from)?;
     let checked = session
         .open(ProjectSpec::new(config))
         .map_err(|error| E::from(SnapshotError::Project(error.to_string())))?;
@@ -99,10 +108,18 @@ fn select_diagnostics<'s>(
 pub(super) fn capture(
     frontend: &mut Frontend,
     session: &mut Session,
-    config: Utf8PathBuf,
+    config: &camino::Utf8Path,
 ) -> Result<SemanticSnapshot, SnapshotError> {
+    let config = canonical_config(config)?;
+    let project_root = config
+        .parent()
+        .ok_or_else(|| {
+            SnapshotError::Project("the requested config has no parent directory".into())
+        })?
+        .to_owned();
     let spec = ProjectSpec::new(config);
     let mut driver = Driver {
+        project_root,
         phase: Phase::Initial,
         original_roots: Vec::new(),
         generated: None,
@@ -210,24 +227,16 @@ impl Driver {
                     // Resolution uses the session's explicit cwd. Serialized
                     // source/module identities use the requested config's root,
                     // as the frontend's URI contract requires.
-                    let cwd = project
-                        .config_path()
-                        .parent()
-                        .ok_or_else(|| {
-                            SnapshotError::Project(
-                                "the requested config has no parent directory".into(),
-                            )
-                        })?
-                        .to_owned();
                     let mut snapshot =
-                        Capture::syntax(&cwd, files, project.semantics())?.finish()?;
+                        Capture::syntax(&self.project_root, files, project.semantics())?
+                            .finish()?;
                     let finished = checked.finish();
                     let project = finished.projects().next().ok_or_else(|| {
                         SnapshotError::Project("the requested native program is missing".into())
                     })?;
                     crate::capture::append_diagnostics(
                         &mut snapshot,
-                        &cwd,
+                        &self.project_root,
                         project,
                         finished.diagnostics(),
                     )?;

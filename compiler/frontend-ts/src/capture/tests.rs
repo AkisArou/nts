@@ -51,15 +51,20 @@ fn capture_project_and_diagnostics(
         let files = project
             .files()
             .filter(|file| !file.is_default_library() && !file.is_external_library());
-        let cwd = project.cwd().to_owned();
-        let mut snapshot = Capture::syntax(&cwd, files, project.semantics())
+        let project_root = project
+            .config_path()
+            .parent()
+            .unwrap()
+            .canonicalize_utf8()
+            .unwrap();
+        let mut snapshot = Capture::syntax(&project_root, files, project.semantics())
             .unwrap()
             .finish()
             .unwrap();
         let finished = checked.finish();
         append_diagnostics(
             &mut snapshot,
-            &cwd,
+            &project_root,
             finished.projects().next().unwrap(),
             finished.diagnostics(),
         )
@@ -484,4 +489,33 @@ fn recursive_generic_library_and_user_returns_capture_without_forcing_a_closure(
             snapshot.types.len()
         );
     }
+}
+
+#[test]
+fn repeated_module_paths_resolve_once_per_capture() {
+    let root = root().canonicalize_utf8().unwrap();
+    native::run(SessionOptions::new(&root), |session| {
+        let checked = session
+            .open(ProjectSpec::new(
+                root.join("tests/workspace/phase-import-capture/tsconfig.json"),
+            ))
+            .unwrap();
+        let project = checked.projects().next().unwrap();
+        let path = project
+            .files()
+            .find(|file| !file.is_default_library())
+            .unwrap()
+            .path()
+            .to_owned();
+        let mut capture = Capture::syntax(&root, [], project.semantics()).unwrap();
+        let expected = capture.workspace_uri(&path).unwrap();
+        for _ in 0..8 {
+            assert_eq!(capture.workspace_uri(&path).unwrap(), expected);
+        }
+        assert_eq!(capture.workspace_uri_resolutions, 1);
+        // Evicting the cached identity forces a fresh filesystem resolution.
+        capture.workspace_uris.clear();
+        assert_eq!(capture.workspace_uri(&path).unwrap(), expected);
+        assert_eq!(capture.workspace_uri_resolutions, 2);
+    });
 }

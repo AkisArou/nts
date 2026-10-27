@@ -19,6 +19,8 @@ impl<'p> Capture<'p, '_> {
             .collect();
         captured.sort_unstable();
         captured.dedup();
+        let classification = symbol.classification();
+        let module = classification.module;
         let library = if captured.is_empty() {
             declarations
                 .first()
@@ -44,7 +46,7 @@ impl<'p> Capture<'p, '_> {
                 }
             }),
             name: PropertyKey::Name(String::new()),
-            flags: schema_flags(symbol.classification()),
+            flags: schema_flags(classification),
             declarations: captured,
             ty: None,
             aliased: None,
@@ -53,8 +55,8 @@ impl<'p> Capture<'p, '_> {
         self.symbols.insert(symbol, id);
         self.symbol_work.push(symbol);
         let mut name = self.property_key(symbol.name())?;
-        if let PropertyKey::Name(text) = &mut name {
-            *text = normalized_name(text, self.cwd);
+        if module && let PropertyKey::Name(text) = &mut name {
+            *text = self.normalized_name(text)?;
         }
         self.snapshot.symbols[id.0 as usize].name = name;
         Ok(id)
@@ -187,12 +189,14 @@ fn schema_flags(class: SymbolClassification) -> SymbolFlags {
     flags
 }
 
-/// Stable written private names and workspace-relative module identities.
-/// Internal counters disambiguate checker tables, not nts declarations: a
-/// declaration and its enclosing layout already supply that identity here.
-fn normalized_name(name: &str, cwd: &camino::Utf8Path) -> String {
-    match name.trim_matches('"').strip_prefix(cwd.as_str()) {
-        Some(relative) => format!("nts-workspace://{relative}"),
-        None => name.to_owned(),
+impl Capture<'_, '_> {
+    /// Module names carry paths; arbitrary property keys do not.
+    fn normalized_name(&mut self, name: &str) -> Result<String, SnapshotError> {
+        let path = camino::Utf8Path::new(name.trim_matches('"'));
+        if path.is_absolute() {
+            self.workspace_uri(path)
+        } else {
+            Ok(name.to_owned())
+        }
     }
 }

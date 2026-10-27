@@ -8,7 +8,7 @@ use super::{arena_index, workspace_uri};
 
 pub(crate) fn append(
     snapshot: &mut SemanticSnapshot,
-    cwd: &camino::Utf8Path,
+    project_root: &camino::Utf8Path,
     project: Project<'_, SyntaxPhase>,
     mut reported: Vec<native::Diagnostic>,
 ) -> Result<(), SnapshotError> {
@@ -26,12 +26,16 @@ pub(crate) fn append(
         }
     }
     reported.sort();
-    Diagnostics { snapshot, cwd }.diagnostics(project, reported)
+    Diagnostics {
+        snapshot,
+        project_root,
+    }
+    .diagnostics(project, reported)
 }
 
 struct Diagnostics<'a> {
     snapshot: &'a mut SemanticSnapshot,
-    cwd: &'a camino::Utf8Path,
+    project_root: &'a camino::Utf8Path,
 }
 
 impl Diagnostics<'_> {
@@ -116,7 +120,7 @@ impl Diagnostics<'_> {
             };
             let id = SourceId(arena_index(self.snapshot.sources.len())?);
             self.snapshot.sources.push(SourceFile {
-                uri: workspace_uri(self.cwd, path),
+                uri: workspace_uri(self.project_root, path)?,
                 digest: Digest(digest.to_le_bytes()),
                 display_path: path.to_owned(),
                 rewritten_by: None,
