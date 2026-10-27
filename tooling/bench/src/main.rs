@@ -570,6 +570,7 @@ fn main() -> Result<()> {
     let mut rows = Vec::new();
     let mut measured = Vec::new();
     let mut spoiled = Vec::new();
+    let mut failed = Vec::new();
     for case in &cases {
         // Before each case rather than once at the start: a sweep begun while
         // the suite is halfway through spoils the rows after it and none
@@ -581,15 +582,16 @@ fn main() -> Result<()> {
         }
         // A row that fails its checks keeps its measurements: `--render` judges
         // them again, which is the point of saving them.
-        match run_case(&root, case, &out) {
-            Ok(measurements) => {
-                match assemble(&measurements, lanes.is_some()) {
-                    Ok(row) => rows.push(row),
-                    Err(error) => println!("{:<16} failed: {error:#}", measurements.shown),
-                }
-                measured.push(measurements);
+        let name = case.file_name().unwrap_or("?");
+        if let Some(measurements) = accept_result(name, run_case(&root, case, &out), &mut failed) {
+            if let Some(row) = accept_result(
+                &measurements.shown,
+                assemble(&measurements, lanes.is_some()),
+                &mut failed,
+            ) {
+                rows.push(row);
             }
-            Err(error) => println!("{:<16} failed: {error:#}", case.file_name().unwrap_or("?")),
+            measured.push(measurements);
         }
     }
 
@@ -601,6 +603,7 @@ fn main() -> Result<()> {
             .filter_map(|case| case.file_name().map(str::to_owned))
             .collect(),
         spoiled: spoiled.clone(),
+        failed,
         measured,
     };
     finish(&root, &run, &rows, &cases)
@@ -626,6 +629,7 @@ fn finish(root: &Utf8Path, run: &Run, rows: &[Row], cases: &[Utf8PathBuf]) -> Re
             spoiled: &run.spoiled,
         },
     )?;
+    require_valid_rows(&run.failed)?;
     publish(
         root,
         rows,
@@ -1788,7 +1792,38 @@ struct Run {
     requested: Vec<String>,
     cases: Vec<String>,
     spoiled: Vec<String>,
+    /// Build, checksum or work-comparability failures. Kept separately from
+    /// measurements spoiled by load, which may still be useful observations.
+    #[serde(default)]
+    failed: Vec<String>,
     measured: Vec<Measurements>,
+}
+
+/// Keep the other rows and the rejected row's raw measurements, but never let
+/// a printed `failed:` line become a successful run (including filtered runs).
+fn accept_result<T>(name: &str, result: Result<T>, failed: &mut Vec<String>) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(error) => {
+            println!("{name:<16} failed: {error:#}");
+            let failure = format!("{name}: {error:#}");
+            if !failed.contains(&failure) {
+                failed.push(failure);
+            }
+            None
+        }
+    }
+}
+
+fn require_valid_rows(failed: &[String]) -> Result<()> {
+    if !failed.is_empty() {
+        bail!(
+            "{} benchmark case(s) failed: {}",
+            failed.len(),
+            failed.join("; ")
+        );
+    }
+    Ok(())
 }
 
 /// Where a run is saved, beside what it built.
@@ -1804,12 +1839,14 @@ fn render(root: &Utf8Path, path: &Utf8Path) -> Result<()> {
     let run: Run = serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
     let filtered = run.lanes.is_some();
     let mut rows = Vec::new();
+    let mut failed = run.failed.clone();
     for measured in &run.measured {
-        match assemble(measured, filtered) {
-            Ok(row) => rows.push(row),
-            Err(error) => println!("{:<16} failed: {error:#}", measured.shown),
+        if let Some(row) = accept_result(&measured.shown, assemble(measured, filtered), &mut failed)
+        {
+            rows.push(row);
         }
     }
+    require_valid_rows(&failed)?;
     let cases_dir = root.join("benchmarks/cases");
     let cases: Vec<Utf8PathBuf> = run.cases.iter().map(|case| cases_dir.join(case)).collect();
     publish(
@@ -3952,6 +3989,105 @@ mod tests {
         );
         assert_eq!(again.nts, Some(10.0));
         assert_eq!(again.wasm_absence.as_deref(), Some("not run"));
+    }
+
+    #[test]
+    fn a_rejected_work_row_survives_in_json_and_fails_finish_and_render() {
+        for rejected in [true, false] {
+            let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+                .expect("UTF-8 temporary directory")
+                .join(format!(
+                    "nts-bench-rejection-{}-{rejected}",
+                    std::process::id()
+                ));
+            std::fs::create_dir_all(root.join("target/bench")).expect("output directory");
+            std::fs::create_dir_all(root.join("results/benchmarks")).expect("results directory");
+            let table = root.join("results/benchmarks/full.md");
+            std::fs::write(&table, "old table\n").expect("old full table");
+            let measurements = super::Measurements {
+                shown: "work-guard-control".to_owned(),
+                results: vec![
+                    Some(measured(1.5)),
+                    Some(measured(10.0)),
+                    None,
+                    Some(measured(1.5)),
+                    Some(measured(if rejected { 11_000.0 } else { 2.0 })),
+                ],
+                absences: super::Absences {
+                    jvm: None,
+                    wasm: Some("not run".to_owned()),
+                },
+                lowers: true,
+                node: measured(30.0),
+                bun: None,
+            };
+            let mut failed = Vec::new();
+            let rows: Vec<_> = super::accept_result(
+                &measurements.shown,
+                super::assemble(&measurements, false),
+                &mut failed,
+            )
+            .into_iter()
+            .collect();
+            let run = super::Run {
+                lanes: None,
+                requested: vec![measurements.shown.clone()],
+                cases: vec![measurements.shown.clone()],
+                spoiled: Vec::new(),
+                failed,
+                measured: vec![measurements],
+            };
+            let cases = vec![root.join("benchmarks/cases/work-guard-control")];
+            let result = super::finish(&root, &run, &rows, &cases);
+            assert_eq!(result.is_err(), rejected);
+            if let Err(error) = result {
+                assert!(
+                    error.to_string().contains("this compiler's backends"),
+                    "{error:#}"
+                );
+            }
+            let saved = super::run_file(&root);
+            let text = std::fs::read_to_string(&saved).expect("failed run still saved");
+            let restored: super::Run = serde_json::from_str(&text).expect("saved run");
+            assert_eq!(restored.failed.len(), usize::from(rejected));
+            assert_eq!(
+                restored.measured.len(),
+                1,
+                "raw rejected measurements survive"
+            );
+            let rendered = super::render(&root, &saved);
+            assert_eq!(rendered.is_err(), rejected);
+            if let Err(error) = rendered {
+                assert!(error.to_string().starts_with("1 benchmark case(s) failed:"));
+            }
+            // Runs saved by the old runner have no failed field. Reassembly
+            // must catch their rejected work too, rather than trusting it.
+            let mut old: serde_json::Value = serde_json::from_str(&text).expect("JSON");
+            old.as_object_mut().expect("object").remove("failed");
+            std::fs::write(&saved, serde_json::to_string(&old).expect("old JSON"))
+                .expect("old run");
+            assert_eq!(super::render(&root, &saved).is_err(), rejected);
+            assert_eq!(
+                std::fs::read_to_string(&table).expect("full table"),
+                "old table\n"
+            );
+            std::fs::remove_dir_all(&root).expect("cleaned up");
+        }
+    }
+
+    #[test]
+    fn an_unmeasured_build_failure_also_fails_the_run() {
+        let mut failed = Vec::new();
+        assert!(
+            super::accept_result::<()>(
+                "broken-build",
+                Err(anyhow::anyhow!("compiler failed")),
+                &mut failed,
+            )
+            .is_none()
+        );
+        let error = super::require_valid_rows(&failed).expect_err("no silent success");
+        assert!(error.to_string().contains("broken-build"));
     }
 
     /// A run of some lanes never reaches the full table, over every case as
