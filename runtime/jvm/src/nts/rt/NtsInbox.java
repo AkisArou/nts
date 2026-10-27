@@ -2,6 +2,7 @@ package nts.rt;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * The one route by which a foreign thread reaches an environment.
@@ -47,7 +48,11 @@ public final class NtsInbox {
         /** Written before the link, read after it. */
         NtsResumable work;
         /** The inbox that issued it, so a return cannot be misdirected. */
-        NtsInbox owner;
+        volatile NtsInbox owner;
+
+        @Override public String toString() {
+            return "completion slot@" + Integer.toHexString(System.identityHashCode(this));
+        }
     }
 
     private final AtomicReference<Slot> tail;
@@ -136,6 +141,7 @@ public final class NtsInbox {
             slot.owner = null;
             slot.work = null;
             held.credits.incrementAndGet();
+            wake(held);
             return;
         }
         slot.work = work;
@@ -150,21 +156,46 @@ public final class NtsInbox {
         // and costs almost nothing; on a parked one it is the whole point.
         // A `parked` flag would skip the call in the common case and is a
         // classic race to get wrong, so it is not here and is not measured.
-        Thread lane = inbox.owner;
-        if (lane != null) { java.util.concurrent.locks.LockSupport.unpark(lane); }
+        wake(inbox);
     }
 
-    /** Name the lane that {@link #post} should wake. Called once, by it. */
-    public static void ownedBy(NtsInbox it, Thread lane) { it.owner = lane; }
+    private static void wake(NtsInbox inbox) {
+        Thread lane = inbox.owner;
+        if (lane != null) { LockSupport.unpark(lane); }
+    }
+
+    /** Claim or release the wake target, from that lane itself. */
+    public static void ownedBy(NtsInbox it, Thread lane) {
+        Thread caller = Thread.currentThread();
+        synchronized (it) {
+            if (it.owner != null && it.owner != caller) { throw wrongConsumer(it.owner, caller); }
+            if (lane != null && lane != caller) { throw wrongConsumer(lane, caller); }
+            it.owner = lane;
+        }
+    }
+
+    private static IllegalStateException wrongConsumer(Thread owner, Thread caller) {
+        return new IllegalStateException("inbox consumer belongs to thread " + owner.getName()
+            + " (" + owner.getId() + "), called from " + caller.getName() + " (" + caller.getId() + ")");
+    }
+
+    /** One head consumer; the usual path is an intrinsic and one comparison. */
+    static void requireConsumer(NtsInbox it) {
+        Thread caller = Thread.currentThread();
+        if (it.owner == caller) { return; }
+        synchronized (it) {
+            if (it.owner != null && it.owner != caller) { throw wrongConsumer(it.owner, caller); }
+            it.owner = caller;
+        }
+    }
 
     /**
      * Claim this inbox for a lane, or report that another already holds it.
      *
-     * <p>`ownedBy` says "called once" and means it: `post` wakes `owner`, so a
-     * second lane taking it silently leaves the first parked in `drain` with
-     * work it will never be told about. This is the checked form, for the one
-     * caller that cannot know whether it is first -- {@link NtsEnv#current} on
-     * a thread that never entered an environment.
+     * <p>`post` wakes `owner`, so a second lane taking it silently would leave
+     * the first parked in `drain` with work it will never be told about. The
+     * default environment uses the boolean result to refuse a second lane;
+     * consumer entry and scoped ownership throw a named invariant failure.
      *
      * <p>Synchronized rather than a compare-and-set on the volatile field,
      * because the check and the write must be one step and this runs once per
@@ -194,6 +225,7 @@ public final class NtsInbox {
         slot.owner = null;
         slot.work = null;
         owner.credits.incrementAndGet();
+        wake(owner);
     }
 
     /**
@@ -206,6 +238,7 @@ public final class NtsInbox {
      * It will be seen on the next drain.
      */
     public static int drain(NtsInbox it) {
+        requireConsumer(it);
         int ran = 0;
         for (;;) {
             Slot next = it.head.next;
@@ -228,26 +261,63 @@ public final class NtsInbox {
      *
      * <p>Draining once is not enough, and the reason is a race with no lock to
      * take: a producer can read the closed flag as false and link its slot a
-     * moment after the drain walked past it. So this alternates *drain, check,
-     * yield* until the credits are all back, which terminates because every
+     * moment after the drain walked past it. So this alternates *discard,
+     * check, park* until the credits are all back, which terminates because every
      * in-flight post either sees the flag and returns its credit or links and
      * is drained by the next pass.
      *
-     * <p>Bounded, because an I/O thread that never finishes is a hang, and a
-     * hang that presents itself as a clean close is worse than a visible one.
-     * Returns the credits still missing when it gave up: **zero is the
-     * contract, and anything else is a leak for the caller to report rather
-     * than absorb.**
+     * <p>Settlement, rather than a wall deadline, decides completion: a delayed
+     * producer is still live work. The waiter is installed before checking the
+     * credits, and unpark leaves a permit even before park, so a return between
+     * the check and park cannot be lost. Interrupts are restored after settling.
+     * A caller wanting a bounded diagnostic can use {@link #awaitSettlement};
+     * that observation never changes close's result.
      */
-    public static int reclaim(NtsInbox it, double timeoutMillis) {
+    public static void reclaim(NtsInbox it) {
+        reclaim(it, null);
+    }
+
+    /** Package-local checkpoint lets the driver force check-before-park. */
+    static void reclaim(NtsInbox it, Runnable beforePark) {
+        requireConsumer(it);
+        // The consumer is also the park waiter. No other thread may drain or
+        // discard while it closes, and producers read this after credit return.
+        it.owner = Thread.currentThread();
         it.closed = true;
+        boolean interrupted = false;
+        try {
+            for (;;) {
+                discard(it);
+                if (it.credits.get() == it.capacity) { return; }
+                if (beforePark != null) { beforePark.run(); }
+                LockSupport.park(it);
+                interrupted |= Thread.interrupted();
+            }
+        } finally {
+            if (interrupted) { Thread.currentThread().interrupt(); }
+        }
+    }
+
+    /**
+     * Explicit bounded observation of one reserved slot. Null means it was
+     * returned; otherwise the diagnostic names the slot still holding work.
+     * This does not cancel work, reclaim credits, or decide whether close may
+     * finish. Polling here is for callers asking for a report; close waits on
+     * the settlement event itself.
+     */
+    public static String awaitSettlement(Slot slot, double timeoutMillis) {
         long deadline = System.nanoTime() + (long) (timeoutMillis * 1_000_000.0);
-        for (;;) {
-            discard(it);
-            int missing = it.capacity - it.credits.get();
-            if (missing == 0) { return 0; }
-            if (System.nanoTime() > deadline) { return missing; }
-            Thread.yield();
+        boolean interrupted = false;
+        try {
+            while (slot.owner != null) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) { return slot + " has not settled"; }
+                LockSupport.parkNanos(slot, Math.min(remaining, 1_000_000L));
+                interrupted |= Thread.interrupted();
+            }
+            return null;
+        } finally {
+            if (interrupted) { Thread.currentThread().interrupt(); }
         }
     }
 
@@ -262,6 +332,7 @@ public final class NtsInbox {
      * zero liveness and never finishes closing.
      */
     public static int discard(NtsInbox it) {
+        requireConsumer(it);
         int dropped = 0;
         for (;;) {
             Slot next = it.head.next;

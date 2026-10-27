@@ -213,8 +213,8 @@ public final class NtsEnv {
      */
     public static NtsEnv enterEnv(NtsEnv env) {
         NtsEnv previous = CURRENT.get();
-        CURRENT.set(env);
         NtsInbox.ownedBy(env.inbox, Thread.currentThread());
+        CURRENT.set(env);
         return previous;
     }
 
@@ -227,7 +227,8 @@ public final class NtsEnv {
      * and it is why the contract says scoped state is cleared on leave.
      */
     public static void leaveEnv(NtsEnv env, NtsEnv previous) {
-        NtsInbox.ownedBy(env.inbox, null);
+        if (previous == env) { NtsInbox.requireConsumer(env.inbox); }
+        else { NtsInbox.ownedBy(env.inbox, null); }
         if (previous == null) { CURRENT.remove(); } else { CURRENT.set(previous); }
     }
 
@@ -571,19 +572,15 @@ public final class NtsEnv {
      * holding its callbacks.
      */
     public static void close(NtsEnv env) {
+        NtsInbox.requireConsumer(env.inbox);
         if (env.closed) { return; }
         env.closed = true;
         // Reclaim rather than drain: work still running on an I/O thread holds
         // a credit, and a single drain walks past it. `reclaim` alternates
-        // until every credit is back, bounded, and reports what it could not
-        // recover instead of pretending.
-        int leaked = NtsInbox.reclaim(env.inbox, 2000.0);
-        env.outstanding = leaked;
-        if (leaked != 0) {
-            throw new NtsRefusal(
-                "closing left " + leaked + " completion credit(s) held by work that never settled"
-            );
-        }
+        // until every credit is back, waiting for settlement notifications.
+        // A scheduler or GC pause cannot turn live work into a leaked credit.
+        NtsInbox.reclaim(env.inbox);
+        env.outstanding = 0;
         env.microtasks.clear();
         env.ticks.clear();
         for (int i = 0; i < env.size; i++) { env.heap[i] = null; }

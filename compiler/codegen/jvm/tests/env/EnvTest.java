@@ -72,7 +72,8 @@ public final class EnvTest {
         NtsInbox.Slot cancelled = NtsEnv.launch(env);
         NtsInbox.Slot dropped = NtsEnv.launch(env);
         check(NtsEnv.outstanding(env) == 3.0, "three launches count " + NtsEnv.outstanding(env));
-        check(NtsEnv.launch(env) != null, "the fourth credit was refused");
+        NtsInbox.Slot fourth = NtsEnv.launch(env);
+        check(fourth != null, "the fourth credit was refused");
         check(NtsEnv.launch(env) == null, "the ceiling did not hold");
 
         final boolean[] ran = { false };
@@ -84,18 +85,16 @@ public final class EnvTest {
             + NtsEnv.outstanding(env) + " outstanding");
 
         NtsInbox.post(dropped, null);
-        // A launch that never settles is a leak, and close says so rather than
-        // reporting a tidy zero. This one is deliberate: `neverSettles` was
-        // reserved and abandoned by nobody.
+        // A launch that never settles is still named by an explicitly bounded
+        // diagnostic. A wall deadline must not make close misclassify slow work.
         NtsInbox.Slot neverSettles = NtsEnv.launch(env);
         check(neverSettles != null, "the environment refused a credit it had");
-        try {
-            NtsEnv.close(env);
-            check(false, "close absorbed a credit held by work that never settled");
-        } catch (NtsRefusal reported) {
-            check(reported.getMessage().contains("never settled"),
-                "close refused for the wrong reason: " + reported.getMessage());
-        }
+        String report = NtsInbox.awaitSettlement(neverSettles, 10.0);
+        check(report != null && report.contains(neverSettles.toString()),
+            "the settlement diagnostic did not name the stuck slot: " + report);
+        NtsEnv.cancel(env, neverSettles);
+        NtsEnv.cancel(env, fourth);
+        NtsEnv.close(env);
         check(NtsEnv.isClosed(env), "close did not close");
         try {
             NtsEnv.launch(env);

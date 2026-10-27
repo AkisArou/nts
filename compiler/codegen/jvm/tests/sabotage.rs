@@ -75,8 +75,8 @@ const NAMED: &[Named] = &[
         "close does not wait for what is in flight",
         "nts/rt/NtsEnv.java",
         &[(
-            "int leaked = NtsInbox.reclaim(env.inbox, 2000.0);",
-            "int leaked = 0; // sabotaged: close does not wait",
+            "NtsInbox.reclaim(env.inbox);",
+            "// sabotaged: close does not wait",
         )],
         "env/CloseRaceTest.java",
         &["60"],

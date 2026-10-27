@@ -282,3 +282,55 @@ fn closing_under_arriving_completions_loses_nothing() {
     assert!(said.ends_with("240 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A producer delayed beyond the former two-second deadline is live, and a
+/// return between reclaim's check and park must leave a wakeup permit.
+#[test]
+fn close_waits_for_delayed_credits_without_losing_notifications() {
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else {
+        return;
+    };
+    let root = repository();
+    let jar = runtime_jar();
+    let dir = std::env::temp_dir().join(format!("nts-close-delay-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let compiled = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&jar)
+        .arg("-d")
+        .arg(&dir)
+        .arg(root.join("compiler/codegen/jvm/tests/env/CloseDelayTest.java"))
+        .arg(root.join("compiler/codegen/jvm/tests/inbox/CloseParkWindowTest.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "the close drivers did not compile:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    for (driver, args, expected) in [
+        ("CloseDelayTest", vec!["join-first"], "5 checks, 0 failures"),
+        ("CloseDelayTest", vec![], "6 checks, 0 failures"),
+        (
+            "nts.rt.CloseParkWindowTest",
+            vec![],
+            "14 checks, 0 failures",
+        ),
+    ] {
+        let ran = Command::new(&java)
+            .arg("-Xverify:all")
+            .arg("-cp")
+            .arg(format!("{}:{}", jar.display(), dir.display()))
+            .arg(driver)
+            .args(args)
+            .output()
+            .unwrap();
+        let said = String::from_utf8_lossy(&ran.stdout);
+        assert!(
+            ran.status.success() && said.trim().ends_with(expected),
+            "{driver}:\n{said}\n{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
