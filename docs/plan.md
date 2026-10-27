@@ -186,7 +186,10 @@ proposals wait on research.
   - nts's Unicode tables (D4);
   - the paused `jvm/appended-results` work.
 - **Wasm** is one WasmGC backend, browser-first, built through Binaryen
-  ([targets](targets/wasm.md)). When it resumes, measurement settles:
+  ([targets](targets/wasm.md)). The direct Wasm backend is retired: removed
+  from the tree, the workspace and the gate, and archived, so this backend
+  starts from the design, not from that code. When it resumes, measurement
+  settles:
   - whose strings the JS-hosted profile reads characters from;
   - how the standalone profile gets its runtime pieces (number formatting,
     hashing, Unicode tables);
