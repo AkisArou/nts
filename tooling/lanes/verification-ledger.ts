@@ -17,11 +17,18 @@ export type Transaction = {
   state: "prepared" | "committed" | "aborted" | "held"; at: string;
   entries: LandingRecord[]; proof: Proof | null; reason?: string;
 };
+export type ShadowBatch = {
+  id: string; base: string; tip: string; at: string; entries: string[]; checks: Checks;
+  expected: "green" | "unknown"; trains: {tip:string;run:string}[];
+  state: "running" | "agreed" | "held" | "interrupted";
+  run?: string; verdict?: "green" | "red"; agreement?: "agree" | "disagree" | "unavailable"; message?: string;
+};
 export type Ledger = {
   version: 1; mode: "strict"; observedMain: string;
   verified: { tip: string; origin: "strict-history" | "gate"; run: string | null };
   transactions: Transaction[];
   events: { at: string; transaction: string | null; transition: string; message?: string }[];
+  shadow?: { batches: ShadowBatch[] };
 };
 const sha = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 function checks(value: Checks): void {
@@ -49,7 +56,28 @@ function validate(value: Ledger): Ledger {
     if (previous !== tx.tip || (tx.kind !== "external" && !tx.proof)) throw new Error("incomplete verification transaction");
     if (tx.proof) { if (tx.proof.commit !== tx.tip || !tx.proof.run) throw new Error("proof does not name the transaction tip"); checks(tx.proof.checks); }
   }
+  if (value.shadow) {
+    if (!Array.isArray(value.shadow.batches)) throw new Error("invalid shadow history");
+    for (const batch of value.shadow.batches) {
+      if (!batch.id || !sha(batch.base) || !sha(batch.tip) || !Array.isArray(batch.entries) || !batch.entries.length
+          || batch.entries.some(id=>typeof id !== "string")
+          || !["green","unknown"].includes(batch.expected) || !Array.isArray(batch.trains)
+          || batch.trains.some(t=>!sha(t.tip) || typeof t.run !== "string")
+          || (batch.verdict !== undefined && !["green","red"].includes(batch.verdict))
+          || (batch.agreement !== undefined && !["agree","disagree","unavailable"].includes(batch.agreement))
+          || !["running","agreed","held","interrupted"].includes(batch.state)) throw new Error("invalid shadow batch");
+      checks(batch.checks);
+    }
+  }
   return value;
+}
+
+export function unionChecks(a: Checks, b: Checks): Checks {
+  const uses = (c: Checks, s: string) => c.steps === "all" || c.steps.includes(s);
+  const scope = (s: string, x: string|null|undefined, y: string|null|undefined) => !uses(b,s) ? x : !uses(a,s) ? y
+    : !x || !y ? null : [...new Set([...x.split(/\s+/),...y.split(/\s+/)])].join(" ");
+  return {steps:a.steps === "all" || b.steps === "all" ? "all" : [...new Set([...a.steps,...b.steps])],
+    interop:scope("interop",a.interop,b.interop)??null,doctests:scope("doctests",a.doctests,b.doctests)};
 }
 
 /** Null is uninitialised, never a claim that current main is verified. */
@@ -172,5 +200,43 @@ export class VerificationLedger {
     if (tx.state === "committed") return;
     this.finish(tx); this.state.observedMain = tx.tip; this.save();
     if (main !== tx.tip) this.recover(main);
+  }
+
+  /** Called under the landing lock, after the caller owns the gate resource. */
+  beginShadow(main: string): ShadowBatch | null {
+    this.recover(main);
+    const history=this.state.shadow ??= {batches:[]};
+    // Only the resource-lock owner can enter here. A previous active batch
+    // therefore lost its owner; interruption never certifies its snapshot.
+    for (const batch of history.batches) if (batch.state === "running") {
+      batch.state="interrupted";
+      this.state.events.push({at:new Date().toISOString(),transaction:null,transition:"shadow-interrupted",message:batch.id});
+    }
+    if (this.state.transactions.some(tx=>tx.state === "held" || tx.state === "prepared")) throw new Error("recover held landing state before shadow verification");
+    const committed=this.state.transactions.filter(tx=>tx.state === "committed" && this.ancestor(tx.tip,main));
+    const base=history.batches.findLast(b=>b.state === "agreed")?.tip ?? committed[0]?.base;
+    const pending=base ? committed.filter(tx=>!this.ancestor(tx.tip,base)) : [];
+    if (!base || !pending.length) {this.save();return null;}
+    const entries=pending.flatMap(tx=>tx.entries);
+    const batch:ShadowBatch={id:randomUUID(),base,tip:main,at:new Date().toISOString(),entries:entries.map(e=>e.id),
+      checks:entries.reduce((all,e)=>unionChecks(all,e.owed),{steps:[],interop:null} as Checks),
+      expected:entries.every(e=>pending.some(tx=>tx.proof && this.ancestor(e.tip,tx.tip) && covers(tx.proof.checks,e.owed))) ? "green" : "unknown",
+      trains:pending.filter(tx=>tx.proof).map(tx=>({tip:tx.tip,run:tx.proof!.run})),state:"running"};
+    history.batches.push(batch);
+    this.state.events.push({at:new Date().toISOString(),transaction:null,transition:"shadow-started",message:`${batch.id} ${base}..${main}`});
+    this.save();return batch;
+  }
+
+  finishShadow(id: string, result: {ok:boolean;run:string;message?:string}, main: string): ShadowBatch {
+    this.recover(main);
+    const batch=this.state.shadow?.batches.find(b=>b.id === id);
+    if (!batch || batch.state !== "running") throw new Error("shadow batch is not active");
+    batch.run=result.run;batch.verdict=result.ok ? "green" : "red";
+    batch.agreement=batch.expected === "unknown" ? "unavailable" : result.ok ? "agree" : "disagree";
+    batch.state=batch.agreement === "agree" ? "agreed" : "held";
+    batch.message=result.message;
+    if (result.ok) this.verifyThrough({commit:batch.tip,run:result.run,checks:batch.checks});
+    this.state.events.push({at:new Date().toISOString(),transaction:null,transition:`shadow-${batch.state}`,message:`${batch.id} ${batch.agreement}; ${result.run}`});
+    this.save();return batch;
   }
 }

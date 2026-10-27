@@ -4,13 +4,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import {GateResource} from "../lanes/gate-resource.ts";
 
 const script = readFileSync(new URL("./pinned.sh", import.meta.url), "utf8");
 const scratch = join(homedir(), ".cache/nts-scratch/tsrs-lane/pinned-tests");
 mkdirSync(scratch, { recursive: true });
 
-for (const refuses of [false, true]) {
-  test(`candidate owns input preparation${refuses ? " and its failure is preserved" : ""}`, t => {
+for (const refuses of [false, true]) for (const inherited of [false,true]) {
+  test(`candidate owns input preparation${refuses ? " and its failure is preserved" : ""}${inherited ? " under the inherited tree lock" : ""}`, t => {
     const directory = mkdtempSync(join(scratch, "candidate-"));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     const root = join(directory, "repo");
@@ -34,14 +35,17 @@ for (const refuses of [false, true]) {
     git("add", ".");
     git("commit", "-qm", "owner");
     const owner = git("rev-parse", "HEAD");
-    writeFileSync(join(root, "tooling/lanes/inputs.sh"), refuses
+    writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'test -z "${NTS_GATE_LOCK_FD:-}" || { echo "lock marker leaked into candidate tools" >&2; exit 24; }\n' + (refuses
       ? 'echo "candidate input is missing" >&2\nexit 23\n'
-      : 'printf candidate > "$NTS_PREPARATION_MARKER"\n');
+      : 'printf candidate > "$NTS_PREPARATION_MARKER"\n'));
     git("add", ".");
     git("commit", "-qm", "candidate");
     const candidate = git("rev-parse", "HEAD");
     git("checkout", "--detach", "-q", owner);
-    const result = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), candidate], { cwd: root, env, encoding: "utf8", timeout: 30_000 });
+    const held=inherited ? GateResource.tryAcquire(`${tree}.lock`)! : null;
+    const result = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), candidate], { cwd: root, env:{...env,...(held?{NTS_GATE_LOCK_FD:"8"}:{})}, encoding: "utf8", timeout: 30_000,
+      ...(held ? {stdio:held.stdio("pipe")} : {}) });
+    held?.close();
     if (refuses) {
       assert.equal(result.status, 23, result.stdout + result.stderr);
       assert.match(result.stderr, /candidate input is missing/);

@@ -150,7 +150,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } else if (process.argv[2] === "--launch-scope") {
     const cpus = process.argv[3];
     cpuList(cpus);
-    const child = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", cpus, ...process.argv.slice(4)], { stdio: "inherit" });
+    // A train can hold pinned.sh's tree lock across setup and execution.
+    // Preserve that open description when entering the cpuset scope.
+    const child = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", cpus, ...process.argv.slice(4)], {
+      stdio: process.env.NTS_GATE_LOCK_FD === "8" ? ["inherit","inherit","inherit",null,null,null,null,null,8] : "inherit",
+    });
     // This is the actual command, not a capability probe. Never retry it.
     if (child.error) console.error(`gate: scope launch failed: ${child.error.message}`);
     process.exitCode = child.status ?? 1;

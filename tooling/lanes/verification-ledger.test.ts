@@ -103,3 +103,35 @@ test("an interrupted prepared landing cannot certify divergent main",t=>{
   assert.equal(readLedger(s.directory)!.transactions[0].state,"held");
   assert.equal(readLedger(s.directory)!.verified.tip,s.base);
 });
+
+test("a shadow snapshot is bounded while a later strict landing reaches main",t=>{
+  const s=scratch(t),l=s.ledger(),first=s.commit("one");
+  const id=l.prepare(s.base,first,[entry(s.base,first)],"strict",proof(first));
+  s.git("update-ref","refs/heads/main",first,s.base);l.commit(id,first);
+  const batch=l.beginShadow(first)!;
+  assert.equal(batch.expected,"green");assert.deepEqual(batch.entries,[first]);
+  const second=s.commit("two"),next=l.prepare(first,second,[entry(first,second)],"strict",proof(second));
+  s.git("update-ref","refs/heads/main",second,first);l.commit(next,second);
+  const done=l.finishShadow(batch.id,{ok:true,run:"/shadow/one"},second);
+  assert.equal(done.tip,first);assert.equal(done.agreement,"agree");
+  const later=l.beginShadow(second)!;
+  assert.equal(later.base,first);assert.equal(later.tip,second);assert.deepEqual(later.entries,[second]);
+});
+
+test("a red shadow batch holds without changing main or reverting anyone",t=>{
+  const s=scratch(t),l=s.ledger(),tip=s.commit("one"),id=l.prepare(s.base,tip,[entry(s.base,tip)],"strict",proof(tip));
+  s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
+  const batch=l.beginShadow(tip)!,done=l.finishShadow(batch.id,{ok:false,run:"/shadow/red",message:"instrument failure"},tip);
+  assert.equal(done.state,"held");assert.equal(done.agreement,"disagree");
+  assert.equal(s.git("rev-parse","main"),tip);assert.equal(l.state.mode,"strict");
+  assert.equal(l.state.shadow!.batches.filter(b=>b.state === "agreed").length,0);
+});
+
+test("a shadow restart interrupts the old batch without certifying it",t=>{
+  const s=scratch(t),l=s.ledger(),tip=s.commit("one"),id=l.prepare(s.base,tip,[entry(s.base,tip)],"strict",proof(tip));
+  s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
+  const interrupted=l.beginShadow(tip)!,restarted=s.ledger(),next=restarted.beginShadow(tip)!;
+  assert.equal(restarted.state.shadow!.batches[0].state,"interrupted");
+  assert.notEqual(next.id,interrupted.id);assert.equal(next.tip,tip);
+  assert.throws(()=>restarted.finishShadow(interrupted.id,{ok:true,run:"/late"},tip),/not active/);
+});

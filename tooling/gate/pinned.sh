@@ -30,6 +30,7 @@
 # edits" is unenforceable across three sessions that each think their edit is
 # small, and this week has been mostly about rules with nothing watching them.
 set -eu
+# nts-gate-tree-lock-handoff: 8
 
 # A physical P-core (both threads, 4-5) belongs to timed measurements.
 # Intersect with our inherited affinity: an E-core-only caller stays there.
@@ -73,7 +74,21 @@ mkdir -p "$(dirname "$tree")" "$target"
 # out their commit and built over the other's; the runner's own lock comes
 # after both. The kernel releases this one when the last process holding it
 # exits, so it never goes stale, and every process the gate starts inherits it.
-exec 9>>"$tree.lock"
+if [ "${NTS_GATE_LOCK_FD:-}" = 8 ]; then
+  # A train or shadow verifier holds this same open description across both
+  # setup and execution. Validate the actual inode; an env flag is no proof.
+  exec 9>&8
+  if [ "$(stat -Lc '%d:%i' /proc/self/fd/9)" != "$(stat -Lc '%d:%i' "$tree.lock")" ] || ! flock -n 9; then
+    echo 'gate: invalid inherited gate-tree lock' >&2
+    exit 1
+  fi
+  exec 8>&-
+else
+  exec 9>>"$tree.lock"
+fi
+# The handoff is consumed by this wrapper. Candidate tools may spawn Node
+# children that close extra descriptors; they must not retain this marker.
+unset NTS_GATE_LOCK_FD
 if ! flock -n 9; then
   echo "gate: $tree is in use; waiting"
   flock 9

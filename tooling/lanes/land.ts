@@ -45,12 +45,15 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 import { gateCommand } from "../gate/affinity.ts";
 import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
 import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_CACHE_MAX_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
-import { VerificationLedger, type Author, type LandingRecord } from "./verification-ledger.ts";
+import { VerificationLedger, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
+import { GateResource, supportsResourceHandoff } from "./gate-resource.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -106,7 +109,7 @@ function say(message: string): void {
 }
 
 /** The checkout every worktree shares: main lives there and only there. */
-function sharedCheckout(): string {
+export function sharedCheckout(): string {
   return dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]));
 }
 
@@ -117,7 +120,7 @@ function authorOf(tree: string): Author {
   return { lane, address: process.env.NTS_LAND_AUTHOR_ADDRESS ?? null };
 }
 
-function ledgerAt(root: string, main: string): VerificationLedger {
+export function ledgerAt(root: string, main: string): VerificationLedger {
   // The shared checkout is at main under this lock. Use its actual owed
   // rules without switching the gate tree (which may hold a checked train).
   const ledger = new VerificationLedger(VERIFICATION, root, main, (from, to) => owedSteps(root, `${from}..${to}`));
@@ -141,19 +144,6 @@ function finishLedger(ledger: VerificationLedger, id: string, main: string): voi
  */
 type Owed = { steps: string[] | "all"; interop: string | null; doctests?: string | null };
 type RequiredChecks = { steps: string[]; interop: string | null };
-function unionChecks(a: Owed, b: Owed): Owed {
-  const interop = (checks: Owed) => checks.steps === "all" || checks.steps.includes("interop");
-  return {
-    steps: a.steps === "all" || b.steps === "all" ? "all" : [...new Set([...a.steps, ...b.steps])],
-    interop: !interop(b) ? a.interop : !interop(a) ? b.interop
-      : a.interop === null || b.interop === null ? null
-      : [...new Set([...a.interop.split(/\s+/), ...b.interop.split(/\s+/)])].join(" "),
-    doctests: b.steps !== "all" && !b.steps.includes("doctests") ? a.doctests
-      : a.steps !== "all" && !a.steps.includes("doctests") ? b.doctests
-      : !a.doctests || !b.doctests ? null : [...new Set([...a.doctests.split(/\s+/), ...b.doctests.split(/\s+/)])].join(" "),
-  };
-}
-
 function unionRequired(a: RequiredChecks, b: RequiredChecks): RequiredChecks {
   return { steps: [...new Set([...a.steps, ...b.steps])], interop: unionChecks(a, b).interop };
 }
@@ -462,6 +452,11 @@ function isAncestor(pid: number): boolean {
   return false;
 }
 
+export function holdsLandingLock(): boolean {
+  const holder=lockHolder();
+  return holder !== null && isAncestor(holder);
+}
+
 /**
  * Join the queue and hold the landing lock for the rest of this process:
  * re-run under flock, telling the locked process which queue entry is its.
@@ -486,10 +481,26 @@ async function underTheLock(sha: string, tree: string): Promise<void> {
   // lock, hours later, is whatever the lane has committed since -- so a lane
   // could not work in its tree while its landing waited.
   const flags = process.argv.slice(2).filter((a) => a.startsWith("--"));
-  const r = spawnSync("flock", [LOCK, process.execPath, process.argv[1], sha, ...flags], {
-    stdio: "inherit",
-    env: { ...process.env, NTS_LAND_LOCKED: "1", NTS_LAND_ENTRY: id },
-  });
+  // pinned.sh comes from shared main, not the candidate. This landing itself
+  // must still gate with an older main that cannot accept an inherited lock.
+  // Shadow entry refuses until that shared script supports the handoff.
+  let r;
+  for (;;) {
+    let resource: GateResource | null = null;
+    if (supportsResourceHandoff(sharedCheckout())) {
+      while (!(resource=GateResource.tryAcquire(`${GATE_TREE}.lock`))) await sleep(1000);
+    }
+    try {
+      // An older waiter can already hold the landing lock while entering
+      // pinned.sh. Never wait for it while retaining its needed tree lock.
+      r=spawnSync("flock", [...(resource ? ["-n","-E","75"] : []),LOCK, process.execPath, process.argv[1], sha, ...flags], {
+        stdio: resource ? resource.stdio("inherit") : "inherit",
+        env: { ...(resource ? resource.env() : process.env), NTS_LAND_LOCKED: "1", NTS_LAND_ENTRY: id },
+      });
+    } finally { resource?.close(); }
+    if (!resource || r.status !== 75) break;
+    await sleep(1000);
+  }
   // The child and its flock wrapper have exited. Each originating process
   // retires only its own submission; the shared gate tree remains warm.
   if (r.status === 0 && resultOf(id)?.state === "landed") {
@@ -578,8 +589,9 @@ function checkGateTarget(root: string): void {
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
-function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed): Gated {
+function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed, shadow = false): Gated {
   const short = landing.slice(0, 12);
+  const resource=GateResource.inherited(`${GATE_TREE}.lock`);
   checkGateTarget(root);
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
@@ -587,6 +599,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     cwd: root,
     env: { ...process.env, NTS_GATE_TREE: GATE_TREE, NTS_GATE_TARGET: GATE_TARGET, NTS_GATE_SETUP_ONLY: "1" },
     encoding: "utf8",
+    ...(resource ? {stdio:resource.stdio("pipe")} : {}),
   });
   if (setup.status !== 0) fail(`could not check out ${short} in the gate tree:\n${setup.stdout}${setup.stderr}`);
   const owed = unionChecks(selected ?? owedSteps(GATE_TREE, `${base}..${landing}`), required);
@@ -600,7 +613,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
   claimMarker(short);
   const run = join(STATE, "runs", `${short}-${Date.now()}`);
   mkdirSync(run, { recursive: true });
-  status({ state: "gating", commit: landing, base, owed, run, train: members });
+  if (!shadow) status({ state: "gating", commit: landing, base, owed, run, train: members });
   try {
     const env: Record<string, string | undefined> = { ...process.env };
     for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_") || k === "NTS_INTEROP_PROJECTS" || k === "NTS_DOCTEST_CRATES") delete env[k];
@@ -615,12 +628,14 @@ function gate(root: string, base: string, landing: string, members: string[], re
       NTS_CHECKERS: "1",
       CARGO_INCREMENTAL: "0",
       CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
+      ...(resource ? {NTS_GATE_LOCK_FD:"8"} : {}),
     });
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);
     const affinity = launch.cpus === null ? launch.mechanism : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded; ${launch.mechanism}`;
     say(`gate affinity: ${affinity}`);
     say(`gating; log ${join(run, "gate.log")}`);
-    const gated = spawnSync(launch.command, launch.args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+    const gated = spawnSync(launch.command, launch.args, { cwd: root, env, stdio: resource ? resource.stdio("pipe") : ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+    writeFileSync(join(run,"process.json"),JSON.stringify({status:gated.status,signal:gated.signal,error:gated.error?.message??null},null,2)+"\n");
     writeFileSync(join(run, "gate.log"), `land: gate affinity: ${affinity}\n${gated.stdout ?? ""}${gated.stderr ?? ""}`);
 
     const summaryPath = join(run, "summary.json");
@@ -636,11 +651,11 @@ function gate(root: string, base: string, landing: string, members: string[], re
       const v = byName.get(s);
       return !(v === "PASS" || (v === "SKIPPED" && ACCEPT_SKIP.includes(s)));
     });
-    if (summary.verdict !== "green" || wrong.length > 0) {
+    if (gated.status !== 0 || gated.signal || gated.error || summary.verdict !== "green" || wrong.length > 0) {
       const failed = wrong.length ? wrong : steps;
       return {
         ok: false, run, state: "red",
-        message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}`,
+        message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || `process ${gated.status ?? gated.signal ?? gated.error?.message}; summary ${summary.verdict}`}; see ${run}`,
         required: { steps: failed, interop: failed.includes("interop") ? owed.interop : null },
       };
     }
@@ -666,6 +681,12 @@ function gate(root: string, base: string, landing: string, members: string[], re
   } finally {
     if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
   }
+}
+
+/** Same pinned setup, build, admission and verdict policy as strict trains. */
+export function runShadowGate(root: string, base: string, tip: string, checks: Owed): Gated {
+  if (!GateResource.inherited(`${GATE_TREE}.lock`)) fail("shadow gate lacks its resource lock");
+  return gate(root,base,tip,[],{steps:[],interop:null},checks,true);
 }
 
 /**
@@ -875,10 +896,12 @@ async function main(): Promise<void> {
   }
 }
 
-try {
-  await main();
-} catch (e) {
-  if (!(e instanceof Refused)) throw e;
-  console.error(`land: ${e.message}`);
-  process.exitCode = 1;
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  try {
+    await main();
+  } catch (e) {
+    if (!(e instanceof Refused)) throw e;
+    console.error(`land: ${e.message}`);
+    process.exitCode = 1;
+  }
 }

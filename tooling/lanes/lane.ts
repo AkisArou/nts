@@ -114,6 +114,7 @@ async function status(json: boolean): Promise<void> {
   try {
     const saved=readLedger(join(homedir(), ".cache/nts-land/verification"));
     verification=saved ? { mode:saved.mode, verified:saved.verified, observedMain:saved.observedMain,
+      shadow:saved.shadow ? {agreed:saved.shadow.batches.filter(b=>b.state==="agreed").length,last:saved.shadow.batches.at(-1)?.state} : null,
       pending:saved.transactions.filter(tx=>tx.state==="prepared" || tx.state==="held" || tx.state==="committed" && tx.entries.some(e=>e.state==="unverified"))
         .flatMap(tx=>tx.entries.map(e=>({id:e.id,tip:e.tip,lane:e.author.lane,state:tx.state==="committed"?e.state:tx.state}))) } : null;
   }
@@ -126,6 +127,7 @@ async function status(json: boolean): Promise<void> {
   if (verification && "error" in verification) console.log(`verification: unavailable: ${verification.error}`);
   else if (verification) {
     console.log(`verified: ${verification.verified.tip.slice(0,12)} (${verification.verified.origin}); product mode strict; ${verification.pending.length} pending entry(s)`);
+    if (verification.shadow) console.log(`shadow: manual only; ${verification.shadow.agreed} agreeing batch(es); last ${verification.shadow.last ?? "none"}`);
     for (const entry of verification.pending) console.log(`  ${entry.tip.slice(0,12)} ${entry.state} ${entry.lane??"unknown lane"}`);
   } else console.log("verification: not initialised; product mode strict");
   console.log(`gate: ${marker() ?? "free"}`);

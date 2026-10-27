@@ -33,7 +33,7 @@ const superset = (got, want, what) => {
 const full = () => stepsFor("no/rule/matches/this.txt");
 
 test("verdict machinery and every verifier entry point stay strict", () => {
-  for (const path of ["tooling/gate/run.mjs", "tooling/lanes/land.ts", "tooling/lanes/verify.ts", "tooling/lanes/verification-ledger.ts",
+  for (const path of ["tooling/gate/run.mjs", "tooling/lanes/land.ts", "tooling/lanes/verify.ts", "tooling/lanes/verify-unit.ts", "tooling/lanes/gate-resource.ts", "tooling/lanes/verification-ledger.ts",
     "tooling/lanes/revert.ts", "tooling/lanes/notify.ts", "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",
     "tooling/differential/agree.mjs", "tooling/memory/run.sh", "results/test262/c/language.tsv"]) assert.ok(isStrictPath(path), path);
   for (const path of ["compiler/core/src/hir/lower.rs", "runtime/c/nts_runtime.c", "docs/architecture.md"]) assert.equal(isStrictPath(path), false, path);

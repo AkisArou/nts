@@ -16,6 +16,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { readLedger, VerificationLedger } from "./verification-ledger.ts";
+import {GateResource} from "./gate-resource.ts";
 
 const LAND = new URL("./land.ts", import.meta.url).pathname;
 
@@ -203,6 +204,36 @@ test("a coordinator docs commit is accounted for by the next strict train",async
   assert.equal(saved.transactions[0].entries[0].author.lane,"coordinator");
   assert.deepEqual(saved.transactions[0].entries[0].owed.steps,["fake"]);
   assert.equal(saved.verified.tip,run(s,s.root,["rev-parse","main"]));
+});
+
+test("a train waits for the gate resource without retaining the landing lock",async()=>{
+  const s=scratch();
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"# nts-gate-tree-lock-handoff: 8\n"+STAND_IN_GATE);
+  // The marker is on its own line after a leading newline, as in pinned.sh.
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n"+readFileSync(join(s.root,"tooling/gate/pinned.sh"),"utf8"));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","lock handoff"]);
+  const tree=lane(s,"tsrs/resource-wait",{"one.txt":"one\n"});
+  const resource=GateResource.tryAcquire(join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"))!;
+  const pending=land(s,tree),queue=join(s.home,".cache/nts-land/queue");
+  await until("it to queue",()=>existsSync(queue) && readdirSync(queue).length>0);
+  assert.equal(spawnSync("flock",["-n",join(s.home,".cache/nts-land.lock"),"true"]).status,0);
+  assert.equal(gates(s),0);resource.close();
+  const result=await pending.done;assert.equal(result.status,0,result.out);
+});
+
+test("an older lock holder waiting for pinned.sh cannot deadlock a new train",async()=>{
+  const s=scratch();
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n# nts-gate-tree-lock-handoff: 8\n"+STAND_IN_GATE);
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","lock handoff"]);
+  const tree=lane(s,"tsrs/older-holder",{"one.txt":"one\n"}),ready=join(s.home,"ready"),go=join(s.home,"go");
+  const gateLock=join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock");
+  const holder=spawn("flock",[join(s.home,".cache/nts-land.lock"),"sh","-c",'touch "$1"; while [ ! -f "$2" ]; do sleep 0.02; done; flock "$3" true',"_",ready,go,gateLock]);
+  const stopped=new Promise<number|null>(resolve=>holder.on("close",resolve));
+  await until("old holder to take landing lock",()=>existsSync(ready));
+  const pending=land(s,tree),queue=join(s.home,".cache/nts-land/queue");
+  await until("new train to queue",()=>existsSync(queue) && readdirSync(queue).length>0);
+  writeFileSync(go,"");assert.equal(await stopped,0);
+  const result=await pending.done;assert.equal(result.status,0,result.out);
 });
 
 test("an unwritable verification journal refuses before any fast-forward", async () => {
