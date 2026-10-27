@@ -18,6 +18,16 @@ the evidence behind each decision.
   formatted double.
 - **Every speed fact is proved by the compiler,** never declared by the
   programmer or assumed by the runtime.
+- **The checker first, proofs where TypeScript is unsound.** What TypeScript's
+  checker knows is the first source of facts: the type at each reference after
+  narrowing, the signature each call resolves to, literal and enum values,
+  generic instantiations, modifiers. TypeScript is unsound by design in known
+  places: covariant arrays, bivariant methods, `any`, `as` and `!`, index reads
+  past the end, `private`, user-written type predicates, and what a `.d.ts`
+  claims about foreign code. There, nts proves the fact itself, checks it at
+  run time, or refuses
+  ([types](../language/types.md#when-a-types-claim-is-false-at-run-time),
+  [log](../records/notebooks/decisions-log.md#the-bar)).
 - **One answer per question across backends:** a fact several backends need is
   computed once in `compiler/core`, and each backend reads it.
 - **Each platform gets its best implementation.** Shared code is reused where it

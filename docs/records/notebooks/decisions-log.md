@@ -28,6 +28,10 @@ Dates are 2026.
   10-21).
 - **Keep the user in the loop** on progress, especially benchmark and
   optimization results (10-24).
+- **"We should leverage the typescript compiler and static analysis as much
+  and as sane we can"** (10-27). What the checker knows is the first source of
+  facts; where TypeScript is unsound by design, the compiler proves the fact,
+  checks it at run time, or refuses.
 
 ## Priorities and order
 
