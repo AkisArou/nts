@@ -159,14 +159,21 @@ claim reads the wrong bytes. Today's behaviour, case by case:
 | an erased value asserted to the wrong type | reads on | `TypeError` or a stop by name (casts, above) | [L6](../open-questions.md#1-language-and-compiler) |
 | a `this` that is not the declared `this:` type | reads on | stops by name ([functions.md](functions.md#this)) | [L14](../open-questions.md#1-language-and-compiler) |
 
-The policy that would replace this case-by-case behaviour (represent
-`undefined` where JavaScript produces it, check widening stores, throw a
-catchable `TypeError` on a failed erased cast) is the register's second
-"decide first" item. A wrong answer that runs is recorded under
-`tests/outcomes/` until it is fixed.
+**The policy:** every case in this table behaves as node does, with one
+exception. An erased value asserted to a type it does not have throws a
+catchable `TypeError`, as the cast table above describes; the stop by name
+remains only until a throw through any call can reach its handler (register
+[L15](../open-questions.md#1-language-and-compiler)). Reads that JavaScript
+answers with `undefined` give `undefined`, by the representation of register
+L4. Until each case meets the policy, a wrong answer that runs is recorded
+under `tests/outcomes/`.
 
 ## Decisions
 
+- **When a type's claim is false at run time, nts behaves as node does, with
+  one exception:** an erased value (from `any`, `unknown`, JSON or foreign
+  code) asserted to a type it does not have throws a catchable `TypeError`
+  (10-27, [log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
 - `JSON.parse(text) as T` that does not match `T` is a `TypeError` naming the
   JSON path; invalid JSON is a `SyntaxError` first; a class as `T` is refused
   for now, plain object types only (10-22,

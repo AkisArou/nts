@@ -52,7 +52,10 @@ does less than its source says for a missing builtin.
 | `check` | printed on stderr as `refused:`; the rest is compared | the same | the same |
 | `hir`, `refusals`, `stats` | listed in the output | listed | not reached |
 
-That a lowering refusal does not stop `nts build` is an open question (L20 in
+A lowering refusal does not stop `nts build` yet: it writes the program
+without the refused functions, and cuts refused top-level statements. Decided,
+not built: any refusal fails `nts build`, and `--partial` writes the cut
+program for experiments, saying so (L20 in
 [open questions](../open-questions.md)).
 
 ## Shared flags
@@ -364,6 +367,9 @@ the others report what the frontend captured either way.
 
 ## Decisions
 
+- **Any refusal fails `nts build`;** `--partial` writes the program without
+  the refused parts, for experiments, and says so (10-27,
+  [log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
 - **Shipped native programs count references;** never-freeing is for tests
   only, which is why `nts build` counts by default
   ([log](../records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)).

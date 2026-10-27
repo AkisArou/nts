@@ -109,9 +109,15 @@ Benchmarks run through every phase.
       `process.stdout.write` and the node `console`;
     - a `declare` field with no visible writer is refused, not read as 0;
     - decorators refused until implemented;
-    - a throw through any indirect call is catchable (L15);
+    - a throw through any indirect call is catchable (L15), so a failed
+      check of an erased value is always a catchable `TypeError` (L6);
     - the web-platform classes keep their functional setup out of the
-      reflective setup that nts defers.
+      reflective setup that nts defers;
+    - any refusal fails `nts build`, with `--partial` for experiments (L20),
+      so a refused program never runs with parts cut;
+    - reads that JavaScript answers with `undefined` give `undefined`:
+      holes, uninitialized fields, a `var` read before its assignment, reads
+      past the end (L4, X1).
 
 ## Phase 2: foundations, native first
 

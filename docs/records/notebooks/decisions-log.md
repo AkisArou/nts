@@ -239,6 +239,16 @@ From [`foundations/memory.md`](../../foundations/memory.md):
 
 ## Language and hosts (10-27)
 
+- **When a type's claim is false at run time** (register L6, with L4): an
+  erased value (from `any`, `unknown`, JSON or foreign code) asserted to a
+  type it does not have throws a catchable `TypeError`, the one documented
+  difference from node, as Static Hermes does and as the JSON.parse decision
+  of 10-22 already says. Everything else TypeScript gets wrong (holes,
+  uninitialized fields, reads past the end) behaves exactly as node does.
+  Chosen: "Catchable TypeError".
+- **Any refusal fails `nts build`** (register L20); a `--partial` flag still
+  writes the cut program for experiments, marked as such. Chosen: "Fail, with
+  an opt-in flag".
 - **`globalThis`, `Proxy` with `Reflect`, and object integrity**
   (`Object.freeze`, `seal`, `preventExtensions` and their predicates) are in
   scope, deferred, and so is the property-descriptor family
