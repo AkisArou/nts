@@ -44,6 +44,7 @@ use nts_frontend_ts::Frontend;
 mod artifact_shadow;
 mod case_costs;
 mod objects;
+mod oracle_exclusions;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
 ///
@@ -265,6 +266,7 @@ struct Testable {
     /// otherwise, where it printed `undefined` for both.
     result_absent: nts_core::hir::Absent,
     params: Vec<(HirType, Facts)>,
+    excluded_tuples: Vec<Vec<u64>>,
 }
 
 /// The values one parameter may be given.
@@ -451,19 +453,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     // without the other compares a program that never releases against an
     // allocator that expects it to. Hence [`counting`], asked here and at the
     // runtime's defines, and nowhere else.
-    let options = hir::Options {
-        provider,
-        table_entries: backend.table_entries(),
-        // What the backend provides, for a `typeof` of an intrinsic
-        // (`hir::features`): C's and LLVM's runtime header, each other
-        // backend's own table.
-        provided: hir::features::Provided::By(match backend {
-            Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
-            Backend::Jvm => nts_codegen_jvm::provides,
-            Backend::Wasm => nts_codegen_wasm::provides,
-        }),
-        ..hir::Options::default()
-    };
+    let options = pool_options(backend, provider);
     let raw = case_costs::measure("lower", || {
         hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign)
     });
@@ -495,49 +485,24 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     }
 
     let selection = case_costs::span("select_exports");
-    let entry = entry_module(&snapshot)?;
-    let importable = exports_of(&snapshot, &entry);
-    // A module that exports `then` *is a thenable*. `await import(m)` sees the
-    // property, decides the namespace object is a promise, and calls it with a
-    // resolve function that the export -- being an ordinary function -- never
-    // invokes. The import never settles, and node reports it as an unsettled
-    // top-level await pointing at the driver rather than at the cause.
-    //
-    // Nothing to do with this compiler: a hand-written module exporting `then`
-    // behaves the same. But the differential cannot check one, and saying so
-    // beats letting the run hang and blaming the harness.
-    if importable.contains("then") {
-        bail!(
-            "the entry module exports `then`, which makes its namespace object a \
-             thenable -- `await import()` on it never resolves, so no differential \
-             can run against node"
+    let (entry, testable, exclusions) = case_population(&snapshot, &prepared.program)?;
+    let excluded = testable
+        .iter()
+        .map(|one| {
+            tuples(&one.params)
+                .iter()
+                .filter(|tuple| oracle_exclusions::matches(tuple, &one.excluded_tuples))
+                .count()
+        })
+        .sum::<usize>();
+    if excluded > 0 {
+        eprintln!(
+            "excluded {excluded} workload tuple(s); see tooling/differential/oracle-exclusions.json"
+        );
+        case_costs::event(
+            serde_json::json!({"event":"oracle.exclusions", "fixture":exclusions.fixture, "excluded":excluded, "policy_version":1}),
         );
     }
-    let testable: Vec<Testable> = prepared
-        .program
-        .funcs
-        .iter()
-        .filter(|func| func.exported)
-        // Exported by the *entry* module, not merely by some module. `exported`
-        // marks a root of the whole program, and node imports one file: a
-        // function another module exports is a root here and `undefined` there,
-        // so driving it threw `m.f is not a function` and the run died before
-        // it compared anything. `tests/programs/nested` had never been checked.
-        .filter(|func| importable.contains(func.name.as_str()))
-        .filter(|func| {
-            drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
-        })
-        .map(|func| Testable {
-            name: func.name.clone(),
-            returns: func.return_type.clone(),
-            result_absent: func.result_absent,
-            params: func
-                .params
-                .iter()
-                .map(|param| (param.ty.clone(), param.known))
-                .collect(),
-        })
-        .collect();
 
     drop(selection);
     case_costs::event(serde_json::json!({"event":"population", "functions":testable.len()}));
@@ -606,6 +571,74 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
     );
     Ok(report)
+}
+
+fn pool_options(backend: Backend, provider: hir::Provider) -> hir::Options<'static> {
+    hir::Options {
+        provider,
+        table_entries: backend.table_entries(),
+        // What the backend provides, for a `typeof` of an intrinsic
+        // (`hir::features`): C's and LLVM's runtime header, each other
+        // backend's own table.
+        provided: hir::features::Provided::By(match backend {
+            Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
+            Backend::Jvm => nts_codegen_jvm::provides,
+            Backend::Wasm => nts_codegen_wasm::provides,
+        }),
+        ..hir::Options::default()
+    }
+}
+
+fn case_population(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    program: &hir::Program,
+) -> Result<(Utf8PathBuf, Vec<Testable>, oracle_exclusions::Policy)> {
+    let entry = entry_module(snapshot)?;
+    let importable = exports_of(snapshot, &entry);
+    // A module that exports `then` *is a thenable*. `await import(m)` sees the
+    // property, decides the namespace object is a promise, and calls it with a
+    // resolve function that the export -- being an ordinary function -- never
+    // invokes. The import never settles, and node reports it as an unsettled
+    // top-level await pointing at the driver rather than at the cause.
+    //
+    // Nothing to do with this compiler: a hand-written module exporting `then`
+    // behaves the same. But the differential cannot check one, and saying so
+    // beats letting the run hang and blaming the harness.
+    if importable.contains("then") {
+        bail!(
+            "the entry module exports `then`, which makes its namespace object a \
+             thenable -- `await import()` on it never resolves, so no differential \
+             can run against node"
+        );
+    }
+    let exclusions = oracle_exclusions::for_entry(&entry)?;
+    let testable: Vec<Testable> = program
+        .funcs
+        .iter()
+        .filter(|func| func.exported)
+        // Exported by the *entry* module, not merely by some module. `exported`
+        // marks a root of the whole program, and node imports one file: a
+        // function another module exports is a root here and `undefined` there,
+        // so driving it threw `m.f is not a function` and the run died before
+        // it compared anything. `tests/programs/nested` had never been checked.
+        .filter(|func| importable.contains(func.name.as_str()))
+        .filter(|func| {
+            drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
+        })
+        .map(|func| Testable {
+            name: func.name.clone(),
+            excluded_tuples: exclusions.tuples_for(&func.name),
+            returns: func.return_type.clone(),
+            result_absent: func.result_absent,
+            params: func
+                .params
+                .iter()
+                .map(|param| (param.ty.clone(), param.known))
+                .collect(),
+        })
+        .collect();
+
+    Ok((entry, testable, exclusions))
 }
 
 /// How far apart two doubles may be and still be the same answer.
@@ -845,12 +878,62 @@ fn interleaved(testable: &[Testable]) -> Vec<(&Testable, usize, Vec<f64>)> {
     let mut out = Vec::new();
     for at in 0..deepest {
         for (one, cases) in testable.iter().zip(&per) {
-            if let Some(tuple) = cases.get(at) {
+            if let Some(tuple) = cases.get(at)
+                && !oracle_exclusions::matches(tuple, &one.excluded_tuples)
+            {
                 out.push((one, at, tuple.clone()));
             }
         }
     }
     out
+}
+
+#[cfg(test)]
+mod workload_exclusion_guards {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn removing_a_poison_tuple_keeps_later_cases_and_other_functions() {
+        let policy =
+            oracle_exclusions::for_entry(Utf8Path::new("/checkout/benchmarks/cases/fib/case.ts"))
+                .unwrap();
+        let cases: Vec<Testable> = ["fib", "other"]
+            .into_iter()
+            .map(|name| Testable {
+                name: name.to_owned(),
+                returns: HirType::NUMBER,
+                result_absent: nts_core::hir::Absent::Impossible,
+                params: vec![(HirType::NUMBER, Facts::TOP)],
+                excluded_tuples: policy.tuples_for(name),
+            })
+            .collect();
+        let scheduled = interleaved(&cases);
+        assert!(
+            !scheduled
+                .iter()
+                .any(|(one, at, _)| one.name == "fib" && *at == 14)
+        );
+        assert!(
+            scheduled
+                .iter()
+                .any(|(one, at, _)| one.name == "other" && *at == 14)
+        );
+        assert!(
+            scheduled
+                .iter()
+                .any(|(one, at, _)| one.name == "fib" && *at == 25)
+        );
+        assert!(
+            scheduled
+                .iter()
+                .any(|(one, at, _)| one.name == "fib" && *at == 28)
+        );
+        let node = driver("file:///fixture.ts", &cases, Engine::Node);
+        assert!(!node.contains("m.fib(100.0)"));
+        assert!(node.contains("m.other(100.0)"));
+        assert!(node.contains("m.fib(NaN)"));
+    }
 }
 
 /// The argument tuples one function is called with.
@@ -3024,6 +3107,7 @@ mod wasm_compiler_stop_guard {
             returns: HirType::NUMBER,
             result_absent: Absent::Impossible,
             params: Vec::new(),
+            excluded_tuples: Vec::new(),
         }
     }
 
@@ -3695,6 +3779,7 @@ mod pairing {
             returns: HirType::Void,
             result_absent: nts_core::hir::Absent::Impossible,
             params: Vec::new(),
+            excluded_tuples: Vec::new(),
         }]
     }
 

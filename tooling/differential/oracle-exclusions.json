@@ -1,0 +1,1436 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "fixture": "benchmarks/cases/absences",
+      "source": "benchmarks/cases/absences/case.ts",
+      "function": "absences",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/array-mutations",
+      "source": "benchmarks/cases/array-mutations/case.ts",
+      "function": "mutations",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "The int32-coerced size is still positive here; it materializes billions of entries and V8 exhausts its heap. Other signed-wrap inputs are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/array-predicates",
+      "source": "benchmarks/cases/array-predicates/case.ts",
+      "function": "predicates",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "The int32-coerced size is still positive here; it materializes billions of entries and V8 exhausts its heap. Other signed-wrap inputs are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-bounce",
+      "source": "benchmarks/cases/awfy-bounce/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-bounce",
+      "source": "benchmarks/cases/awfy-bounce/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-bounce",
+      "source": "benchmarks/cases/awfy-bounce/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-bounce",
+      "source": "benchmarks/cases/awfy-bounce/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-list",
+      "source": "benchmarks/cases/awfy-list/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-list",
+      "source": "benchmarks/cases/awfy-list/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-list",
+      "source": "benchmarks/cases/awfy-list/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-list",
+      "source": "benchmarks/cases/awfy-list/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-mandelbrot",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "Size squared is 4,294,836,225 pixels, each with up to 50 iterations; it is an impractical per-train workload."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-mandelbrot",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-mandelbrot",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-mandelbrot",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-mandelbrot",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-mandelbrot",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "27"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "100"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "255"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "256"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "1000"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "Each iteration advances 250,000 simulation steps; this tuple asks for 16,383,750,000 advances, an impractical per-train workload."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-nbody",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "Each repetition advances 250000 simulation steps; this tuple asks for 3,086,250,000 simulation advances, an impractical per-train oracle workload."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-permute",
+      "source": "benchmarks/cases/awfy-permute/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-permute",
+      "source": "benchmarks/cases/awfy-permute/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-permute",
+      "source": "benchmarks/cases/awfy-permute/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-permute",
+      "source": "benchmarks/cases/awfy-permute/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-queens",
+      "source": "benchmarks/cases/awfy-queens/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-queens",
+      "source": "benchmarks/cases/awfy-queens/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-queens",
+      "source": "benchmarks/cases/awfy-queens/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-queens",
+      "source": "benchmarks/cases/awfy-queens/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-sieve",
+      "source": "benchmarks/cases/awfy-sieve/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-sieve",
+      "source": "benchmarks/cases/awfy-sieve/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-sieve",
+      "source": "benchmarks/cases/awfy-sieve/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-sieve",
+      "source": "benchmarks/cases/awfy-sieve/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-towers",
+      "source": "benchmarks/cases/awfy-towers/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-towers",
+      "source": "benchmarks/cases/awfy-towers/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-towers",
+      "source": "benchmarks/cases/awfy-towers/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/awfy-towers",
+      "source": "benchmarks/cases/awfy-towers/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/bigint",
+      "source": "benchmarks/cases/bigint/case.ts",
+      "function": "mix",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "61 + (seed | 0) demands over two billion multi-BigInt rounds; other wrap-boundary inputs remain cheap and are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/exceptions",
+      "source": "benchmarks/cases/exceptions/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/exceptions",
+      "source": "benchmarks/cases/exceptions/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/exceptions",
+      "source": "benchmarks/cases/exceptions/case.ts",
+      "function": "run",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/exceptions",
+      "source": "benchmarks/cases/exceptions/case.ts",
+      "function": "run",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/fib",
+      "source": "benchmarks/cases/fib/case.ts",
+      "function": "fib",
+      "tuple": [
+        "100"
+      ],
+      "reason": "Exponential recursion remains below the immediate stack-overflow depth; no result in the CPU-bounded probe. Large inputs which throw RangeError promptly are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/fib",
+      "source": "benchmarks/cases/fib/case.ts",
+      "function": "fib",
+      "tuple": [
+        "255"
+      ],
+      "reason": "Exponential recursion remains below the immediate stack-overflow depth; no result in the CPU-bounded probe. Large inputs which throw RangeError promptly are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/fib",
+      "source": "benchmarks/cases/fib/case.ts",
+      "function": "fib",
+      "tuple": [
+        "256"
+      ],
+      "reason": "Exponential recursion remains below the immediate stack-overflow depth; no result in the CPU-bounded probe. Large inputs which throw RangeError promptly are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/fib",
+      "source": "benchmarks/cases/fib/case.ts",
+      "function": "fib",
+      "tuple": [
+        "1000"
+      ],
+      "reason": "Exponential recursion remains below the immediate stack-overflow depth; no result in the CPU-bounded probe. Large inputs which throw RangeError promptly are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/fib",
+      "source": "benchmarks/cases/fib/case.ts",
+      "function": "fib",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "Exponential recursion remains below the immediate stack-overflow depth; no result in the CPU-bounded probe. Large inputs which throw RangeError promptly are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/generator",
+      "source": "benchmarks/cases/generator/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator",
+      "source": "benchmarks/cases/generator/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator",
+      "source": "benchmarks/cases/generator/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator",
+      "source": "benchmarks/cases/generator/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator-dispatched",
+      "source": "benchmarks/cases/generator-dispatched/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator-dispatched",
+      "source": "benchmarks/cases/generator-dispatched/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator-dispatched",
+      "source": "benchmarks/cases/generator-dispatched/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/generator-dispatched",
+      "source": "benchmarks/cases/generator-dispatched/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/instanceof",
+      "source": "benchmarks/cases/instanceof/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/instanceof",
+      "source": "benchmarks/cases/instanceof/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/instanceof",
+      "source": "benchmarks/cases/instanceof/case.ts",
+      "function": "run",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/instanceof",
+      "source": "benchmarks/cases/instanceof/case.ts",
+      "function": "run",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-append",
+      "source": "benchmarks/cases/json-build-append/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-append",
+      "source": "benchmarks/cases/json-build-append/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-append",
+      "source": "benchmarks/cases/json-build-append/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-append",
+      "source": "benchmarks/cases/json-build-append/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-join",
+      "source": "benchmarks/cases/json-build-join/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-join",
+      "source": "benchmarks/cases/json-build-join/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-join",
+      "source": "benchmarks/cases/json-build-join/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-build-join",
+      "source": "benchmarks/cases/json-build-join/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-parse",
+      "source": "benchmarks/cases/json-parse/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-scan",
+      "source": "benchmarks/cases/json-scan/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-scan",
+      "source": "benchmarks/cases/json-scan/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-scan",
+      "source": "benchmarks/cases/json-scan/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-scan",
+      "source": "benchmarks/cases/json-scan/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-serialize",
+      "source": "benchmarks/cases/json-serialize/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-serialize",
+      "source": "benchmarks/cases/json-serialize/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-serialize",
+      "source": "benchmarks/cases/json-serialize/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-serialize",
+      "source": "benchmarks/cases/json-serialize/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-builtin",
+      "source": "benchmarks/cases/json-stringify-builtin/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "1000"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-doc",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-fused",
+      "source": "benchmarks/cases/json-stringify-fused/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-inline",
+      "source": "benchmarks/cases/json-stringify-inline/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "4096"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/json-stringify-typed",
+      "source": "benchmarks/cases/json-stringify-typed/case.ts",
+      "function": "work",
+      "tuple": [
+        "12345"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/logical-assignment",
+      "source": "benchmarks/cases/logical-assignment/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/logical-assignment",
+      "source": "benchmarks/cases/logical-assignment/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/logical-assignment",
+      "source": "benchmarks/cases/logical-assignment/case.ts",
+      "function": "run",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/logical-assignment",
+      "source": "benchmarks/cases/logical-assignment/case.ts",
+      "function": "run",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Uncoerced count demands 2^53-1 loop or iterator steps; all completing int32/uint32 boundaries are retained for separate cost review."
+    },
+    {
+      "fixture": "benchmarks/cases/loop",
+      "source": "benchmarks/cases/loop/case.ts",
+      "function": "accumulate",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Uncoerced count demands 2^53-1 loop or iterator steps; all completing int32/uint32 boundaries are retained for separate cost review."
+    },
+    {
+      "fixture": "benchmarks/cases/map-and-set",
+      "source": "benchmarks/cases/map-and-set/case.ts",
+      "function": "table",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "The int32-coerced size is still positive here; it materializes billions of entries and V8 exhausts its heap. Other signed-wrap inputs are retained."
+    },
+    {
+      "fixture": "benchmarks/cases/node-utf8",
+      "source": "benchmarks/cases/node-utf8/case.ts",
+      "function": "work",
+      "tuple": [
+        "65535"
+      ],
+      "reason": "workload repetition; body covered by smaller counts"
+    },
+    {
+      "fixture": "benchmarks/cases/node-utf8",
+      "source": "benchmarks/cases/node-utf8/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/node-utf8",
+      "source": "benchmarks/cases/node-utf8/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/node-utf8",
+      "source": "benchmarks/cases/node-utf8/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/node-utf8",
+      "source": "benchmarks/cases/node-utf8/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/optional-chain",
+      "source": "benchmarks/cases/optional-chain/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/optional-chain",
+      "source": "benchmarks/cases/optional-chain/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/optional-chain",
+      "source": "benchmarks/cases/optional-chain/case.ts",
+      "function": "run",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/optional-chain",
+      "source": "benchmarks/cases/optional-chain/case.ts",
+      "function": "run",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Uncoerced count demands 2^53-1 loop or iterator steps; all completing int32/uint32 boundaries are retained for separate cost review."
+    },
+    {
+      "fixture": "benchmarks/cases/printer-erased",
+      "source": "benchmarks/cases/printer-erased/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/printer-erased",
+      "source": "benchmarks/cases/printer-erased/case.ts",
+      "function": "work",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/printer-erased",
+      "source": "benchmarks/cases/printer-erased/case.ts",
+      "function": "work",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/printer-erased",
+      "source": "benchmarks/cases/printer-erased/case.ts",
+      "function": "work",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Raw positive bound demands billions of iterations, or multiplies that bound by the fixed inner workload; infeasible for a per-train oracle case."
+    },
+    {
+      "fixture": "benchmarks/cases/user-iterable",
+      "source": "benchmarks/cases/user-iterable/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/user-iterable",
+      "source": "benchmarks/cases/user-iterable/case.ts",
+      "function": "run",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/user-iterable",
+      "source": "benchmarks/cases/user-iterable/case.ts",
+      "function": "run",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "int32/uint32 induction boundary; replaced by dedicated near-boundary fixtures"
+    },
+    {
+      "fixture": "benchmarks/cases/user-iterable",
+      "source": "benchmarks/cases/user-iterable/case.ts",
+      "function": "run",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "Uncoerced count demands 2^53-1 loop or iterator steps; all completing int32/uint32 boundaries are retained for separate cost review."
+    },
+    {
+      "fixture": "benchmarks/cases/user-iterable",
+      "source": "benchmarks/cases/user-iterable/case.ts",
+      "function": "run",
+      "tuple": [
+        "NaN"
+      ],
+      "reason": "Steps.next decrements this.at and stops at this.at < 0; NaN stays NaN and the stop comparison stays false, so the iterator never ends. This pair was hidden behind earlier large bounds."
+    },
+    {
+      "fixture": "tests/programs/array-from",
+      "source": "tests/programs/array-from/src/main.ts",
+      "function": "fromIterable",
+      "tuple": [
+        "NaN"
+      ],
+      "reason": "CountdownIterator.next tests at <= 0 and subtracts 1; NaN never meets the stop condition, so Array.from consumes an infinite iterator until heap exhaustion."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "grow",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "drain",
+      "tuple": [
+        "2147483647"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "grow",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "drain",
+      "tuple": [
+        "2147483648"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "grow",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "drain",
+      "tuple": [
+        "4294967295"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "grow",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    },
+    {
+      "fixture": "tests/programs/growable",
+      "source": "tests/programs/growable/src/main.ts",
+      "function": "drain",
+      "tuple": [
+        "9007199254740991"
+      ],
+      "reason": "A loop materializes one array element per positive input value; billions of elements exceed the oracle memory budget."
+    }
+  ]
+}

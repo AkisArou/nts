@@ -209,6 +209,7 @@ fn all_three_results_agree_on_every_backend() {
             returns: HirType::NUMBER,
             result_absent: Absent::Impossible,
             params: Vec::new(),
+            excluded_tuples: Vec::new(),
         })
         .collect();
     let path = Utf8PathBuf::from_path_buf(
