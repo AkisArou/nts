@@ -21714,6 +21714,9 @@ struct Comparator {
     callee: ClosureEntry,
     parameters: Vec<HirType>,
     argument_source: Option<(NodeId, Option<TypeId>)>,
+    /// The immutable owner of managed elements. Merge buffers then contain
+    /// uint32 indices into this snapshot, never managed references themselves.
+    snapshot: Option<ValueId>,
 }
 
 /// What a loop does between one iteration and the next.
@@ -80895,12 +80898,23 @@ impl<'a> FuncBuilder<'a> {
         } else {
             receiver
         };
-        // Two arrays of this function's own, which the merge passes alternate
-        // between: nothing the comparator can reach.
-        let runs = (
-            self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
-            self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
-        );
+        // Keep managed elements owned by one immutable snapshot throughout
+        // comparisons and write-back. The comparator can mutate the original
+        // array, retain an element, collect or throw; it cannot reach this
+        // private owner. Merge passes move only uint32 indices, so their
+        // partial results need no element counts, even on an exceptional exit.
+        let snapshot = matches!(element, HirType::Managed(_))
+            .then(|| self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin));
+        let runs = if let Some(snapshot) = snapshot {
+            self.sort_indices(id, snapshot, &origin)?
+        } else {
+            // Numeric sorts already move uncounted values; an index would add
+            // an indirection without removing any count traffic.
+            (
+                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
+                self.call_runtime(copy, vec![target, zero, end], ty.clone(), &origin),
+            )
+        };
         let comparator = Comparator {
             node: compare,
             function,
@@ -80913,10 +80927,110 @@ impl<'a> FuncBuilder<'a> {
                     _ => None,
                 }
             }),
+            snapshot,
         };
         let sorted = self.merge_passes(id, runs, &element, &comparator, &origin)?;
-        self.write_back(id, (sorted, target), &element, &origin)?;
+        self.write_back(id, (sorted, target), &element, snapshot, &origin)?;
         Ok(target)
+    }
+
+    /// Two private index buffers, initially `0..length` and zeros. An array's
+    /// length is uint32, so every valid index fits exactly in four bytes. The
+    /// second buffer is read only after a complete pass has filled it.
+    fn sort_indices(
+        &mut self,
+        id: NodeId,
+        snapshot: ValueId,
+        origin: &Origin,
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        let length = self.push(OpKind::Length(snapshot), HirType::NUMBER, origin.clone());
+        let index_type = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        let array_type = HirType::Managed(ManagedType::Array(Box::new(index_type.clone())));
+        let mut allocate = || {
+            self.push(
+                OpKind::ArrayNew {
+                    length,
+                    fill: ArrayFill::Filled,
+                },
+                array_type.clone(),
+                origin.clone(),
+            )
+        };
+        let buffers = (allocate(), allocate());
+        let at = self.synthetic_symbol();
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        self.bindings.insert(at, zero);
+        let fill = self.begin_loop(id, &[at], true, origin)?;
+        let index = self.bindings[&at];
+        let more = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: index,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.test_loop(more, &fill);
+        self.switch_to(fill.body);
+        let value = self.push(OpKind::Convert(index), index_type, origin.clone());
+        self.push(
+            OpKind::ArraySet {
+                array: buffers.0,
+                index,
+                value,
+                checked: false,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        self.end_loop(&fill, Step::Count { name: at, by: 1.0 })?;
+        Ok(buffers)
+    }
+
+    /// Read one merge element. Managed sorts read an index and then borrow
+    /// from the private counted snapshot, which survives every comparator and
+    /// every write-back. Both bounds follow from the index permutation.
+    fn sort_element(
+        &mut self,
+        (array, index): (ValueId, ValueId),
+        element: &HirType,
+        snapshot: Option<ValueId>,
+        origin: &Origin,
+    ) -> ValueId {
+        let stored = if snapshot.is_some() {
+            HirType::Int {
+                bits: 32,
+                signed: false,
+            }
+        } else {
+            element.clone()
+        };
+        let value = self.push(
+            OpKind::ArrayGet {
+                array,
+                index,
+                checked: false,
+            },
+            stored,
+            origin.clone(),
+        );
+        if let Some(array) = snapshot {
+            self.push(
+                OpKind::ArrayGet {
+                    array,
+                    index: value,
+                    checked: false,
+                },
+                element.clone(),
+                origin.clone(),
+            )
+        } else {
+            value
+        }
     }
 
     /// The merge passes of [`Self::lower_sort_with`], over `runs` -- two arrays
@@ -81065,24 +81179,8 @@ impl<'a> FuncBuilder<'a> {
             else_args: by_left.clone(),
         });
         self.switch_to(both);
-        let first = self.push(
-            OpKind::ArrayGet {
-                array: source,
-                index: left_at,
-                checked: false,
-            },
-            element.clone(),
-            origin.clone(),
-        );
-        let second = self.push(
-            OpKind::ArrayGet {
-                array: source,
-                index: right_at,
-                checked: false,
-            },
-            element.clone(),
-            origin.clone(),
-        );
+        let first = self.sort_element((source, left_at), element, comparator.snapshot, origin);
+        let second = self.sort_element((source, right_at), element, comparator.snapshot, origin);
         let mut args = vec![comparator.function];
         for (value, want) in [first, second].into_iter().zip(&comparator.parameters) {
             args.push(self.coerce(value, want, comparator.node)?);
@@ -81128,13 +81226,21 @@ impl<'a> FuncBuilder<'a> {
             args: by_left,
         });
         self.switch_to(merged);
+        let stored = if comparator.snapshot.is_some() {
+            HirType::Int {
+                bits: 32,
+                signed: false,
+            }
+        } else {
+            element.clone()
+        };
         let value = self.push(
             OpKind::ArrayGet {
                 array: source,
                 index: chosen,
                 checked: false,
             },
-            element.clone(),
+            stored,
             origin.clone(),
         );
         let index = self.bindings[&at];
@@ -81161,6 +81267,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         (sorted, target): (ValueId, ValueId),
         element: &HirType,
+        snapshot: Option<ValueId>,
         origin: &Origin,
     ) -> Result<(), Diagnostic> {
         let push = if *element == HirType::NUMBER {
@@ -81185,15 +81292,7 @@ impl<'a> FuncBuilder<'a> {
         self.test_loop(more, &write);
         self.switch_to(write.body);
         let index = self.bindings[&back];
-        let value = self.push(
-            OpKind::ArrayGet {
-                array: sorted,
-                index,
-                checked: false,
-            },
-            element.clone(),
-            origin.clone(),
-        );
+        let value = self.sort_element((sorted, index), element, snapshot, origin);
         let held = self.push(OpKind::Length(target), HirType::NUMBER, origin.clone());
         let inside = self.push(
             OpKind::Binary {
