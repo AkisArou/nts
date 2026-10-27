@@ -43,6 +43,8 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 - [`native-operations.md`](native-operations.md) and [`native-interop.md`](native-interop.md): calling C, and C calling TypeScript.
 - [`jvm-interop.md`](jvm-interop.md) and [`jvm-android-provider.md`](jvm-android-provider.md): the JVM and Android lane.
 - [`wasm.md`](wasm.md): the WebAssembly backend.
+- [`targets.md`](targets.md): every environment a program runs in, in one table:
+  memory, strings, builtins, JSON, Unicode, Map and Set, event loop, status.
 - [`nts-config.md`](nts-config.md): products, targets and `nts.config.ts`.
 - [`web-platform-integration-plan.md`](web-platform-integration-plan.md): the contract `runtime/web-platform` implements.
 - [`temporal.md`](temporal.md): Date, Temporal and Intl.

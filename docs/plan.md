@@ -57,9 +57,10 @@ Benchmarks run through every phase.
      file.
 6. **The agents' unlanded work:** almost all of it is already in the switch,
    rejected or unfinished (the per-agent inventories of 10-26). What is worth
-   keeping moves into phase 2: the six Are We Fast Yet ports, and the held
-   arena API with its first caller. Deleting the leftover branches is shared
-   state, so it waits for the user's approval.
+   keeping moves into phase 2: the six remaining Are We Fast Yet ports (first,
+   right after the memory fixes) and the held arena API with its first caller.
+   Leftover branches and worktrees are the coordinator's to clean up (the
+   user, 10-27): landed ones are deleted, and unique work is archived.
 7. **Make the gate fast again** (the coordinator's decision, 2026-10-27, at the
    user's request).
    - **Where the time went:** the full gate took 26–32 minutes at 24 slots
@@ -96,7 +97,9 @@ order:
    - the memory census;
    - the new rows (`tree-teardown`, `sort-objects`, `immutable-update`,
      `array-copying-methods`, the `case-convert` variants);
-   - the six Are We Fast Yet ports;
+   - the six remaining Are We Fast Yet ports (`storage`, `cd`, `deltablue`,
+     `havlak`, `json`, `richards`). With the eight on main, that is the whole
+     suite of fourteen, measured against node, Bun, C++ and Java;
    - the Unicode fixtures and the version pin check.
 2. **Memory stages 1 and 2** (cheap counting wins; the one memory analysis,
    facts only) beside **Unicode stage 1** (case mapping).

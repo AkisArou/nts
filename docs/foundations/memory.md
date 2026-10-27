@@ -327,6 +327,36 @@ safe:
 
 Both wait for workers (stage 9).
 
+### Cycles through foreign objects
+
+Every native host nts binds counts references too: Objective-C and Core
+Foundation (retain/release), GObject (`g_object_ref`/`unref`), COM and WinRT
+(`AddRef`/`Release`). nts holds a host object through a wrapper that owns one
+host reference. The collector cannot see references the host holds, so a
+cycle through a host object, such as a closure capturing the object that holds
+it, is invisible to it unless the host's side is made visible.
+
+The mechanism exists: `NtsHolders` in `runtime/c/nts_runtime.h`. A family
+makes each host object that holds nts closures a node of the trace, counted by
+the host's own count, and severs a garbage node by making the host let go of
+its closures.
+
+| host | today | tested |
+|---|---|---|
+| GTK (GObject) | **collected.** The one family registered: a GObject's signal handlers are its held closures, its `ref_count` is read at checkpoints, and a garbage cycle is severed by disconnecting the handlers. | `tests/interop/gtk-cycles`: no cycle, a cycle through itself, the same inside a window that is then destroyed |
+| Windows (WinRT, COM) | **leaks until the program unsubscribes.** An event handler that captures its source keeps both alive. The async bindings avoid it by handing the handler the object instead of capturing it. | `tests/interop/windows-winrt` pins the leak: one delegate alive without `remove_Closed`, none with it |
+| Apple (Objective-C, CF) | **not collected.** Classes nts defines keep their state in an ivar released at `dealloc`, blocks capture nts closures, and no family is registered. AppKit's delegates and targets are weak by convention, which avoids the commonest cycles; a stored block or handler that captures its owner leaks. | no cycle test |
+
+The two missing families differ in what the host lets nts count:
+- **WinRT delegates** are COM objects nts implements, so their
+  `AddRef`/`Release` are nts's own and the count is exact. That gives a family
+  like GObject's, severed by dropping the delegate's closure.
+- **Objective-C** retain counts are not observable in general (side tables,
+  tagged pointers). The classes nts creates can count their own retains by
+  implementing `retain` and `release`, at a cost to measure; blocks have no
+  public count. Until a design settles blocks, their cycles need weak
+  references or explicit invalidation.
+
 ### Our own JSON parser needs one change
 
 `runtime/web-platform/src/json/parse.ts` starts every open container with
@@ -347,14 +377,14 @@ node and Bun in the same sitting.
 
 | stage | work | rows it must move |
 |---|---|---|
-| 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`) | none: instruments and fixes |
+| 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`); a macOS cycle test like `gtk-cycles`, recording today's behaviour (it runs when a Mac is available again; there is none now) | none: instruments and fixes |
 | 1 | release specialized by type; count-free sort; erased-value releases; one count per map key; anchors held only to the last borrow | `map-entries-top-k` about −5% more; `awfy-towers` below Bun |
 | 2 | the one memory analysis, facts only, as formulated above; its first slice end to end (a parser-shaped workload and a tree or list builder) | none may move; each difference from today's placement explained |
 | 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `json-build-append` must not regress |
 | 4 | borrowed region inputs | `record-word-counts` and `json-stringify-doc` a few percent |
 | 5 | reuse for arrays and objects | `immutable-update`, `array-copying-methods` below node and Bun; stop if they don't move |
 | 6 | page allocator: mimalloc v3 (v2 as control) and rpmalloc against today's, with today's object layout; then the 16-byte header, measured separately; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row; reuse distance; executable size; RSS retained by long-running programs |
-| 7 | weak references, on the contract fixed in stage 0 | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry` |
+| 7 | weak references, on the contract fixed in stage 0; holder families for WinRT delegates and for the Objective-C classes nts defines (blocks: design open) | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry`; `windows-winrt` keeps no delegate without `remove_Closed`; the macOS cycle test collects |
 | 8 | proving types acyclic from how they are built, only if a row needs it | cycle-candidate traffic |
 | 9 | workers as isolated heaps | a message row against node's `worker_threads` |
 

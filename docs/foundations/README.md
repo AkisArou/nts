@@ -94,6 +94,7 @@ the benchmark rows it is held to, and what is still open.
 | [Memory management](memory.md) | decided 2026-10-27 |
 | [Hashing and hash tables](hashing.md) | designed 2026-10-27 |
 | [Strings](strings.md) | approved 2026-10-22; stages D and E refined 2026-10-27 |
+| [The JVM and Wasm](jvm-and-wasm.md) | proposed 2026-10-27, for approval |
 | Numbers, JSON | designs exist from the 2026-10-22 studies; to be written here as pages |
 
 ## What is still open for native

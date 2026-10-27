@@ -55,6 +55,14 @@ Dates are 2026. Quotes are the user's words.
 - **The earlier Codex work's archived branches** (`refs/archive/codex/...`) are
   a quarry: port an independent fix with its own fixture and gate; never land
   a branch wholesale.
+- **Wasm (10-27):** `stringref` is rejected (W3), and erased values keep i31 for
+  small integers (W4), from [the JVM and Wasm page](foundations/jvm-and-wasm.md);
+  its other proposals wait for research.
+- **Branch and worktree cleanup is the coordinator's call** (10-27): no need to
+  ask. Landed branches are deleted; branches with unique work are archived
+  (`refs/archive/...` plus an `archive.tsv` row), so nothing is lost; worktrees
+  go when they are clean, idle and their branch is done. The Chromium checkout
+  and that lane's branches stay.
 - **Docs go straight to main** (10-27): the coordinator writes documentation
   in `~/Projects/nts` itself, with no docs branch or worktree, and commits it
   without a gate whenever no landing train is running. The user reads the docs
@@ -74,11 +82,11 @@ Dates are 2026. Quotes are the user's words.
 - **tsrs replaces tsgo**, called in-process (10-22: "YES about tsrs!!").
 - **"NO tsgo or tsrs --api intermediate steps"** (10-23): no staged switch, no
   tsgo bump, no digest comparison with tsgo; once validated, tsgo and its
-  transport are deleted with no compatibility leftovers. *Supersedes* the
+  transport are deleted with no compatibility leftovers. _Supersedes_ the
   staged plan of 10-22.
 - **Temporary local tsrs patch allowed** (10-24) to unblock the landing, for the
   two checker crashes, after first moving to the latest upstream tsrs; it is
-  removed when an official upstream release fixes both. *Supersedes* "no local
+  removed when an official upstream release fixes both. _Supersedes_ "no local
   patches to vendored tsrs" for that case only.
 
 ## Builtins and runtimes (10-22)
@@ -148,7 +156,7 @@ Dates are 2026. Quotes are the user's words.
 ## Objects (10-22)
 
 - **String hashing takes a random seed per process,** against hash flooding.
-  *Not yet true on main*: see the [map](foundations/README.md).
+  _Not yet true on main_: see the [map](foundations/README.md).
 - **Map and Set tables compact deleted entries,** with a list of live cursors
   so iteration stays correct.
 
@@ -184,7 +192,7 @@ From [`foundations/unicode.md`](foundations/unicode.md):
 - **D5 (amended the same day):** the word-break dictionaries ship whenever a
   program uses word segmentation, unless its input is proved free of those
   scripts, because ICU picks a dictionary from the text, not the locale.
-  *Superseded:* "word-break dictionaries only for declared locales".
+  _Superseded:_ "word-break dictionaries only for declared locales".
 - **D6:** no Intl on standalone Wasm for now.
 
 QuickJS goes entirely (10-22).
