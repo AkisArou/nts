@@ -62,9 +62,14 @@ test("named standalone experiments remain non-canonical through children",t=>{
 
 test("the explicit old-environment comparison is never landing evidence",t=>{
   const {run,base}=fixture(t);
-  const old=gateEnvironment({...base,[ENVIRONMENT_EXPERIMENT]:"today",LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",UNRELATED_SECRET:"not for the report"},{run,standalone:true});
+  const launcher={...base,[ENVIRONMENT_EXPERIMENT]:"today",LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",UNRELATED_SECRET:"not for the report"};
+  const old=gateEnvironment(launcher,{run,standalone:true});
   assert.equal(old.report.canonical,false);assert.equal(old.env.NODE_OPTIONS,"--max-old-space-size=8192");
   assert.equal(old.env.TMPDIR,join(run,"tmp"));
+  const expected:NodeJS.ProcessEnv={...launcher,TMPDIR:join(run,"tmp"),XDG_CACHE_HOME:join(base.HOME,".cache"),NTS_GATE_RUN_DIR:run};
+  delete expected[ENVIRONMENT_EXPERIMENT];
+  assert.deepEqual(Object.fromEntries(Object.entries(old.env).filter(([name])=>name!==ENVIRONMENT_CONTEXT)),expected);
+  assert.deepEqual(old.report.dropped,[ENVIRONMENT_EXPERIMENT]);
   assert.doesNotMatch(JSON.stringify(old.report),/not for the report/);
   const child=gateEnvironment(old.env,{run});assert.equal(child.report.canonical,false);assert.equal(child.env.LANG,"en_US.UTF-8");
 });

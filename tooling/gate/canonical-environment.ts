@@ -147,16 +147,16 @@ export function gateEnvironment(
   const temporary=captureRunTemporary(options.run,prior?.temporary);
   const experiments = [...(prior?.report.experiments ?? []), ...overrides];
   if (selected === "today") experiments.push({ name: ENVIRONMENT_EXPERIMENT, value: "today" });
+  delete env[ENVIRONMENT_EXPERIMENT];
   const retained = new Set<string>([...HOST_CAPABILITIES, ...Object.keys(owned), ENVIRONMENT_CONTEXT]);
   const dropped = [...new Set([...(prior?.report.dropped ?? []), ...Object.keys(launcher).filter(name =>
-    !retained.has(name) && (legacy || launcher[name] !== env[name])
+    !retained.has(name) && launcher[name] !== env[name]
   )])].sort();
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,
     host: Object.fromEntries(HOST_CAPABILITIES.map(name => [name, env[name] ?? null])),
     ambient, dropped, experiments,
   };
-  delete env[ENVIRONMENT_EXPERIMENT];
   env[ENVIRONMENT_CONTEXT] = JSON.stringify({ report, owned, temporary } satisfies Context);
   return { env, report, temporary };
 }
