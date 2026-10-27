@@ -8,10 +8,10 @@
 // status and a timeout's SIGTERM would kill the wrapper and leave the compiler
 // running. The last sample is at most one interval before the process ends,
 // so a measurement is short by at most that much per busy thread.
-import { readFileSync, readdirSync, readlinkSync, rmSync } from "node:fs";
+import { readFileSync, mkdirSync } from "node:fs";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname } from "node:path";
+import { COUNTER_SCOPE, counterProblem } from "./compile-counter.ts";
 
 let TICK = 100;
 try { TICK = Number(execFileSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).trim()) || 100; } catch {}
@@ -47,124 +47,76 @@ export function followCpu(child) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Instructions retired in user space, counted by `perf stat -p` attached to
-// the running process: the measure compile-time.mjs judges by.
-//
-// **Why not CPU seconds**: this box's cores are of two kinds (cpu_core and
-// cpu_atom), and a process the scheduler leaves on the slow kind uses about
-// twice the CPU time for the same work. Under a gate's load one module's
-// lowering read 2.2x its recorded CPU time with nothing changed (2026-10-07),
-// which a 2x tripwire cannot live with. Raw instruction counts (PERF_ARGS)
-// over ten runs each at once, on whatever cores they landed: child_process
-// 551.6-551.8 G, assert 293.7 G every time.
-//
-// Attached, not wrapped, for the reason above: the caller keeps its own
-// process, signals and timeout. perf exits when the process does. A process
-// that ends before perf has attached (well under a second of work) reads as
-// null, which the caller tells apart from a perf that cannot count at all by
-// `instructionsWork()`.
-// ---------------------------------------------------------------------------
+// Count from exec: inheritance includes every compiler thread, including threads
+// created after launch, and forked descendants. The measured hir commands have
+// no descendants (no adjacent nts.config.ts, GIR imports, toolchain or oracle).
+// A different command must inventory its children before using this scope.
+// Raw hybrid-PMU counts are summed: scaled counts double-count migration.
+export const PERF_ARGS = ["stat", "--no-scale", "--no-big-num", "-e", "instructions:u"];
+export { COUNTER_SCOPE, counterProblem } from "./compile-counter.ts";
 
-/**
- * The arguments every count is taken with: the process's own user-space
- * instructions (`--no-inherit`: not the children it forks after perf attaches
- * -- an `sh` the compiler starts counted 1.69 G), **raw** (`--no-scale`).
- *
- * **Raw, because the scaled count cannot be undone.** On this box's two core
- * kinds perf counts each kind only while the process runs on it, and by
- * default prints each count scaled up by enabled/running time, with that
- * share beside it rounded to a whole percent. Undoing the scaling with the
- * printed share works until a kind ran under half a percent of the time:
- * then the share prints as "0.00", the scaled count -- the work of a whole
- * run extrapolated from a sliver -- cannot be told from a raw one, and adding
- * it made runtime/node/events read 420.6 G and 360.1 G in two of six runs
- * whose raw counts were 281.6-281.7 G every time (2026-10-07). It shows on a
- * quiet box, where a process stays on the fast cores, not under load.
- */
-export const PERF_ARGS = ["stat", "--no-inherit", "--no-scale", "-x,", "-e", "instructions:u"];
-
-/**
- * The raw instruction count in `perf stat --no-scale -x,` output: the sum of
- * every core kind's count. A kind the process never ran on prints
- * `<not counted>` and adds nothing. No count line at all is null.
- */
+/** Read raw counts from current human output or retained historical CSV. */
 export function parsePerf(text) {
   let total = 0;
   let seen = false;
   for (const line of text.split("\n")) {
-    const f = line.split(",");
-    if (f.length < 3 || !/instructions/.test(f[2] ?? "")) continue;
-    if (f[0] === "<not counted>") { seen = true; continue; }
-    const value = Number(f[0]);
-    if (f[0] === "" || !Number.isFinite(value)) continue; // <not supported> and the like
+    const csv = line.split(",");
+    const human = /^\s*(\d+|<not counted>)\s+(?:cpu_(?:core|atom)\/instructions\/u|instructions:u)(?:\s|$)/.exec(line);
+    const value = csv.length >= 3 && /instructions/.test(csv[2]) ? csv[0].trim() : human?.[1];
+    if (value === "<not counted>") { seen = true; continue; }
+    if (value === undefined || value === "" || !Number.isFinite(Number(value))) continue;
     seen = true;
-    total += value;
+    total += Number(value);
   }
   return seen ? total : null;
 }
 
+/** perf's waited-command rusage, not PMU enabled/running time or a /proc sample. */
+export function parseMeasurement(text) {
+  const seconds = (kind) => {
+    const match = new RegExp(`^\\s*([0-9]+(?:\\.[0-9]+)?) seconds ${kind}\\s*$`, "m").exec(text);
+    return match ? Number(match[1]) : null;
+  };
+  const user_s = seconds("user");
+  const sys_s = seconds("sys");
+  return { counter_scope: COUNTER_SCOPE, instructions: parsePerf(text), user_s, sys_s,
+    cpu_s: user_s === null || sys_s === null ? null : user_s + sys_s };
+}
+
 let probed;
-/** Whether `perf stat -p` can count a process of ours here; the reason when not. */
+/** A bounded launch probe; attachment to an already-running process is forbidden. */
 export function instructionsWork() {
   if (probed !== undefined) return probed;
-  // The target spins until perf is done with it: perf's own `-- sleep` is the
-  // window. A target that ended on its own (`sleep 0.5`, until 2026-10-14)
-  // could be gone before perf attached on a loaded machine, and perf's usage
-  // error then read as "cannot count here": a SKIP that turned a gate red with
-  // every other step green. And it spins so the count proves counting works,
-  // which a sleeping target's `<not counted>` would not.
-  const r = spawnSync(
-    "sh",
-    ["-c", `sh -c 'while :; do :; done' & p=$!; perf ${PERF_ARGS.join(" ")} -p "$p" -- sleep 0.3 2>&1 >/dev/null; kill "$p"; wait`],
-    { encoding: "utf8" },
-  );
-  const counted = r.error ? null : parsePerf(r.stdout + r.stderr);
-  probed = r.error ? `no perf (${r.error.message})` : !counted ? `perf stat -p counted nothing: ${(r.stdout + r.stderr).trim().split("\n").pop()}` : null;
+  const r = spawnSync("perf", [...PERF_ARGS, "--", "sh", "-c", "i=0; while [ $i -lt 10000 ]; do i=$((i+1)); done"],
+    { encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, timeout: 120_000 });
+  const measurement = parseMeasurement(r.stderr ?? "");
+  probed = r.error ? `no perf (${r.error.message})` : r.status !== 0 ? `perf exited ${r.status}: ${r.stderr.trim()}` : counterProblem(measurement);
   return probed;
 }
 
 /**
- * Follow `child` until it exits; resolves to its user-space instructions, or null.
- *
- * `onAttached`, when given, is called once perf holds a counter on the child,
- * which is when perf's own process has a `perf_event` descriptor open. Before
- * that, whatever the child runs is not counted: perf attaches *after* the
- * child starts, and on a loaded machine the gap grew to 2 G of a 24 G loop. A
- * caller that starts its child stopped and continues it here loses nothing.
+ * Launch under perf before exec can create a thread. GNU timeout owns its child
+ * process group and forwards termination to the whole run; killing a wrapper
+ * alone would leave the compiler running. Its deadline is only a hang guard:
+ * every nonzero status (including timeout's 124/137) invalidates the count.
+ * The raw file belongs to the caller's run and is never deleted here.
  */
-export function followInstructions(child, { onAttached } = {}) {
-  const out = join(tmpdir(), `nts-instructions-${process.pid}-${child.pid}.txt`);
-  const perf = spawn("perf", [...PERF_ARGS, "-p", String(child.pid), "-o", out], { stdio: "ignore" });
-  if (onAttached) {
-    const counting = () => {
-      try {
-        return readdirSync(`/proc/${perf.pid}/fd`).some((fd) => {
-          try { return readlinkSync(`/proc/${perf.pid}/fd/${fd}`).includes("perf_event"); } catch { return false; }
-        });
-      } catch {
-        return false;
-      }
-    };
-    const poll = setInterval(() => {
-      if (counting() || perf.exitCode !== null) {
-        clearInterval(poll);
-        onAttached();
-      }
-    }, 5);
-    perf.on("close", () => clearInterval(poll));
-  }
-  let stopper;
-  child.on("exit", () => { stopper = setTimeout(() => perf.kill("SIGINT"), 5000); });
-  return new Promise((resolve) => {
-    const end = () => {
-      clearTimeout(stopper);
-      let text = "";
-      try { text = readFileSync(out, "utf8"); } catch {}
-      rmSync(out, { force: true });
-      resolve(parsePerf(text));
-    };
-    perf.on("error", end);
-    perf.on("close", end);
+export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, ...options }) {
+  if (!counterFile) throw new Error("a retained counterFile is required");
+  mkdirSync(dirname(counterFile), { recursive: true });
+  const child = spawn("timeout", ["--signal=TERM", "--kill-after=5s", `${timeoutMs / 1000}s`, "perf",
+    ...PERF_ARGS, "-o", counterFile, "--", command, ...args],
+    { ...options, env: { ...(options.env ?? process.env), LC_ALL: "C" } });
+  const measurement = new Promise((resolve) => {
+    let launchError;
+    child.on("error", (error) => { launchError = error.message; });
+    child.on("close", (status, signal) => {
+      let raw = "";
+      try { raw = readFileSync(counterFile, "utf8"); } catch {}
+      const row = { ...parseMeasurement(raw), counter_file: counterFile, status, signal };
+      row.counter_error = launchError ?? (signal ? `counter run ended by ${signal}` : status !== 0 ? `counter run exited ${status}` : counterProblem(row));
+      resolve(row);
+    });
   });
+  return { child, measurement };
 }

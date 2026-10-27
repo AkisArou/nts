@@ -1,0 +1,173 @@
+import assert from "node:assert/strict";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+import { COUNTER_SCOPE, counterProblem, readCounterTable, calibratedTable } from "./compile-counter.ts";
+import { instructionsWork, spawnCounted } from "./cputime.mjs";
+import { spawnTest, waitFor, TEST_HANG_MS } from "./test-wait.ts";
+
+test("old attached counts and positive but missed-worker counts fail closed", () => {
+  const valid = { counter_scope: COUNTER_SCOPE, instructions: 590879145142, cpu_s: 45.99, status: 0 };
+  assert.equal(counterProblem(valid), null);
+  assert.match(counterProblem({ ...valid, counter_scope: undefined })!, /scope/);
+  assert.match(counterProblem({ ...valid, instructions: 319570, cpu_s: 92.90 })!, /implausible/);
+  for (const instructions of [null, 0, NaN, Infinity]) assert.ok(counterProblem({ ...valid, instructions }));
+  for (const cpu_s of [null, 0, NaN, Infinity]) assert.ok(counterProblem({ ...valid, cpu_s }));
+  assert.ok(counterProblem({ ...valid, status: 124 }));
+  assert.throws(() => readCounterTable("runtime/node/tty\t0.0\t0.0\n"), /scope/);
+  assert.throws(() => readCounterTable(`# counter-scope: ${COUNTER_SCOPE}\nruntime/node/tty\t0\n`), /invalid/);
+  assert.equal(readCounterTable(`# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/tty\t1.234\n`).rows.get("runtime/node/tty"), 1.234);
+});
+
+test("baseline publication refuses missing runs/populations and derives its threshold from the spread", () => {
+  const runs = [1, 2, 3, 4, 5].map(repeat => ({ module: "runtime/example", repeat, counter_scope: COUNTER_SCOPE,
+    status: 0, instructions: (100 + repeat) * 1e9, cpu_s: 10, listing_functions: 1, listing_definitions: 1, counter_file: "raw.perf" }));
+  const summary = { counter_scope: COUNTER_SCOPE, complete: true, nts_sha256: "a".repeat(64), modules: [{ module: "runtime/example", runs }] };
+  const published = calibratedTable(summary, ["runtime/example"]);
+  assert.equal(published.policy.ratio, 1.20); // max/min spread 3.96%; fourfold margin rounded up.
+  assert.equal(readCounterTable(published.text).rows.get("runtime/example"), 103);
+  assert.throws(() => calibratedTable(summary, ["runtime/example", "missing"]), /population/);
+  assert.throws(() => calibratedTable({ ...summary, modules: [{ module: "runtime/example", runs: runs.slice(1) }] }, ["runtime/example"]), /five-repeat/);
+  assert.throws(() => calibratedTable({ ...summary, complete: false }, ["runtime/example"]), /incomplete/);
+});
+
+test("the real tripwire reports missed, absent and legacy readings as not measured", { skip: instructionsWork() ?? false }, t => {
+  const cache = join(homedir(), ".cache/nts-counter-tests");
+  mkdirSync(cache, { recursive: true });
+  const root = mkdtempSync(join(cache, "guard-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const gate = join(root, "tooling/gate"), kept = join(root, "kept");
+  mkdirSync(gate, { recursive: true });
+  mkdirSync(kept);
+  mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
+  writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
+  for (const name of ["compile-time.mjs", "compile-counter.ts", "cputime.mjs", "tokens.mjs"]) {
+    copyFileSync(fileURLToPath(new URL(name, import.meta.url)), join(gate, name));
+  }
+  const sha256 = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
+  const meta = { counter_scope: COUNTER_SCOPE, sha256, nts: process.execPath };
+  const table = `# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
+  writeFileSync(join(gate, "compile-times.tsv"), table);
+  writeFileSync(join(kept, "meta.json"), JSON.stringify(meta));
+  const valid = { counter_scope: COUNTER_SCOPE, status: 0, signal: null, cpu_s: 10, instructions: 100e9 };
+  const check = (row: object) => {
+    writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify(row));
+    return spawnTest(process.execPath, [join(gate, "compile-time.mjs")], { encoding: "utf8", env: {
+      ...process.env, NTS_BIN: process.execPath, NTS_COMPILE_TIMES_FROM: kept, NTS_GATE_RUN_DIR: join(root, "run"),
+    } });
+  };
+  assert.equal(check(valid).status, 0);
+  for (const row of [
+    { ...valid, instructions: 319570, cpu_s: 92.90 },
+    { ...valid, instructions: null, cpu_s: 0.001 },
+    { ...valid, counter_scope: undefined },
+    { ...valid, status: undefined },
+  ]) {
+    const result = check(row);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /NOT MEASURED/);
+  }
+  const slower = check({ ...valid, instructions: 115e9 });
+  assert.equal(slower.status, 1);
+  assert.match(slower.stdout, /SLOWER/);
+  // A tiny module's tenfold blow-up must not hide below an absolute floor.
+  writeFileSync(join(gate, "compile-times.tsv"), table.replace("subject\t100", "subject\t2"));
+  const smallBlowup = check({ ...valid, instructions: 20e9 });
+  assert.equal(smallBlowup.status, 1);
+  assert.match(smallBlowup.stdout, /SLOWER/);
+  writeFileSync(join(gate, "compile-times.tsv"), table);
+  writeFileSync(join(kept, "meta.json"), JSON.stringify({ ...meta, counter_scope: undefined }));
+  const legacy = check(valid);
+  assert.equal(legacy.status, 2);
+  assert.match(legacy.stdout, /NOT MEASURED: incompatible counter scope/);
+  writeFileSync(join(kept, "meta.json"), JSON.stringify(meta));
+  writeFileSync(join(root, "runtime/node/subject/nts.config.ts"), "export default {};");
+  const config = check(valid);
+  assert.equal(config.status, 2);
+  assert.match(config.stdout, /NOT MEASURED: project config can spawn descendants/);
+});
+
+test("a complete listing followed by a wrapped signal remains not measured", { skip: instructionsWork() ?? false }, t => {
+  const cache = join(homedir(), ".cache/nts-counter-tests");
+  mkdirSync(cache, { recursive: true });
+  const dir = mkdtempSync(join(cache, "listing-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const nts = join(dir, "nts");
+  writeFileSync(nts, `#!/bin/sh
+if [ "$1" = hir ]; then
+cat <<'HIR'
+func module#init() -> void {
+b0:
+  return
+}
+1 function(s), 0 construct(s) refused
+HIR
+fi
+if [ "$2" = --prepared ] && [ "$NTS_COUNTER_TEST_ENDING" = signal ]; then kill -TERM $$; fi
+`);
+  chmodSync(nts, 0o755);
+  for (const ending of ["ok", "signal"]) {
+    const kept = join(dir, ending);
+    const result = spawnTest(process.execPath, [fileURLToPath(new URL("../conformance/integrity.ts", import.meta.url)), "runtime/node/counter-test"], {
+      encoding: "utf8", env: { ...process.env, NTS_BIN: nts, NTS_INTEGRITY_KEEP: kept, NTS_COUNTER_TEST_ENDING: ending,
+        NTS_GATE_COSTS_DIR: join(dir, "costs"), NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_CASE_COSTS_DIR: "", NTS_GATE_RUN_DIR: dir },
+    });
+    const row = JSON.parse(readFileSync(join(kept, "runtime_node_counter-test.json"), "utf8"));
+    if (ending === "ok") {
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(row.counter_error, null);
+    } else {
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /NOT MEASURED/);
+      assert.ok(row.counter_error);
+    }
+  }
+});
+
+test("from-exec inheritance counts a late thread and fork, and termination reaches the command", { skip: instructionsWork() ?? false }, async t => {
+  const cache = join(homedir(), ".cache/nts-counter-tests");
+  mkdirSync(cache, { recursive: true });
+  const dir = mkdtempSync(join(cache, "run-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const binary = join(dir, "counter-thread");
+  const compiled = spawnTest("cc", ["-O2", "-pthread", "-o", binary, fileURLToPath(new URL("fixtures/counter-thread.c", import.meta.url))], { encoding: "utf8" });
+  assert.equal(compiled.status, 0, compiled.stderr);
+  const counts: number[] = [];
+  for (const kind of ["thread", "thread", "thread", "fork", "terminate"]) {
+    const counterFile = join(dir, `${kind}-${counts.length}.perf`);
+    const { child, measurement } = spawnCounted(binary, [kind === "terminate" ? "fork-hold" : kind], { counterFile, timeoutMs: TEST_HANG_MS });
+    let stdout = "", stderr = "", closed = false;
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk; });
+    child.on("close", () => { closed = true; });
+    try {
+      await waitFor("the counter command's READY event", () => stdout.includes("READY\n"), { stopped: () => closed ? stderr || "command closed" : undefined });
+      child.stdin.end("go\n");
+      if (kind === "terminate") {
+        await waitFor("the counter command's live descendant", () => stdout.includes("CHILD_READY\n"), { stopped: () => closed ? stderr || "command closed" : undefined });
+        child.kill("SIGTERM");
+      }
+      const row = await measurement;
+      if (kind === "terminate") {
+        assert.ok(row.counter_error, "a signalled command is not a measurement");
+        assert.equal(stdout.match(/TERMINATED/g)?.length, 2, "termination reached both the command and its descendant");
+      } else {
+        assert.equal(row.counter_error, null, JSON.stringify(row));
+        assert.equal(counterProblem(row), null);
+        assert.ok(row.instructions! > 100_000_000, `late ${kind} work was missed: ${JSON.stringify(row)}`);
+        assert.ok(readFileSync(counterFile, "utf8").includes("seconds user"));
+        counts.push(row.instructions!);
+      }
+    } finally {
+      if (!closed) child.kill("SIGTERM");
+      child.stdin.destroy();
+      await measurement;
+    }
+  }
+  // Native fixed work, with no JIT: count the same loop in both scope controls.
+  const spread = Math.max(...counts) / Math.min(...counts) - 1;
+  assert.ok(spread < 0.03, `counts ${counts.join(", ")}, spread ${spread}`);
+});

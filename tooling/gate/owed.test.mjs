@@ -42,6 +42,13 @@ test("an earlier data path cannot erase a source script's wide obligations", () 
   }
 });
 
+test("the native counter control owes tooling without an unmatched-path full gate", () => {
+  const rules = owed([{ path: "tooling/gate/fixtures/counter-thread.c", added: true }]);
+  assert.ok(!rules.some(rule => rule.full));
+  superset(gateSteps(rules), ["tooling"], "the counter control");
+  assert.ok(!gateSteps(rules).includes("interop"));
+});
+
 test("the standalone ICU driver has an explicit validation obligation", () => {
   const rules = owed([{path:"runtime/ecmascript/tools/icu.ts",added:false}]);
   assert.ok(!rules.some(r => r.full));

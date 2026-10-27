@@ -1,12 +1,9 @@
-import { waitFor } from "./test-wait.ts";
 // How compile-time.mjs reads perf, on outputs captured from this box.
 //
 //   node --test tooling/gate/cputime.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { PERF_ARGS, followInstructions, instructionsWork, parsePerf } from "./cputime.mjs";
+import { PERF_ARGS, parsePerf, parseMeasurement } from "./cputime.mjs";
 
 // `nts hir --prepared runtime/node/events`, twice, each counted by two perfs
 // attached to the same process: one with PERF_ARGS (raw), one as the first
@@ -49,7 +46,8 @@ test("no count line is no count", () => {
 
 test("counts are taken raw: the scaled ones cannot be undone", () => {
   assert.ok(PERF_ARGS.includes("--no-scale"));
-  assert.ok(PERF_ARGS.includes("--no-inherit"));
+  assert.ok(!PERF_ARGS.includes("--no-inherit"));
+  assert.ok(PERF_ARGS.includes("--no-big-num"));
   // What the first version did with the scaled output of run 1: undo each
   // line's scaling by its printed share, and add a line whose share printed as
   // 0.00 whole. The slow kind ran under half a percent of the run, so its
@@ -59,31 +57,16 @@ test("counts are taken raw: the scaled ones cannot be undone", () => {
   assert.ok(undo(RUN1_SCALED) / parsePerf(RUN1_RAW) > 1.4);
 });
 
-/** Resolves once `pid` is stopped (state `T` in /proc), which `kill -STOP $$` makes it. */
-function stopped(pid) {
-  return waitFor(`perf control ${pid} to stop`, () => {
-    try {return readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /s, "")[0] === "T";}
-    catch {throw new Error(`perf control ${pid} exited before its stop event`);}
-  });
-}
-
-test("on this machine, the same work counts the same", { skip: instructionsWork() ?? false }, async () => {
-  const counts = [];
-  for (let i = 0; i < 3; i++) {
-    // **Stopped until perf is counting.** perf attaches after a child starts
-    // and misses what it ran first, and how much grows with the machine's
-    // load: three runs read 24.49, 22.54 and 24.70 G at a load of ~10
-    // (2026-10-15) and failed this test on a JVM tooling landing. Started
-    // stopped and continued once perf holds its counter, the loop is counted
-    // whole, so the spread is what the instrument does with the same work --
-    // the question -- and not when perf happened to arrive.
-    const child = spawn("sh", ["-c", "kill -STOP $$; i=0; while [ $i -lt 1000000 ]; do i=$((i+1)); done"], { stdio: "ignore" });
-    await stopped(child.pid);
-    counts.push(await followInstructions(child, { onAttached: () => process.kill(child.pid, "SIGCONT") }));
-  }
-  for (const c of counts) assert.ok(c > 1e8, `counted ${c}`);
-  const spread = Math.max(...counts) / Math.min(...counts) - 1;
-  // 3%, kept from when attaching late cost 1-2%; with nothing lost to the
-  // attach the spread is far smaller, and the table's own threshold is 2x.
-  assert.ok(spread < 0.03, `three runs read ${counts.map((c) => (c / 1e9).toFixed(2)).join(", ")} G`);
+test("launch output sums hybrid counts and uses waited-command user plus sys CPU", () => {
+  const text = `
+     123456789 cpu_atom/instructions/u (42.37%)
+     987654321 cpu_core/instructions/u (57.63%)
+     1.500000000 seconds time elapsed
+     0.239235000 seconds user
+     0.002937000 seconds sys
+  `;
+  const row = parseMeasurement(text);
+  assert.equal(row.instructions, 1111111110);
+  assert.equal(row.cpu_s, 0.239235 + 0.002937);
+  assert.equal(parseMeasurement("123 instructions:u").cpu_s, null);
 });

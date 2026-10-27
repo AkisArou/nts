@@ -188,7 +188,7 @@ export const ASKS = {
   // lowering change owed pointed at it until another lane found it red.
   "benches": ["answers", "does every benchmarks/cases program still emit C that compiles and runs"],
   addons: ["valid", "does each runtime module build, load and publish something"],
-  "compile-time": ["hygiene", "did lowering any runtime module get twice as slow (instructions, perf-counted)"],
+  "compile-time": ["hygiene", "did lowering exceed its calibrated instruction budget (perf from exec)"],
   profile: ["whether", "does runtime/node emit without a panic, under the refusal ceiling, above the definition floor"],
   interop: ["answers", "does every interop project build the way its README says and run"],
   divergence: ["valid", "do node's divergence instruments still hold"],
@@ -583,6 +583,12 @@ export const RULES = [
     name: "documentation",
     when: (p) => /\.md$/.test(p) && !/^(tests|benchmarks|tooling\/(conformance|memory)|runtime)\//.test(p),
     steps: ["records", "primitives"],
+    arms: [],
+  },
+  {
+    name: "the native counter control fixture",
+    when: (p) => p === "tooling/gate/fixtures/counter-thread.c",
+    steps: ["tooling"],
     arms: [],
   },
   {

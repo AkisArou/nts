@@ -1,4 +1,4 @@
-// Did lowering any runtime module get twice as slow?
+// Did lowering a runtime module regress beyond its calibrated instruction budget?
 //
 //   node tooling/gate/compile-time.mjs            check against compile-times.tsv
 //   node tooling/gate/compile-time.mjs --record   rewrite compile-times.tsv
@@ -12,20 +12,12 @@
 // times in times.tsv catch a regression that size in a whole step, but a 2x
 // regression in one module is a few percent of any step that lowers it.
 //
-// So this step compares each module's lowering (`nts hir --prepared`: the
-// instructions the compiler process itself retires in user space, counted by
-// `perf stat -p` -- see cputime.mjs) with tooling/gate/compile-times.tsv, and
-// **fails when one takes twice its recorded count and at least ABS billion
-// more**. Instructions, not seconds: wall time moves with the slots and the
-// load, and CPU time with which kind of core the process landed on -- one
-// module read 2.2x its recorded CPU time under a gate's load with nothing
-// changed, while its instruction count repeats within half a percent. Only
-// the compiler process is counted (`--no-inherit`), including the in-process
-// native frontend, but not external children. Pre-switch counts excluded tsgo;
-// its snapshot-cache miss took runtime/node/assert from 291 G to 524 G. Those
-// historical counts are not native-frontend measurements. The floor
-// keeps the smallest modules out of it. CPU seconds are printed beside, for
-// the reader.
+// Compare launch-time user-space instructions for `nts hir --prepared` with
+// compile-times.tsv. Inheritance includes every compiler thread from exec and
+// any descendants; these 29 projects spawn no child processes. See cputime.mjs.
+// CPU seconds come from perf's waited-command rusage and validate the count;
+// missing or implausible readings fail closed, including for small modules.
+// A changed counter scope requires a fresh five-repeat baseline.
 //
 // # Where the times come from
 //
@@ -42,12 +34,13 @@
 // (`perf record nts hir --prepared <module>/tsconfig.json`) before anything
 // else. If the work is meant to be slower (a new analysis), rerun with
 // --record and say why in the commit.
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { followCpu, followInstructions, instructionsWork } from "./cputime.mjs";
+import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from "./cputime.mjs";
+import { readCounterTable } from "./compile-counter.ts";
 import { withToken } from "./tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -55,11 +48,15 @@ const ROOT = join(HERE, "../..");
 const TABLE = join(HERE, "compile-times.tsv");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JOBS = Number(process.env.NTS_GATE_JOBS ?? 4);
-const RATIO = 2;
-const ABS = Number(process.env.NTS_COMPILE_TIME_ABS_G ?? 20); // billion instructions, about 2 s
 const RECORD = process.argv.includes("--record");
-const QUICK_S = 1; // CPU seconds below which a process may end before perf attaches
 let FROM = process.env.NTS_COMPILE_TIMES_FROM;
+if (RECORD) {
+  await import("./compile-counter-calibrate.ts");
+  process.exit(0);
+}
+const cache = join(homedir(), ".cache/nts-compile-counters");
+mkdirSync(cache, { recursive: true });
+const COUNTERS = join(process.env.NTS_GATE_RUN_DIR ?? mkdtempSync(join(cache, "run-")), "compile-time-counters");
 
 const modules = [
   ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
@@ -68,14 +65,21 @@ const modules = [
   ...(existsSync(join(ROOT, "runtime/web-platform/tsconfig.json")) ? ["runtime/web-platform"] : []),
 ].sort();
 
+// Config evaluation would add Node/JIT work to a compiler-only tripwire.
+const configured = modules.filter(module => existsSync(join(ROOT, module, "nts.config.ts")));
+if (configured.length) {
+  console.log(`  NOT MEASURED: project config can spawn descendants: ${configured.join(", ")}; audit the counted command before recording`);
+  process.exit(2);
+}
+
 if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
   process.exit(2);
 }
 const cannot = instructionsWork();
 if (cannot) {
-  console.log(`SKIP: cannot count instructions here: ${cannot}`);
-  process.exit(77);
+  console.log(`  NOT MEASURED: cannot count instructions here: ${cannot}`);
+  process.exit(2);
 }
 const mine = createHash("sha256").update(readFileSync(NTS)).digest("hex");
 
@@ -85,6 +89,10 @@ if (FROM && !existsSync(join(FROM, "meta.json"))) {
 }
 if (FROM) {
   const meta = JSON.parse(readFileSync(join(FROM, "meta.json"), "utf8"));
+  if (meta.counter_scope !== COUNTER_SCOPE) {
+    console.log(`  NOT MEASURED: incompatible counter scope in ${FROM}; attached counts cannot be reused`);
+    process.exit(2);
+  }
   if (meta.sha256 !== mine) {
     console.log(`  NOT MEASURED: the times in ${FROM} were taken with ${meta.nts} (${meta.sha256?.slice(0, 12)}), not ${NTS} (${mine.slice(0, 12)})`);
     process.exit(2);
@@ -92,24 +100,29 @@ if (FROM) {
   console.log(`  read from ${FROM}: the lowering integrity --runtime timed with this binary`);
 }
 
+let baseline;
+try { baseline = readCounterTable(readFileSync(TABLE, "utf8")); }
+catch (error) {
+  console.log(`  NOT MEASURED: ${error.message}`);
+  process.exit(2);
+}
+
+
+const { rows: base, ratio: RATIO } = baseline;
+
 function lower(module) {
-  return withToken(() => new Promise((resolve) => {
-    // The same fresh native capture as integrity's listing.
-    const child = spawn(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore", env: { ...process.env } });
-    const cpu = Promise.all([followCpu(child), followInstructions(child)]);
-    const timer = setTimeout(() => child.kill("SIGTERM"), 900_000);
-    child.on("error", (e) => { clearTimeout(timer); resolve({ error: e.message }); });
-    child.on("close", (status, signal) => {
-      clearTimeout(timer);
-      cpu.then(([cpu_s, instructions]) => resolve({ status, signal, cpu_s, instructions }));
-    });
-  }));
+  return withToken(async () => {
+    const counted = spawnCounted(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore",
+      env: { ...process.env, NTS_CHECKERS: "1" }, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
+    return counted.measurement;
+  });
 }
 
 function kept(module) {
   const path = join(FROM, `${module.replaceAll("/", "_")}.json`);
   if (!existsSync(path)) return { error: `has no listing in ${FROM}` };
-  return JSON.parse(readFileSync(path, "utf8"));
+  try { return JSON.parse(readFileSync(path, "utf8")); }
+  catch (error) { return { error: `cannot read kept measurement: ${error.message}` }; }
 }
 
 const times = new Map();
@@ -119,47 +132,18 @@ await Promise.all(Array.from({ length: FROM ? 1 : Math.min(JOBS, modules.length)
   while (next < modules.length) {
     const module = modules[next++];
     const r = FROM ? kept(module) : await lower(module);
-    // Its exit status is other steps' business (a module that does not
-    // typecheck exits non-zero after lowering what it can); a signal or no
-    // reading is not a time.
-    if (r.error || r.signal) {
-      unmeasured.push(`${module}: ${r.error ?? r.signal}`);
+    const problem = counterProblem(r) ?? (r.status !== 0 ? "missing successful command status" : null);
+    if (problem) {
+      unmeasured.push(`${module}: ${problem}`);
       continue;
     }
-    // null: it ended before perf attached -- well under a second of work.
-    times.set(module, { g: typeof r.instructions === "number" ? r.instructions / 1e9 : null, cpu: r.cpu_s });
+    times.set(module, { g: r.instructions / 1e9, cpu: r.cpu_s });
   }
 }));
 
-function readTable() {
-  const rows = new Map();
-  if (!existsSync(TABLE)) return rows;
-  for (const line of readFileSync(TABLE, "utf8").split("\n")) {
-    if (line === "" || line.startsWith("#")) continue;
-    const [module, g] = line.split("\t");
-    rows.set(module, Number(g));
-  }
-  return rows;
-}
 
-if (RECORD) {
-  // A null count is recorded as 0 only for a module too quick for perf to
-  // attach to; one with more than a second of CPU was missed, not small.
-  for (const [m, t] of times) if (t.g === null && (t.cpu ?? 0) > QUICK_S) unmeasured.push(`${m}: no instruction count, with ${t.cpu.toFixed(1)} s of CPU`);
-  if (unmeasured.length) {
-    console.log("  not recorded: a table with modules missing would stop checking them");
-    for (const u of unmeasured) console.log(`    ${u}`);
-    process.exit(2);
-  }
-  const head = readFileSync(TABLE, "utf8").split("\n").filter((l) => l.startsWith("#")).join("\n");
-  writeFileSync(TABLE, `${head}\n${[...times].sort().map(([m, t]) => `${m}\t${(t.g ?? 0).toFixed(1)}\t${t.cpu?.toFixed(1) ?? ""}`).join("\n")}\n`);
-  console.log(`  recorded ${times.size} module(s) with ${mine.slice(0, 12)} in ${TABLE}`);
-  process.exit(0);
-}
-
-const base = readTable();
 let failures = 0;
-let sumNow = 0, sumWas = 0, early = 0;
+let sumNow = 0, sumWas = 0;
 const lines = [];
 for (const module of modules) {
   const t = times.get(module);
@@ -168,34 +152,24 @@ for (const module of modules) {
   // A module with no row is not checked against anything: red until recorded,
   // whatever it measured.
   if (was === undefined) {
-    unmeasured.push(`${module}: ${t.g === null ? "no instruction count" : `${t.g.toFixed(1)} G instructions`} and no row in compile-times.tsv -- record it with --record`);
-    continue;
-  }
-  // No count: the process ended before perf attached. With at most a second
-  // of CPU that is one of the smallest modules, and its row is a few G at
-  // most, under the floor a regression must clear anyway; it is counted as
-  // "with no count" above. Above a second, perf missed work it should have
-  // counted, and a module that grew from 5 G to 30 G would pass unseen.
-  if (t.g === null) {
-    early += 1;
-    if (was >= ABS || (t.cpu ?? 0) > QUICK_S) unmeasured.push(`${module}: no instruction count, with ${t.cpu?.toFixed(1) ?? "?"} s of CPU`);
+    unmeasured.push(`${module}: ${t.g.toFixed(1)} G instructions and no row in compile-times.tsv -- record it with --record`);
     continue;
   }
   sumNow += t.g;
   sumWas += was;
   const ratio = t.g / Math.max(was, 0.1);
-  if (ratio >= RATIO && t.g - was >= ABS) {
+  if (ratio >= RATIO) {
     failures += 1;
-    lines.push(`  SLOWER        ${module}: ${was.toFixed(1)} -> ${t.g.toFixed(1)} G instructions, ${ratio.toFixed(1)}x (${t.cpu?.toFixed(1) ?? "?"} s of CPU) -- profile it before anything else`);
+    lines.push(`  SLOWER        ${module}: ${was.toFixed(1)} -> ${t.g.toFixed(1)} G instructions, ${ratio.toFixed(2)}x (${t.cpu?.toFixed(1) ?? "?"} s of CPU) -- profile it before anything else`);
   }
 }
 for (const module of base.keys()) {
   if (!modules.includes(module)) lines.push(`  gone          ${module}: in the table, not in the tree -- remove its row`);
 }
-const moved = [...times].filter(([m, t]) => t.g !== null && (base.get(m) ?? 0) >= ABS)
+const moved = [...times].filter(([m]) => base.has(m))
   .map(([m, t]) => [m, t.g / base.get(m)]).sort((a, b) => b[1] - a[1]).slice(0, 3);
 console.log(`  compiler ${NTS} (${mine.slice(0, 12)})`);
-console.log(`  ${times.size} of ${modules.length} module(s) counted${early ? ` (${early} with no count)` : ""}; ${sumNow.toFixed(0)} G instructions against ${sumWas.toFixed(0)} recorded (${sumWas ? (sumNow / sumWas).toFixed(2) : "?"}x); fails at ${RATIO}x and ${ABS} G more`);
+console.log(`  ${times.size} of ${modules.length} module(s) counted; ${sumNow.toFixed(0)} G instructions against ${sumWas.toFixed(0)} recorded (${sumWas ? (sumNow / sumWas).toFixed(2) : "?"}x); fails at ${RATIO}x of the fresh median`);
 if (moved.length) console.log(`  most moved: ${moved.map(([m, r]) => `${m.replace("runtime/", "")} ${r.toFixed(2)}x`).join(", ")}`);
 for (const l of lines) console.log(l);
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);

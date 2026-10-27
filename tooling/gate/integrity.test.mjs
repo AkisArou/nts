@@ -1,5 +1,6 @@
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
+import { COUNTER_SCOPE } from "./compile-counter.ts";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -17,27 +18,26 @@ test("integrity executes every listing and counts only a kept prepared child", (
     mkdirSync(bin);
     const compiler = join(bin, "nts");
     writeFileSync(compiler, `#!/usr/bin/env node
-import {appendFileSync,existsSync} from "node:fs";
+import {appendFileSync} from "node:fs";
 const argv=process.argv.slice(2);
 appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv})+"\\n");
 if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
-if(process.env.NTS_INTEGRITY_KEEP && argv[1]==="--prepared") {
-  const {waitFor}=await import(${JSON.stringify(new URL("./test-wait.ts",import.meta.url).href)});
-  await waitFor('the perf attachment to the prepared child',()=>existsSync(process.env.CONTROL_COUNTERS+"."+process.pid+".ready"));
-}
 `);
     chmodSync(compiler, 0o755);
     // Exercise the real collector without depending on perf permissions or
-    // measuring host work. Only the selected child may receive an attachment.
+    // measuring host work. Only the selected command runs under the counter.
     const perf = join(bin, "perf");
     writeFileSync(perf, `#!/usr/bin/env node
-import {appendFileSync,existsSync,writeFileSync} from "node:fs";
-const argv=process.argv.slice(2),pid=Number(argv[argv.indexOf("-p")+1]);
-appendFileSync(process.env.CONTROL_COUNTERS,JSON.stringify({pid,argv})+"\\n");
-writeFileSync(process.env.CONTROL_COUNTERS+"."+pid+".ready","");
-const {waitFor}=await import(${JSON.stringify(new URL("./test-wait.ts",import.meta.url).href)});
-await waitFor('the measured integrity child to finish',()=>!existsSync("/proc/"+pid));
-writeFileSync(argv[argv.indexOf("-o")+1],"123456,,instructions:u,1,100,,\\n");
+import {appendFileSync,writeFileSync} from "node:fs";
+import {spawn} from "node:child_process";
+const argv=process.argv.slice(2),start=argv.indexOf("--");
+if(start<0 || argv.includes("-p") || argv.includes("--no-inherit")) throw new Error("counter must launch with inheritance");
+const child=spawn(argv[start+1],argv.slice(start+2),{stdio:"inherit"});
+appendFileSync(process.env.CONTROL_COUNTERS,JSON.stringify({pid:child.pid,argv})+"\\n");
+child.on("close",status=>{
+  writeFileSync(argv[argv.indexOf("-o")+1],"123000 cpu_core/instructions/u\\n456 cpu_atom/instructions/u\\n0.010000000 seconds user\\n0.002000000 seconds sys\\n");
+  process.exitCode=status??1;
+});
 `);
     chmodSync(perf, 0o755);
     for (const keep of [false, true]) {
@@ -46,7 +46,7 @@ writeFileSync(argv[argv.indexOf("-o")+1],"123456,,instructions:u,1,100,,\\n");
       const commands = join(arm, "commands.jsonl");
       const counters = join(arm, "counters.jsonl");
       const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, NTS_BIN: compiler,
-        NTS_INTEGRITY_JOBS: "1", CONTROL_COMMANDS: commands, CONTROL_COUNTERS: counters };
+        NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: join(arm, "costs"), CONTROL_COMMANDS: commands, CONTROL_COUNTERS: counters };
       delete env.NTS_INTEGRITY_KEEP;
       delete env.NTS_GATE_TOKENS;
       if (keep) env.NTS_INTEGRITY_KEEP = join(arm, "listings");
@@ -56,12 +56,14 @@ writeFileSync(argv[argv.indexOf("-o")+1],"123456,,instructions:u,1,100,,\\n");
       assert.match(result.stdout, /1 of 1 project\(s\) measured, 1 function\(s\)/);
       const calls = readFileSync(commands, "utf8").trim().split("\n").map(JSON.parse);
       assert.deepEqual(calls.map(c => c.argv.slice(0, -1)), [["hir", "--prepared"], ["hir"], ["layouts"], ["refusals"]]);
-      const attached = existsSync(counters) ? readFileSync(counters, "utf8").trim().split("\n").map(JSON.parse) : [];
-      assert.deepEqual(attached.map(c => c.pid), keep ? [calls[0].pid] : []);
+      const counted = existsSync(counters) ? readFileSync(counters, "utf8").trim().split("\n").map(JSON.parse) : [];
+      assert.deepEqual(counted.map(c => c.pid), keep ? [calls[0].pid] : []);
       if (keep) {
         const measured = JSON.parse(readFileSync(join(arm, "listings/runtime_node_integrity-control.json"), "utf8"));
         assert.equal(measured.status, 0);
-        assert.equal(typeof measured.cpu_s, "number");
+        assert.equal(measured.cpu_s, 0.012);
+        assert.equal(measured.counter_scope, COUNTER_SCOPE);
+        assert.ok(existsSync(measured.counter_file), "the raw counter file is retained");
         assert.equal(measured.instructions, 123456);
       }
     }

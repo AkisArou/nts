@@ -159,7 +159,7 @@ import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-proj
 
 import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
-import { followCpu, followInstructions } from "../gate/cputime.mjs";
+import { COUNTER_SCOPE, spawnCounted } from "../gate/cputime.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -1298,23 +1298,21 @@ const run = (args) => slot(() => withToken(() =>
   new Promise((resolve) => {
     // The native producer captures anew; there is no producer-cache mode.
     // Only a kept prepared listing supplies the compile-time step's counters.
-    const timedRun = KEEP && args[0] === "hir" && args[1] === "--prepared";
-    const child = spawn(NTS, args, { cwd: ROOT, env });
-    // The lowering's own work -- instructions retired, and CPU seconds -- kept
-    // for the compile-time step (tooling/gate/compile-time.mjs): measured on
-    // the listing it would otherwise make itself, so the corpus is lowered
-    // once for three steps. perf attaches to the process; nothing stands
-    // between this and it.
-    const cpu = timedRun ? Promise.all([followCpu(child), followInstructions(child)]) : Promise.resolve([null, null]);
+    const timedRun = KEEP && ADDON.test(args.at(-1)) && args[0] === "hir" && args[1] === "--prepared";
+    const counted = timedRun ? spawnCounted(NTS, args, { cwd: ROOT, env,
+      counterFile: join(KEEP, `${args.at(-1).replaceAll("/", "_")}.perf`) }) : null;
+    const child = counted?.child ?? spawn(NTS, args, { cwd: ROOT, env });
+    // Only the prepared listing supplies compile-time's launch-time counters.
+    const cpu = counted?.measurement ?? Promise.resolve({});
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => child.kill("SIGTERM"), 900_000);
+    const timer = counted ? undefined : setTimeout(() => child.kill("SIGTERM"), 900_000);
     child.stdout.on("data", (c) => (stdout += c));
     child.stderr.on("data", (c) => (stderr += c));
     child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
     child.on("close", (status, signal) => {
       clearTimeout(timer);
-      cpu.then(([cpu_s, instructions]) => resolve({ status, signal, stdout, stderr, cpu_s, instructions }));
+      cpu.then((counters) => resolve({ ...counters, status, signal, stdout, stderr }));
     });
   })));
 
@@ -1342,7 +1340,7 @@ function keep(project, done) {
   if (!KEEP || !ADDON.test(project)) return;
   const name = project.replaceAll("/", "_");
   writeFileSync(join(KEEP, `${name}.txt`), `${done.stdout}${done.stderr}`);
-  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null }));
+  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null, counter_scope: done.counter_scope ?? null, counter_file: done.counter_file ?? null, counter_error: done.counter_error ?? null, user_s: done.user_s ?? null, sys_s: done.sys_s ?? null }));
 }
 
 const cost = {};
@@ -1356,8 +1354,10 @@ async function scan(project) {
   keep(project, results[0]);
   for (const [i, [key, args]] of commands.entries()) {
     const done = results[i];
-    if (done.error || done.signal) {
-      unmeasured.push(`${project}: nts ${args[0]} ${done.signal ?? done.error?.message}`);
+    // The wrapper expresses command signals as nonzero statuses. Counter
+    // failure must remain a not-measured listing, even if output was complete.
+    if (done.error || done.signal || done.counter_error) {
+      unmeasured.push(`${project}: nts ${args[0]} ${done.counter_error ?? done.signal ?? done.error?.message}`);
       return;
     }
     // Diagnostics (the cascades) arrive on stderr beside the listing.
@@ -1391,7 +1391,7 @@ const started = Date.now();
 const costKey = process.argv.includes("--runtime") ? "integrity-runtime" : "integrity";
 await Promise.all(longestFirst(costKey, projects, (p) => pathOf.get(p) ?? p).map(scan));
 recordCosts(costKey, cost);
-if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), projects }, null, 1));
+if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), counter_scope: COUNTER_SCOPE, projects }, null, 1));
 
 const key = (v) => `${v.project}\t${v.rule}\t${stable(v.subject)}`;
 const fresh = found.filter((v) => !known.has(key(v))).sort((a, b) => key(a).localeCompare(key(b)));
