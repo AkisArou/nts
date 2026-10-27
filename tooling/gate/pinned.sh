@@ -30,6 +30,14 @@
 # edits" is unenforceable across three sessions that each think their edit is
 # small, and this week has been mostly about rules with nothing watching them.
 set -eu
+# Normalize before affinity helpers, input setup or Cargo. The private re-entry
+# still requires the helper's context; it is not an experiment selector.
+if [ "${1:-}" = --environment-ready ]; then
+  shift
+  [ -n "${NTS_GATE_ENV_CONTEXT:-}" ] || { echo 'gate: missing normalized environment context' >&2; exit 2; }
+else
+  exec node "$(dirname -- "$0")/canonical-environment.ts" --pinned "$0" "$@"
+fi
 # nts-gate-tree-lock-handoff: 8
 
 # A physical P-core (both threads, 4-5) belongs to timed measurements.

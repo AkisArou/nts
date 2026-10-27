@@ -83,6 +83,8 @@ import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
 import { TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
 import { frontendBudget } from "./budget.ts";
 import { fixedReservation } from "./reservation.ts";
+import {finishRunTemporary} from "./run-temporary.ts";
+import { gateEnvironment, reportEnvironment, nodeHeapOomReason, ENVIRONMENT_CONTEXT } from "./canonical-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -218,7 +220,7 @@ const BY_NAME = new Map(STEPS.map((s) => [s.name, s]));
 // ---------------------------------------------------------------------------
 // Environment and budgets.
 // ---------------------------------------------------------------------------
-const env = process.env;
+let env = process.env;
 const color = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
 
 // ---------------------------------------------------------------------------
@@ -279,6 +281,11 @@ if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
   process.exit(2);
 }
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
+const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
+const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
+const normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT] });
+env = normalized.env;
+reportEnvironment(normalized.report);
 // `NTS_BIN` defaults to the build this run makes, not to `./target/release/nts`:
 // with CARGO_TARGET_DIR elsewhere the old default gated whatever another session
 // last built into ./target (the-gate-drives-target-release-nts).
@@ -302,8 +309,6 @@ const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAS
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
 const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
 const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
-const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
-const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(target, "gate-runs", `${stamp}-${process.pid}`));
 const TIMES_FILE = join(HERE, "times.tsv");
 
 function usage(message) {
@@ -757,7 +762,9 @@ function start(step, slots, rider = false) {
     } else if (code === 77) {
       finish(step.name, "SKIPPED", lastLine(text) || "exited 77 without a reason", extra);
     } else {
-      finish(step.name, "FAIL", signal ? `killed by ${signal}` : `exit ${code}`, extra);
+      const status = signal ? `killed by ${signal}` : `exit ${code}`;
+      const heap = nodeHeapOomReason(text);
+      finish(step.name, "FAIL", heap ? `${heap}; ${status}` : status, extra);
     }
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
@@ -875,6 +882,9 @@ function done() {
     red.push(name);
   }
   const green = red.length === 0;
+  const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted)
+    : {path:env.TMPDIR,state:"kept: rows still running"};
+  process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
   const wall = (Date.now() - startedAt) / 1000;
   const costsSummary = caseCosts?.summary(plan.map(name => ({ name, ...results.get(name), mem_gb: BY_NAME.get(name).mem }))) ?? { version: 1, status: "unavailable" };
 
@@ -909,6 +919,8 @@ function done() {
 
   const summary = {
     schema: 1,
+    environment: normalized.report,
+    temporary,
     verdict: green ? "green" : "red",
     fail_fast: FAIL_FAST,
     interrupted,
@@ -1019,9 +1031,10 @@ if (!plan.includes("build")) identify();
 // the logs never said so: `tests` took 690 s instead of 450 and `test262-cases`
 // 776 s instead of 363, and the difference read as the compiler.
 function settings() {
-  const names = Object.keys(env).filter((k) =>
-    /^(NTS_|RUST_TEST_THREADS$|RUSTFLAGS$|CARGO_|TMPDIR$|XDG_CACHE_HOME$|JAVA_HOME$|ANDROID_HOME$)/.test(k)).sort();
-  const lines = names.map((k) => `    ${k}=${env[k]}`);
+  // Report only classified values, never arbitrary discarded launcher data.
+  const context = JSON.parse(env[ENVIRONMENT_CONTEXT]);
+  const values = {...normalized.report.host,...normalized.report.ambient,...context.owned};
+  const lines = Object.keys(values).sort().map(k => `    ${k}=${values[k] ?? "<unset>"}`);
   let cgroup = "";
   try {
     const path = readFileSync("/proc/self/cgroup", "utf8").trim().split("\n").pop().split("::").pop();

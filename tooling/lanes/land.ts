@@ -1,3 +1,5 @@
+import {pruneRunTemporaries} from "../gate/run-temporary.ts";
+import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Land a commit on main: the owed gate steps, one gate at a time, then a
 // fast-forward. What every lane did by hand, which is how main went red.
 //
@@ -49,7 +51,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { gateCommand } from "../gate/affinity.ts";
 import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
-import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL, TEST_CACHE_MAX_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
+import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL, TEST_CACHE_MAX_BYTES, TEST_DISK_FLOOR_BYTES, TEST_BUILD_WORKING_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 import { VerificationLedger, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
@@ -190,7 +192,7 @@ function treeOnly(tree: string, owed: Owed, short: string): string | null {
   const run = spawnSync("sh", ["tooling/gate/all.sh"], {
     cwd: tree,
     stdio: "inherit",
-    env: { ...process.env, NTS_GATE_STEPS: steps.join(" "), NTS_GATE_RUN_DIR: dir },
+    env: gateEnvironment(process.env, {run:dir, owned:{NTS_GATE_STEPS:steps.join(" ")}}).env,
   });
   if (run.status !== 0) {
     // The steps that were not green, by name, from the run's own summary.
@@ -256,7 +258,7 @@ function fastForward(root: string, sha: string): void {
   if (!onlyTree(checked, owed)) fail("the checked change no longer owes only tree checks");
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8"));
   const observed = summary.identities?.commit;
-  if (summary.verdict !== "green" || typeof observed !== "string" || !/^[0-9a-f]{12,40}$/.test(observed)
+  if (summary.environment?.canonical !== true || summary.verdict !== "green" || typeof observed !== "string" || !/^[0-9a-f]{12,40}$/.test(observed)
       || git(["rev-parse", "--verify", `${observed}^{commit}`], checked) !== tip || owed.steps === "all"
       || owed.steps.some(name => !summary.steps.some((s: {name: string; verdict: string}) => s.name === name && s.verdict === "PASS"))) fail("missing green checks for the exact tree-only tip");
   const ledger = ledgerAt(root, base);
@@ -583,6 +585,7 @@ function checkGateTarget(root: string): void {
   }
   let diskPath = GATE_TARGET;
   while (!existsSync(diskPath)) diskPath = dirname(diskPath);
+  pruneRunTemporaries(process.env.HOME ?? homedir(),{minimumFreeBytes:TEST_DISK_FLOOR_BYTES+Math.max(TEST_BUILD_WORKING_BYTES,cacheBytes)});
   const disk = statfsSync(diskPath);
   const problem = testBuildAdmissionProblem(cacheBytes, disk.bavail * disk.bsize);
   if (problem) fail(problem);
@@ -593,11 +596,12 @@ function gate(root: string, base: string, landing: string, members: string[], re
   const short = landing.slice(0, 12);
   const resource=GateResource.inherited(`${GATE_TREE}.lock`);
   checkGateTarget(root);
+  const setupRun=join(STATE,"setup",`${short}-${process.pid}`);
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
   const setup = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], {
     cwd: root,
-    env: { ...process.env, NTS_GATE_TREE: GATE_TREE, NTS_GATE_TARGET: GATE_TARGET, NTS_GATE_SETUP_ONLY: "1" },
+    env: gateEnvironment(process.env,{run:setupRun,owned:{NTS_GATE_TREE:GATE_TREE,NTS_GATE_TARGET:GATE_TARGET,NTS_GATE_SETUP_ONLY:"1",...(resource?{NTS_GATE_LOCK_FD:"8"}:{})}}).env,
     encoding: "utf8",
     ...(resource ? {stdio:resource.stdio("pipe")} : {}),
   });
@@ -615,12 +619,11 @@ function gate(root: string, base: string, landing: string, members: string[], re
   mkdirSync(run, { recursive: true });
   if (!shadow) status({ state: "gating", commit: landing, base, owed, run, train: members });
   try {
-    const env: Record<string, string | undefined> = { ...process.env };
-    for (const k of Object.keys(env)) if (k.startsWith("NTS_GATE_") || k === "NTS_INTEROP_PROJECTS" || k === "NTS_DOCTEST_CRATES") delete env[k];
-    if (owed.steps !== "all") env.NTS_GATE_STEPS = owed.steps.join(" ");
-    if (owed.interop) env.NTS_INTEROP_PROJECTS = owed.interop;
-    if (owed.doctests) env.NTS_DOCTEST_CRATES = owed.doctests;
-    Object.assign(env, {
+    const owned: Record<string, string | undefined> = {};
+    if (owed.steps !== "all") owned.NTS_GATE_STEPS = owed.steps.join(" ");
+    if (owed.interop) owned.NTS_INTEROP_PROJECTS = owed.interop;
+    if (owed.doctests) owned.NTS_DOCTEST_CRATES = owed.doctests;
+    Object.assign(owned, {
       NTS_GATE_TREE: GATE_TREE,
       NTS_GATE_TARGET: GATE_TARGET,
       NTS_GATE_ACCEPT_SKIP: ACCEPT_SKIP.join(","),
@@ -631,6 +634,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
       CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL,
       ...(resource ? {NTS_GATE_LOCK_FD:"8"} : {}),
     });
+    const env=gateEnvironment(process.env,{run,owned}).env;
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);
     const affinity = launch.cpus === null ? launch.mechanism : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded; ${launch.mechanism}`;
     say(`gate affinity: ${affinity}`);
@@ -642,6 +646,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     const summaryPath = join(run, "summary.json");
     if (!existsSync(summaryPath)) return { ok: false, run, state: "red", message: `the gate wrote no summary (exit ${gated.status}); see ${join(run, "gate.log")}` };
     const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
+    if (summary.environment?.canonical !== true) return {ok:false,run,state:"red",message:"non-canonical or unrecorded environment is not landing evidence"};
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
     // The full gate is whatever the run requested: every step all.sh defines.
     const steps: string[] = owed.steps === "all"
@@ -844,6 +849,9 @@ function refreshPackages(root: string, base: string, tip: string): string {
 }
 
 async function main(): Promise<void> {
+  if (process.env.NTS_LAND_LOCKED !== "1") {
+    try {assertLandingEnvironment();reportLauncherDrops(process.env);} catch(error) {fail((error as Error).message);}
+  }
   if (!target) fail("which commit? `node tooling/lanes/land.ts <commit> [--dry-run]`");
   const root = sharedCheckout();
   const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);

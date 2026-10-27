@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { gateEnvironment } from "../gate/canonical-environment.ts";
 
 export function fullPlan(root: string, home: string, args: string[], now = Date.now()) {
   const candidate = args.includes("--candidate");
@@ -27,8 +28,7 @@ export function fullPlan(root: string, home: string, args: string[], now = Date.
 }
 
 export function fullEnvironment(plan: ReturnType<typeof fullPlan>, steps: string[], base: NodeJS.ProcessEnv) {
-  return {
-    ...base,
+  return gateEnvironment(base, {run:plan.run, standalone:true, owned:{
     // Candidate times must not rewrite even its pinned policy records.
     ...(plan.candidate ? { NTS_GATE_RECORD_TIMES: "0" } : {}),
     NTS_GATE_STEPS: steps.join(" "),
@@ -36,5 +36,5 @@ export function fullEnvironment(plan: ReturnType<typeof fullPlan>, steps: string
     NTS_GATE_TARGET: plan.target,
     NTS_GATE_RUN_DIR: plan.run,
     NTS_CHECKERS: "1",
-  };
+  }}).env;
 }

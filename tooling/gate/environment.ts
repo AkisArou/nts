@@ -1,3 +1,4 @@
+import { HOST_CAPABILITIES, FIXED_AMBIENT, hostEnvironment } from "./canonical-environment.ts";
 // Variables a detached gate unit must inherit, and the capabilities that
 // require them. The launcher and both gate entry points read this one list.
 import { spawnSync } from "node:child_process";
@@ -6,29 +7,16 @@ import { join } from "node:path";
 
 type Capability = "android" | "jvm" | "valgrind";
 type Variable = { name: string; capability?: Capability };
-export const GATE_ENVIRONMENT: readonly Variable[] = [
-  { name: "PATH" },
-  { name: "HOME" },
-  { name: "LANG" },
-  { name: "XDG_RUNTIME_DIR" },
-  { name: "DBUS_SESSION_BUS_ADDRESS" },
-  { name: "ANDROID_HOME", capability: "android" },
-  { name: "ANDROID_SDK_ROOT" },
-  { name: "ANDROID_AVD_HOME" },
-  { name: "JAVA_HOME", capability: "jvm" },
-  { name: "JDK_HOME" },
-  { name: "DEBUGINFOD_URLS", capability: "valgrind" },
-  { name: "NTS_COREDUMPS" },
-];
+export const GATE_ENVIRONMENT: readonly Variable[] = HOST_CAPABILITIES.map(name => ({
+  name, ...(name === "JAVA_HOME" ? {capability:"jvm" as const} : name === "ANDROID_HOME" ? {capability:"android" as const} : name === "DEBUGINFOD_URLS" ? {capability:"valgrind" as const} : {}),
+}));
 
 export const GATE_LAUNCHER = "node tooling/lanes/land-unit.ts <commit> <name>";
 
 /** Each assignment is one argv element, including values with spaces or $. */
 export function systemdEnvironment(env: NodeJS.ProcessEnv = process.env): string[] {
-  return GATE_ENVIRONMENT.flatMap(({ name }) => {
-    const value = env[name];
-    return value ? [`--setenv=${name}=${value}`] : [];
-  });
+  const effective={...hostEnvironment(env),...FIXED_AMBIENT};
+  return Object.entries(effective).flatMap(([name,value])=>value ? [`--setenv=${name}=${value}`] : []);
 }
 
 export type CapabilitySite = { step: string; project?: string; capabilities: string[] };

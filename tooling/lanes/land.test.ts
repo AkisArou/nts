@@ -1,4 +1,5 @@
-import { spawnTest, waitFor } from "../gate/test-wait.ts";
+import { launcherPolicyNames } from "../gate/canonical-environment.ts";
+import { spawnTest as processTest, waitFor } from "../gate/test-wait.ts";
 // land.ts against a scratch repository and a stand-in gate: the train.
 //
 //   node --test tooling/lanes/land.test.ts
@@ -18,6 +19,23 @@ import assert from "node:assert/strict";
 import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { readLedger, VerificationLedger } from "./verification-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
+
+// Fake gates read their own fixture controls from a private file. The real
+// gate environment deliberately does not forward these launcher variables.
+function saveControls(env:NodeJS.ProcessEnv):void {
+  if (!env.LAND_TEST_CONTROLS) return;
+  const quote=(value:string)=>"'"+value.replaceAll("'", "'\\''")+"'";
+  writeFileSync(env.LAND_TEST_CONTROLS,Object.entries(env).filter(([k,v])=>k.startsWith("LAND_TEST_") && v!==undefined).map(([k,v])=>`export ${k}=${quote(v!)}`).join("\n")+"\n");
+}
+const spawnTest:typeof processTest=(command,args,options,what)=>{saveControls(options?.env ?? {});return processTest(command,args,options,what);};
+const controls=(s:Scratch,text:string)=>`. '${s.env.LAND_TEST_CONTROLS}'\n${text}`;
+const reportContext=`node - "$NTS_GATE_RUN_DIR/summary.json" <<'CONTEXT'
+const fs=require("node:fs"),path=process.argv[2],summary=JSON.parse(fs.readFileSync(path));
+summary.environment=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).report;
+if (process.env.LAND_TEST_NON_CANONICAL) summary.environment.canonical=false;
+fs.writeFileSync(path,JSON.stringify(summary));
+CONTEXT
+`;
 
 const LAND = new URL("./land.ts", import.meta.url).pathname;
 
@@ -62,7 +80,7 @@ function scratch(): Scratch {
   const home = join(dir, "home");
   mkdirSync(join(home, ".cache/nts-parallel-20261004/mainctl"), { recursive: true });
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
-  writeFileSync(join(root, "tooling/gate/pinned.sh"), STAND_IN_GATE);
+  writeFileSync(join(root, "tooling/gate/pinned.sh"), `. '${join(dir,"controls.sh")}'\n`+STAND_IN_GATE+reportContext);
   writeFileSync(join(root, "tooling/gate/run.mjs"), 'process.stdout.write(JSON.stringify({fake: []}));\n');
   // Narrows interop to what a commit's INTEROP file names, as owed.mjs does.
   writeFileSync(
@@ -71,10 +89,11 @@ function scratch(): Scratch {
   );
   writeFileSync(join(root, "shared.txt"), "one\n");
   const env: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_") && !k.startsWith("NTS_")) env[k] = v;
+  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_") && !k.startsWith("NTS_") && !launcherPolicyNames({[k]:v}).length) env[k] = v;
   Object.assign(env, {
     NTS_LAND_HOME: home,
     LAND_TEST_GATES: join(dir, "gates.log"),
+    LAND_TEST_CONTROLS: join(dir,"controls.sh"),
     GIT_AUTHOR_NAME: "t",
     GIT_AUTHOR_EMAIL: "t@t",
     GIT_COMMITTER_NAME: "t",
@@ -112,6 +131,7 @@ function lane(s: Scratch, name: string, files: Record<string, string>): string {
 type Landed = { status: number | null; out: string };
 
 function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; done: Promise<Landed> } {
+  saveControls(s.env);
   const child = cpus
     ? spawn("taskset", ["-c", cpus, process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env })
     : spawn(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env });
@@ -125,7 +145,7 @@ function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; d
 function fastGate(s: Scratch): void {
   writeFileSync(join(s.root, "tooling/gate/run.mjs"), 'process.stdout.write(process.argv.includes("--tree-only") ? "tree-check\\n" : JSON.stringify({"tree-check":[],fake:[]}));\n');
   writeFileSync(join(s.root, "tooling/gate/owed.mjs"), 'process.stdout.write(\'NTS_GATE_STEPS="tree-check" sh tooling/gate/all.sh\\n\');\n');
-  writeFileSync(join(s.root, "tooling/gate/all.sh"), `#!/bin/sh
+  writeFileSync(join(s.root, "tooling/gate/all.sh"), controls(s,`#!/bin/sh
 set -eu
 mkdir -p "$NTS_GATE_RUN_DIR"
 git rev-parse HEAD >> "$LAND_TEST_FAST_CHECKS"
@@ -136,8 +156,9 @@ fi
 verdict=green step=PASS
 if [ -e TREE_RED ]; then verdict=red step=FAIL; fi
 printf '{"verdict":"%s","identities":{"commit":"%s"},"steps":[{"name":"tree-check","verdict":"%s"}]}' "$verdict" "$(git rev-parse --short=12 HEAD)" "$step" > "$NTS_GATE_RUN_DIR/summary.json"
+${reportContext}
 [ "$verdict" = green ]
-`);
+`));
   s.env.LAND_TEST_FAST_CHECKS = join(s.home, "fast-checks");
   run(s, s.root, ["add", "tooling/gate"]);
   run(s, s.root, ["commit", "-q", "-m", "tree-only rules"]);
@@ -210,7 +231,7 @@ test("a coordinator docs commit is accounted for by the next strict train",async
 
 test("a train waits for the gate resource without retaining the landing lock",async()=>{
   const s=scratch();
-  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"# nts-gate-tree-lock-handoff: 8\n"+STAND_IN_GATE);
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"# nts-gate-tree-lock-handoff: 8\n"+controls(s,STAND_IN_GATE+reportContext));
   // The marker is on its own line after a leading newline, as in pinned.sh.
   writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n"+readFileSync(join(s.root,"tooling/gate/pinned.sh"),"utf8"));
   run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","lock handoff"]);
@@ -248,7 +269,7 @@ test("a train waits for the gate resource without retaining the landing lock",as
 
 test("an older lock holder waiting for pinned.sh cannot deadlock a new train",async()=>{
   const s=scratch();
-  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n# nts-gate-tree-lock-handoff: 8\n"+STAND_IN_GATE);
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n# nts-gate-tree-lock-handoff: 8\n"+controls(s,STAND_IN_GATE+reportContext));
   run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","lock handoff"]);
   const tree=lane(s,"tsrs/older-holder",{"one.txt":"one\n"}),ready=join(s.home,"ready"),go=join(s.home,"go");
   const gateLock=join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock");
@@ -336,7 +357,6 @@ const until = waitFor;
 
 test("a landing keeps its warm cache and uses one optimized line-table variant", async () => {
   const s = scratch();
-  s.env.CARGO_PROFILE_DEV_OPT_LEVEL = "2"; // A caller cannot change the gate's variant.
   const tree = lane(s, "warm-tests", { "change": "one\n" });
   const cache = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target/debug/build/generated/out");
   mkdirSync(cache, { recursive: true });
@@ -472,13 +492,15 @@ test("native inputs link the upstream TypeScript corpus without an external comp
   }
 });
 
-test("landing gives batch processes one checker instead of a caller override", async () => {
+test("landing refuses a caller checker override before enqueue", async () => {
   const s = scratch();
   s.env.LAND_TEST_CHECKERS = "1";
   s.env.NTS_CHECKERS = "8";
   const a = lane(s, "frontend", { "a.txt": "a" });
   const result = await land(s, a).done;
-  assert.equal(result.status, 0, result.out);
+  assert.equal(result.status, 1, result.out);
+  assert.match(result.out,/launcher verdict-policy.*NTS_CHECKERS/);
+  assert.equal(existsSync(join(s.home,".cache/nts-land/queue")),false);
 });
 
 test("the gate and its grandchild exclude the measurement core, preserving an E-core caller", { skip: process.platform !== "linux" }, async () => {
@@ -565,7 +587,7 @@ const changed = execFileSync("git", ["diff", "--name-only", process.argv.at(-1)]
 const steps = changed.includes("SELECT_MEMORY") ? "fake memory" : "fake";
 console.log('NTS_GATE_STEPS="' + steps + '" sh tooling/gate/all.sh');
 `);
-  writeFileSync(join(s.root, "tooling/gate/pinned.sh"), STAND_IN_GATE.slice(0, STAND_IN_GATE.indexOf("verdict=green step=PASS")) + `
+  writeFileSync(join(s.root, "tooling/gate/pinned.sh"), controls(s,STAND_IN_GATE.slice(0, STAND_IN_GATE.indexOf("verdict=green step=PASS")) + `
 node - "$sha" <<'JS'
 const {appendFileSync, existsSync, writeFileSync} = require("node:fs");
 const {join} = require("node:path");
@@ -575,10 +597,11 @@ const steps = requested.map(name => ({name, verdict: name === "memory" && culpri
 appendFileSync(process.env.LAND_TEST_GATES + ".steps", JSON.stringify({requested, culprit}) + "\\n");
 writeFileSync(join(process.env.NTS_GATE_RUN_DIR, "summary.json"), JSON.stringify({
   verdict: steps.some(s => s.verdict === "FAIL") ? "red" : "green",
+  environment:JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).report,
   steps, requested, started: "t", wall_s: 1, identities: {commit: process.argv[2]},
 }));
 JS
-`);
+`));
   if (mainRed) writeFileSync(join(s.root, "BAD_MEMORY"), "already red on main\n");
   run(s, s.root, ["add", "tooling/gate", ...(mainRed ? ["BAD_MEMORY"] : [])]);
   run(s, s.root, ["commit", "-q", "-m", "a memory check selected only by another landing"]);
@@ -808,4 +831,20 @@ test("an upkeep logging failure cannot turn a successful landing red", async () 
   assert.equal(r.status, 0, r.out); assert.ok(onMain(s, "landed.txt"));
   assert.match(r.out, /upkeep incomplete; landing remains successful/);
   assert.equal(run(s, tree, ["symbolic-ref", "--short", "HEAD"]), "logging");
+});
+
+test("a launcher profile override refuses before queueing and leaves its cache alone", async()=>{
+  const s=scratch(),tree=lane(s,"profile-override",{change:"one\n"});
+  s.env.CARGO_PROFILE_DEV_OPT_LEVEL="2";
+  const result=await land(s,tree).done;
+  assert.equal(result.status,1,result.out);assert.match(result.out,/launcher verdict-policy.*CARGO_PROFILE_DEV_OPT_LEVEL/);
+  assert.equal(existsSync(join(s.home,".cache/nts-land/queue")),false);
+});
+
+test("a non-canonical green summary cannot land",async()=>{
+  const s=scratch(),tree=lane(s,"experiment-report",{change:"one\n"});
+  s.env.LAND_TEST_NON_CANONICAL="1";
+  const before=run(s,s.root,["rev-parse","main"]),result=await land(s,tree).done;
+  assert.equal(result.status,1,result.out);assert.match(result.out,/non-canonical or unrecorded environment is not landing evidence/);
+  assert.equal(run(s,s.root,["rev-parse","main"]),before);
 });

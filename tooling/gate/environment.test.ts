@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { gateCapabilities, gateEnvironmentError, GATE_ENVIRONMENT, missingEnvironment, systemdEnvironment } from "./environment.ts";
+import { FIXED_AMBIENT, hostEnvironment } from "./canonical-environment.ts";
 
 const roots: string[] = [];
 after(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -65,8 +66,11 @@ test("undeclared steps and misspelled capabilities cannot evade preflight", () =
 test("the launcher forwards the one descriptor literally, without arbitrary variables", () => {
   const env = Object.fromEntries(GATE_ENVIRONMENT.map(({ name }) => [name, `${name} with spaces $literal=ok`]));
   env.UNRELATED_SECRET = "must not be forwarded";
-  assert.deepEqual(systemdEnvironment(env), GATE_ENVIRONMENT.map(({ name }) => `--setenv=${name}=${env[name]}`));
-  assert.deepEqual(systemdEnvironment({ JAVA_HOME: "", DEBUGINFOD_URLS: "https://symbols" }), ["--setenv=DEBUGINFOD_URLS=https://symbols"]);
+  assert.deepEqual(systemdEnvironment(env), Object.entries({...hostEnvironment(env),...FIXED_AMBIENT}).map(([name,value])=>`--setenv=${name}=${value}`));
+  const empty=systemdEnvironment({ JAVA_HOME: "", DEBUGINFOD_URLS: "https://symbols" });
+  assert.ok(empty.includes("--setenv=DEBUGINFOD_URLS=https://symbols"));
+  assert.ok(empty.includes("--setenv=LC_ALL=C.UTF-8"));
+  assert.ok(!empty.some(value=>value.startsWith("--setenv=JAVA_HOME=")));
 });
 
 test("step and project declarations cover the actual JVM, Android and Valgrind consumers", () => {

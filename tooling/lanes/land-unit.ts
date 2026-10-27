@@ -1,3 +1,4 @@
+import { assertLandingEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Queue an immutable submission in a systemd user unit with the gate's environment.
 // Run from a login shell: node tooling/lanes/land-unit.ts <commit> <name>
 import { spawnSync } from "node:child_process";
@@ -13,6 +14,8 @@ function checked(command: string, args: string[], cwd: string): string {
 }
 
 try {
+  assertLandingEnvironment();
+  reportLauncherDrops(process.env);
   const [asked, name, ...extra] = process.argv.slice(2);
   if (!asked || !name || extra.length || !/^[A-Za-z0-9_-]+$/.test(name)) {
     throw new Error("usage: node tooling/lanes/land-unit.ts <commit> <name> (letters, digits, _ or -)");
@@ -39,7 +42,7 @@ try {
   checked("systemd-run", [
     "--user", "--collect", "--quiet", `--unit=${unit}`, `--working-directory=${tree}`,
     `--property=StandardOutput=file:${log}`, `--property=StandardError=file:${log}`,
-    `--property=LimitCORE=${process.env.NTS_COREDUMPS === "1" ? "infinity" : "0"}`,
+    "--property=LimitCORE=0",
     `--setenv=NTS_LAND_AUTHOR_BRANCH=${authorBranch}`,
     ...(process.env.NTS_LAND_AUTHOR_ADDRESS ? [`--setenv=NTS_LAND_AUTHOR_ADDRESS=${process.env.NTS_LAND_AUTHOR_ADDRESS}`] : []),
     ...systemdEnvironment(), process.execPath, land, sha,

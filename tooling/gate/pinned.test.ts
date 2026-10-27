@@ -1,3 +1,4 @@
+import { launcherPolicyNames } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -19,26 +20,28 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     const tree = join(directory, "gate-tree");
     mkdirSync(join(root, "tooling/gate"), { recursive: true });
     mkdirSync(join(root, "tooling/lanes"), { recursive: true });
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_")));
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
     Object.assign(env, {
       GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
       GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
       NTS_GATE_TREE: tree, NTS_GATE_TARGET: join(directory, "target"), NTS_GATE_SETUP_ONLY: "1",
-      NTS_PREPARATION_MARKER: join(directory, "marker"),
+      NTS_GATE_RUN_DIR: join(directory, "run"),
     });
     const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
+    writeFileSync(join(root, "tooling/gate/canonical-environment.ts"), readFileSync(new URL("./canonical-environment.ts",import.meta.url)));
+    writeFileSync(join(root,"tooling/gate/run-temporary.ts"),readFileSync(new URL("./run-temporary.ts",import.meta.url)));
     // Affinity is independently tested; this fixture isolates which commit
     // supplies preparation without depending on delegated host cpusets.
     writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
-    writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'printf owner > "$NTS_PREPARATION_MARKER"\n');
+    writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'printf owner > "' + join(directory, "marker") + '"\n');
     git("init", "-q");
     git("add", ".");
     git("commit", "-qm", "owner");
     const owner = git("rev-parse", "HEAD");
     writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'test -z "${NTS_GATE_LOCK_FD:-}" || { echo "lock marker leaked into candidate tools" >&2; exit 24; }\n' + (refuses
       ? 'echo "candidate input is missing" >&2\nexit 23\n'
-      : 'printf candidate > "$NTS_PREPARATION_MARKER"\n'));
+      : 'printf candidate > "' + join(directory, "marker") + '"\n'));
     git("add", ".");
     git("commit", "-qm", "candidate");
     const candidate = git("rev-parse", "HEAD");

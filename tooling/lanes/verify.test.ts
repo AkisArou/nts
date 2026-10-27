@@ -1,3 +1,4 @@
+import { launcherPolicyNames } from "../gate/canonical-environment.ts";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawn,spawnSync,execFileSync} from "node:child_process";
@@ -12,7 +13,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   const directory=mkdtempSync(join(tmpdir(),"shadow-verify-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
   const repo=join(directory,"repo"),home=join(directory,"home"),state=join(home,".cache/nts-land"),store=join(state,"verification");
   mkdirSync(join(repo,"tooling/gate"),{recursive:true});mkdirSync(home);
-  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith("NTS_") && !k.startsWith("GIT_")));
+  const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith("NTS_") && !k.startsWith("GIT_") && !launcherPolicyNames({[k]:process.env[k]}).length));
   Object.assign(env,{NTS_LAND_HOME:home,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"});
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8"}).trim();
   writeFileSync(join(repo,"tooling/gate/owed.mjs"),`import {execFileSync} from "node:child_process";
@@ -21,6 +22,7 @@ const paths=execFileSync("git",["diff","--name-only",range],{encoding:"utf8"}).t
 process.stdout.write('NTS_GATE_STEPS="'+(paths.every(p=>p.startsWith("docs/"))?"format":"fake")+'" sh tooling/gate/all.sh\\n');\n`);
   writeFileSync(join(repo,"tooling/gate/run.mjs"),'process.stdout.write(process.argv.includes("--tree-only")?"format\\n":JSON.stringify({fake:[],other:[],format:[]}));\n');
   writeFileSync(join(repo,"tooling/gate/pinned.sh"),`set -eu
+. "${join(directory,"controls.sh")}"
 # nts-gate-tree-lock-handoff: 8
 exec 9>&8
 flock -n 9
@@ -34,7 +36,7 @@ fi
 SHADOW_TEST_COMMIT="$1" node -e 'const fs=require("fs"),p=require("path"),e=process.env;
 const requested=(e.NTS_GATE_STEPS||"fake").split(/\\s+/).filter(Boolean);
 const steps=requested.map(name=>({name,verdict:e.SHADOW_TEST_RED||name===e.SHADOW_TEST_RED_STEP?"FAIL":"PASS"}));
-fs.writeFileSync(p.join(e.NTS_GATE_RUN_DIR,"summary.json"),JSON.stringify({verdict:steps.some(s=>s.verdict==="FAIL")?"red":"green",identities:{commit:e.SHADOW_TEST_COMMIT},requested,steps}));'
+fs.writeFileSync(p.join(e.NTS_GATE_RUN_DIR,"summary.json"),JSON.stringify({environment:JSON.parse(e.NTS_GATE_ENV_CONTEXT).report,verdict:steps.some(s=>s.verdict==="FAIL")?"red":"green",identities:{commit:e.SHADOW_TEST_COMMIT},requested,steps}));'
 if [ -n "\${SHADOW_TEST_BAD_EXIT:-}" ]; then exit 17; fi
 [ -z "\${SHADOW_TEST_RED:-}\${SHADOW_TEST_RED_STEP:-}" ]
 `);
@@ -47,6 +49,7 @@ if [ -n "\${SHADOW_TEST_BAD_EXIT:-}" ]; then exit 17; fi
     l.commit(id,tip);return tip;
   };
   const start=()=>{
+    writeFileSync(join(directory,"controls.sh"),Object.entries(env).filter(([k])=>k.startsWith("SHADOW_TEST_")).map(([k,v])=>`export ${k}='${v!.replaceAll("'","'\\''")}'`).join("\n")+"\n");
     const child=spawn(process.execPath,[verifier],{cwd:repo,env});let out="";
     child.stdout.on("data",d=>out+=d);child.stderr.on("data",d=>out+=d);
     return {child,done:new Promise<{status:number|null;out:string}>(resolve=>child.on("close",status=>resolve({status,out})))};

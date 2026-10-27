@@ -1,3 +1,4 @@
+import { launcherPolicyNames } from "../gate/canonical-environment.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -21,7 +22,7 @@ if (!require("node:fs").existsSync(".inputs-ready")) process.exit(98);
 if (process.env.FAIL_PREFLIGHT === "1") process.exit(2);
 console.log("preflight passed");\n`);
   writeFileSync(join(root, "tooling/lanes/inputs.sh"), '#!/bin/sh\ntest "$1" = lane\ntouch "$3/.inputs-ready"\n');
-  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_")));
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
   Object.assign(env, {
     HOME: home, PATH: `${bin}:${process.env.PATH}`, UNIT_CAPTURE: capture,
     JAVA_HOME: "/jdk with spaces/$literal", ANDROID_HOME: "/sdk with spaces",
@@ -62,14 +63,13 @@ test("the detached launcher seals the caller's HEAD and forwards the descriptor 
   assert.match(result.stdout, /log: .*land\.log/);
 });
 
-test("core dumps require an explicit debugging opt-in", t => {
+test("a landing refuses experimental core dumps before creating a unit", t => {
   const f = fixture(t);
   f.env.NTS_COREDUMPS = "1";
   const result = f.launch();
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  const args: string[] = JSON.parse(readFileSync(f.capture, "utf8"));
-  assert.ok(args.includes("--property=LimitCORE=infinity"));
-  assert.ok(args.includes("--setenv=NTS_COREDUMPS=1"));
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr,/launcher verdict-policy.*NTS_COREDUMPS/);
+  assert.equal(existsSync(f.capture),false);
 });
 
 test("a failed detached preflight never starts a unit and removes its own submission tree", t => {

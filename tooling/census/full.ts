@@ -78,7 +78,6 @@ const gated = spawnSync("flock", ["-n", "-E", String(BUSY), landLock, "sh", join
     // Keep the default tree literal discoverable by lane cleanup. The plan
     // overrides it for candidates; neither candidate tree nor target is shared
     // with the main full-run history.
-    ...process.env,
     NTS_GATE_TREE: join(HOME, "tree"),
     NTS_GATE_TARGET: join(HOME, "target"),
     ...fullEnvironment(plan, steps, process.env),

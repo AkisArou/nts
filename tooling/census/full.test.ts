@@ -1,3 +1,4 @@
+import { launcherPolicyNames } from "../gate/canonical-environment.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -32,7 +33,7 @@ function fixture(t: { after(fn: () => void): void }) {
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   mkdirSync(join(root, "tooling/lanes"), { recursive: true });
   mkdirSync(join(root, "results"), { recursive: true });
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_")));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
   Object.assign(env, {
     GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
     GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@example.invalid",
@@ -40,6 +41,8 @@ function fixture(t: { after(fn: () => void): void }) {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   writeFileSync(join(root, "results/marker"), "main record\n");
   writeFileSync(join(root, "tooling/gate/pinned.sh"), readFileSync(new URL("../gate/pinned.sh", import.meta.url)));
+  writeFileSync(join(root,"tooling/gate/canonical-environment.ts"),readFileSync(new URL("../gate/canonical-environment.ts",import.meta.url)));
+    writeFileSync(join(root,"tooling/gate/run-temporary.ts"),readFileSync(new URL("../gate/run-temporary.ts",import.meta.url)));
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
   writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
