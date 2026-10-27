@@ -20,6 +20,8 @@ Dates are 2026. Quotes are the user's words.
 - **Nothing is fixed:** "we can refactor as much as needed, to reach our goal.
   Noone uses our project yet!" Slow ported code, runtimes or representations
   are replaced outright (10-22).
+- **"Beats" means at most 0.8× of node's and Bun's time on a row,** for now;
+  each row's bar is set again when that row is worked on (10-27).
 - **Show every benchmark result** as it is produced: ratios against node and
   Bun, the machine's conditions, and the verdict, losing rows included (10-07,
   10-21).
@@ -209,3 +211,27 @@ From [`foundations/memory.md`](foundations/memory.md):
 - **M3:** weak references follow the specification exactly.
 - **M4:** mimalloc is tried first as the native allocator.
 - **M5:** no memory annotations in the language.
+
+## Language and hosts (10-27)
+
+- **`globalThis`, `Proxy` with `Reflect`, and object integrity**
+  (`Object.freeze`, `seal`, `preventExtensions` and their predicates) are in
+  scope, deferred. Each is to cost nothing where a program does not use it,
+  with the compiler proving which values a use can reach
+  ([open questions](open-questions.md) L24 to L26).
+- **An exception that escapes a callback a host invokes** (a GTK signal, a
+  WinRT event, a C function pointer, a timer) is the program's uncaught error,
+  and the target decides what that does. _Decided by the coordinator, on the
+  user's delegation._
+  - On a command-line program it is printed as node prints it, and the process
+    exits with status 1.
+  - In a Node addon it crosses into node as a JavaScript exception, so node's
+    own rules apply.
+  - On UI targets (GTK, Apple, Windows UI, Chromium) it is reported with the
+    same text, and the event loop keeps running, as browsers and GJS do.
+  - A handler can observe it: `process.on("uncaughtException")` where
+    `node:process` is provided, the web's `error` event elsewhere.
+  - It never unwinds through the host's frames: the boundary catches it. A
+    callback that must return a value to the host, and throws instead, is
+    fatal on every target, since no value can be made up.
+  - An unhandled promise rejection follows the same split.

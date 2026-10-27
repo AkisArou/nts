@@ -74,7 +74,8 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
 | ArrayBuffer, typed arrays, DataView | C (4 kinds R) | C, copied | = | J | W | ◐ |
 | SharedArrayBuffer, Atomics | R (with workers) | R | R | R | R | ◐ |
 | errors | C (8 classes; `stack` R) | = | = | J | W | ◐ |
-| Proxy, Reflect, `globalThis`, `eval` | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ |
+| Proxy, Reflect, `globalThis`, `Object.freeze` and its family | R · ◐ in scope, deferred | R · ◐ | R · ◐ | R · ◐ | R · ◐ | R · ◐ |
+| `eval`, `Function` | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ |
 
 ### Web platform
 

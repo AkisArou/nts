@@ -24,9 +24,7 @@ Ranked by how much each blocks or how much harm it does today.
 | 5 | **`nts build` still writes a partial program** when a function is refused for a lowering gap; only a missing builtin stops it (L20) | Any refusal fails `nts build`; partial builds only behind a flag |
 | 6 | **Decorators are silently dropped** (L10) | Refuse them until implemented |
 | 7 | **No dependency policy, and system packages in the build** (libuv, OpenSSL, clang) against the decisions (D-1, T-1) | Write the policy; bundle the toolchain (zig) |
-| 8 | **A throw inside a host callback kills the process** (I-1) | **user:** the reference host's behaviour per target (node for CLIs, the browser and GJS for UI) |
-| 9 | **Compiled programs cannot be debugged or give stack traces** (X-1, X-2) | Line tables and `#line` by default; `Error.stack` from them |
-| 10 | **Performance has no numeric bar or noise rule** (P-1, P-3) | **user:** "beats" = 0.8× node and Bun; a paired noise band |
+| 8 | **Compiled programs cannot be debugged or give stack traces** (X-1, X-2) | Line tables and `#line` by default; `Error.stack` from them |
 
 ## 1. Language and compiler
 
@@ -55,6 +53,9 @@ Ranked by how much each blocks or how much harm it does today.
 | L21 | Diagnostics: marking permanence, and early errors | inconsistent wording, no code registry; 1,315 negative test262 cases accepted | A diagnostic registry (code, permanent or not, message); complete the early errors (phase 3) |
 | L22 | Separate and incremental compilation | whole program only; no cache | Closed world for executables; libraries declare an export surface with L9's fallback; a validated cache later. **research:** Kotlin/Native, Swift |
 | L23 | Which oracle wins when test262 and node disagree | unstated | Node: the promise is "behaves like node"; the boundary set is written down |
+| L24 | How `globalThis` costs nothing where unused | refused; in scope since 10-27 (user), deferred | A static `globalThis.X` folds to the binding; only a dynamic read or write builds a global object, holding just the globals the program can reach |
+| L25 | How `Proxy` and `Reflect` cost nothing where unused | refused; in scope since 10-27 (user), deferred | Only values a `new Proxy` can reach take the trap path, which the compiler proves; every other access stays direct |
+| L26 | How object integrity (`Object.freeze`, `seal`, `preventExtensions` and their predicates) costs nothing where unused | refused; in scope since 10-27 (user), deferred | A flag in the object's header, checked on a write only where a freeze can reach the object |
 
 ## 2. Builtins and globals
 
@@ -62,7 +63,7 @@ Ranked by how much each blocks or how much harm it does today.
 |---|---|---|---|
 | G1 | The provider mechanism | one name list for every target; NTS1100 stops a build that reaches a missing builtin | Proposed: [`foundations/builtins.md`](foundations/builtins.md) |
 | G2 | Host or own, feature by feature | only Intl and RegExp decided (host on JS hosts) | Own by default (exactness); the host only where decided; Node addons own |
-| G3 | Feature detection: `typeof X === "undefined"`, `"X" in globalThis` | folds for intrinsics only | Fold both forms per target at compile time; `globalThis` stays a non-goal otherwise |
+| G3 | Feature detection: `typeof X === "undefined"`, `"X" in globalThis` | folds for intrinsics only | Fold both forms per target at compile time; `globalThis` itself is L24 |
 | G4 | Node's types in the one lib | no rule | `types: ["node"]` where a profile provides `node:*`; node's timer types on native, the DOM's elsewhere |
 | G5 | Web globals for native apps | `runtime/sdk`'s lib subset, unimplemented | WinterTC's Minimum Common Web API as the floor on native and the JVM; retire the subset (decision 11) |
 | G6 | Chromium's overlay | listed in tsconfig | Injected by `target.chromium()`, checked against lib.dom; Blink errors as `DOMException` |
@@ -105,7 +106,6 @@ Ranked by how much each blocks or how much harm it does today.
 
 | # | question | today | recommendation |
 |---|---|---|---|
-| I-1 | A throw inside a host callback | the process stops on C, GTK, Windows | **user:** the reference host's behaviour: node's (exit) for CLIs, log and continue for UI apps, with a handler hook |
 | I-2 | Host failures reaching a `catch` | GError, NSError, HRESULT built; Java declines; `NSException` and C++ exceptions nowhere | Every host error becomes a catchable `Error` carrying the host value. **research:** unwinding through setjmp |
 | I-3 | Callbacks on threads nts does not own | a different answer per host; GLib has none | One rule: carry to the owner thread; refuse calls that must return a value from another thread |
 | I-4 | Promises across a boundary | N-API refuses; C embedders drain microtasks by an unwritten rule | N-API: a deferred plus a threadsafe function; document `nts_checkpoint` for C embedders |
@@ -122,10 +122,10 @@ Ranked by how much each blocks or how much harm it does today.
 | B-1 | What `bind-c` derives | named items only | Whole headers with an overrides file, after ResourceFlow |
 | B-2 | Per-target bindings against "typecheck once against the intersection" | written, not implemented | Implement the intersection check |
 | B-3 | Platform surface packages: published or generated locally | generated locally | Generate locally by default; **user:** publish only the permissively licensed ones (GIR, Win32 metadata) |
-| P-1 | Wasm as a product in `nts.config` | no Wasm target or product | `target.web()` and `target.wasi()` with ES-module and component products, after Binaryen |
-| P-2 | Library surfaces beyond functions | classes cross nothing | Opaque handles in the C ABI; generated Swift, Kotlin and Java wrappers later |
-| P-3 | Shipping to npm | builds at install time | Prebuilt binaries per platform, as esbuild and swc do |
-| P-4 | The Chromium app's shape | two options written | **user:** a separate app process with IPC, as Electron |
+| S-1 | Wasm as a product in `nts.config` | no Wasm target or product | `target.web()` and `target.wasi()` with ES-module and component products, after Binaryen |
+| S-2 | Library surfaces beyond functions | classes cross nothing | Opaque handles in the C ABI; generated Swift, Kotlin and Java wrappers later |
+| S-3 | Shipping to npm | builds at install time | Prebuilt binaries per platform, as esbuild and swc do |
+| S-4 | The Chromium app's shape | two options written | **user:** a separate app process with IPC, as Electron |
 | T-1 | A bundled toolchain or an installed one | system clang (or zig), node for configs | Bundle zig (clang, lld, libcs) as the default. **research:** size, licences |
 | T-2 | LLVM version coupling; ThinLTO on cross builds | text IR; cross builds without LTO | Text IR at the bundled LLVM's version; ThinLTO through `zig cc`. **research** |
 | T-3 | Which hosts run nts | Linux | **user:** Linux, then macOS (Apple silicon); Windows through WSL |
@@ -138,7 +138,6 @@ Ranked by how much each blocks or how much harm it does today.
 
 | # | question | today | recommendation |
 |---|---|---|---|
-| P-1 | A number for "beats" and "close" | none | **user:** beats = at most 0.8× node and Bun; close = within 1.2× C++ and Java |
 | P-2 | Startup time, executable size, peak RSS as rows | not measured, though decided ("a code-size check") | Add the rows (stage 0 instruments) against node and Bun |
 | P-3 | Regression against noise | sign over two rounds | Paired A/B, at least 5 processes, band = max(3%, 2× spread); counts for deterministic rows |
 | P-4 | The quiet host and the comparators' versions | one quiet core; Bun, the JDK and clang unpinned | Pin all comparators; acceptance numbers only with no gate running; load recorded in every report |
@@ -150,8 +149,8 @@ Ranked by how much each blocks or how much harm it does today.
 
 | # | question | today | recommendation |
 |---|---|---|---|
-| Q-1 | Counting steps per landing | full run only | *Decided 10-27:* `rc`, `llvm-rc`, `memory` core for compiler and runtime changes (being built) |
-| Q-2 | A halved train can drop the step that failed | it did on 10-27: a culprit landed | *Being fixed:* each half runs what it owes plus the red steps |
+| Q-1 | Counting steps per landing | full run only | *Decided 10-27, being built:* `rc` and `memory` for C backend changes, `llvm-rc` for LLVM backend changes, and all three for compiler core and the C runtime |
+| Q-2 | A halved train can drop the step that failed | it did on 10-27: a culprit landed | *Being fixed:* each half runs what it owes plus the red steps, and a step red on `main` itself is reported as red on main, not blamed on a landing |
 | Q-3 | Full-run cadence; test selection | by hand; `--touching` unbuilt | Nightly full run, weekly cache-off run; `--touching` only after a determinism test |
 | Q-4 | A ratchet that rises | records re-recorded by hand | A per-case ratchet, recorded through reviewed `results:` commits |
 | Q-5 | Node's own tests; moving the node pin | lane-local; no bump rule | The pin moves with node LTS releases and D2's Unicode pin; node's tests gate when the node lane resumes |
@@ -164,7 +163,7 @@ Ranked by how much each blocks or how much harm it does today.
 |---|---|---|---|
 | X-1 | Debug and profile builds | no DWARF or `#line` from C or LLVM | `#line` plus line tables by default; frame pointers on (measured); an unoptimized debug profile |
 | X-2 | `Error.stack`, and the report of an uncaught error | `stack` refused. C, LLVM and the JVM print `nts: uncaught Error: boom` and exit 1, as node does, though node also prints the source line and the stack. Wasm exits 1 with a decline (NTS5001) | `stack` symbolized from line tables on demand; node's report format. **research:** cost |
-| X-3 | Deterministic builds | untested | Required (the result cache depends on it); tested by diffing two builds |
+| X-3 | Deterministic builds | untested | *Decided 10-27:* required (the result cache, reproducible releases and A/B measurement depend on it); being measured by diffing two builds per backend |
 | X-4 | Hash flooding | unseeded | The pending A/B and J2 |
 | X-5 | Bounds checks | proved or checked; a rule only in records | Record the rule in `decisions.md`, with L4's answer for out-of-range reads |
 | X-6 | Stack exhaustion | aborts; Windows has no handler | L14 |
