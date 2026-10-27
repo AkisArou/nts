@@ -152,7 +152,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-project.ts";
@@ -286,6 +286,24 @@ export function readLocations(text) {
     seen.set(`${file}:${line}:${col} ${code} ${body}`, { file, line: +line, col: +col, code, text: body });
   }
   return [...seen.values()];
+}
+
+/** Statement cuts without the named call/read/initializer report at that site. */
+export function readStatementCuts(text) {
+  // Match diagnostic lines, not diagnostic-looking HIR string constants.
+  // Cuts can originate in JavaScript or generated sources as well as TypeScript.
+  const locations = [...text.matchAll(/^[ \t]*(?:--[ \t]+)?(\/.+?):(\d+):(\d+):? (NTS100[35]) (.*)$/gm)]
+    .map(([, file, line, col, code, body]) => ({ file, line: +line, col: +col, code, text: body }));
+  const site = ({ file, line, col }) => `${file}:${line}:${col}`;
+  const named = new Set(locations.filter((d) => d.code === "NTS1003" &&
+    /^(?:this module-scope statement was dropped because it (?:calls|reads)|the initializer of `[^`]+` was not compiled because it (?:calls|reads)) /.test(d.text)).map(site));
+  const cuts = new Map();
+  for (const d of locations) {
+    if (d.code === "NTS1005" && d.text.startsWith("this statement, which module evaluation therefore skips") && !named.has(site(d))) {
+      cuts.set(site(d), d);
+    }
+  }
+  return [...cuts.values()];
 }
 
 const sourceLines = new Map();
@@ -679,7 +697,7 @@ export function unbuiltUnerases(prepared, { byName, byId, byType }) {
  * One project's violations from its four listings, or why it was not measured.
  * The scan and the self-test both go through this.
  */
-export function judge({ prepared, plain, layouts, refusals, whole = true }, sourceLine = readSourceLine) {
+export function judge({ prepared, plain, layouts, refusals, whole = true, sourceRoot = ROOT }, sourceLine = readSourceLine) {
   const hir = readHir(prepared);
   if (hir.stated === null) return { unmeasured: 'hir --prepared printed no "N function(s)" line' };
   if (hir.lines !== hir.stated) return { unmeasured: `parsed ${hir.lines} definition(s) where the summary states ${hir.stated}` };
@@ -786,6 +804,14 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
   }
   for (const { read } of cascades.statementReads) {
     cut(`a module-scope statement reading \`${read}\` was dropped`, `a statement reading ${read}`, read);
+  }
+  for (const d of readStatementCuts(prepared)) {
+    // Outcome fixtures are materialised in a fresh scratch directory each run.
+    // The project-local source path, rather than that directory, names the cut.
+    const file = d.file.startsWith(`${sourceRoot}/`) ? relative(sourceRoot, d.file)
+      : d.file.startsWith(`${ROOT}/`) ? relative(ROOT, d.file) : d.file;
+    const subject = `a statement at ${file}:${d.line}:${d.col}`;
+    say("top-level-cut", `${subject} was dropped (${d.text})`, subject);
   }
   if (refused.has("module#init")) say("top-level-cut", "module#init is refused, so none of the module's evaluation runs", "module#init");
 
@@ -945,6 +971,27 @@ function selfTest() {
   // still a cut, named for the ratchet.
   const said = judge({ ...clean, prepared: `${gone(cut)}\n  -- main.ts:11:23 NTS1003 this module-scope statement was dropped because it calls \`total\`, which was refused above\n`, refusals: "total\tsomething\n" });
   if (said.violations?.length !== 1 || said.violations[0].rule !== "top-level-cut") return `a reported cut read as silent, or went unnamed: ${JSON.stringify(said)}`;
+  const declarationCut = "NTS1005 this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs";
+  for (const sourceRoot of ["/scratch/first/project", "/scratch/second/project"]) {
+    const diagnostic = `  -- ${sourceRoot}/src/main.ts:12:1 ${declarationCut}\n`;
+    const generic = judge({ ...clean, sourceRoot, prepared: `${clean.prepared}\n${diagnostic}${diagnostic}` });
+    if (generic.violations?.length !== 1 || generic.violations[0].rule !== "top-level-cut" || generic.violations[0].subject !== "a statement at src/main.ts:12:1") return `a generic declaration cut was lost, duplicated, or named by its scratch path: ${JSON.stringify(generic)}`;
+  }
+  const namedCut = "  -- /project/main.ts:11:23 NTS1003 this module-scope statement was dropped because it calls `total`, which was refused above\n";
+  const genericNamed = judge({ ...clean, prepared: `${gone(cut)}\n${namedCut}  -- /project/main.ts:11:23 ${declarationCut}\n`, refusals: "total\tsomething\n" });
+  if (genericNamed.violations?.length !== 1 || genericNamed.violations[0].subject !== "a statement calling total") return `a named statement cut was counted twice: ${JSON.stringify(genericNamed)}`;
+  for (const extension of ["js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx"]) {
+    if (readStatementCuts(`  -- /project/main.${extension}:12:1 ${declarationCut}\n`).length !== 1) return `a ${extension} statement cut was lost`;
+  }
+  for (const body of [
+    "this module-scope statement was dropped because it reads `global`, which was refused above",
+    "the initializer of `global` was not compiled because it calls `total`, which was refused above",
+    "the initializer of `global` was not compiled because it reads `other`, which was refused above",
+  ]) {
+    if (readStatementCuts(`  -- /project/main.js:12:1 NTS1003 ${body}\n  -- /project/main.js:12:1 ${declarationCut}\n`).length !== 0) return "a named read or initializer cut was counted twice";
+  }
+  if (readStatementCuts(`  %0 = const "/project/main.ts:12:1 ${declarationCut}" : string\n`).length !== 0) return "diagnostic-looking string contents read as a statement cut";
+  if (readStatementCuts("  -- /project/main.ts:12:1 NTS1001 an ordinary refusal\n").length !== 0) return "an ordinary refusal read as a statement cut";
   // A call to a function that compiles, folded away, is not a loss.
   if (judge({ ...clean, prepared: cut }).violations?.length !== 0) return "a folded call to a compiled function read as a lost statement";
   // A refused module#init reports every call it held.
@@ -1324,7 +1371,7 @@ async function scan(project) {
   // A runtime module is an addon, whose values arrive across its boundary;
   // everything else -- examples, fixtures, an app like runtime/react's -- is
   // a whole program.
-  const verdict = judge({ ...listings, whole: !ADDON.test(project) });
+  const verdict = judge({ ...listings, whole: !ADDON.test(project), sourceRoot: pathOf.get(project) ?? join(ROOT, project) });
   if (verdict.unmeasured) {
     // How the listing's process ended, beside what its output lacked. A
     // process killed by a signal is reported above; one that exited by itself

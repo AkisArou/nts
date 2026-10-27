@@ -213,7 +213,7 @@ declare function nts_process_on_exit(callback: (code: number) => void): void;
  * Registered rather than private, as `util.promisify.custom` is, because the stand-in has to find
  * it from outside the module.
  */
-const kEmitUnhandledRejection: symbol = Symbol.for("nts.process.emitUnhandledRejection");
+const kEmitUnhandledRejection: unique symbol = Symbol.for("nts.process.emitUnhandledRejection");
 
 class NodeEnvironmentFlagsSet extends Set<string> {
   readonly #bare: Set<string>;
