@@ -24,7 +24,7 @@
 // failing doctest fails it), at least one binary must have been recorded, and
 // every replayed binary must exit 0. A binary that crashes or is killed fails.
 // Only then are obsolete test executables pruned. The build defaults to the
-// lander's line-table debug information and CARGO_INCREMENTAL=0, avoiding a
+// lander's opt-level 1, line tables and CARGO_INCREMENTAL=0, avoiding a
 // second variant in standalone runs. Explicit standalone overrides still work;
 // old incremental/feature variants are reclaimed after a successful run too.
 
@@ -34,7 +34,7 @@ import { cpus, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
-import { pruneTestArtifacts, TEST_BUILD_DEBUG } from "./test-artifacts.ts";
+import { pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
@@ -70,6 +70,7 @@ const first = spawnSync("cargo", ["test", "--workspace", "--no-fail-fast"], {
     ...process.env,
     CARGO_INCREMENTAL: process.env.CARGO_INCREMENTAL ?? "0",
     CARGO_PROFILE_DEV_DEBUG: process.env.CARGO_PROFILE_DEV_DEBUG ?? TEST_BUILD_DEBUG,
+    CARGO_PROFILE_DEV_OPT_LEVEL: process.env.CARGO_PROFILE_DEV_OPT_LEVEL ?? TEST_BUILD_OPT_LEVEL,
     [runnerVar]: recorder,
   },
   encoding: "utf8",

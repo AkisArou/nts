@@ -36,6 +36,7 @@ if [ -n "\${LAND_TEST_CHECKERS:-}" ]; then
   test "$NTS_CHECKERS" = "1"
 fi
 printf '%s' "\${CARGO_PROFILE_DEV_DEBUG-unset}" > "$NTS_GATE_RUN_DIR/test-debug-mode"
+printf '%s' "\${CARGO_PROFILE_DEV_OPT_LEVEL-unset}" > "$NTS_GATE_RUN_DIR/test-opt-level"
 echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
@@ -317,8 +318,9 @@ async function until(what: string, ok: () => boolean): Promise<void> {
   assert.fail(`timed out waiting for ${what}`);
 }
 
-test("a landing keeps its warm test cache and uses line-table debug information", async () => {
+test("a landing keeps its warm cache and uses one optimized line-table variant", async () => {
   const s = scratch();
+  s.env.CARGO_PROFILE_DEV_OPT_LEVEL = "2"; // A caller cannot change the gate's variant.
   const tree = lane(s, "warm-tests", { "change": "one\n" });
   const cache = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target/debug/build/generated/out");
   mkdirSync(cache, { recursive: true });
@@ -329,6 +331,7 @@ test("a landing keeps its warm test cache and uses line-table debug information"
   const runs = join(s.home, ".cache/nts-land/runs");
   const run = readdirSync(runs)[0];
   assert.equal(readFileSync(join(runs, run, "test-debug-mode"), "utf8"), "line-tables-only");
+  assert.equal(readFileSync(join(runs, run, "test-opt-level"), "utf8"), "1");
 });
 
 test("an oversized Cargo cache is cleaned whole and the train proceeds", async () => {

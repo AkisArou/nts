@@ -1,18 +1,46 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { cleanDevProfile, pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_WORKING_BYTES, TEST_DISK_FLOOR_BYTES, testBuildAdmissionProblem } from "./test-artifacts.ts";
+import { cleanDevProfile, pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL, TEST_BUILD_WORKING_BYTES, TEST_DISK_FLOOR_BYTES, testBuildAdmissionProblem } from "./test-artifacts.ts";
 
 test("cache admission preserves one measured live set and leaves disk working space", () => {
   const gib = 2 ** 30;
-  assert.equal(testBuildAdmissionProblem(32.44 * gib, TEST_DISK_FLOOR_BYTES + TEST_BUILD_WORKING_BYTES), null);
+  assert.equal(TEST_BUILD_WORKING_BYTES, 35 * gib);
+  assert.equal(testBuildAdmissionProblem(34.07 * gib, TEST_DISK_FLOOR_BYTES + TEST_BUILD_WORKING_BYTES), null);
   assert.match(testBuildAdmissionProblem(0, TEST_DISK_FLOOR_BYTES - 1)!, /working space.*disk floor/);
-  assert.match(testBuildAdmissionProblem(32.44 * gib, TEST_DISK_FLOOR_BYTES + TEST_BUILD_WORKING_BYTES - 1)!, /working space.*disk floor/);
+  assert.match(testBuildAdmissionProblem(34.07 * gib, TEST_DISK_FLOOR_BYTES + TEST_BUILD_WORKING_BYTES - 1)!, /working space.*disk floor/);
   // A grown live set needs its own replacement room, not the old measurement.
   assert.match(testBuildAdmissionProblem(50 * gib, 80 * gib)!, /50.0 GiB working space/);
+});
+
+test("the gate tests helper builds at opt-level 1 and replays Cargo's environment", () => {
+  const root = mkdtempSync(join(tmpdir(), "nts-test-build-env-"));
+  try {
+    mkdirSync(join(root, "tooling/gate"), { recursive: true });
+    for (const file of ["tests.mjs", "test-artifacts.ts", "costs.mjs"]) {
+      copyFileSync(new URL(file, import.meta.url), join(root, "tooling/gate", file));
+    }
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "Cargo.toml"), '[package]\nname="gate-build-env"\nversion="0.0.0"\nedition="2024"\n');
+    writeFileSync(join(root, "build.rs"), 'fn main() { println!("cargo:rustc-env=ACTUAL_OPT_LEVEL={}", std::env::var("OPT_LEVEL").unwrap()); }\n');
+    writeFileSync(join(root, "src/lib.rs"), `#[test] fn optimized_build() {
+      assert_eq!(env!("ACTUAL_OPT_LEVEL"), "1");
+      assert_eq!(std::env::var("CARGO_PROFILE_DEV_OPT_LEVEL").unwrap(), "1");
+    }\n`);
+    const result = spawnSync(process.execPath, [join(root, "tooling/gate/tests.mjs")], {
+      cwd: root, encoding: "utf8",
+      env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1",
+        CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
+        CARGO_PROFILE_DEV_OPT_LEVEL: undefined, NTS_TESTS_JOBS: "1", NTS_GATE_COSTS_DIR: join(root, "costs") },
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /1 test binaries, 1 doctest crate\(s\): 1 passed, 0 failed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Cargo rebuilds pruned feature/incremental variants while build-script output stays valid", () => {
@@ -25,7 +53,7 @@ test("Cargo rebuilds pruned feature/incremental variants while build-script outp
     const cargo = (args: string[], env: Record<string, string> = {}) => {
       const result = spawnSync("cargo", args, {
         cwd: root, encoding: "utf8",
-        env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_TERM_COLOR: "never", ...env },
+        env: { ...process.env, CARGO_TARGET_DIR: join(root, "target"), CARGO_BUILD_JOBS: "1", CARGO_INCREMENTAL: "0", CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG, CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL, CARGO_TERM_COLOR: "never", ...env },
       });
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       return result;

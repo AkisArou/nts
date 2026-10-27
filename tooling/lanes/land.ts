@@ -49,7 +49,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { gateCommand } from "../gate/affinity.ts";
 import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
-import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_CACHE_MAX_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
+import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL, TEST_CACHE_MAX_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 import { VerificationLedger, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
@@ -562,7 +562,7 @@ type Gated = { ok: true; run: string; note: string; checks: Owed } | { ok: false
 /**
  * tests.mjs prunes obsolete test executables after PASS. Keep its current set:
  * deleting the whole profile at 40 GiB discarded even one healthy 88 GiB run.
- * The line-table profile measures 32.44 GiB. Past a larger safety bound,
+ * The optimized line-table profile measures 34.07 GiB. Past a larger safety bound,
  * Cargo cleans the whole regenerable profile, including its build state.
  */
 function checkGateTarget(root: string): void {
@@ -628,6 +628,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
       NTS_CHECKERS: "1",
       CARGO_INCREMENTAL: "0",
       CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
+      CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL,
       ...(resource ? {NTS_GATE_LOCK_FD:"8"} : {}),
     });
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);

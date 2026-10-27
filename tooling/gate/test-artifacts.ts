@@ -7,10 +7,11 @@ import { existsSync, lstatSync, readdirSync, realpathSync, unlinkSync, writeFile
 import { basename, dirname, join } from "node:path";
 
 export const TEST_BUILD_DEBUG = "line-tables-only";
+export const TEST_BUILD_OPT_LEVEL = "1";
 const GIB = 2 ** 30;
-// Measured with all 300 test binaries on 2026-10-27: 32.44 GiB including
+// Measured with all 305 test binaries at opt-level 1: 34.07 GiB including
 // Cargo state. Keep room for a new artifact set above the 40 GiB disk floor.
-export const TEST_BUILD_WORKING_BYTES = 33 * GIB;
+export const TEST_BUILD_WORKING_BYTES = 35 * GIB;
 export const TEST_CACHE_MAX_BYTES = 64 * GIB;
 export const TEST_DISK_FLOOR_BYTES = 40 * GIB;
 
