@@ -27,28 +27,29 @@ the evidence behind each decision.
 
 ## The map
 
-State on main as of 2026-10-26. "Designed" means a design was agreed; "built"
+"Designed" means a design was agreed; "built"
 means it is on main.
 
 | Foundation | Covers | Native today | Open |
 |---|---|---|---|
-| **Numbers** | integers proved from doubles, BigInt, `Math`, number ↔ text | Built: integer specialization, zmij for number → text, ffc for text → number, x86-64-v3 builds, ThinLTO, aligned hot loops. | `Math` bit-identical to node (V8's fdlibm): decided, not built. BigInt past 64 bits: wraps today, real bignums later. |
+| **Numbers** ([design](numbers.md)) | integers proved from doubles, BigInt, `Math`, number ↔ text | Built: integer specialization, BigInt exact to 128 bits, zmij for number → text, ffc for text → number, x86-64-v3 builds, ThinLTO, aligned hot loops. | `Math` bit-identical to node (V8's fdlibm): decided, not built. BigInt past 128 bits: stops by name today, real bignums later. `Math.random` as V8's generator: designed. |
 | **Strings** ([design](strings.md)) | layout, building, slicing, comparing, hashing, UTF-8 | One or two bytes per character, inline, with a cached hash. Built: in-place append, strings written where they are appended, SIMD JSON quoting, literal hashes. | Stage D (one data pointer, proved flags, slices that own their owner) and stage E (fewer passes and temporaries): designed. simdutf for UTF-8: prototyped, not built. |
-| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Decided 2026-10-27: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Not built. |
+| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Decided: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Not built. |
 | **Hash tables** ([design](hashing.md)) | `Map`, `Set`, objects used as dictionaries | Insertion-ordered tables of 16-byte tagged keys and values; the static key type picks the hash and comparison, and the index keeps each entry's hash so growth never rehashes. | **Contradicts a decision:** main's hash is unseeded FNV-1a with literal hashes fixed at compile time; BigInt keys collide structurally; the JVM table can be flooded. Designed: one keyed definition (rapidhash with random secrets against SipHash-1-3, by the rows), lazy literal hashes, and a per-table tree fallback when probes run long. |
-| **Objects and classes** | layouts, field access, interfaces, method calls | Fixed layouts per class, interfaces satisfied by shape, and a call through a value with at most two known classes becomes a direct call. | `instanceof` as a class-id range test, nullable fields: designed, not built. |
-| **Arrays** | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
-| **Functions as values** | closures, indirect calls | A closure is an object with one method; known-class calls are direct. | Sets of classes for fields and return values, splitting call sites, typed adapters: designed, not built. |
-| **Dynamic values** | `any`, `unknown`, unions: a value carrying its type at run time | A 16-byte tagged value ([`../any-unknown.md`](../any-unknown.md)). | Revisit with untyped JSON, which needs a new representation for it. |
-| **Memory management** ([design](memory.md)) | reference counting, cycles, stack frames, regions, reuse | One ownership answer per value, borrowed calls, objects placed in the frame, counts elided, an inline retain/release fast path, a cycle collector that skips acyclic types, call regions. | Decided 2026-10-27: one analysis gives every allocation site one home (frame, region or counted heap); then reuse for arrays and objects and a page allocator. Not built. |
-| **Control flow** | exceptions, generators, async/await, the event loop | Mostly built ([`../async.md`](../async.md)); the event loop is chosen per platform. | Gaps such as `next()` on an async generator. |
+| **Objects and classes** ([design](objects.md)) | layouts, field access, interfaces, method calls | Fixed layouts per class, interfaces satisfied by shape, and a call through a value with at most two known classes becomes a direct call. | `instanceof` as a class-id range test, nullable fields: designed, not built. |
+| **Arrays** ([design](objects.md#arrays)) | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
+| **Functions as values** ([design](objects.md#functions-as-values)) | closures, indirect calls | A closure is an object with one method; known-class calls are direct. | Sets of classes for fields and return values, splitting call sites, typed adapters: designed, not built. |
+| **Dynamic values** ([design](objects.md#dynamic-values)) | `any`, `unknown`, unions: a value carrying its type at run time | A 16-byte tagged value ([types](../language/types.md)). | Revisit with untyped JSON, which needs a new representation for it. |
+| **Memory management** ([design](memory.md)) | reference counting, cycles, stack frames, regions, reuse | One ownership answer per value, borrowed calls, objects placed in the frame, counts elided, an inline retain/release fast path, a cycle collector that skips acyclic types, call regions. | Decided: one analysis gives every allocation site one home (frame, region or counted heap); then reuse for arrays and objects and a page allocator. Not built. |
+| **Control flow** | exceptions, generators, async/await, the event loop | Mostly built ([async](../language/async.md)); the event loop is chosen per platform. | Gaps such as `next()` on an async generator. |
 | **RegExp** | the regular-expression engine | Not provided. | Decided: matchers generated at compile time for literal patterns, plus the TypeScript interpreter in `runtime/ecmascript` for dynamic ones. Needs the Unicode data. |
 | **JSON** | parse and stringify | `JSON.stringify` writes each layout through a writer the compiler generates. `JSON.parse` is not provided (NTS1100). | Designed: a parser generated per static type for `JSON.parse(text) as T`, simdjson's scanner on native, a new representation for untyped values. |
-| **Builtins** ([design](builtins.md)) | which implementation of each global and module a target uses | One name list for every target; NTS1100 stops a build that reaches a missing builtin. | Proposed 2026-10-27: features, providers and per-target profiles, resolved at build time; the clock and randomness with deterministic providers for the tests. |
+| **Builtins** ([design](builtins.md)) | which implementation of each global and module a target uses | One name list for every target; NTS1100 stops a build that reaches a missing builtin. | Proposed: features, providers and per-target profiles, resolved at build time; the clock and randomness with deterministic providers for the tests. |
 | **Host boundary** | bytes, buffers, files, the network, C interop | C interop and the event loop are built. | Decided, not done: build libuv, zlib, brotli, zstd and OpenSSL from node's own sources instead of system libraries. |
 
-Dates, time zones and Intl are built on these foundations. On JS hosts (Wasm in
-a browser or node, Chromium) they come from the host.
+Dates, time zones and Intl are built on these foundations
+([design](time-and-intl.md)). On JS hosts (Wasm in a browser or node,
+Chromium) they come from the host.
 
 ## Libraries we take from others
 
@@ -66,57 +67,48 @@ only where used. nts never depends on a system package.
 | QuickJS `libunicode` | case conversion | to be replaced by the compiler's own Unicode data ([design](unicode.md)) |
 | ICU4C 78.3 (node's version) | locale services only: collation, word breaking, Intl formatting | proposed ([design](unicode.md), decision D3) |
 
-## Keep in mind: the JVM and Wasm
+## The JVM and Wasm
 
-Not designed yet. What is already known:
+The JVM uses its own collector, so reference counting does not apply there,
+and Java's `String` already has nts's shape (one or two bytes per character).
+Wasm in a JS host may use the engine's strings, `Math`, JSON, RegExp and Intl;
+standalone Wasm carries everything itself. Their foundations are proposed in
+[the JVM and Wasm](jvm-and-wasm.md), and the backends are described in
+[targets/jvm.md](../targets/jvm.md) and [targets/wasm.md](../targets/wasm.md).
 
-- **The JVM** has its own garbage collector, so reference counting does not
-  apply. Java's `String` already has nts's shape (one or two bytes per
-  character). Strings are built by writing into the consumer. JSON gets a
-  generated serializer and parser plus Java kernels; simdjson's Java port was
-  measured and rejected.
-- **Wasm, JS-hosted** (browser, node, Bun): may use the engine's strings, `Math`,
-  JSON, RegExp and Intl. Open: reading characters through the engine's strings
-  costs a call each (the `strings` row is 34x C), while the 2026-10-25
-  direction keeps the host's strings in this profile.
-- **Wasm, standalone** (Wasmtime, WASI): carries everything itself. Open: how its
-  runtime pieces (number formatting, hashing, Unicode) are provided now that the
-  compiler hands code straight to Binaryen ([`../wasm.md`](../wasm.md)).
+## The pages
 
-## How this directory grows
-
-Each foundation gets its own page when it is designed: what it is, its
-representation per backend, what each operation costs, the decisions and why,
-the benchmark rows it is held to, and what is still open.
+Each foundation has its own page: what it is, its representation per backend,
+what each operation costs, the decisions and why, the benchmark rows it is held
+to, and what is still open.
 
 | page | status |
 |---|---|
-| [Unicode and text data](unicode.md) | decided 2026-10-27 |
-| [Memory management](memory.md) | decided 2026-10-27 |
-| [Hashing and hash tables](hashing.md) | designed 2026-10-27 |
-| [Strings](strings.md) | approved 2026-10-22; stages D and E refined 2026-10-27 |
-| [The JVM and Wasm](jvm-and-wasm.md) | proposed 2026-10-27, for approval |
-| Numbers, JSON | designs exist from the 2026-10-22 studies; to be written here as pages |
+| [Numbers](numbers.md) | built, except `Math` through V8's `ieee754` (decided) |
+| [Strings](strings.md) | approved; stages 0, A and B built |
+| [Unicode and text data](unicode.md) | decided, not built |
+| [Hashing and hash tables](hashing.md) | designed, not built |
+| [Objects, arrays and functions](objects.md) | built: layouts, interfaces by shape, dispatch, arrays, closures, dynamic values |
+| [Memory management](memory.md) | decided; the new analysis not built |
+| [JSON](json.md) | `stringify` built; typed `parse` designed |
+| [Builtins](builtins.md) | proposed, for approval; stages 1 and 2 partly built |
+| [Dates, time zones and Intl](time-and-intl.md) | providers and decisions; nothing bound as a builtin yet |
+| [The JVM and Wasm](jvm-and-wasm.md) | proposed, for approval |
 
-## What is still open for native
+The order in which they are built is the [plan](../plan.md#phase-2-foundations-native-first).
 
-No other foundation needs a new study. These need a fix, a decision or a
-measurement:
+## Decisions
 
-- **Three memory defects on main** (memory corruption in regions, a dangling
-  stack pointer from an unfinished escape analysis, and loop objects sharing a
-  frame slot), found by an outside review on 2026-10-27 and reproduced. They
-  are being fixed before any memory stage; see [memory](memory.md).
-- **Hashing:** designed ([hashing.md](hashing.md)); the function is chosen by an
-  A/B on the rows. It settles the contradiction in the map.
-- *Resolved 2026-10-27:* `case-convert` is not a regression. It is 0.50x node
-  and 0.48x Bun on main; the 3.90 µs full-run row was stale.
+On vendored code and libraries
+([log](../records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)):
 
-## Order of work
-
-1. Main settles first: the tsrs switch lands, then these docs and the work
-   already on agents' branches that is worth keeping.
-2. Instruments before mechanisms: the memory census and new rows, the six Are
-   We Fast Yet ports, the Unicode rows and fixtures (stage 0 of both pages).
-3. Then the build orders of [memory](memory.md) and [Unicode](unicode.md), with
-   the strings, numbers and hashing work from their pages.
+- Vendored sources are baked into the `nts` binary: no network at build time.
+- nts never depends on a system package; a toolchain package that is missing
+  is installed with `paru`.
+- C++ is allowed in a vendored corner of the runtime, with no C++ standard
+  library linked, except for Intl (D3, [Unicode](unicode.md)).
+- The text codec costs at most about 200 KB, aiming for +51 KB with LTO.
+- ICU ships locale subsets by default, with full data opt-in.
+- OpenSSL 3.5 is vendored, replacing the system's libcrypto.
+- The TypeScript URL and HTTP parsers stay, with ada and llhttp as C++
+  references in benchmark rows, and are replaced only where a row loses.

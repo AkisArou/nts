@@ -1,9 +1,6 @@
 # Unicode and text data
 
-**Status:** designed and decided 2026-10-27: the user agreed to every
-recommendation (D1–D6 below), and amended D5 after an outside review the same
-day. The review also corrected the table-selection rules, the
-unchanged-string contract and the URL host plan below. Nothing is built yet.
+**Status:** decided (D1–D6 below); not built yet.
 
 JavaScript needs Unicode knowledge in more places than it looks:
 `toLowerCase`/`toUpperCase`, `normalize`, RegExp's `i`, `u` and `v` flags and
@@ -192,11 +189,10 @@ on four backends, its fixtures with controls, and its test262 records.
 | 5. ICU for locale services | ICU4C 78.3 with per-program data; collator fast paths | sorting and comparing strings, number and date formatting, word segmentation |
 | 6. Unicode 18 | with the next node pin | every row above, against the previous run |
 
-## Decisions (2026-10-27)
+## Decisions
 
-The user agreed to each recommendation as written. D5 was amended the same
-day, after the outside review showed the first version gave different answers
-from node.
+The user's, as written; D5 as amended ([log](../records/notebooks/decisions-log.md#unicode-10-27)). QuickJS's tables go
+entirely.
 
 | # | question | decision |
 |---|---|---|
@@ -210,5 +206,4 @@ from node.
 ## Evidence
 
 The study behind this page, with its measurements, computed table sizes and 60
-sources, is `~/.cache/nts-scratch/foundations/unicode/report.md` (local, not in
-the repository).
+sources, is [in the records](../records/notebooks/studies/unicode.md).

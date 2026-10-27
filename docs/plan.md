@@ -1,250 +1,217 @@
 # The plan
 
-Where nts is going, and in what order. It rests on [`decisions.md`](decisions.md)
-(the user's decisions) and [`foundations/`](foundations) (the designs being
-built now).
+What is being built, in what order, and what each step waits on. This is the
+one page that changes as work goes; the designs it builds are in
+[`foundations/`](foundations), and the questions still open are in
+[`open-questions.md`](open-questions.md).
 
-This replaces the working plan that lived outside the repository
-("conformance-driven compiler development", 2026-10-15, with its "FIRST" section
-of 10-22). Everything of it that still holds is below, updated, and the places
-where it disagreed with the foundations work are resolved at the end.
+## Priorities
 
-## Where things stand (2026-10-27)
+- **Primitives before test262.** The test262 records keep gating, but no new
+  test262 family starts until the foundations are solid.
+- **Native (C and LLVM) first.** The JVM and Wasm are kept in mind and designed
+  after native.
+- **Land everything worth keeping before new work,** whoever wrote it.
+- **Features and conformance first; compile time is guarded, not chased:** a
+  compile-time tripwire per module in the gate, and super-linear blow-ups fixed
+  when found.
+- **A builtin must not mask a compiler gap.** A row that loses because ordinary
+  TypeScript compiles badly is fixed at that general cause first; a specialized
+  builtin comes after, on top.
 
-- **The tsrs switch** (tsrs replacing tsgo, in-process) is in its final full
-  gate.
-- **The team:**
-  - MainClaude coordinates, designs and reviews from the switch's landing.
-  - Codex agents implement and measure: **compiler** (core and lowering),
-    **runtime** (`runtime/c`, allocation), **tsrs** (the frontend) and
-    **tsrs-helper** (the adapter, measurements).
-  - The JVM and Wasm lanes are paused.
-- **The machine:** one shared 32 GB box. That means at most two heavy jobs at
-  once, CPUs 4–5 kept for measurement, and disk floors before builds.
-  [`../AGENTS.md`](../AGENTS.md) has the rules.
+## Now
+
+- **The team:** the coordinator decides, designs and reviews. Agents implement
+  and measure:
+  - **compiler:** the core and lowering;
+  - **runtime:** `runtime/c`, allocation and benchmarks;
+  - **runtime2:** the CLI and the JVM packaging;
+  - **tsrs:** the frontend and the gate tooling;
+  - **fixtures:** recorded wrong answers;
+  - **helper:** documentation and repository upkeep, with no gate runs.
+
+  The JVM and Wasm lanes are paused.
+- **The machine:** one shared 32 GB box. At most two heavy jobs run at once,
+  CPUs 4–5 are kept for measurement, and every build checks the disk floor
+  first ([`../AGENTS.md`](../AGENTS.md)).
 
 ## The phases
 
 | phase | what | state |
 |---|---|---|
-| 1 | Settle main | now |
-| 2 | Foundations, native first | next; designs decided for memory and Unicode |
-| 3 | Conformance-driven development | paused since 10-22; its records keep gating |
+| 1 | Settle `main` | finishing |
+| 2 | Foundations, native first | next; memory and Unicode designs decided |
+| 3 | Conformance-driven development | paused; its records keep gating |
 | 4 | The JVM and Wasm on the same foundations | after phase 2 |
 
 Benchmarks run through every phase.
 
 ## Phase 1: settle main
 
-1. **Land the tsrs switch** through its full gate. *Done 2026-10-26
-   (`bd0df4c64`).*
-2. **Remove what tsgo leaves outside the repository:** the `target/tsgo` binary,
-   `NTS_TSGO` in landing environments and scripts, and notes that still name
-   it. No compatibility leftovers. The repository part landed on 2026-10-27
-   (`dc1e57742`); the outside part is in the disk inventory, waiting for the
-   user's approval.
-3. **Land these docs** (`docs/foundations/`, this plan, `decisions.md`).
-   *Done.*
-4. **Fix the three memory defects** the outside review found
-   ([memory](foundations/memory.md), "Known defects"). The compiler agent is
-   on it.
-5. **Small fixes found on the way:**
-   - documentation says plain `cargo fmt`, never `--all`, which reaches the
-     vendored tsrs;
-   - the gate deletes its own old test binaries after its test step, so its
-     build folder stops growing to 90 GB. *Landed 2026-10-27;*
-   - a cargo target is cleaned whole or with `cargo clean`, never file by
-     file.
-6. **The agents' unlanded work:** almost all of it is already in the switch,
-   rejected or unfinished (the per-agent inventories of 10-26). What is worth
-   keeping moves into phase 2: the six remaining Are We Fast Yet ports (first,
-   right after the memory fixes) and the held arena API with its first caller.
-   Leftover branches and worktrees are the coordinator's to clean up (the
-   user, 10-27): landed ones are deleted, and unique work is archived.
-7. **Make the gate fast again** (the coordinator's decision, 2026-10-27, at the
-   user's request).
-   - **Where the time went:** the full gate took 26–32 minutes at 24 slots
-     on 10-24. The tsrs switch's official runs set `NTS_JOBS=4` and took
-     72–100 minutes; that is now forbidden in `AGENTS.md`. The next full gate
-     at 24 slots took 28 minutes (1,677 s, `760bfbd32`, 10-27).
-   - **Why it can't simply be scheduled faster:** at 24 slots the full gate
-     is CPU-bound, at about 31,000 CPU-seconds, so going much faster means
-     doing less work.
-   - **In order, each its own landing with gate time measured before and
-     after:**
-     1. **No cold build per train.** The landing tool deletes the whole debug
-        build folder past 40 GiB, and one run makes about 88 GiB, so every
-        train rebuilds for about 7 minutes. Build the gate's tests with
-        line-table debug information only, and replace the delete with the
-        pruning plus a bound above one run.
-     2. **Compile each program once for every backend.** Six steps (examples,
-        llvm, jvm, wasm, rc, llvm-rc) compile the same ~760 programs
-        separately. They share one lowering through `nts emit --backends`.
-     3. **Cache results by what they depend on.** A case whose emitted output,
-        runtime, toolchain and step script are all unchanged is not re-run;
-        `jvm-verifies` checks only classes that changed. The full run
-        regularly runs with the cache off, so a stale entry cannot hide a
-        regression.
-     4. **Select the tests a change can affect** (`--touching`), after 2 and 3
-        have shown their numbers.
+1. **The tsrs switch.** *Done.*
+2. **What tsgo left behind.** The binary is gone; `NTS_TSGO` is still read by
+   two JVM test files (`compiler/codegen/jvm/tests/intrinsics.rs`,
+   `refusals.rs`).
+3. **The memory defects the outside review found.** *Fixed*, with region and
+   frame allocations kept within their proved lifetimes, and the frames that
+   fix gave up restored; the follow-up is in its landing gate.
+4. **The gate,** in this order:
+   - a red train blames only the landing that caused it, and a failure that is
+     already on `main` is reported as red on main (*done*);
+   - the reference-counting and memory checks run on every compiler and runtime
+     landing, not only in the full run;
+   - deliberate crashes store no core dumps, so measurement can start beside a
+     gate;
+   - no cold build per train: tests are built with line tables only, and the
+     debug build folder is pruned within a bound.
+5. **Make the gate fast again,** each step its own landing, with gate time
+   measured before and after:
+   1. compile each program once for every backend: six steps compile the same
+      ~760 programs separately, and they share one lowering through
+      `nts emit --backends`;
+   2. cache results by what they depend on: a case whose emitted output,
+      runtime, toolchain and step script are unchanged is not re-run. The full
+      run regularly runs with the cache off, so a stale entry cannot hide a
+      regression;
+   3. select the tests a change can affect (`--touching`), once 1 and 2 have
+      shown their numbers.
+6. **Deterministic builds:** the same source and compiler give the same bytes
+   on every backend. Being fixed cause by cause:
+   - native build paths;
+   - jar timestamps;
+   - Wasm source URIs;
+   - then a guard test.
+7. **The documentation** as specification pages, with the notebooks in
+   [`records/`](records). *In progress.*
+8. **The register's wrong answers** recorded as fixtures: decorators dropped,
+   throws escaping `try` through closures in fields, and the covariant-array
+   dispatch.
+9. **Count what is now in scope.** test262's `Proxy`, `Reflect`, `globalThis`,
+   object-integrity and property-descriptor cases leave the exclusion set
+   (`tooling/census/features.json`, `test262-exclusions.json`) and count as
+   gaps, with the records re-recorded in the same landing.
+10. **A citation sweep:** code comments that cite documents moved to
+    `records/`, fixed in one landing, in a quiet window (it owes the full
+    gate).
 
 ## Phase 2: foundations, native first
 
-The designs and their build orders are in [`foundations/`](foundations). The
-order:
+The designs and their build orders are in [`foundations/`](foundations).
 
 1. **Instruments before mechanisms:**
    - the memory census;
-   - the new rows (`tree-teardown`, `sort-objects`, `immutable-update`,
-     `array-copying-methods`, the `case-convert` variants);
-   - the six remaining Are We Fast Yet ports (`storage`, `cd`, `deltablue`,
-     `havlak`, `json`, `richards`). With the eight on main, that is the whole
-     suite of fourteen, measured against node, Bun, C++ and Java;
-   - the Unicode fixtures and the version pin check.
-2. **Memory stages 1 and 2** (cheap counting wins; the one memory analysis,
-   facts only) beside **Unicode stage 1** (case mapping).
-3. **Then:** memory stage 3 (per-site regions, json-parse first), Unicode stages
-   2–3, and the strings, numbers and hashing work.
-
-### What the old plan's "FIRST" list became
-
-| old item (10-22) | where it is now |
-|---|---|
-| Strings first, stages 0 and A–G | 0, A (zmij) and B (destination passing) are built. C (allocation) is [memory](foundations/memory.md) stages 1–3. D (header hash and flags) and E (SIMD copy-and-check) are pending, for a strings page. F (Wasm strings) moves to phase 4. G (parse regions) is memory stage 3, plus field ranges. |
-| Closures passed as values | The two-class devirtualization is built. Field and return-value class sets, call-site splitting and typed adapters are pending (the calls study's stages 2–4). |
-| Reference counting in moves and sorts | Memory stage 1. |
-| Wasm type tests and array access | Phase 4. |
-| Map key paths | Hash tables: the seeded hash (open), and `Map<K, number>` values stored unboxed. |
-| Native indirect calls | The calls study's stages 2–4. |
-| JSON as a compiler-specialized builtin | After the general causes (decision of 10-23). Typed stringify is built. Typed `JSON.parse(...) as T` and simdjson come on top of memory stage 3. |
-| Finish and optimize runtime/ecmascript and runtime/web-platform | After the foundations, through the builtins provider mechanism. |
-| Builtins: one mechanism to declare providers per target | The host-boundary foundation, in 12 stages. Its 11 product decisions are made. |
-| tsrs replaces tsgo | Phase 1. |
-| QuickJS goes entirely | `dtoa.c` is gone. `libregexp` is unused: delete it. `libunicode` goes through [Unicode](foundations/unicode.md) stages 1–3. Then `runtime/c/quickjs/` is deleted with its license and README entries. |
-
-### Backlog noted on the way (10-24)
-
-- `Map<K, number>` values stored unboxed (Bun 3.9x and Java 3.1x faster on
-  `map-literal-keys`).
-- Integer accumulators, so that `(a + b) | 0` stays in int32.
-- `Array.prototype.flat` is refused.
-- Intersection-typed parameters, a refusal family.
-- One exit-code convention across commands; parse the command line once.
-- A per-case ratchet for the TypeScript corpus.
-- One hash definition in core, used by every backend, including Wasm's literal
-  hashes.
+   - the memory rows: `tree-teardown`, `sort-objects`, `release-acyclic`,
+     `immutable-update`, `array-copying-methods`, `cyclic-churn`, plus the
+     `case-convert` variants;
+   - the six remaining Are We Fast Yet ports: Richards, DeltaBlue, Havlak, CD,
+     Json and Storage. With the eight already on `main`, that is the whole
+     suite of fourteen, against node, Bun, C++ and Java;
+   - the Unicode fixtures and the version-pin check.
+2. **Memory stages 1 and 2** (cheap counting wins; the one placement analysis,
+   facts only), beside **Unicode stage 1** (case mapping).
+3. **Then:** memory stage 3 (per-site regions, json-parse first), Unicode
+   stages 2–3, the strings stages D and E, numbers, and the keyed hash.
+4. **The builtins mechanism** ([builtins](foundations/builtins.md)), once
+   approved, from its stage 1. The clock and randomness come with stage 6.
 
 ## Phase 3: conformance-driven development
 
-Paused on 10-22 so the foundations come first. test262 records keep gating, and
-no new family starts. When it resumes:
-
-**Four suites, on all four backends:**
+When it resumes, there are **four suites, on all four backends:**
 
 | suite | checks | oracle |
 |---|---|---|
 | test262 (upstream, unedited) | JavaScript semantics | the test itself |
-| ts-conformance (new, `tests/typescript/`) | TypeScript-specific run-time semantics, and the typed paths of every type-system concept and their pairings | the test itself; every case must first pass on node |
-| ts-corpus (TypeScript's own tests, unedited) | compile robustness (no crash, no invalid output); the executable ones agree with node | node running TypeScript's emit |
-| generated (YARPGen-style) | interactions between concepts nobody wrote by hand | node; each program prints a hash of its results |
+| TypeScript conformance (`tests/typescript/`) | TypeScript's run-time semantics, and the typed paths of every type-system concept and their pairings | the test itself; every case first passes on node |
+| TypeScript's own tests (upstream, unedited) | compile robustness (no crash, no invalid output); the executable ones agree with node | node running TypeScript's emit |
+| generated programs | interactions between concepts nobody wrote by hand | node; each program prints a hash of its results |
 
 **Representation is checked, not assumed:**
-
-- `expect-ir` facts on cases (built);
+- `expect-ir` facts on cases;
 - `nts stats` counters per program;
 - one benchmark row per concept family on every backend;
 - an A/B switch for each representation decision.
 
 **Three tiers of performance checks:**
+- representation assertions, at every landing;
+- concept benchmarks by instruction counts, in the full run;
+- cross-language suites, in the full run.
 
-| tier | cadence |
-|---|---|
-| representation assertions | every landing |
-| concept benchmarks (instruction counts) | the full run |
-| cross-language suites | the full run |
-
-**The machine for it:**
+**The machinery:**
 
 | piece | state |
 |---|---|
-| core gate per landing, wide steps in the full run | built |
-| `inner.ts` | built |
-| content-keyed frontend snapshot cache | built |
-| full run (`tooling/census/full.ts`) | built |
-| test262 runner with records on C, JVM and Wasm | built |
-| LLVM test262 records | missing |
-| `emit --backends`, choosing the cases a change touches (`--touching`) | partly built |
-| ts-conformance suite and its oracle | not started |
-| ts-corpus | not started |
-| generator | not started |
+| the core gate per landing, the wide steps in the full run | built |
+| `inner.ts`, the gate's own commands before review | built |
+| the full run (`tooling/census/full.ts`) | built |
+| test262 records on C, LLVM, the JVM and Wasm | built |
+| the TypeScript conformance suite, with records per backend | built |
+| `emit --backends`, and choosing the cases a change touches (`--touching`) | partly built |
+| a persistent cache of frontend results | none: the frontend captures every request |
+| the program generator | not started |
 
 When `--touching` exists, the rule "run the five test262 records before the
 gate" becomes "run the inner loop on every backend before queueing".
 
-**Order of families:**
-
-1. wrong answers and invalid output first;
+**The order of families:**
+1. wrong answers and invalid output;
 2. backend parity;
-3. refusal families by reach;
+3. refusal families, by reach;
 4. early errors;
-5. decorators last (decision of 10-15).
+5. decorators last.
 
-## Benchmarks (through every phase)
+## Phase 4: the JVM and Wasm
 
-- **The six Are We Fast Yet ports** (Richards, DeltaBlue, Havlak, CD, Json,
-  Storage) land in phase 2's instruments, against their own C++ and Java.
-- **Then a JetStream 3.0 subset as a suite** (decided 10-17): pinned at tag
-  `JetStream3.0`, unedited, with about 16 compute workloads first. GPL, LGPL
-  and unlicensed workloads, DOM, `eval`, `Proxy`, Intl, Workers and the Wasm
-  workloads are out. Their refusals become a ranked backlog.
-- **Comparators per backend:**
+Both rest on [their foundations](foundations/jvm-and-wasm.md), whose open
+proposals wait on research.
+
+- **The JVM** resumes with a design per foundation:
+  - Java's `String` with destination passing;
+  - JSON's Java kernels;
+  - a zmij port;
+  - nts's Unicode tables (D4);
+  - the paused `jvm/appended-results` work.
+- **Wasm** is one WasmGC backend, browser-first, built through Binaryen
+  ([targets](targets/wasm.md)). When it resumes, measurement settles:
+  - whose strings the JS-hosted profile reads characters from;
+  - how the standalone profile gets its runtime pieces (number formatting,
+    hashing, Unicode tables);
+  - Wasm's literal hashes, through the shared hash definition.
+
+## Benchmarks
+
+- **Are We Fast Yet,** all fourteen, against their own C++ and Java
+  references.
+- **Then a JetStream 3.0 subset, as a suite:**
+  - pinned at the tag `JetStream3.0` and unedited, with about 16 compute
+    workloads first;
+  - out of it: GPL, LGPL and unlicensed workloads, the DOM, `eval`, `Proxy`,
+    Intl, Workers and the Wasm workloads;
+  - their refusals become a ranked backlog.
+- **Comparators:**
   - native: C++;
   - JVM: Java;
   - Wasm: C compiled to Wasm, and AssemblyScript;
   - every backend: node and Bun.
 - **Instruction counts** are the regression signal between runs; wall time is
-  for the ratios. Every result is shown with its ratios, conditions and
-  verdict.
+  for the ratios. Every result is shown with its ratios, the machine's
+  conditions and the verdict.
 
-## Phase 4: the JVM and Wasm
+## Backlog
 
-- **The JVM** resumes with a design per foundation:
-  - Java's `String` and destination passing;
-  - JSON's Java kernels;
-  - a zmij port;
-  - nts's Unicode tables (D4);
-  - the paused `jvm/appended-results` work (`20c59475d`).
-- **Wasm** follows its 10-25 direction ([`wasm.md`](wasm.md)): one WasmGC
-  backend, browser-first, built through Binaryen. Open questions to settle by
-  measurement when it resumes:
-  - whose strings the JS-hosted profile reads characters from;
-  - how the standalone profile gets its runtime pieces (number formatting,
-    hashing, Unicode tables);
-  - Wasm's literal hashes through the shared hash definition.
+Noted, not scheduled:
+- `Map<K, number>` values stored unboxed (Bun 3.9× and Java 3.1× faster on
+  `map-literal-keys`);
+- integer accumulators, so that `(a + b) | 0` stays in int32;
+- `Array.prototype.flat`;
+- intersection-typed parameters, a refusal family;
+- one exit-code convention across commands, and the command line parsed once;
+- a per-case ratchet for the TypeScript corpus;
+- one hash definition in core, used by every backend, including Wasm's literal
+  hashes.
 
-## Where the old plan and the foundations disagreed, and the resolution
+## Decisions
 
-| the old plan said | now | why |
-|---|---|---|
-| tsrs in stages: bump tsgo, digest-equal snapshots, switch with `NTS_FRONTEND=tsgo` kept for a cycle | one switch, no tsgo intermediate steps; tsgo deleted after it | the user, 10-23 |
-| no local patches to vendored tsrs | one temporary patch for two checker crashes, removed when upstream fixes them | the user, 10-24 |
-| replace `libunicode` with "our own Rust generator or ICU4X data, whichever measures faster" | our own generator (D1), with an A/B on `case-convert-greek` to honour the criterion | [unicode.md](foundations/unicode.md) |
-| ICU4C only as an opt-in link, and no C++ standard library | ICU4C for locale services only, with a static C++ library in Intl programs only (D3) | byte-identical Intl answers to node |
-| answer the json-parse row with the typed `JSON.parse` builtin (MainClaude, 10-23 morning) | fix the general cause first: per-site regions, and `null` placeholders in our parser (M1); the builtin comes on top | the user, 10-23 evening |
-| regions as R4 placement facts over counted code | one analysis before counting (M1) | [memory.md](foundations/memory.md) |
-| "declare a JSON-shaped type acyclic?" | proved, never declared (decision 12, M5) | the user, 10-23 |
-| the string hash takes a per-process random seed | still the decision; main's hash is unseeded and literal hashes are fixed at compile time, so main must change | open item in the [map](foundations/README.md) |
-| Wasm owns its strings in GC arrays (strings design, 10-22) | the JS-hosted profile uses the host's strings (10-25 direction); measured again when Wasm resumes | the later direction |
-| five agents: MainClaude, CompilerHelper, CompilerHelper2, JVM, Wasm | MainClaude coordinates; Codex agents compiler, runtime, tsrs and tsrs-helper | the user, 10-23 and 10-27 |
-| disk: clear targets before phase 4 of the old plan | disk floors before every build; targets cleaned whole; the gate prunes its own binaries | lessons of 10-23 and 10-26 |
-
-## History
-
-- The previous working plan was `~/.claude/plans/moonlit-crafting-toucan.md`
-  (local). It is kept as history; this file replaces it.
-- The 10-22 studies (strings, JSON, runtimes, builtins, calls, memory,
-  objects, numbers, vendored code) and the 10-27 studies (memory, Unicode) are
-  in `~/.cache/nts-scratch/` (local). Their designs are being written into
-  [`foundations/`](foundations).
-- [`compiler-delivery-plan.md`](compiler-delivery-plan.md) is the earlier
-  delivery log (to 10-04).
+The priorities are the user's ([log](records/notebooks/decisions-log.md#priorities-and-order)).
+The JetStream subset was decided on 10-17, and decorators come last (10-15).
+How the old plan was folded into this one is in
+[the plan's history](records/notebooks/plan-history.md).

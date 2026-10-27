@@ -1,70 +1,61 @@
-# Documentation
+# nts documentation
 
-What each document is for. If a document is not listed here, it is either a
-lane's own (under `runtime/<lane>/docs/`) or it should be added.
+nts compiles TypeScript ahead of time to native code (through C or LLVM), JVM
+bytecode, WebAssembly and Node addons. A compiled program carries no
+JavaScript engine, and it behaves like the same program run by node. These
+pages describe what nts compiles, how it represents a program, where the
+result runs, and how it is held to each standard.
 
-## Where we are going
+## The bar
 
-- [`plan.md`](plan.md): the plan: the phases, their order, and what each is waiting on.
-- [`decisions.md`](decisions.md): every product decision the user has made, in one place.
-- [`open-questions.md`](open-questions.md): every fundamental question not yet decided, across all targets, with a recommendation for each and those to decide first.
-- [`foundations/`](foundations): the foundations every program is built from (numbers, strings, tables, memory, ...): the map, and one design per foundation.
+- **Faster than node and Bun on every benchmark row:** a row is won at 0.8×
+  their time or better, for now; each row's bar is set again when that row is
+  worked on. nts also comes as close as it can to each target's own language:
+  C++ for native code, Java for the JVM, C++ compiled to Wasm for Wasm.
+- **Correct first.** Node is the oracle, down to the last digit of a formatted
+  number. A construct nts cannot compile is refused by name at build time;
+  nothing is compiled wrong on purpose.
+- **Clean architecture.** A problem is fixed at its cause; no workaround stands
+  in for a fix. Nothing in nts is fixed in place: a slow representation or
+  runtime is replaced outright.
 
-## How we work
+## Where to start
 
-- [`../AGENTS.md`](../AGENTS.md): the rules every contributor follows: landing, the gate, fixtures, the shared tree.
-- [`architecture.md`](architecture.md): how nts works: the pipeline, how memory is chosen, the repository layout.
-- [`agents/lessons/`](agents/lessons): what working on nts has taught, one rule and its reason per line, by topic.
-- [`records/`](records): one file per decision, with the evidence. Claim a number with `tooling/gate/claim-record.sh`.
-- [`workflow.md`](workflow.md): how lanes work side by side, landing with `land`, and `lane status`.
+- [`plan.md`](plan.md): what is being built now, in what order, and what each
+  step waits on. The one page that changes as work goes.
+- [`open-questions.md`](open-questions.md): every fundamental question not yet
+  decided, with a recommendation for each.
+- [`architecture.md`](architecture.md): how nts works, from TypeScript source
+  to a binary.
 
-## Where things are
+## The pages
 
-- [`../tests/`](../tests): what nts must pass, one kind per directory: programs compared with node, refusals, outcomes, memory cases, interop projects, GJS ports, the workspace. Its README says which gate steps run each kind and how to add one.
-- [`../benchmarks/`](../benchmarks): what is measured: the cases nts-bench times against C++, Java and node, and the Wasm and GTK benchmarks.
-- [`../results/`](../results): what the tools measured, each file written by a tool: benchmark tables, test262 and conformance records, the corpus run.
-- Before 2026-10-14 these were `examples` and `benches` at the root and four directories under `tooling`; [`../tooling/migrate/table.ts`](../tooling/migrate/table.ts) maps each old place to its new one. Records keep the paths they were written with.
+| section | what it covers |
+|---|---|
+| [`language/`](language) | What a program means: the TypeScript nts compiles, feature by feature, and what it does not compile |
+| [`foundations/`](foundations) | How each kind of value is represented, and what each operation costs |
+| [`targets/`](targets) | Where programs run: native, GTK, Apple, Windows, the JVM and Android, Wasm, Chromium, Node addons |
+| [`reference/`](reference) | `nts.config.ts`, the `nts` commands, the web-platform contract |
+| [`conformance/`](conformance) | How nts is held to test262, TypeScript's own tests and node's tests |
+| [`contributing/`](contributing) | How work is done and landed, and what it has taught |
+| [`records/`](records) | Decision records with their evidence, and the notebooks the pages were distilled from |
+| [`primitives.md`](primitives.md) | Each primitive operation and what it costs, held by a gate step |
 
-## Status ledgers (where the numbers are)
+## Elsewhere in the repository
 
-- [`conformance/typescript.md`](conformance/typescript.md): the TypeScript language status. Its §13 is the authority for the census's non-goals.
-- [`conformance/test262.md`](conformance/test262.md): how test262 is run and counted.
-- [`census/test262.md`](census/test262.md): the earlier per-slice test262 census.
-- [`conformance/nodejs.md`](conformance/nodejs.md) and [`conformance/nodejs-plan.md`](conformance/nodejs-plan.md): Node.js API status, and the plan for the rest.
-- [`primitives.md`](primitives.md): each primitive and what it costs. Read by the `primitives` gate step.
+- [`../AGENTS.md`](../AGENTS.md): the rules every contributor follows.
+- [`../tests/`](../tests): what nts must pass, one kind per directory.
+- [`../benchmarks/`](../benchmarks): what is measured, against node, Bun, C++
+  and Java.
+- [`../results/`](../results): what the tools measured. Every number these
+  pages rely on is there, written by a tool.
+- Lanes keep their own notes beside their code, such as
+  [`../runtime/chromium/docs/`](../runtime/chromium/docs).
 
-## Current designs
+## How these pages are kept
 
-- [`compiler-delivery-plan.md`](compiler-delivery-plan.md): the compiler's delivery log up to 2026-10-04 (historical; the plan is [`plan.md`](plan.md)).
-- [`any-unknown.md`](any-unknown.md): `any` and `unknown`, erased values and how they are recovered.
-- [`async.md`](async.md): promises, async functions and the host seam.
-- [`interfaces-by-shape.md`](interfaces-by-shape.md): interfaces satisfied by shape, and field families.
-- [`function-receivers.md`](function-receivers.md): function values that carry `this`.
-- [`scalar-numbers.md`](scalar-numbers.md): `Int32`, `c_int` and the other scalar types (`@nts/scalars`).
-- [`native-operations.md`](native-operations.md) and [`native-interop.md`](native-interop.md): calling C, and C calling TypeScript.
-- [`jvm-interop.md`](jvm-interop.md) and [`jvm-android-provider.md`](jvm-android-provider.md): the JVM and Android lane.
-- [`wasm.md`](wasm.md): the WebAssembly backend.
-- [`targets.md`](targets.md): every environment a program runs in, in one table:
-  memory, strings, builtins, JSON, Unicode, Map and Set, event loop, status.
-- [`nts-config.md`](nts-config.md): products, targets and `nts.config.ts`.
-- [`web-platform-integration-plan.md`](web-platform-integration-plan.md): the contract `runtime/web-platform` implements.
-- [`temporal.md`](temporal.md): Date, Temporal and Intl.
-- [`eval.md`](eval.md): a possible engine-free `eval`. Not built; test262 cites it for why eval tests stay in scope.
-- [`npm-deps.md`](npm-deps.md) and [`npm-deps-plan.md`](npm-deps-plan.md): what npm dependencies need from the compiler.
-
-## Lane notebooks
-
-Living status, written by each lane as it goes:
-
-- [`apple-lane-goal.md`](apple-lane-goal.md): macOS and iOS.
-- [`gtk-lane-goal.md`](gtk-lane-goal.md): GTK.
-- [`windows-lane-goal.md`](windows-lane-goal.md): Win32, WinRT and WinUI 3.
-- [`electron-like.md`](electron-like.md): native code calling Blink in Chromium. The lane's own docs are in `runtime/chromium/docs/`.
-
-## Guides
-
-- [`macos.md`](macos.md): writing a Mac app in TypeScript.
-
-## Ideas
-
-- [`ideas/`](ideas): directions worth keeping that nobody has committed to.
+- A page states the current design, the way a specification does: no dates,
+  no history, no running log. It changes when a decision changes it.
+- `plan.md` is the only page updated as work progresses.
+- Numbers are not copied into pages; they live in `results/`.
+- Measurements, investigations and long notes go to `records/`.

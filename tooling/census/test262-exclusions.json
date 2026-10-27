@@ -11,11 +11,11 @@
     "",
     "An entry naming a path the suite does not have fails the run. Adding one needs an",
     "authority -- a docs/ section that makes it a non-goal -- not a count that looks bad.",
-    "docs/eval.md is a possible design, not a non-goal, so eval-code is not excluded.",
+    "docs/records/notebooks/eval.md is a possible design, not a non-goal, so eval-code is not excluded.",
     "",
     "**The rule every entry follows: a documented non-goal leaves the in-scope denominator;",
     "an undocumented gap stays in it.** Temporal's 4,603 test/built-ins cases stay in because",
-    "typescript.md never mentions Temporal; propertyHelper.js's cases leave because §13 names",
+    "no boundary names Temporal; propertyHelper.js's cases leave because boundaries.md names",
     "property descriptors. A large, expensive include is not a precedent for excluding anything",
     "expensive: the authority is the reason, never the size."
   ],
@@ -24,7 +24,7 @@
       "kind": "include",
       "match": "propertyHelper.js",
       "reason": "The include exists to check property descriptors: verifyProperty reads Object.getOwnPropertyDescriptor and asserts writable/enumerable/configurable. Of the 4,789 tests including it, 4,622 call verifyProperty and 4,589 of those name a descriptor attribute -- so about 33 excluded cases may not be about descriptors, an error bar stated rather than smoothed. Since 2026-09-29 these cases are attempted like the feature exclusions -- the include is compiled as test262 wrote it, and refuses where descriptors do not lower -- so the FIXED? check can fire for them, and the entry's audit is that check. Temporal is an implementation gap again under the shared Date/Temporal/Intl plan. 2,811 test/built-ins and 1,754 test/language cases, 2026-09-26.",
-      "authority": "docs/conformance/typescript.md §13, \"The metaobject protocol\" -- the rows \"property descriptors\" and \"Object.defineProperty, freeze, seal, preventExtensions\""
+      "authority": "docs/language/boundaries.md §In scope, not yet built"
     }
   ]
 }

@@ -1,15 +1,13 @@
 # Builtins
 
-**Status:** proposed 2026-10-27, for the user's approval. The mechanism comes
-from the builtins study of 2026-10-22, checked against `main` `c292b0023`. The
-study, its 51 probes and its prior-art notes are in
-`~/.cache/nts-scratch/builtins/`. The eleven product decisions it asked for
-were made the same day ([decisions](../decisions.md), "Builtins and runtimes")
-and are written into the design here. The first two stages are partly built.
+**Status:** proposed, for the user's approval; stages 1 and 2 are partly built.
+It carries out the eleven decisions listed at the end. The study it comes from,
+with its 51 probes, is [in the records](../records/notebooks/studies/builtins.md),
+with [its prior art](../records/notebooks/studies/builtins-prior-art.md).
 
 A **builtin** is a name a program uses without implementing it: a global
 (`JSON`, `fetch`, `document`) or a module (`node:fs`).
-[`../targets.md`](../targets.md) lists what each target offers today. This
+[`../targets.md`](../targets/README.md) lists what each target offers today. This
 page covers how a target says what it provides, and how a build picks one
 implementation of each builtin.
 
@@ -23,7 +21,7 @@ implementation of each builtin.
 | **Per-backend helpers** | A source can test `typeof nts_helper === "function"` on an `@ntsAbi intrinsic` declaration. Each backend's preparation answers it from that backend's own helper table (`hir/features.rs`). So one TypeScript source calls a native helper where it exists and runs its own body elsewhere. |
 | **Chromium** | 374 `@ntsBoundBy` tags bind lib.dom's declarations to Blink through `nts:dom`. Whether a tag or the compiler's own intrinsic wins depends on whether the overlay file is in the program, and on code order in lowering. |
 | **The event loop** | The only per-target provider choice that is built (`LoopHost`). It is guessed from the link flags (`loop_host()` in `tooling/cli/src/main.rs`). |
-| **nts's own implementations** | `runtime/ecmascript` has Intl, Temporal, RegExp and a full Date; `runtime/web-platform` has JSON, URL, TextEncoder, streams, fetch and WebSocket. No program can reach them as builtins. |
+| **nts's own implementations** | `runtime/ecmascript` has Intl, Temporal, RegExp and a full Date; `runtime/web-platform` has JSON, TextEncoder, streams, fetch and WebSocket, and `runtime/node/url` has `URL`. No program can reach them as builtins. |
 | **`node:*`** | 28 modules are in `runtime/node`, but no resolver exists, so a native program cannot `import "node:fs"`. |
 
 What this costs:
@@ -192,7 +190,7 @@ So a production program contains no test provider and reads no test switch.
 | **`host:tz`:** local time | The time-zone data (G13) and the process's zone | A fixed zone, UTC. |
 
 **Why V8's generator.** "`Math` is bit-identical to node" is decided
-([decisions](../decisions.md), "Numbers and JSON"), and the generator can
+([decisions](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22), "Numbers and JSON"), and the generator can
 match exactly.
 
 **What V8's generator is:**
@@ -202,11 +200,11 @@ match exactly.
 - refilled 64 values at a time and read from the end;
 - each value is `(s0 >> 11) / 2^53`.
 
-**Checked on 2026-10-27.** A TypeScript model reproduces node 24.20.0's
+**Checked.** A TypeScript model reproduces node 24.20.0's
 `--random-seed=N` exactly: 1,000 of 1,000 values at each of four seeds,
 including a negative one and the largest. So node's startup draws nothing
 before the program's first call. In node, seed 0 means unseeded. The model and
-its result are in `~/.cache/nts-scratch/builtins/v8-math-random/`.
+its result are [in the records](../records/notebooks/studies/v8-math-random.md).
 
 ## Where each piece lives
 
@@ -261,3 +259,28 @@ recommendations:
 - G11: which builtins a Node addon uses;
 - G13 to G19: time zones, Intl's locales, Temporal on Wasm, crypto, the DOM on
   Wasm, `console`, and shared memory.
+
+## Decisions
+
+From the user ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)):
+
+1. Intl is in scope, with locale subsets keeping it small.
+2. The clock and randomness come from the environment, with a virtual clock and
+   seeded randomness under the differential tests.
+3. On JS hosts (Wasm in a browser or node, Chromium) take the host's builtins,
+   starting with Intl and RegExp; on native and standalone Wasm use nts's own.
+   Each feature is chosen by its benchmark row and conformance record.
+4. `WeakRef` and `FinalizationRegistry` are represented, not designed around.
+5. RegExp: matchers generated at compile time for literal patterns, plus the
+   TypeScript interpreter for dynamic ones and as the oracle. No second native
+   engine.
+6. Apps may override a provider in `nts.config.ts`, but only with one that has
+   a conformance record.
+7. `typeof X === "undefined"` folds where a target lacks `X`.
+8. `node:*` APIs are native-only for now, and never in a Chromium renderer.
+9. Only `@nts/*` packages provide `es:*` and `web:*` features; others may
+   provide `host:*` capabilities and their own modules.
+10. The canonical `URLSearchParams`, `Blob` and `File` are web-platform's;
+    `runtime/node` re-exports them.
+11. One full lib (ESNext plus DOM) for every target, with NTS1100 as the
+    per-target error, not per-target libs.

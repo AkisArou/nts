@@ -1,8 +1,7 @@
 # Strings
 
-**Status:** the string design was approved by the user on 2026-10-22. Stages
-0, A and B are built; this page records the rest, refined on 2026-10-27 by an
-outside research review checked against the code.
+**Status:** an approved design. Stages 0, A and B are built; the rest is
+designed.
 
 ## What a string is
 
@@ -11,7 +10,7 @@ then a cached-hash word, then its code units inline: one byte each when every
 unit fits in Latin-1, two otherwise. JavaScript indexes UTF-16 code units, so
 storage is never UTF-8. The JVM uses `java.lang.String`, which has the same
 one-or-two-byte shape. Wasm's representation is decided when Wasm resumes
-([wasm.md](../wasm.md)).
+([wasm.md](../targets/wasm.md)).
 
 ## What is built
 
@@ -100,8 +99,16 @@ has finished reading it.
 
 ## Evidence
 
-The 2026-10-22 inventory and state-of-the-art study (47 sources), the approved
-design, and the 2026-10-27 research review (V8's 2025 JSON stringify work,
-WebKit's move to rapidhash, the simdutf UTF-16 repair paper, Firefox's
-refcounted string buffers, and others) are in `~/.cache/nts-scratch/`
-(local).
+The string microbenchmarks the stages are held to are
+[in the records](../records/notebooks/studies/primitives-string-bench.md).
+The design follows an inventory of nts's string operations, a
+state-of-the-art study and an outside research review, each checked against
+the code.
+
+## Decisions
+
+- The string design is approved, in the order this page gives: the
+  microbenchmark matrix, the number formatter, destination passing, allocation,
+  the header, the escape primitive, Wasm strings, then parse regions. Strings
+  are never stored as UTF-8, and there are no run-time ropes unless a row
+  proves them ([log](../records/notebooks/decisions-log.md#strings-10-22)).

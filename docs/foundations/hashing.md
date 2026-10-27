@@ -1,9 +1,7 @@
 # Hashing and hash tables
 
-**Status:** designed 2026-10-27 from an outside research review checked
-against the code. The seed is the user's decision of 2026-10-22; the rest is
-the coordinator's design, to be settled by the rows below. Nothing is built
-yet.
+**Status:** designed, not built. The seed is the user's decision; the rest is
+the coordinator's design, to be settled by the rows below.
 
 `Map`, `Set` and objects used as dictionaries hash their keys. Two things
 matter: speed on the short keys real programs use (property names, words,
@@ -77,7 +75,14 @@ collide, making every insert and lookup scan the whole table, so a `Map` or a
 
 ## Evidence
 
-The research behind this page, with sources, SMHasher3 results and published
-speed figures, came from an outside review on 2026-10-27. Its code claims
-(BigInt symmetry, the JVM hash, rebuilding from cached hashes, literal hashes
-in read-only data) were checked against `main`.
+The design follows an outside research review, with sources, SMHasher3
+results and published speed figures. Its claims about nts's code were checked
+against the code.
+
+## Decisions
+
+- String hashing takes a random seed per process, against hash flooding.
+- Map and Set tables compact deleted entries, with a list of live cursors so
+  that iteration stays correct.
+
+Both are in the [log](../records/notebooks/decisions-log.md#objects-10-22).

@@ -1,8 +1,7 @@
 # Memory management (native)
 
-**Status:** designed and decided 2026-10-27: the user agreed to every
-recommendation (M1–M5 below). Nothing new is built yet. This page covers C and
-LLVM. The JVM and Wasm use their host's garbage collector.
+**Status:** decided (M1–M5 below); the new analysis is not built yet. This
+page covers C and LLVM; the JVM and Wasm use their host's garbage collector.
 
 How nts decides where every object lives and when its memory comes back, so
 that compiled TypeScript allocates less, frees faster and stays smaller than
@@ -397,9 +396,13 @@ narrow what may be overwritten. Stage 3 succeeds when its rows move; when a
 cohort would hold too much memory, the heap is a successful answer, not a
 failure.
 
-## Decisions (2026-10-27)
+## Decisions
 
-The user agreed to each recommendation as written.
+The user's, as written ([log](../records/notebooks/decisions-log.md#memory-management-10-27)). Earlier ones still
+hold ([log](../records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)): `NoGc` is for testing only,
+and shipped native programs count references; region clones are fine where a
+benchmark row pays for them, with a code-size check; acyclic types are proved,
+never declared.
 
 | # | decision | why |
 |---|---|---|
@@ -412,5 +415,4 @@ The user agreed to each recommendation as written.
 ## Evidence
 
 The study behind this page, with its measurements, the comparison with 15
-systems and about 70 sources, is `~/.cache/nts-scratch/foundations/memory/report.md`
-(local, not in the repository).
+systems and about 70 sources, is [in the records](../records/notebooks/studies/memory.md).

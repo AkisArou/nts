@@ -10,8 +10,10 @@ JIT.
   question -- inference, overloads, narrowing -- so a program means what `tsc`
   says it means.
 - **Whole program, ahead of time.** Everything reachable is compiled. A
-  construct nts cannot compile yet is refused with a diagnostic at build time,
-  never compiled wrong and never left to fail at run time.
+  construct nts cannot compile yet is refused by name at build time, and a
+  value it cannot hold (a BigInt past 128 bits) stops the program by name at
+  run time. Nothing is compiled wrong on purpose: a wrong answer is a defect,
+  recorded until it is fixed.
 - **JavaScript's semantics.** Compiled programs are checked against node, and
   the compiler against test262.
 - **Fast.** The aim is to beat node and Bun on every benchmark and to come close

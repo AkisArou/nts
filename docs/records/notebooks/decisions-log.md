@@ -1,12 +1,13 @@
-# The user's decisions
+# The decisions log
 
-Every product decision the user has made, in one place, so none is lost or
-reopened by accident. A decision changes only when the user changes it; then
-the old line stays, marked superseded, with the new one beside it. Designs
-that follow from these live in [`foundations/`](foundations) and
-[`plan.md`](plan.md); the evidence behind each is in [`records/`](records).
+Every decision the user has made, with its date and, where quoted, the user's
+words. Each one is also written into the page it governs, in that page's
+`## Decisions` section, which is where it is read; this log is where it is
+dated. A decision changes only when the user changes it: then the old entry
+stays, marked superseded, with the new one beside it. The evidence behind each
+is in [the records](..).
 
-Dates are 2026. Quotes are the user's words.
+Dates are 2026.
 
 ## The bar
 
@@ -32,7 +33,7 @@ Dates are 2026. Quotes are the user's words.
 
 - **Primitives before test262** (10-22): test262 records keep gating, but no new
   test262 family starts until the foundations are solid. Now the
-  [foundations](foundations) plan.
+  [foundations](../../foundations) plan.
 - **Native (C and LLVM) first** (10-22, confirmed 10-27): the JVM and Wasm are
   kept in mind and designed after native.
 - **Land everything worth keeping before new work** (10-26): "whatever work is
@@ -58,7 +59,7 @@ Dates are 2026. Quotes are the user's words.
   a quarry: port an independent fix with its own fixture and gate; never land
   a branch wholesale.
 - **Wasm (10-27):** `stringref` is rejected (W3), and erased values keep i31 for
-  small integers (W4), from [the JVM and Wasm page](foundations/jvm-and-wasm.md);
+  small integers (W4), from [the JVM and Wasm page](../../foundations/jvm-and-wasm.md);
   its other proposals wait for research.
 - **Branch and worktree cleanup is the coordinator's call** (10-27): no need to
   ask. Landed branches are deleted; branches with unique work are archived
@@ -78,6 +79,8 @@ Dates are 2026. Quotes are the user's words.
   lane's build output; never an active agent's (10-23).
 - **The git cleanup** (inventory, archive, delete) was approved and executed
   (10-23).
+- **Upstream code stays as upstream wrote it** (node's tests, React,
+  test262): a test nts cannot pass is a gap to report, never code to edit.
 
 ## Frontend: tsrs
 
@@ -123,7 +126,8 @@ Dates are 2026. Quotes are the user's words.
   `-ffp-contract=off`.
 - **`Math` is bit-identical to node:** ship V8's fdlibm-derived `ieee754`.
 - **BigInt past 128 bits:** wrapping 64-bit now (`asUintN(64)`), real bignums
-  after.
+  after. _The code went further:_ BigInt is exact to 128 bits on every
+  backend, and a result past 128 bits stops by name.
 - **Benchmarks build exactly as `nts build` does,** and `nts build` uses ThinLTO.
 - **`JSON.parse(text) as T` that does not match `T`:** a `TypeError` naming the
   JSON path; invalid JSON is always a `SyntaxError` first.
@@ -158,7 +162,7 @@ Dates are 2026. Quotes are the user's words.
 ## Objects (10-22)
 
 - **String hashing takes a random seed per process,** against hash flooding.
-  _Not yet true on main_: see the [map](foundations/README.md).
+  _Not yet true on main_: see the [map](../../foundations/README.md).
 - **Map and Set tables compact deleted entries,** with a list of live cursors
   so iteration stays correct.
 
@@ -177,13 +181,13 @@ storage; no run-time ropes unless a row proves them.
 - **The answer:** one WasmGC backend, browser-first (DOM and JS integration as
   the first milestone), with JS-hosted and standalone profiles. The compiler
   hands code directly to Binaryen, which does the optimizing; linear memory is
-  only for buffers and kernels ([`wasm.md`](wasm.md)). No backward
+  only for buffers and kernels ([`wasm.md`](../../targets/wasm.md)). No backward
   compatibility with the current emitter is owed.
 - test262 runs on every backend, the JVM and Wasm included (10-14).
 
 ## Unicode (10-27)
 
-From [`foundations/unicode.md`](foundations/unicode.md):
+From [`foundations/unicode.md`](../../foundations/unicode.md):
 
 - **D1:** the compiler owns the Unicode data, generated from Unicode's own
   files.
@@ -201,7 +205,7 @@ QuickJS goes entirely (10-22).
 
 ## Memory management (10-27)
 
-From [`foundations/memory.md`](foundations/memory.md):
+From [`foundations/memory.md`](../../foundations/memory.md):
 
 - **M1:** one analysis before counting gives every allocation site one home;
   R4(b) is redirected into it, and our JSON parser's shared placeholders
@@ -216,9 +220,12 @@ From [`foundations/memory.md`](foundations/memory.md):
 
 - **`globalThis`, `Proxy` with `Reflect`, and object integrity**
   (`Object.freeze`, `seal`, `preventExtensions` and their predicates) are in
-  scope, deferred. Each is to cost nothing where a program does not use it,
+  scope, deferred. _The coordinator reads "etc." to include_ the
+  property-descriptor family (`Object.defineProperty`, `defineProperties`,
+  `getOwnPropertyDescriptor`, `getOwnPropertyDescriptors`), since `Reflect`
+  and the integrity levels are defined in terms of it. Each is to cost nothing where a program does not use it,
   with the compiler proving which values a use can reach
-  ([open questions](open-questions.md) L24 to L26).
+  ([open questions](../../open-questions.md) L24 to L26).
 - **An exception that escapes a callback a host invokes** (a GTK signal, a
   WinRT event, a C function pointer, a timer) is the program's uncaught error,
   and the target decides what that does. _Decided by the coordinator, on the
@@ -235,3 +242,33 @@ From [`foundations/memory.md`](foundations/memory.md):
     callback that must return a value to the host, and throws instead, is
     fatal on every target, since no value can be made up.
   - An unhandled promise rejection follows the same split.
+
+## Lanes (09-23, 09-24)
+
+- **Apple (09-23, 09-24):** macOS and AppKit first, iOS later. A Swift-shaped
+  surface replaced the NativeScript-shaped one (09-24). There is no Mac
+  hardware and no hosted CI: a local quickemu VM.
+- **Windows (09-24):** Win32 first, then WinRT and COM, then WinUI 3. The
+  mingw ABI through zig now, MSVC later. A quickemu Windows 11 VM; nts itself
+  never runs on Windows.
+- **React (09-24):** React gets its own runtime with typed internals; upstream
+  React is the reference and the oracle only, never shipped.
+
+## test262 (09-29, 10-02)
+
+- **Done** means every ECMA-262 strict-lane file passes or sits under a named
+  permanent boundary.
+- **The permanent boundaries** are property descriptors, the metaobject
+  protocol, the global object and realms, and three Symbol redirect hooks
+  (`Symbol.toPrimitive`, `Symbol.hasInstance`, `Symbol.unscopables`).
+  _Partly superseded 10-27:_ `globalThis`, `Proxy` with `Reflect`, object
+  integrity and the descriptors they are defined by are in scope (Language and
+  hosts, above).
+- **Module tests** are in the lane (10-02), reversing 09-29.
+
+## Wasm exports (10-14)
+
+- **Objects cross an exported boundary by proof:** copied where the copy is
+  invisible, live otherwise, through a cached wrapper; typed-array bytes are
+  borrowed; never a silent copy
+  ([record 0356](../0356-objects-cross-an-exported-boundary-by-proof-copied-where-invisible-live-otherwise.md)).

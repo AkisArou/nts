@@ -2,7 +2,7 @@
 
 Rules for every contributor, human or agent. Each is here because breaking it
 cost real time; the reason is beside it. What working on nts has taught beyond
-these is in [`docs/agents/lessons/`](docs/agents/lessons): read the topic before
+these is in [`docs/contributing/lessons/`](docs/contributing/lessons): read the topic before
 working in it.
 
 nts compiles TypeScript ahead of time to native code, the JVM, WebAssembly and
@@ -24,7 +24,7 @@ says who owns which paths and which branch prefix each uses.
 ## Your tree, and the shared checkout
 
 Work in your lane's own worktree, `~/Projects/nts-lanes/<lane>`, on branches
-`<lane>/<topic>` (`docs/workflow.md`). `~/Projects/nts` is `main` and is
+`<lane>/<topic>` (`docs/contributing/workflow.md`). `~/Projects/nts` is `main` and is
 landing-only: nobody edits there. The exception is the coordinator's
 documentation, which the user reads there (see "Documentation goes straight to
 main" below). It supplies the inputs no commit carries (`third_party/*`
@@ -49,7 +49,7 @@ not change.
 ## Landing
 
 Nothing reaches `main` except a fast-forward to a commit that passed the gate
-steps it owes. `land` does the whole of it (see `docs/workflow.md`):
+steps it owes. `land` does the whole of it (see `docs/contributing/workflow.md`):
 
 ```sh
 node tooling/lanes/land.ts <commit> --dry-run   # the steps it owes
@@ -91,6 +91,15 @@ commits them to `main` without a gate, but **only while no train is running**:
   `land` refuse it at the end;
 - while a train runs, leave uncommitted edits only on files that train does
   not change. A dirty file the fast-forward must update aborts the landing.
+
+**A page in `docs/` is a specification, not a notebook** (user, 2026-10-27).
+It states the current design and contract, with no dates, history or running
+log, and changes when a decision changes it. `docs/plan.md` is the only page
+updated as work goes. Numbers are not copied into pages: they live in
+`results/`, written by tools. Observations, measurements, investigations and
+long notes go to `docs/records/` (long notes in `docs/records/notebooks/`).
+A decision is written into the page it governs, in its `## Decisions` section;
+its dated entry goes in `docs/records/notebooks/decisions-log.md`.
 
 A landing runs the core steps. The wide ones -- integrity, the profile,
 addons, interop, counting, memory and the rest (`WIDE` in `tooling/gate/owed.mjs`

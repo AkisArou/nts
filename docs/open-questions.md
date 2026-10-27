@@ -1,14 +1,14 @@
 # Open questions
 
 **Every fundamental design question nts has not yet decided, across all
-targets,** surveyed from the code and the documents on 2026-10-27. Each has
-today's state and the coordinator's recommendation. **research** means outside
-evidence is needed first; **user** means it is the user's call (product
-direction or money). Decided matters live in [`decisions.md`](decisions.md) and
-[`foundations/`](foundations); an answered question moves there and leaves
-this page. Bureaucracy (signing, store submission, paperwork) is out of scope.
+targets,** each with today's state and the coordinator's recommendation.
+**research** means outside evidence is needed first; **user** means it is the
+user's call (product direction or money). An answered question leaves this
+page: its answer goes into the page it governs, and its dated entry into the
+[decisions log](records/notebooks/decisions-log.md). Bureaucracy (signing,
+store submission, paperwork) is out of scope.
 
-The per-target picture is [`targets.md`](targets.md); the JVM and Wasm
+The per-target picture is [`targets/`](targets/README.md); the JVM and Wasm
 proposals are [`foundations/jvm-and-wasm.md`](foundations/jvm-and-wasm.md).
 
 ## Decide first
@@ -50,12 +50,13 @@ Ranked by how much each blocks or how much harm it does today.
 | L18 | CommonJS and sloppy-mode JavaScript | `.js` compiles with inferred types; sloppy mode excluded only for test262 | **user** (with D-4): strict ESM for sources, CommonJS dependencies through an interop layer |
 | L19 | The TypeScript version policy | tsrs 0.19.0, TypeScript 7.1.0-beta | Follow tsrs releases of stable TypeScript; upgrades gated by the four suites |
 | L20 | Partial builds | `nts build` stops for a builtin nothing provides (NTS1100, NTS1101); any other refusal still writes a program without the refused functions, and refused top-level statements are cut | Any refusal fails `nts build` |
-| L21 | Diagnostics: marking permanence, and early errors | inconsistent wording, no code registry; 1,315 negative test262 cases accepted | A diagnostic registry (code, permanent or not, message); complete the early errors (phase 3) |
+| L21 | Diagnostics: marking permanence, and early errors | inconsistent wording, no code registry (NTS5001 means three things: the scalar check, an LLVM internal error, a Wasm decline); 1,315 negative test262 cases accepted | A diagnostic registry (code, permanent or not, message); complete the early errors (phase 3) |
 | L22 | Separate and incremental compilation | whole program only; no cache | Closed world for executables; libraries declare an export surface with L9's fallback; a validated cache later. **research:** Kotlin/Native, Swift |
 | L23 | Which oracle wins when test262 and node disagree | unstated | Node: the promise is "behaves like node"; the boundary set is written down |
 | L24 | How `globalThis` costs nothing where unused | refused; in scope since 10-27 (user), deferred | A static `globalThis.X` folds to the binding; only a dynamic read or write builds a global object, holding just the globals the program can reach |
 | L25 | How `Proxy` and `Reflect` cost nothing where unused | refused; in scope since 10-27 (user), deferred | Only values a `new Proxy` can reach take the trap path, which the compiler proves; every other access stays direct |
 | L26 | How object integrity (`Object.freeze`, `seal`, `preventExtensions` and their predicates) costs nothing where unused | refused; in scope since 10-27 (user), deferred | A flag in the object's header, checked on a write only where a freeze can reach the object |
+| L27 | A function's source text (`Function.prototype.toString`) | `function NAME() { [native code] }` on every backend; node gives the source; test262's `toString` cases count as failures | Keep the source only for functions whose `toString` the compiler finds reachable, so other programs pay nothing |
 
 ## 2. Builtins and globals
 
@@ -72,7 +73,7 @@ Ranked by how much each blocks or how much harm it does today.
 | G9 | `runtime/web-platform`'s JSON parser | runs `json-parse`; documents disagree | Stays the untyped path until the compiler's untyped parser exists, then becomes a test oracle |
 | G10 | `node:*` scope and how programs reach it | 28 modules, no resolver | Owe the 28; a `node:` resolver and `process`/`Buffer` globals in the native profile |
 | G11 | A Node addon: node's builtins or ours | ours | Ours (one semantics); revisit by size |
-| G12 | The clock and randomness, and the seeded test mode | refused (contradicts decision 2) | Designed in [builtins](foundations/builtins.md#the-clock-and-randomness): real providers by default, deterministic ones pinned only by the test profile. `Math.random` is V8's generator, which reproduces `node --random-seed=N` exactly (checked) |
+| G12 | The clock and randomness, and the seeded test mode | refused (contradicts decision 2); a JVM runnable jar runs its timers on a virtual clock | Designed in [builtins](foundations/builtins.md#the-clock-and-randomness): real providers by default, deterministic ones pinned only by the test profile. `Math.random` is V8's generator, which reproduces `node --random-seed=N` exactly (checked) |
 | G13 | Time zones without Intl | local time refused | Node's pinned TZDB, emitted as data only into programs that use local time. **research:** size |
 | G14 | Intl locales and data | providers exist, unbound | Locales declared in `nts.config` (default `en`), with ICU's fallback; never the device's ICU (D2, D3). **research:** sizes |
 | G15 | Temporal on Wasm, and whether to provide what node lacks | refused everywhere; node 24.20 has no `Temporal`, Bun 1.4 has it (checked 10-27) | `runtime/ecmascript`'s wherever the host lacks it, node included. **user:** providing a builtin node lacks goes beyond "behaves like node". **research:** browser support |
@@ -99,7 +100,7 @@ Ranked by how much each blocks or how much harm it does today.
 | C-2 | `SharedArrayBuffer` and `Atomics` semantics | deferred | Memory stage 9, on C11 atomics; `Atomics.wait` refused on the main thread, as browsers do |
 | C-3 | A thread nts does not own entering the runtime | aborts with libuv's host; **unchecked** without one (addons, libraries) | Build record 0018: the runtime owns the check; `c:` callbacks may opt into posting to the owner |
 | C-4 | One async runtime or three (C, JVM, Wasm) | three implementations | One contract, enforced by shared ordering fixtures on every backend |
-| C-5 | Two microtask queues on JS hosts and in Chromium | ours, separate | Adopt the host's queue wherever promises cross. **research:** ordering traces |
+| C-5 | Two microtask queues on JS hosts | Chromium already runs the program's jobs on Blink's queue; Wasm in a JS host keeps its own queue, drained at each export | Adopt the host's queue wherever promises cross, as Chromium does. **research:** ordering traces |
 | C-6 | How native `setTimeout` clamps its delay | its own rule; by reading, it orders differently from node | Node's rule on native, HTML's in Chromium and browsers; a two-arm fixture now |
 
 ## 5. Interop and hosts
@@ -193,32 +194,18 @@ Ranked by how much each blocks or how much harm it does today.
 12. Decorators are a silent wrong answer, while the plan puts wrong answers first (L10).
 13. The tsrs patch adds a checker API beyond what its decision allows ("for the two crashes only").
 
-**Documents behind the code:** a clean-up pass, suited to a Muse agent.
-- `decisions.md`:
-  - BigInt "wraps at 64 bits" (it stops past 128);
-  - record 0356 and the lane decisions of 09-23, 09-24 and 09-29 are missing;
-  - test262's boundaries are missing.
-- `plan.md`'s machine table: LLVM test262 records "missing", ts-conformance "not started", the snapshot cache "built". All three are wrong.
-- `workflow.md`'s `ts-corpus` step does not exist.
-- `async.md` counts two promise implementations; there are three.
-- `nts-config.md`:
-  - "three backends" and no `wasm32`;
-  - AAR and APK builds "refused";
-  - surfaces "published, not generated";
-  - the cairo gap (since closed).
-- `native-interop.md`: the callback policy "open", and `bind-c` "does not exist".
-- `native-operations.md` decides both a subprocess and libclang for reading headers; the code uses the subprocess.
-- `typescript.md` §13:
-  - Intl is a non-goal, against decision 1;
-  - `arguments` and Annex B are "free by construction";
-  - `Object.freeze` is incompatible;
-  - the out-of-range abort is "intended".
-  
-  About 20 of the TypeScript suite's cases assert §13 non-goals.
-- `eval.md`, the eval refusal and test262's exclusions disagree on whether `eval` is a non-goal.
-- `nodejs.md`'s module counts are stale; `worker_threads` is "probably never" against memory stage 9.
-- `with-lock.sh` and `wait-idle.sh` disagree on whether measurement needs a quiet machine.
-- The project's CLAUDE.md names only node as the bar; decisions name node and Bun.
-- `targets.md` says Android ran on no device (ART runs exist).
-- `apple-lane-goal.md` both lacks and has AAPCS64 classification.
-- `schema.rs` cites the deleted `cache.rs`.
+**Code and scripts behind the documents:** small fixes, each its own change.
+- `tooling/gate/with-lock.sh` and `wait-idle.sh` disagree on whether
+  measurement needs a quiet machine.
+- The project's `CLAUDE.md` names only node as the bar; the bar is node and
+  Bun (the user's file to change).
+- Comments behind the code: `compiler/semantic-schema/src/schema.rs` cites the
+  deleted `cache.rs`; `NtsGrisu.java` the removed `nts_grisu.h`; the `parseFloat`
+  comment names `strtod` (the code uses ffc); `refused_by_name` in `lower.rs`
+  lists async generators, which compile; `builtin.rs` calls BigInt absent.
+- `tests/refusals/a-lone-surrogate-in-a-string-literal` expects three U+FFFD,
+  while the semantic schema now keeps lone surrogates.
+- Code comments cite documents that moved to `docs/records/notebooks/` in the
+  documentation restructure, and `docs/lib-dom.md`, which no longer exists. A
+  citation sweep fixes them in one landing, in a quiet window: it owes the full
+  gate.

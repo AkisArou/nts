@@ -1,568 +1,271 @@
-# Test262: protocol, scope, and NativeTS prerequisites
+# Test262
 
-Dated measurements, commands and tsgo API references below describe the pre-switch
-frontend. The current frontend runs in process; those historical inputs and
-results are kept at their original revisions.
+How nts is held to test262, the conformance suite of ECMA-262: the pin, what
+runs, the variants, the verdicts, how a case is counted, the records the gate
+holds, and how to run each part. For anyone reading a test262 number,
+changing the census tools, or landing a change the gate checks against the
+records. What nts declines on principle is
+[boundaries](../language/boundaries.md); the census's history and
+measurements are in [the census notebook](../records/notebooks/test262-census.md).
 
-This document records the intended Test262 conformance protocol. The
-tooling-only part now exists **and, as of 2026-09-18, has been run against
-the pinned corpus** -- the inventory, the strict-lane assembly and the
-Rust/Python metadata parity audit all pass at the pin above. Before that the
-pin was unreachable and every one of them returned `WrongPin`. What exists
-is: pin-checked discovery, metadata parsing, strict
-scheduling, source-unit assembly plans, host declaration assets, a mock adapter,
-verdict logic, and deterministic report types. It does not compile or run a
-Test262 case. The NativeTS execution adapter, script initializer, host
-implementation, and representation-recovery pass do not exist yet.
+## The pin
 
-The suite is pinned locally at commit
-`14e8c908e54ae2e770e473bcacf536f8cb654929`.
-
-**Advanced from `d86b2294eb0a17eaa281ff12c73c473ec864c72f` on 2026-09-18, and the
-numbers below re-derived from the run rather than recomputed.** No checkout in
-this tree held the old pin, and `discover_suite` refuses a suite that is not at
-`TEST262_PIN` before doing any work, so every command here returned `WrongPin`
-and **none of this had ever run against the corpus it describes**.
-`bootstrap.sh` cloned master and checked nothing out, so that was structural
-rather than a slip; it now checks out the pin and reads it from the constant.
-The drift moved exactly two files, both default scripts, so every file count
-rose by 2 and every variant count by 4 while no flag-selected bucket moved.
+The suite is `third_party/test262`, checked out at the commit that
+`TEST262_PIN` names in `tooling/suite/src/test262_runner/mod.rs`;
+`tooling/bootstrap/bootstrap.sh` clones it there. Every command refuses a
+checkout at another commit or with local changes. Moving the pin means
+changing that constant, then deriving the inventory's counts and every record
+again from runs at the new pin.
 
 ## Scope at the pin
 
-| corpus | test files | required variants |
-| --- | ---: | ---: |
-| all `.js` files, including fixtures | 53,874 | — |
-| `_FIXTURE.js` module dependencies | 294 | never standalone |
-| standalone tests | 53,580 | 102,922 |
-| ECMA-402 / `Intl` | 3,357 | 6,714 |
-| NativeTS ECMA-262 scope | **50,223** | **96,208** |
+`nts-test262-protocol inventory` reads every `.js` file under `test/` and
+sorts it:
 
-One file may require two variants, which is why variants outnumber files.
-At this pin, 4,238 standalone files select one variant and 49,342 use the
-default two; the ECMA-402 files all use two variants.
-The shared runtime lane is implementing `Intl`. ECMA-402 cases are scheduled as
-implementation gaps; they no longer receive the blanket `initial-lane:intl402`
-exclusion. ECMA-262 and ECMA-402 results still have separate denominators.
-Staging tests outside ECMA-402 remain part of the ECMA-262 inventory.
+- a `_FIXTURE.js` file is a module dependency, never a standalone test;
+- every standalone file's metadata is parsed, whatever nts supports. Malformed
+  metadata or a missing include is an infrastructure error, never a skip, and
+  an unknown flag makes the file unsupported, with the flag named;
+- **ECMA-402** is `test/intl402/`. It is in scope, as Intl is, and it is
+  counted apart from ECMA-262: the two never share a denominator, and no
+  record of ECMA-402 is held yet. A case elsewhere that declares an ECMA-402
+  feature token (`Intl.Era-monthcode`) is excluded from the ECMA-262 headline
+  through `features.json`, because its expectations are ECMA-402's;
+- **ECMA-262** is everything else: `test/language`, `test/built-ins`,
+  `test/annexB`, `test/staging` and `test/harness`.
 
-The metadata parser must still read all 53,580 standalone files. Parser
-correctness is independent of whether the selected compiler profile implements
-a feature used by a test.
+Within ECMA-262, each file is scheduled by its flags:
 
-## Initial lane: strict global scripts
+| flags | action |
+|---|---|
+| none, or `onlyStrict` | run once, as a strict script |
+| `module` | run once, as module code |
+| `async`, with either of the above | run, completing through `$DONE` |
+| `noStrict` | scope-excluded: counted, and not attempted |
+| `raw` | scope-excluded: counted, and not attempted |
 
-NativeTS will initially focus only on global scripts executed with a
-`"use strict";` directive. This is an intentional scheduled subset, not a claim
-of full-file Test262 conformance.
+The scheduled files are the **strict lane**. The counts at the pin are
+asserted by the ignored test `pinned_corpus_matches_the_documented_strict_inventory`
+(`tooling/suite/src/test262_runner/discover.rs`) and printed by the inventory
+command. They are read off a run there, never recomputed by hand.
 
-At the pinned commit, the ECMA-262 inventory divides as follows after normalizing
-both flow-style and multiline YAML flag lists:
+## Variants
 
-| scheduling bucket | files | initial action |
-| --- | ---: | --- |
-| default scripts | 45,985 | run the injected strict variant only |
-| `onlyStrict` scripts | 678 | run |
-| **initial strict-script lane** | **46,663** | one variant per file |
-| modules | 841 | run as module code (in the lane since 2026-10-02) |
-| `noStrict` scripts | 2,687 | scope-excluded |
-| raw tests | 32 | scope-excluded (2 are also `module`) |
+test262 runs a default test twice: as written, and with `"use strict";`
+prepended. nts runs one variant of each scheduled file:
 
-Modules are inherently strict, but they are not global scripts with an injected
-directive and require a different loader and resolution protocol. They were
-out of the first lane and are **in the lane since 2026-10-02**, by the
-project owner's decision: a `module` test runs once, as module code, with its
-`_FIXTURE.js` modules materialised beside it (see "Done" below). Raw tests
-forbid source modification and stay out. An `async` flag
-does not remove a test from the strict lane; it adds a capability requirement,
-so the test remains scheduled and reports `unsupported` until the async host can
-execute it.
+- a script gets exactly `"use strict";\n` before the test source, and its
+  variant is `<path>#strict`;
+- a module test runs once as module code, `<path>#module`, with the
+  `./*_FIXTURE.js` modules it imports placed beside it. One with no `import`
+  or `export` is marked `export {};`, so the early errors of module code
+  apply.
 
-The runner must name this result `strict-pass`, or otherwise qualify it as a
-strict-variant result. It must not collapse one passing strict variant into a
-full Test262 file pass when the file's default metadata also requires a sloppy
-variant. Sloppy scripts, raw tests, and modules may be reconsidered later
-without changing metadata parsing, variant identity, or the report schema.
+A pass is therefore `strict-pass`: one strict variant. A passing strict
+variant is never promoted to a full-file pass when the file's metadata also
+requires a sloppy variant.
 
-## Done, and the permanent boundaries (decided 2026-09-29)
+## What runs
 
-Test262 is **done** when every ECMA-262 strict-lane file -- all directories:
-`language`, `built-ins`, `annexB`, `staging`, `harness` -- ends as a pass or
-under a **named permanent boundary**: an exclusion with an authority in
-`tooling/census/test262-exclusions.json` or `tooling/census/features.json`.
-No `fail`, no `no-verdict`, no unclassified refusal. Sloppy-mode and raw tests
-stay scope-excluded, counted and not attempted.
+Each case is compiled as test262 lays it out, as global scripts in one
+program, except that a module test's own file is module code:
 
-**Module tests are in the lane (decided 2026-10-02).** The project owner
-reversed the 2026-09-29 exclusion: "module tests should be included, they
-should not be out of scope". The scheduler plans each as its one `#module`
-variant; the census materialises it as module code (marked with `export {};`
-when it has no `import`/`export`, so module-goal early errors are seen) with
-its fixture modules, and judges `negative: {phase: resolution}` by the
-checker's evidence like a parse negative, counted with the accepted negatives.
+| file | what it holds |
+|---|---|
+| `src/harness.ts` | the stand-in for the default harness, `assert.js` and `sta.js` (`tooling/census/harness.ts`), with `assert.throws`, `assert.compareArray`, `$DONE` and `$DONOTEVALUATE` added only for a test that uses them |
+| `src/include-<name>.js` | each file the test's `includes:` names, verbatim |
+| `src/main.js` | the test, as JavaScript, behind its strict prefix |
 
-These are permanent boundaries by the project owner's decision, not backlog.
-Each is attempted all the same -- a boundary that starts passing is news, and
-the census's FIXED? check says so:
+"Test262 permits implementations to replace harness functions with equivalent
+functionality." Only the default entries are replaced: every other include is
+compiled as test262 wrote it, and one that does not compile refuses like any
+other source. The harness, the includes and the test "remain separate source
+units evaluated in one realm". They are never concatenated into a function or
+a CommonJS wrapper, and none imports another.
 
-- property descriptors (`propertyHelper.js`, `Object.defineProperty` and
-  friends) -- `typescript.md` §13;
-- the metaobject protocol (`Proxy`, `Reflect`) -- `typescript.md` §13;
-- the global object and realms (`globalThis`, cross-realm);
-- the redirect hooks (`Symbol.toPrimitive`, `Symbol.hasInstance`,
-  `Symbol.unscopables`);
+The program is built by the backend's own command with `--main` (`emit-c`,
+`emit-llvm`, `emit-jvm`, or `emit-wasm --host node`), linked where the backend
+links, and run. A run ends with exit status 0, or with
+`nts: uncaught <Class>: <message>`.
 
-Temporal is now an implementation gap, not a permanent boundary. The shared
-Date/Temporal/Intl lane is described in
-[`runtime/ecmascript/DATE-TEMPORAL-INTL.md`](../../runtime/ecmascript/DATE-TEMPORAL-INTL.md).
-Its host adapter results do not establish compiled standard-builtin conformance.
+A test that uses `$262` is not attempted: the host hooks it reaches (realms,
+agents, detached buffers, garbage collection, `IsHTMLDDA`) are not provided.
+The protocol layer also ships typed declarations of that host
+(`tooling/suite/assets/test262/`), for a runner that maps them to intrinsics.
+That mapping is not built, so the census uses the stand-in.
 
-**Because boundaries are attempted, they appear in every refusal ranking, and
-at the top.** Read these rows as boundaries, never as compiler work. In the
-census of 141c1ea81, all within the `--root any` selection and all first
-roots in an *include*:
+A run checks itself before it counts anything: a control program that must
+pass, a sabotage that must not, a refusal that must be read as one, and an
+async case. Each case runs under a memory cap. A run will not start without
+the memory its workers need, it prints the machine's state at both ends, and
+it marks itself `DEGRADED` when it ran under swap traffic or low memory.
 
-- "a parameter of unrepresentable type (a union of `X` | undefined)":
-  `verifyProperty`'s `PropertyDescriptor` in `propertyHelper.js`. 1,716
-  language and 2,578 built-ins files, 0 of them sole.
-- "a property of unexpected shape": `temporalHelpers.js`, 1,479 built-ins.
-- "a module-scope variable of unrepresentable type": about 500 of 1,166 name
-  a Temporal type, and 240 name `RegExp`.
-- "`X` on `X`, which is erased here": 272 of 290 are in `regExpUtils.js`.
-  RegExp is QuickJS's, not a boundary, but not `any` work either.
+## The oracle
 
-A ranking that has not separated these (`rows.ts --where body`) measures
-the boundaries, not the compiler.
+test262 is the oracle: the test body, the harness and the metadata. Node may
+be run beside it to diagnose the runner, but it never decides a verdict.
 
-## The oracle is Test262
+- Two implementations rejecting a case at different phases is not a pass.
+- A generic compiler refusal cannot satisfy an expected JavaScript exception.
+- An expected `SyntaxError` cannot be satisfied by a runtime `TypeError`.
+- A missing host capability cannot pass because another host lacks it too.
 
-A positive Test262 case is self-checking. It completes normally on success and
-usually throws through an assertion on failure. A negative case declares the
-exact phase and exception constructor it expects. The test body, harness, and
-metadata are therefore the oracle.
+No compiler refusal is promoted to a test262 verdict.
 
-Node may be run as an optional diagnostic control for the runner, but Node's
-exit code, stdout, or agreement with NativeTS never determines a Test262
-verdict. In particular:
+## Outcomes
 
-- two implementations rejecting a case at different phases is not a pass;
-- a generic compiler refusal cannot satisfy an expected JavaScript exception;
-- an expected `SyntaxError` cannot be satisfied by a runtime `TypeError`;
-- a missing host capability cannot pass merely because another host also lacks
-  it.
+Every selected case gets exactly one of five outcomes, and they must sum to
+the population, or the run fails:
 
-The result vocabulary must distinguish `pass`, `fail`, `unsupported`,
-`inapplicable`, `scope-excluded`, `timeout`, `crash`, and
-`infrastructure-error`. A file passes only when every variant required by its
-metadata passes. In the initial lane, `strict-pass` deliberately reports only
-the scheduled strict variant and is not promoted to that full-file result.
+| outcome | meaning |
+|---|---|
+| `pass` | ran and completed: `strict-pass` |
+| `fail` | ran and was wrong: an uncaught throw, or a negative test accepted |
+| `refused` | the compiler declined: a checker error or an `NTS` refusal |
+| `unsupported` | the harness cannot run it: scope-excluded, a `$262` test, or a gap in the stand-in |
+| `no-verdict` | crashed, timed out, hit the memory cap, produced invalid HIR, or did not emit or link |
 
-## Metadata drives execution
+A negative test is judged by how the compiler said no, never by whether it did:
 
-Test262 metadata is YAML embedded in a `/*--- ... ---*/` block. For example:
-
-```yaml
-flags: [onlyStrict]
-negative:
-  phase: runtime
-  type: ReferenceError
-```
-
-The execution-relevant fields are:
-
-- `flags`, which select strictness, scripts versus modules, raw source, and
-  asynchronous completion;
-- `includes`, which name additional files in `harness/` and preserve their
-  listed order;
-- `negative.phase` and `negative.type`, which define an expected failure;
-- `features`, which describe required language or host capabilities.
-
-The runner rejects both the wrong revision and a locally modified checkout. Its
-parser matches Test262's bundled `monkeyYaml`/`parseTestRecord.py` behavior.
-Validation compares the normalized metadata and extracted test-body hash for
-every standalone file. Malformed metadata, an absent include, a dirty checkout,
-or the wrong suite commit is an infrastructure error, never an implicit default
-or skip.
-
-The production parser implements this small Test262 YAML dialect directly in
-Rust rather than inheriting the larger and subtly different behavior of a
-general YAML library. It handles mappings, nested mappings, flow and multiline
-lists, folded and literal text, integer and float scalars, and continuation
-lines exactly as `monkeyYaml.py` defines them. Test262's Python parser is a
-validation oracle used in tests; it is not a runtime dependency of the Rust
-tool.
-
-### Worked strict-negative flow
-
-Suppose a test contains:
-
-```js
-/*---
-flags: [onlyStrict]
-negative:
-  phase: runtime
-  type: ReferenceError
----*/
-
-undeclared = 1;
-```
-
-For NativeTS, the flow is:
-
-1. The parser returns `flags = {onlyStrict}` and the exact negative expectation
-   `{runtime, ReferenceError}` while retaining a hash of the extracted body.
-2. The strict scheduler emits one stable variant ID ending in `#strict`; it does
-   not create a sloppy variant.
-3. Assembly initializes the host profile, resolves any listed includes, and
-   retains the test as a separate unit with prefix `"use strict";\n`.
-4. A future adapter compiles those units and returns structured compile/run
-   events. Here the expected trace is compile success followed by a runtime
-   `ReferenceError`.
-5. Verdict logic compares both fields and emits `strict-pass`. Normal completion,
-   a parse-phase `ReferenceError`, a runtime `TypeError`, or an unaudited
-   compiler refusal does not pass; the last is `unsupported`.
-
-This is why YAML is control data, not merely a skip list, and why comparing
-process exit codes is insufficient.
-
-## Variants and source units
-
-Every variant runs in a fresh realm. Unless a flag says otherwise, a test is a
-global script and runs twice:
-
-1. the original non-strict source;
-2. a strict variant with exactly `"use strict";\n` inserted at the beginning of
-   the **test source**.
-
-The other flag rules are:
-
-- `onlyStrict`: one strict script variant;
-- `noStrict`: one non-strict script variant;
-- `module`: one module variant, inherently strict, without adding the script
-  directive;
-- `raw`: one unchanged script source with no Test262 harness or injected strict
-  directive;
-- `async`: the ordinary strictness rule plus asynchronous completion handling.
-
-For a non-raw test, the logical evaluation order is:
-
-```text
-host equivalent of harness/assert.js
-host equivalent of harness/sta.js
-host equivalent of harness/doneprintHandle.js    only for async
-metadata includes            in listed order
-test source
-```
-
-The three default harness entries may be equivalent profile-owned host
-initializers rather than JavaScript source units. Metadata includes and the test
-remain separate source units evaluated in one realm. They must not be
-concatenated into a function or CommonJS wrapper: that changes global script
-semantics, strict-directive reach, parse phases, and declaration visibility.
-`_FIXTURE` files are resolved as module dependencies and are never initialized
-as independent tests. Harness and host modifications belong to the test realm,
-not to the fixture module source.
-
-## Positive, negative, and asynchronous verdicts
-
-A positive synchronous variant passes only after successful parse/resolution,
-successful compilation, and normal execution. An assertion or any other
-uncaught exception fails it.
-
-A negative variant passes only when the actual result matches both declared
-fields:
-
-- `parse`: parsing or early-error checking produces the declared constructor;
-- `resolution`: module resolution produces the declared constructor;
-- `runtime`: evaluation produces an uncaught exception of the declared
+- A **parse** or **resolution** negative passes when the checker rejects it
+  with at least one evidence code: a TypeScript diagnostic code that no
+  attempted positive case, which is valid JavaScript, ever draws. The codes
+  are kept in `tooling/census/test262-evidence-codes.json`, derived only from
+  a whole run of `test/language` on C; `test262-evidence-overrides.json` adds
+  codes that a named gap in the checker needs, each audited against the
+  checker's pin. Rejected only by codes valid JavaScript draws, the case is
+  `refused`. Accepted, it is `fail`, and it counts as an **accepted negative**.
+- A **runtime** negative passes only if it throws exactly the declared
   constructor.
 
-Completing normally, failing in a different phase, producing a different
-constructor, or refusing an otherwise valid construct cannot pass. Compiler
-diagnostics may satisfy parse or resolution metadata only through an audited
-mapping to the corresponding ECMAScript phase and error constructor.
+Off C, parse and resolution negatives are not run: the frontend decides them
+before any backend does.
 
-An async test also loads `doneprintHandle.js` and does not pass on ordinary
-process exit. It waits for the Test262 completion message, fails on the failure
-message, and times out when no completion arrives. NativeTS should eventually
-implement this on the deterministic microtask host rather than parsing
-arbitrary stdout as a verdict.
+A refused case is ranked by its root causes three ways: by its **first** root,
+where a reduction starts; by its **sole** root, the most that fixing one cause
+could clear; and by **any** root, its reach. The cascade diagnostics NTS1003
+and NTS1005 are consequences, never roots. A checker root is sole over
+nothing, since lowering never ran behind it.
 
-### A recorded pass can be hollow
+## How a case is counted
 
-A pass says the program ran and threw nothing. Many tests assert little: that
-nothing throws, that a default did *not* run, or that `typeof` of something
-names a type. A compiler that never compiles the construct under test
-satisfies these, so the pass is recorded and counted in the floor. On
-2026-09-29 three changes that made a construct evaluate each exposed such
-rows:
+**Exclusions are a column, never a filter.** An excluded case is still
+compiled and run; it leaves only the in-scope denominator. The headline is the
+in-scope passes over the in-scope cases, printed beside the raw rate over every
+case. Exclusions come from two ledgers, and each entry carries a reason and an
+authority, a section of [boundaries](../language/boundaries.md) or of this
+page:
 
-- **21** built-ins and language rows: `typeof f()` was answered from the static
-  type and never ran `f` (Temporal with no runtime, `Boolean()`, `Date()`, ...).
-- **6** language rows: a pattern that binds no names was never lowered, and
-  each asserted only that its default did not run.
-- **1** staging row: `new foo()` 1,100 times for a constructor that returns an
-  object, passing because the `return {}` under test was ignored.
+- `tooling/census/features.json` classes every test262 feature token the
+  census has met: `inapplicable` (a boundary, excluded), `gap` (the backlog),
+  `supported` (expected to lower) or `host` (needs a host capability). Only
+  `inapplicable` excludes. An uncertain token is a `gap`, since a gap stays
+  visible.
+- `tooling/census/test262-exclusions.json` holds anything that is not a
+  feature token, matched by path or by a harness include.
 
-Three signs that a pass is hollow:
-- conformance262 reports `FIXED? N passing` on an exclusion whose feature
-  cannot exist at runtime;
-- a pass's assertion could be answered without the construct running;
-- a change that makes something *evaluate* turns a pass into an honest
-  refusal.
+The rule every entry follows: a documented non-goal leaves the in-scope
+denominator, and an undocumented gap stays in it. The size of a population is
+never a reason.
 
-The procedure when a pending change exposes them:
-1. Re-run the recorded sets on the change's pin.
-2. For every REGRESSED row, read the test and confirm the pass was hollow. A
-   row that was a real pass is a regression, and the change owes the fix.
-3. Remove the hollow rows from the record, and lower the floor with every row
-   named, in a commit of their own that lands *before* the change. The
-   recorded check re-runs only recorded rows, so the gate is green on both
-   sides of the landing.
-4. After the change lands, re-record its FIXED rows from a clean main pin.
+An exclusion with a passing case is reported, `FIXED? N passing`: a boundary
+that starts passing is news. An entry with no reason or authority, or naming a
+path or include the suite does not have, fails the run.
+`tooling/census/audit.ts` checks `features.json` itself: every class is one of
+the four, every authority names a page and section that exist, every token is
+in the pin's `features.txt`, and every token the selection uses has a row (the
+gate selects `test/language`).
 
-A floor lowered this way is not ground lost: the passes were never real.
+A sample, or a run over a record's cases, prints a pass count and no rate,
+because its denominator is not the suite.
 
-**The ledger.** Each class of hollow pass found so far, and the guard that
-goes red if it comes back. "Fired" means the guard was recorded failing on a
-compiler that had the defect, so it is known to detect the class, not assumed
-to.
+test262 is **done** when every file of the ECMA-262 strict lane, in every
+directory, ends as a pass or under a named boundary: no `fail`, no
+`no-verdict`, no unclassified refusal. Scope-excluded files stay counted and
+not attempted.
 
-| class | found | rows | guard | fired |
-|---|---|---|---|---|
-| a negative-parse test "rejected" by a TypeScript *type* error, not the early error it names | 2026-09-29, compiling the suite as JavaScript | ~1,600 language | conformance262's evidence-code judge and `negatives-accepted:` ceiling; the census self-check refusal arm | the re-baseline 5,463 -> 4,632 |
-| `typeof <call>` answered from the static type, operand never run (incl. Temporal with no runtime) | `FIXED? 9 passing` on the Temporal exclusion | 21 | outcomes/typeof-a-call-drops-the-call | wrong-answer on 9b4bd02b9; agrees from 141c1ea81 |
-| a pattern binding no names never lowered, so its default "did not run" | a change making it evaluate | 6 | outcomes/an-empty-nested-pattern-with-a-default | wrong-answer on 9b4bd02b9; agrees from 8965cdd2e |
-| a constructor's `return {}` ignored, so a test asserting only "nothing threw" passed | a change refusing it | 1 staging | blockers/a-{base,derived}-constructor-returning-an-object | wrong-answer on 9b4bd02b9; refused from f51f5a2cc |
+## Records
 
-No generic detector covers the last three classes, and the obvious one does
-not work. Counting executed assertions would flag a pass that asserted
-nothing, but each class above *did* assert: on a folded value, on a counter
-that stayed 0, or not at all by design. A pass row keeps no diagnostics, and
-the dropped-statement warnings (NTS1003/NTS1005) only follow a refusal, which
-makes the file unsupported, not a pass. So the ledger grows by the signs
-above, and each new class gets a guard fixture recorded on a compiler that
-has the defect.
+A record is `results/test262/<backend>/<slice>.tsv`, one per backend (`c`,
+`llvm`, `jvm`, `wasm`) and slice (`language`, `builtins`, `annexb`, `staging`,
+`harness`). It holds every case that ran, one line each: the path, `pass` or
+`fail`, and for a fail its uncaught line. Refused and unsupported cases are
+not recorded: they move with every compiler change, and the rankings are
+where they are read. The header names the compiler's fingerprint, the commit
+(only for a clean pin), the backend, the harness and the machine.
 
-### Reporting a failing case: materialise it, do not reconstruct it
+- `--record` writes a record, and only from a pin of a commit
+  (`tooling/conformance/pin.ts`).
+- `--recorded` re-runs exactly the cases a record names, on the backend that
+  wrote it, and compares. A recorded pass that does anything else is
+  `REGRESSED`, a fail with a different line `CHANGED`, a case that did not
+  run `MISSING`, and an unrecorded failure `NEW FAIL`; any of these fails the
+  run. `FIXED` and `NEW PASS` print a note to re-record. The run also prints
+  how many commits to `compiler/` or `runtime/` the record is behind.
+- A record cannot see a new pass, since its population is what already ran.
+  Only a full run, re-recorded from a pin, adds one.
+- Another backend's record covers C's cases: it is written with `--paths-from`
+  naming C's record, and its own previous record as well, so that cases it
+  passes and C refuses are kept.
 
-The first move on any census failure is the case as the census compiled it:
+## What the gate holds
 
-    node tooling/census/materialise262.ts <test/...js> <dir>
-    NTS_TSGO=target/tsgo <pinned nts> emit-c <dir>/tsconfig.json --out <dir>/out --main
+All of these are core steps, which every landing runs.
 
-Then link it with the `cc` line that prints, run it, and label the file's
-assertions to see which one fails. Hand over the emitted C line or the first
-diagnostic, and reduce from that program, one change at a time. On
-2026-09-29, three typed TypeScript reconstructions of the
-`private-gen-meth-*` failures all agreed with node, and so did a typed
-reduction of three `vN undeclared` files. The materialised JavaScript showed
-what each had dropped: the exact pattern (`[[] = init()]`), and a callee with
-no `return`.
+| step | what it holds |
+|---|---|
+| `test262` | the pin is reachable, every standalone file's metadata parses, and `features.json` passes `audit.ts` over `test/language` |
+| `test262-cases` | C, `test/language`: its record, a floor on its pass count and a ceiling on its accepted negatives |
+| `test262-builtins-cases` | C, `test/built-ins`: the same, with its own floor and ceiling |
+| `test262-rest-cases` | C, `test/annexB`, `test/staging` and `test/harness`: each with its own record, floor and ceiling |
+| `test262-llvm`, `test262-jvm`, `test262-wasm` | that backend's five records, each held to itself; the record is the ratchet, so there is no floor |
 
-## Tooling architecture and parallel-work boundary
+The floors and ceilings are variables in `tooling/gate/all.sh`. A pass count
+above its floor, or accepted negatives below their ceiling, prints a note to
+move it. A lowering change runs the five C records against a pin before it
+goes to the gate.
 
-The protocol tooling can be built before representation recovery or script
-lowering and without modifying compiler or runtime code. It should remain in
-the existing `nts-suite` crate so this work does not edit the root workspace
-manifest currently shared with other efforts. The existing numeric harvester
-remains a separate command and result type.
+## Running it
 
-The tooling is divided into six layers:
-
-1. **Discovery and pin validation** enumerate the suite deterministically,
-   reject the wrong commit, identify fixtures, and read exact source bytes.
-2. **Metadata parsing** returns a typed `TestRecord` plus the exact body span and
-   hashes; it does not decide whether NativeTS supports the test.
-3. **Scheduling** applies the strict-script policy and capability inventory to
-   produce explicit `VariantPlan` values or a reasoned exclusion.
-4. **Assembly planning** retains harness files, includes, and the test as ordered
-   source units. It records the strict prefix on the test unit without writing a
-   combined wrapper file.
-5. **Execution adapters** accept a plan and return structured compile and run
-   events. A mock adapter supports protocol tests now; the real NativeTS adapter
-   is added only when the compiler exposes the required script interface.
-6. **Verdict and reporting** compare structured events with positive or negative
-   expectations and emit stable JSON plus a human summary.
-
-The protocol model contains stable, serializable values equivalent to:
-
-```text
-TestRecord
-    suite-relative path
-    source hash and body hash
-    flags, includes, features
-    optional negative { phase, type }
-
-VariantPlan
-    stable test and variant ID
-    strict-script execution mode
-    required capabilities
-    expected outcome
-
-AssemblyPlan
-    host profile identity
-    ordered SourceUnit[] and hashes
-
-CompileEvent / RunEvent
-    success, diagnostic, exception, timeout, or crash
-    ECMAScript phase where applicable
-    exception constructor identity where applicable
-
-Verdict
-    strict-pass, fail, unsupported, inapplicable,
-    timeout, crash, or infrastructure-error
-
-UnscheduledResult
-    scope-excluded or unsupported, with a reason code
-```
-
-Paths in reports are suite-relative, collections are sorted, and no temporary
-build path appears in stable output. Every exclusion and unsupported result has
-a machine-readable reason code; unknown flags or features are never silently
-ignored.
-
-### Checker-facing harness declarations
-
-The tooling owns a synthetic ambient declaration asset for the profile-provided
-Test262 host. It declares `Test262Error` and its `thrower`, callable `assert`
-and its standard methods, `compareArray` and the formatting helpers exported by
-the default harness, `print`, `$DONE`, `$DONOTEVALUATE`, and the typed `$262`
-shape. Known assertion extensions supplied by metadata includes are also typed,
-but the include remains responsible for initializing them. Arbitrary values use
-`unknown`, never `any`, and `$262` has no open-ended string index signature.
-
-Declarations provide checker types only. A separate host-contract manifest maps
-each declaration identity to a stable intrinsic ID and required capability.
-The future compiler adapter consumes that contract; the tooling must not teach
-the compiler to recognize names such as `assert` or `$262`. Unsupported host
-members remain declared when needed to typecheck discovery, but scheduling
-prevents execution unless their capability is implemented.
-
-This asset replaces only the default host functions for which Test262 permits
-an equivalent implementation. Ordinary `includes` remain original JavaScript
-source units and are not rewritten, annotated with JSDoc, or replaced merely
-because they are difficult to compile.
-
-### Tooling completed before compiler integration
-
-The independent tooling can:
-
-- validate the pin and inventory;
-- parse and normalize every standalone file;
-- reproduce the strict scheduling counts above;
-- resolve and hash every metadata include used by the strict-script lane;
-- print the exact ordered source-unit plan for any test;
-- validate positive, negative, timeout, crash, and capability verdict logic
-  through a scripted mock adapter; and
-- write deterministic JSON reports.
-
-Module fixtures are resolved by the census materialiser (`project.ts`'s
-`fixturesOf`): a test's `./*_FIXTURE.js` modules, transitively, beside it and
-outside the program's roots, so a fixture is evaluated only when loaded. This
-serves both dynamic `import()` from scripts and, since 2026-10-02, module tests.
-
-The command surface is:
+`NTS_BIN` names the compiler; for evidence, a pin of a commit.
 
 ```sh
+# The metadata layer: the inventory at the pin, and one test's plan
 cargo run -p nts-suite --no-default-features --bin nts-test262-protocol -- \
   inventory third_party/test262
-
 cargo run -p nts-suite --no-default-features --bin nts-test262-protocol -- \
-  plan third_party/test262 \
-  test/language/expressions/tagged-template/template-object.js
+  plan third_party/test262 test/language/expressions/tagged-template/template-object.js
+
+# One record, as the gate holds it
+node tooling/census/conformance262.ts --under test/language \
+  --recorded results/test262/c/language.tsv
+node tooling/census/conformance262.ts --backend jvm --under test/built-ins \
+  --recorded results/test262/jvm/builtins.tsv
+
+# A full run of one directory, keeping each case's row; --resume continues it
+node tooling/census/conformance262.ts --under test/built-ins \
+  --rows <rows.jsonl> --json <report.json>
+
+# Re-record, from a pin of a commit
+NTS_BIN=$(node tooling/conformance/pin.ts <rev> | tail -1) \
+  node tooling/census/conformance262.ts --under test/language \
+  --record results/test262/c/language.tsv
+
+# One case as the census compiles it; prints the emit-c line to run on it
+node tooling/census/materialise262.ts test/language/<case>.js <dir>
+
+# What a run's rows say, and which cases moved between two runs
+node tooling/census/rows.ts <rows.jsonl> --by message
+node tooling/census/rows.ts --diff <before.jsonl> <after.jsonl>
 ```
 
-`inventory` fails on the wrong git revision, a dirty checkout, or malformed
-metadata. `plan` first performs that same full validation, then prints either a
-reasoned scheduling exclusion or the host profile, ordered include/test units,
-hashes, capabilities, negative expectation, and exact strict prefix. Source
-text is intentionally not copied into stable plan JSON.
+A failing case is reported from its materialised program, never from a
+TypeScript reconstruction of it: the materialised JavaScript is what the
+census compiled.
 
-No compiler refusal can be measured as Test262 support during this milestone.
-The adapter seam is complete when swapping the mock for a future NativeTS
-driver requires no change to parsing, scheduling, assembly, or verdict code.
-
-## NativeTS architecture required by the runner
-
-### Ordinary JavaScript and `NeedsRepresentation`
-
-Test262 receives no typing exception. It consumes the compiler-wide JavaScript
-source policy described in [`../any-unknown.md`](../any-unknown.md).
-
-An unannotated parameter may have TypeScript checker type `any`, but its runtime
-value enters the frontend-only `NeedsRepresentation` flow. Whole-program
-evidence and operation requirements must resolve it to concrete
-representations, direct-call specializations, or a deliberately supported
-union/erased representation before HIR. The verifier admits no `Any`, unresolved
-representation, or generic dynamic operation into HIR or MIR.
-
-This is general compiler functionality shared by application JavaScript,
-declaration-originated `any`, and `unknown`; it is not a Test262 mode that makes
-`any` executable. Test sources are not rewritten with JSDoc. Raw tests remain
-byte-for-byte unchanged, and other tests receive only the source
-transformations prescribed by Test262.
-
-### Script execution
-
-**This prerequisite is met.** Top-level statements lower into one `module#init`
-ordered across modules by `evaluation_order`, rooted for reachability, and
-`emit-c --out <dir> --main` writes a `main.c` that calls it and then drains the
-microtask queue. `tooling/cli/tests/build.rs` builds a top-level-only program
-and runs it; `tests/programs/module-order` pins the cross-file order against node.
-
-This paragraph read "NativeTS currently lowers function bodies, not a complete
-global script" and was the first of four prerequisites named here; three were
-already met when it was checked on 2026-09-18, and the fourth --
-`NeedsRepresentation` -- does not gate this lane, because the leading slice has
-no unannotated parameters by construction. What was genuinely missing was the
-*wiring*: `ExecutionAdapter` had only a mock, and `judge_execution`,
-`RunReport` and `SuiteAssembler` were called from nothing but their own unit
-tests.
-
-A wrapper function is still not equivalent, and units are still not concatenated
-into one: that changes global script semantics, strict-directive reach, parse
-phases and declaration visibility. `tooling/census/project.ts` prepends the
-harness as sibling top-level statements in one script, which is none of those.
-
-Reflective global-object behavior remains unsupported until the runtime has a
-global object; statically resolved script bindings require correct declaration
-and execution order, and get it.
-
-### Harness and host boundary
-
-Test262 permits implementations to replace harness functions with equivalent
-functionality. NativeTS may provide typed, profile-owned identities for
-`Test262Error`, `assert`, `assert.sameValue`, `assert.notSameValue`, `print`, and
-supported `$262` operations. They must be recognized by trusted declaration
-identity, never by a spelling such as `assert` that application code could
-reuse.
-
-Ordinary metadata includes remain unmodified JavaScript source units. A missing
-runtime feature in an include makes the case unsupported; the include is not
-silently omitted. `assert.throws` remains unsupported until the runtime can
-invoke a callback and catch its exception.
-
-The process result must preserve an uncaught exception's constructor type in a
-structured side channel. Exit code and stdout alone cannot distinguish an
-assertion failure from an expected runtime `ReferenceError` or a native crash.
-
-Host APIs such as realms, agents, dynamic script evaluation, detached buffers,
-GC control, and reflective global access must each report a stable unsupported
-capability until implemented. Reachable runtime-generated code follows the
-finite-source AOT policy in [`../eval.md`](../eval.md); arbitrary runtime source
-is an explicit AOT inapplicability. Source-text scanning is not sufficient
-because reachability matters.
-
-## What exists today
-
-The standards-facing implementation is
-`tooling/suite/src/test262_runner/`, exposed by the
-`nts-test262-protocol` binary. It has no dependency on a NativeTS compiler or
-runtime API and does not modify either subsystem. Normal unit tests cover the
-parser dialect, scheduling, safe include resolution, assembly, mock adapter,
-exact negative verdicts, and deterministic reports. Explicit whole-corpus
-audits are available with:
+The metadata layer is a Rust implementation of test262's YAML dialect, with
+test262's own Python parser as its test oracle only. Three ignored tests audit
+it over the whole pin:
 
 ```sh
 cargo test -p nts-suite --no-default-features --lib \
@@ -573,28 +276,24 @@ cargo test -p nts-suite --no-default-features --lib \
   rust_metadata_matches_test262s_parser_for_the_whole_pin -- --ignored
 ```
 
-The last audit compares normalized metadata and extracted body hashes for all
-53,580 standalone files with Test262's bundled Python parser. Python is a test
-oracle only; the Rust command has no Python or general-purpose YAML dependency.
+`nts-suite test262` is not a test262 result. It harvests closed numeric
+expressions from the suite and compares their values with node
+([`results/suite/test262-expressions.md`](../../results/suite/test262-expressions.md)),
+which tests arithmetic and constant folding, and it runs no harness, metadata
+or variant.
 
-`tooling/suite/src/test262.rs` is an expression harvester, not a Test262 runner.
-It extracts closed numeric expressions, feeds them through the constant folder,
-and compares their values with Node. That remains useful as a differential test
-of arithmetic and compile-time folding, but it does not execute Test262's
-harness, metadata, variants, negative expectations, or realms and must not be
-reported as Test262 conformance.
+## Decisions
 
-The real execution adapter should be added only after the first general
-`NeedsRepresentation` path and top-level script initializer can execute a
-non-vacuous synchronous slice. Until then, no compiler refusal can be promoted
-to a Test262 verdict; once connected, a generic refusal remains `unsupported`
-rather than manufacturing a negative-test pass.
-
-The intended first directory inventory is all 11,102 standalone files under
-`test/language/expressions` plus the ten files under
-`test/built-ins/Math/sqrt`: 11,112 files and 21,306 full-protocol variants. The
-strict-script lane schedules **10,455** of those files, one strict variant each;
-588 `noStrict` tests and 69 modules are scope-excluded. Normal pull-request CI
-needs only runner self-tests and a small pinned protocol smoke manifest; larger
-conformance reports are advisory until coverage is broad enough to set a
-meaningful gate.
+- test262 is done when every ECMA-262 strict-lane file passes or sits under a
+  named permanent boundary; sloppy-mode and raw tests stay scope-excluded,
+  counted and not attempted
+  ([log](../records/notebooks/decisions-log.md#test262-09-29-10-02)).
+- Module tests are in the lane, each run once as module code
+  ([log](../records/notebooks/decisions-log.md#test262-09-29-10-02)).
+- test262 runs on every backend, the JVM and Wasm included
+  ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
+- The records keep gating, and no new test262 family starts until the
+  foundations are solid
+  ([log](../records/notebooks/decisions-log.md#priorities-and-order)).
+- The permanent boundaries are those [boundaries](../language/boundaries.md)
+  states.

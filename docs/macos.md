@@ -5,7 +5,7 @@ the one Swift gives an AppKit programmer. Apple's own importer supplies every
 name, so the Swift documentation for a class is its documentation here too.
 Everything below is exercised by an `tests/interop/macos-*` fixture, run on
 a Mac against an Objective-C, C or Swift oracle, through both the C and the
-LLVM backend. [`apple-lane-goal.md`](apple-lane-goal.md) is the lab notebook:
+LLVM backend. [`apple-lane-goal.md`](records/notebooks/apple-lane-goal.md) is the lab notebook:
 how each piece was built and measured, and what is refused.
 
 ## Setup
