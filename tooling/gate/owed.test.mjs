@@ -90,12 +90,54 @@ test("a representation fact is checked wherever the program it describes can cha
 
 test("a compiler change runs the core and leaves the wide steps to the full run", () => {
   const got = stepsFor("compiler/core/src/hir/lower.rs");
-  for (const s of ["examples", "llvm", "jvm", "wasm", "test262-cases", "outcomes", "blockers", "expect-ir", "benches", "c-compiles"]) {
+  for (const s of ["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc", "memory", "test262-cases", "outcomes", "blockers", "expect-ir", "benches", "c-compiles"]) {
     assert.ok(got.includes(s), `lowering should run ${s} per landing; runs ${got.join(" ")}`);
   }
   for (const s of WIDE) assert.ok(!got.includes(s), `lowering should leave ${s} to the full run`);
   // The rule still names them: the full run is where they are owed.
-  superset(reach("compiler/core/src/hir/lower.rs"), ["integrity", "rc", "dex", "bench-agree"], "lowering, with the full run");
+  superset(reach("compiler/core/src/hir/lower.rs"), ["integrity", "dex", "bench-agree"], "lowering, with the full run");
+});
+
+test("native compiler and runtime changes run shipping counting and allocation checks", () => {
+  for (const path of [
+    "compiler/core/src/hir/own.rs",
+    "compiler/core/src/hir/escape.rs",
+    "compiler/core/src/hir/regions.rs",
+    "compiler/core/src/hir/regions/placement.rs",
+    "compiler/core/src/hir/new-analysis/pass.rs",
+    "runtime/c/nts_runtime.c",
+    "runtime/c/a-new-helper.c",
+  ]) {
+    const rules = owed([{ path, added: false }]);
+    assert.ok(!rules.some((r) => r.full), `${path} must select its checks without falling back to every step`);
+    superset(gateSteps(rules), ["rc", "llvm-rc", "memory"], path);
+  }
+});
+
+test("backend-only changes run counting checks for the backend they change", () => {
+  const c = stepsFor("compiler/codegen/c/src/emit.rs");
+  superset(c, ["rc", "memory"], "the C backend");
+  assert.ok(!c.includes("llvm-rc"), "C output cannot change counted LLVM output");
+  const llvm = stepsFor("compiler/codegen/llvm/src/lib.rs");
+  superset(llvm, ["llvm-rc"], "the LLVM backend");
+  for (const step of ["rc", "memory"]) assert.ok(!llvm.includes(step), `LLVM output cannot change the C-only ${step} check`);
+});
+
+test("every HIR pass owes the counting checks, not just files named for ownership", () => {
+  // CFG/liveness, scalarization, cycle classification and callee summaries
+  // also change allocation or reference placement. Cover the whole directory.
+  const listed = spawnSync("git", ["ls-files", "--", "compiler/core/src/hir"], { encoding: "utf8" });
+  assert.equal(listed.status, 0, listed.stderr);
+  const paths = listed.stdout.trim().split("\n").filter((p) => p.endsWith(".rs"));
+  assert.ok(paths.length > 0);
+  for (const path of paths) superset(stepsFor(path), ["rc", "llvm-rc", "memory"], path);
+});
+
+test("documentation changes owe no counted execution or allocation checks", () => {
+  for (const path of ["README.md", "docs/architecture.md", "docs/foundations/memory.md"]) {
+    const got = stepsFor(path);
+    for (const step of ["rc", "llvm-rc", "memory"]) assert.ok(!got.includes(step), `${path} should not owe ${step}`);
+  }
 });
 
 test("a path that is a wide step's subject still owes it per landing", () => {
@@ -356,12 +398,17 @@ test("runtime/c is compiled into the C backend, so it owes at least what the C b
   superset(reach("runtime/c/a-file-nobody-includes-yet.c"), backend, "a new runtime/c file");
 });
 
-test("a crate owes its own rule and every rule of the crates that depend on it", () => {
+test("a crate owes its own rule and its production consumers' rules", () => {
   superset(reach("compiler/semantic-schema/src/lib.rs"), stepsFor("compiler/core/src/lib.rs"), "semantic-schema");
   superset(reach("compiler/core/src/lib.rs"), stepsFor("compiler/codegen/c/src/lib.rs"), "core");
-  for (const crate of ["compiler/codegen/common", "compiler/jvm-emitter", "build"]) {
+  for (const crate of ["compiler/codegen/common", "compiler/jvm-emitter"]) {
     superset(reach(`${crate}/src/lib.rs`), ["corpus", "benches", "bench-agree"], crate);
   }
+  // nts-build reaches the CLI normally, but the JVM only uses it in tests.
+  // That dev edge must keep workspace tests without selecting suite/bench runs.
+  const build = stepsFor("build/src/lib.rs");
+  superset(build, ["tests", "config"], "build's production and test consumers");
+  for (const step of ["corpus", "benches"]) assert.ok(!build.includes(step), `build's dev-only JVM edge should not select ${step}`);
 });
 
 test("a deleted example still owes every step that compiles the examples", () => {

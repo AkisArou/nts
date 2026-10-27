@@ -118,6 +118,8 @@ const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
  * still owes that step per landing: the N-API backend owes `addons`, a
  * runtime module its integrity, a step's own scripts that step. Moving a step
  * back into every landing is deleting it from this set.
+ * Counted C/LLVM execution and allocation counts stay core: reference
+ * counting is the shipping native mode, including placement/escape changes.
  */
 export const WIDE = new Set([
   "integrity",
@@ -131,9 +133,6 @@ export const WIDE = new Set([
   "dex",
   "react-sources",
   "divergence",
-  "memory",
-  "rc",
-  "llvm-rc",
   "sweep",
   "bench-agree",
 ]);
@@ -302,7 +301,9 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    steps: ["examples", "rc", "outcomes", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "typescript-cases", "benches"],
+    // memory/run.sh emits C with --rc and runs it through clang; it never
+    // selects the LLVM backend.
+    steps: ["examples", "rc", "memory", "outcomes", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "typescript-cases", "benches"],
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
@@ -359,7 +360,7 @@ export const RULES = [
   {
     name: "the C runtime",
     when: (p) => /^runtime\/c\//.test(p),
-    steps: ["format", "examples", "rc", "llvm", "assembles"],
+    steps: ["format", "examples", "rc", "llvm", "llvm-rc", "memory", "assembles"],
     arms: [
       { kind: "hygiene", asks: "is the binary testing the new runtime", run: "rebuild nts: runtime/c is include_str!-ed, so an old binary tests the old runtime" },
       COMPARE[0],
@@ -733,7 +734,7 @@ export function allSteps() {
   });
 }
 
-/** crate dir -> { name, deps: [dir], users: [dir] } for the workspace's crates. */
+/** Production/build dependency reach; workspace tests cover dev dependencies. */
 export function crates() {
   return once("crates", () => {
     let meta;
@@ -746,7 +747,7 @@ export function crates() {
     const out = new Map();
     for (const p of meta.packages) {
       const dir = rel(dirname(p.manifest_path));
-      out.set(dir, { name: p.name, deps: [...new Set(p.dependencies.filter((d) => d.path && byName.has(d.name)).map((d) => byName.get(d.name)))], users: [] });
+      out.set(dir, { name: p.name, deps: [...new Set(p.dependencies.filter((d) => d.kind !== "dev" && d.path && byName.has(d.name)).map((d) => byName.get(d.name)))], users: [] });
     }
     for (const [dir, c] of out) for (const d of c.deps) out.get(d)?.users.push(dir);
     return out;
@@ -1298,7 +1299,7 @@ function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 8).join(" ") !== "build clippy tests rustfmt old-paths llvm assembles benches" || !order.includes("corpus") || order.includes("llvm-rc") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 9).join(" ") !== "build clippy tests rustfmt old-paths llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
