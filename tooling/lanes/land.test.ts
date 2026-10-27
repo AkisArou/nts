@@ -282,7 +282,72 @@ test("a red train is halved until the red landing is alone, and only it is refus
   assert.ok(onMain(s, "a.txt") && onMain(s, "b.txt") && onMain(s, "c.txt"));
   assert.ok(!onMain(s, "RED"));
   // [a b red c] red, [a b] green, [red c] red, [red] red, [c] green.
-  assert.equal(gates(s), 5);
+  assert.equal(gates(s), 8, "the three red attempts also check their failed step on main");
+});
+
+function memoryGate(s: Scratch, mainRed = false): void {
+  writeFileSync(join(s.root, "tooling/gate/run.mjs"), 'process.stdout.write(JSON.stringify({fake: [], memory: []}));\n');
+  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), `
+import { execFileSync } from "node:child_process";
+const changed = execFileSync("git", ["diff", "--name-only", process.argv.at(-1)], {encoding: "utf8"}).split("\\n");
+const steps = changed.includes("SELECT_MEMORY") ? "fake memory" : "fake";
+console.log('NTS_GATE_STEPS="' + steps + '" sh tooling/gate/all.sh');
+`);
+  writeFileSync(join(s.root, "tooling/gate/pinned.sh"), STAND_IN_GATE.slice(0, STAND_IN_GATE.indexOf("verdict=green step=PASS")) + `
+node - "$sha" <<'JS'
+const {appendFileSync, existsSync, writeFileSync} = require("node:fs");
+const {join} = require("node:path");
+const requested = process.env.NTS_GATE_STEPS.split(/\\s+/);
+const culprit = existsSync(join(process.env.NTS_GATE_TREE, "BAD_MEMORY"));
+const steps = requested.map(name => ({name, verdict: name === "memory" && culprit ? "FAIL" : "PASS"}));
+appendFileSync(process.env.LAND_TEST_GATES + ".steps", JSON.stringify({requested, culprit}) + "\\n");
+writeFileSync(join(process.env.NTS_GATE_RUN_DIR, "summary.json"), JSON.stringify({
+  verdict: steps.some(s => s.verdict === "FAIL") ? "red" : "green",
+  steps, requested, started: "t", wall_s: 1, identities: {commit: process.argv[2]},
+}));
+JS
+`);
+  if (mainRed) writeFileSync(join(s.root, "BAD_MEMORY"), "already red on main\n");
+  run(s, s.root, ["add", "tooling/gate", ...(mainRed ? ["BAD_MEMORY"] : [])]);
+  run(s, s.root, ["commit", "-q", "-m", "a memory check selected only by another landing"]);
+}
+
+for (const culpritFirst of [true, false]) test(`halving keeps a red step the culprit does not owe (${culpritFirst ? "first" : "second"} half)`, async () => {
+  const s = scratch();
+  memoryGate(s);
+  const culprit = lane(s, "culprit", { BAD_MEMORY: "the allocation regression\n" });
+  const selector = lane(s, "selector", { SELECT_MEMORY: "select the memory check\n" });
+  const asked = culpritFirst ? [culprit, selector] : [selector, culprit];
+  const results = await landTogether(s, asked);
+  const bad = results[culpritFirst ? 0 : 1];
+  const good = results[culpritFirst ? 1 : 0];
+  assert.equal(bad.status, 1, bad.out);
+  assert.match(bad.out, /memory=FAIL/);
+  assert.equal(good.status, 0, good.out);
+  assert.equal(onMain(s, "BAD_MEMORY"), false);
+  assert.equal(onMain(s, "SELECT_MEMORY"), true);
+  const runs = readFileSync(s.gates + ".steps", "utf8").trim().split("\n").map(line => JSON.parse(line));
+  assert.equal(runs.length, 5, "the train and culprit failures each check main");
+  assert.equal(runs.filter(r => r.culprit).length, 2);
+  for (const r of runs) assert.ok(r.requested.includes("memory"), "neither half drops the train's red check");
+});
+
+for (const selectorFirst of [true, false]) test(`a red main refuses only the landing that owes its red step (${selectorFirst ? "first" : "second"} in train)`, async () => {
+  const s = scratch();
+  memoryGate(s, true);
+  const unrelated = lane(s, "unrelated", { "unrelated.txt": "safe tooling change\n" });
+  const selector = lane(s, "selector", { SELECT_MEMORY: "owes memory\n" });
+  const results = await landTogether(s, selectorFirst ? [selector, unrelated] : [unrelated, selector]);
+  const red = results[selectorFirst ? 0 : 1];
+  const green = results[selectorFirst ? 1 : 0];
+  assert.equal(red.status, 1, red.out);
+  assert.match(red.out, /red on main.*memory/);
+  assert.equal(green.status, 0, green.out);
+  assert.equal(onMain(s, "SELECT_MEMORY"), false);
+  assert.equal(onMain(s, "unrelated.txt"), true);
+  const runs = readFileSync(s.gates + ".steps", "utf8").trim().split("\n").map(line => JSON.parse(line));
+  assert.equal(runs.length, 3, "failed train, base check, then only the unrelated landing");
+  assert.deepEqual(runs.map(r => r.requested), [["fake", "memory"], ["memory"], ["fake"]]);
 });
 
 test("a landing that conflicts with one ahead of it is refused, and the train goes on", async () => {

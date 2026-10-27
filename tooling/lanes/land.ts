@@ -42,11 +42,11 @@
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
-import { gateEnvironmentError } from "../gate/environment.ts";
+import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 
@@ -113,6 +113,21 @@ function sharedCheckout(): string {
  * projects when it could narrow them (`NTS_INTEROP_PROJECTS`), else null.
  */
 type Owed = { steps: string[] | "all"; interop: string | null };
+type RequiredChecks = { steps: string[]; interop: string | null };
+function unionChecks(a: Owed, b: Owed): Owed {
+  const interop = (checks: Owed) => checks.steps === "all" || checks.steps.includes("interop");
+  return {
+    steps: a.steps === "all" || b.steps === "all" ? "all" : [...new Set([...a.steps, ...b.steps])],
+    interop: !interop(b) ? a.interop : !interop(a) ? b.interop
+      : a.interop === null || b.interop === null ? null
+      : [...new Set([...a.interop.split(/\s+/), ...b.interop.split(/\s+/)])].join(" "),
+  };
+}
+
+function unionRequired(a: RequiredChecks, b: RequiredChecks): RequiredChecks {
+  return { steps: [...new Set([...a.steps, ...b.steps])], interop: unionChecks(a, b).interop };
+}
+
 function environmentProblem(tree: string, owed: Owed): string | null {
   try { return gateEnvironmentError(tree, owed.steps, owed.interop); }
   catch (error) { fail(`environment preflight: ${(error as Error).message}`); }
@@ -253,7 +268,7 @@ function replayOnto(root: string, base: string, onto: string, sha: string): stri
 }
 
 /** A landing waiting for the lock: one file in QUEUE, named by its id. */
-type Entry = { id: string; sha: string; tree: string; pid: number; at: number };
+type Entry = { id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks };
 /** What became of a landing, written by whichever process gated it. */
 type Result = { state: "landed" | "red" | "conflict" | "unrun"; message: string; landing?: string; main?: string; run?: string };
 
@@ -426,7 +441,7 @@ function status(fields: Record<string, unknown>): void {
 }
 
 /** How a gate of one commit ended: green, or why not. */
-type Gated = { ok: true; run: string; note: string } | { ok: false; run: string; state: "red" | "unrun"; message: string };
+type Gated = { ok: true; run: string; note: string } | { ok: false; run: string; state: "red" | "unrun"; message: string; required?: RequiredChecks };
 
 /**
  * The gate's debug build gains the artifacts of every compiler version gated,
@@ -447,7 +462,7 @@ function trimGateTarget(): void {
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
-function gate(root: string, base: string, landing: string, members: string[]): Gated {
+function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed): Gated {
   const short = landing.slice(0, 12);
   trimGateTarget();
   // The gate tree is this landing's while the lock is held: check it out at
@@ -458,7 +473,7 @@ function gate(root: string, base: string, landing: string, members: string[]): G
     encoding: "utf8",
   });
   if (setup.status !== 0) fail(`could not check out ${short} in the gate tree:\n${setup.stdout}${setup.stderr}`);
-  const owed = owedSteps(GATE_TREE, `${base}..${landing}`);
+  const owed = unionChecks(selected ?? owedSteps(GATE_TREE, `${base}..${landing}`), required);
   say(`${short} on ${base.slice(0, 12)} owes: ${describe(owed)}`);
 
   // A train can owe capabilities its lock holder's own submission did not.
@@ -495,14 +510,21 @@ function gate(root: string, base: string, landing: string, members: string[]): G
     const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
     // The full gate is whatever the run requested: every step all.sh defines.
-    const steps: string[] = owed.steps === "all" ? (summary.requested ?? []) : owed.steps;
+    const steps: string[] = owed.steps === "all"
+      ? [...new Set<string>([...(summary.requested ?? []), ...required.steps])]
+      : owed.steps;
     if (steps.length === 0) return { ok: false, run, state: "red", message: `the summary requested no steps; see ${run}` };
     const wrong = steps.filter((s) => {
       const v = byName.get(s);
       return !(v === "PASS" || (v === "SKIPPED" && ACCEPT_SKIP.includes(s)));
     });
     if (summary.verdict !== "green" || wrong.length > 0) {
-      return { ok: false, run, state: "red", message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}` };
+      const failed = wrong.length ? wrong : steps;
+      return {
+        ok: false, run, state: "red",
+        message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}`,
+        required: { steps: failed, interop: failed.includes("interop") ? owed.interop : null },
+      };
     }
     const touched = git(["diff", "--name-only", base, landing], root).split("\n").filter(Boolean);
     const platformLines = unrun(summary.steps ?? [], touched);
@@ -561,7 +583,8 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
   if (members.length > 1) say(`a train of ${members.length}: ${shas.join(" ")}`);
 
   const started = Date.now();
-  const gated = gate(root, base, tip, shas);
+  const required = members.reduce((checks, { entry }) => unionRequired(checks, entry.required ?? { steps: [], interop: null }), { steps: [], interop: null } as RequiredChecks);
+  const gated = gate(root, base, tip, shas, required);
   const record = (verdict: string) => {
     mkdirSync(STATE, { recursive: true });
     appendFileSync(join(STATE, "trains.tsv"), `${new Date(started).toISOString()}\t${members.length}\t${verdict}\t${Math.round((Date.now() - started) / 1000)}\t${tip.slice(0, 12)}\t${shas.join(",")}\n`);
@@ -569,6 +592,54 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
   if (!gated.ok) {
     record(gated.state);
     status({ state: gated.state, commit: tip, base, run: gated.run, train: shas });
+    let inherited = gated.required;
+    let redOnMain: string[] = [];
+    let remaining = members;
+    if (gated.state === "red" && gated.run) {
+      // Use the frozen train's rules and each member's own replayed delta,
+      // before the base check changes the shared gate tree. A submitting
+      // worktree may have moved while waiting and is not evidence here.
+      let previous = base;
+      const own = members.map(({ landing }) => {
+        const checks = owedSteps(GATE_TREE, `${previous}..${landing}`);
+        previous = landing;
+        return checks;
+      });
+      const suspect = gated.required ?? {
+        steps: [...new Set(gateCapabilities(GATE_TREE, "all").map(site => site.step))],
+        interop: null,
+      };
+      say(`checking failed steps on main (${base.slice(0, 12)}): ${suspect.steps.join(" ")}`);
+      const baseline = gate(root, base, base, [], { steps: [], interop: null }, suspect);
+      redOnMain = baseline.ok ? [] : baseline.required?.steps ?? suspect.steps;
+      inherited = {
+        steps: suspect.steps.filter(step => !redOnMain.includes(step)),
+        interop: suspect.steps.includes("interop") && !redOnMain.includes("interop") ? suspect.interop : null,
+      };
+      if (redOnMain.length) {
+        say(`red on main (${base.slice(0, 12)}): ${redOnMain.join(" ")}; see ${baseline.run}`);
+        for (const [i, { entry }] of members.entries()) {
+          const blocked = redOnMain.filter(step => own[i].steps === "all" || own[i].steps.includes(step));
+          if (blocked.length) answer(entry, {
+            state: "red", run: baseline.run,
+            message: `red on main (${base.slice(0, 12)}): ${blocked.join(" ")}; ${baseline.ok ? "" : baseline.message}`,
+          });
+        }
+        remaining = members.filter(({ entry }) => !resultOf(entry.id));
+      }
+    }
+    // Only a check green on this base can identify a regression in a half.
+    // Persist on every survivor so a new lock holder keeps that distinction.
+    if (inherited || redOnMain.length) for (const { entry } of remaining) {
+      const path = join(QUEUE, `${entry.id}.json`);
+      const prior = entry.required ?? { steps: [], interop: null };
+      const kept = { ...prior, steps: prior.steps.filter(step => !redOnMain.includes(step)) };
+      if (!kept.steps.includes("interop")) kept.interop = null;
+      const next = { ...entry, required: unionRequired(kept, inherited ?? { steps: [], interop: null }) };
+      writeFileSync(`${path}.tmp`, JSON.stringify(next));
+      renameSync(`${path}.tmp`, path);
+    }
+    if (remaining.length !== members.length) return "done";
     if (members.length > 1) {
       say(`a train of ${members.length} was ${gated.state}: gating its first half on its own next`);
       return "halve";
