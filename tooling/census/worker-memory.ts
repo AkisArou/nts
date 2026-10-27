@@ -19,7 +19,28 @@ const systemctl = (...args: string[]) => {
   if (result.status !== 0) throw new Error(`resident cap: systemctl ${args.join(" ")} failed: ${result.stderr || result.error?.message}`);
   return result.stdout.trim();
 };
-const groupOf = (unit: string) => systemctl("show", unit, "--property=ControlGroup", "--value");
+const validGroup = (unit: string, group: string, parent?: string) => {
+  if (!group.startsWith("/") || group === "/" || group.split("/").includes("..") || !group.endsWith(`/${unit}`)
+      || (parent !== undefined && (!parent || !group.startsWith(`${parent}/`)))) {
+    throw new Error(`resident cap: ${unit} has no valid ControlGroup (${JSON.stringify(group)})`);
+  }
+  return group;
+};
+const groupOf = (unit: string, parent?: string) => {
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    const group = systemctl("show", unit, "--property=ControlGroup", "--value");
+    if (group || Date.now() >= deadline) return validGroup(unit, group, parent);
+    pause(10);
+  }
+};
+const failedSetup = (error: unknown, cleanup: () => void): never => {
+  try { cleanup(); }
+  catch (cleanupError) {
+    throw new AggregateError([error, cleanupError], `resident cap: setup failed: ${String(error)}; cleanup also failed: ${String(cleanupError)}`, { cause: error });
+  }
+  throw error;
+};
 const manager = (...args: string[]) => {
   const result = spawnSync("busctl", ["--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager", ...args], { encoding: "utf8" });
   if (result.status !== 0 && args[0] === "StopUnit" && result.stderr.includes(`Unit ${args[2]} not loaded.`)) return;
@@ -71,16 +92,23 @@ export class MemoryRun {
     this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
     mkdirSync(this.directory, { recursive: true });
     try {
-      this.#slice(this.slice, this.budgetBytes);
-      this.group = groupOf(this.slice);
-      this.#verify(this.group, this.budgetBytes);
+      this.group = this.#slice(this.slice, this.budgetBytes);
     } catch (error) {
-      this.close();
-      throw error;
+      failedSetup(error, () => this.close());
     }
   }
-  #slice(unit: string, bytes: number) {
-    manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", "5", "Description", "s", `nts census resident cap ${this.prefix}`, "MemoryMax", "t", String(bytes), "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "0");
+  #slice(unit: string, bytes: number, parent?: string) {
+    try {
+      manager("StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail", "5", "Description", "s", `nts census resident cap ${this.prefix}`, "MemoryMax", "t", String(bytes), "MemorySwapMax", "t", "0", "StopWhenUnneeded", "b", "false", "CollectMode", "s", "inactive-or-failed", "0");
+      // StartTransientUnit returns a queued job, not an active slice. Join
+      // that job before reading ControlGroup or any kernel memory controls.
+      systemctl("start", unit);
+      const group = groupOf(unit, parent);
+      this.#verify(group, bytes);
+      return group;
+    } catch (error) {
+      failedSetup(error, () => manager("StopUnit", "ss", unit, "replace"));
+    }
   }
   #verify(group: string, maximum: number) {
     // The kernel rounds byte budgets down to whole pages. Its actual ceiling
@@ -95,10 +123,9 @@ export class MemoryRun {
     const limit = bytes === 0 ? this.budgetBytes : Math.min(integer(bytes, "resident worker budget"), this.budgetBytes);
     const slice = `${this.prefix}-w${index}.slice`;
     if (!/^[a-zA-Z0-9]+$/.test(String(index))) throw new Error("invalid resident worker index");
-    this.#slice(slice, limit);
-    const worker = new MemoryWorker(this, slice, groupOf(slice), limit);
+    const group = this.#slice(slice, limit, this.group);
+    const worker = new MemoryWorker(this, slice, group, limit);
     this.#workers.push(worker);
-    this.#verify(worker.group, limit);
     return worker;
   }
   aggregateOoms() { return events(this.group, true).oom; }
@@ -129,7 +156,7 @@ export class MemoryWorker {
   #closed = false;
   #scopes = new Set<MemoryScope>();
   constructor(run: MemoryRun, slice: string, group: string, bytes: number) {
-    this.run = run; this.slice = slice; this.group = group; this.bytes = bytes;
+    this.run = run; this.slice = slice; this.group = validGroup(slice, group, run.group); this.bytes = bytes;
   }
   kills() { return events(this.group).kills; }
   scope(command: string, args: readonly string[]): MemoryScope {

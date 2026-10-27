@@ -112,3 +112,97 @@ test("a closed worker cannot recreate an uncapped parent slice", () => {
   assert.throws(() => worker.scope(process.execPath, []), /worker is closed/);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
 });
+
+// A queued job and a lagging ControlGroup property, without changing the real
+// manager. Patches live only in a short-lived child, never in peer processes.
+async function fakeManager(mode, module) {
+  const { default: fs } = await import("node:fs");
+  const { default: cp } = await import("node:child_process");
+  const { syncBuiltinESMExports } = await import("node:module");
+  const original = { spawn: cp.spawnSync, read: fs.readFileSync, exists: fs.existsSync };
+  const units = new Map();
+  const calls = [];
+  let root, rootLookups = 0;
+  const response = (stdout = "", status = 0, stderr = "") => ({ stdout, stderr, status });
+  cp.spawnSync = (command, args, options) => {
+    if (command === "busctl") {
+      let at = args.indexOf("StartTransientUnit");
+      if (at >= 0) {
+        const unit = args[at + 2]; root ??= unit;
+        const group = `/fake-user/${root}${unit === root ? "" : `/${unit}`}`;
+        units.set(unit, { unit, group, bytes: Number(args[args.indexOf("MemoryMax") + 2]), ready: false, reads: 0 });
+        calls.push(`create:${unit}`);
+        return response('o "/fake-job"');
+      }
+      at = args.indexOf("StopUnit");
+      if (at >= 0) {
+        const unit = args[at + 2];
+        calls.push(`stop:${unit}`);
+        if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected cleanup failure");
+        const held = units.get(unit);
+        for (const [name, row] of units) if (name === unit || held && row.group.startsWith(held.group + "/")) units.delete(name);
+        return response('o "/fake-stop-job"');
+      }
+    }
+    if (command === "systemctl") {
+      const operation = args[1], unit = args[2], row = units.get(unit);
+      calls.push(`${operation}:${unit}`);
+      if (operation === "start") {
+        if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected start failure");
+        row.ready = true;
+        return response();
+      }
+      if (operation === "show") {
+        if (!row.ready) throw new Error("ControlGroup read before joining start job");
+        row.reads++;
+        if (mode === "always-empty" && unit !== root || mode === "empty-once" && row.reads === 1) return response();
+        return response(mode === "wrong-parent" && unit !== root ? `/someone-else/${unit}` : row.group);
+      }
+    }
+    return original.spawn(command, args, options);
+  };
+  fs.existsSync = path => {
+    const text = String(path);
+    if (text === "/sys/fs/cgroup" || text === "/sys/fs/cgroup/") { rootLookups++; throw new Error("cgroup root was checked"); }
+    if (text.startsWith("/sys/fs/cgroup/")) return [...units.values()].some(row => text === "/sys/fs/cgroup" + row.group);
+    return original.exists(path);
+  };
+  fs.readFileSync = (path, ...args) => {
+    const text = String(path);
+    if (text.startsWith("/sys/fs/cgroup/")) {
+      const row = [...units.values()].find(row => text === "/sys/fs/cgroup" + row.group + "/memory.max" || text === "/sys/fs/cgroup" + row.group + "/memory.swap.max");
+      if (!row) throw new Error(`unexpected kernel read ${text}`);
+      return text.endsWith("memory.max") ? String(row.bytes) : "0";
+    }
+    return original.read(path, ...args);
+  };
+  syncBuiltinESMExports();
+  const { MemoryRun } = await import(module);
+  const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "fake-manager" });
+  let error = null, group = null;
+  try { group = run.worker(0, 64 * 2 ** 20).group; }
+  catch (caught) { error = String(caught); }
+  finally { run.close(); }
+  process.stdout.write(JSON.stringify({ error, group, calls, rootLookups, remaining: units.size }));
+}
+
+for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanup"]) {
+  test(`slice setup with fake manager: ${mode}`, () => {
+    const code = `(${fakeManager.toString()})(${JSON.stringify(mode)},${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});`;
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8", timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr);
+    const actual = JSON.parse(result.stdout);
+    assert.equal(actual.rootLookups, 0);
+    assert.equal(actual.remaining, 0);
+    if (mode === "empty-once") {
+      assert.equal(actual.error, null);
+      assert.ok(actual.group.endsWith("-w0.slice"));
+    } else if (mode === "failed-cleanup") {
+      assert.match(actual.error, /injected start failure/);
+      assert.match(actual.error, /injected cleanup failure/);
+    } else {
+      assert.match(actual.error, /resident cap: .*?-w0.slice has no valid ControlGroup/);
+      assert.doesNotMatch(actual.error, /cgroup was not removed/);
+    }
+  });
+}
