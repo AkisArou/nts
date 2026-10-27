@@ -17,7 +17,7 @@ function fixture(t: { after: (fn: () => void) => void }) {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
-function checkFile(root: string, id: number, binary = "new", start = 1, duration = 2, partial = false, unknownCpu = false) {
+function checkFile(root: string, id: number, binary = "new", start = 1, duration = 2, partial = false, unknownCpu = false, peak: unknown = undefined) {
   const fields = { project: "tests/programs/a/tsconfig.json", pid: id, step: "examples", binary_sha: binary, cpu_resolution_s: unknownCpu ? null : .01 };
   const phase = (name: string, wall: number, self: number, child: number) => ({ ...fields, event: "end", phase: name, epoch: epoch + start + duration,
     wall_s: wall, self_user_s: unknownCpu ? null : self, self_sys_s: unknownCpu ? null : 0,
@@ -26,7 +26,7 @@ function checkFile(root: string, id: number, binary = "new", start = 1, duration
     { ...fields, event: "case" },
     { ...fields, event: "begin", phase: "check.total", epoch: epoch + start },
     phase("capture", .2, .1, 0), phase("native.runtime_objects", .3, .01, .2), phase("native.runtime_objects", .4, .01, .3),
-    ...(!partial ? [phase("check.total", duration, .3, 1)] : []),
+    ...(!partial ? [{...phase("check.total", duration, .3, 1), self_peak_rss_kb: peak, child_peak_rss_kb: null}] : []),
   ];
   writeFileSync(join(root, `check-${id}-0.jsonl`), rows.map(r => JSON.stringify(r)).join("\n") + (partial ? '\n{"unfinished":' : "\n"));
 }
@@ -48,7 +48,8 @@ test("disjoint wall distinguishes token and memory waits without summing overlap
 
 test("the unpooled JVM sweep is work rather than idle time", () => {
   const check = { project: "target/sweep-jvm/tsconfig.json", binary_sha: "new", step: "examples", pid: 99,
-    start: epoch, end: epoch + 4, wall_s: 4, complete: true, cpu_resolution_s: .01, phases: [] };
+    start: epoch, end: epoch + 4, wall_s: 4, complete: true, cpu_resolution_s: .01,
+    self_peak_rss_kb: null, child_peak_rss_kb: null, phases: [] };
   const result = waitingBreakdown([], step, [check])!;
   assert.equal(result.wall_s.unpooled_check, 4);
   assert.equal(result.wall_s.script_or_dispatch, 6);
@@ -88,6 +89,24 @@ test("old binaries or missing files are incomplete telemetry, never a fabricated
   assert.equal(data.coverage.completed, 0);
   assert.deepEqual(data.coverage.missing_program_checks, ["tests/programs/a/tsconfig.json"]);
   assert.equal(data.check_wall_s.n, 0);
+});
+
+test("RSS distributions count only measured completed cases and preserve unknown child peaks", t => {
+  const dir = fixture(t);
+  checkFile(dir, 10, "new", 1, 2, false, false, 1024);
+  checkFile(dir, 11, "new", 1, 2, false, false, 4096);
+  checkFile(dir, 12); // Old telemetry has no RSS field.
+  checkFile(dir, 13, "new", 1, 2, false, false, null);
+  checkFile(dir, 14, "new", 1, 2, true, false, 8192);
+  for (const [index, value] of ["4096", -1, 1.5, Infinity, Number.MAX_SAFE_INTEGER + 1].entries()) {
+    checkFile(dir, 20 + index, "new", 1, 2, false, false, value);
+  }
+  const data = summarizeCosts(dir, [], [step]).steps.examples as Record<string, any>;
+  assert.deepEqual(data.self_peak_rss_kb, {n:2, sum:5120, p50:1024, p95:4096, p99:4096, max:4096});
+  assert.deepEqual(data.child_peak_rss_kb, distribution([]));
+  assert.equal(data.cases.find((c: any) => c.pid === 12).self_peak_rss_kb, null);
+  assert.equal(data.cases.find((c: any) => c.pid === 14).self_peak_rss_kb, null);
+  assert.ok(data.cases.every((c: any) => c.child_peak_rss_kb === null));
 });
 
 test("a truncated child record and unavailable CPU stay visible", t => {

@@ -10,7 +10,8 @@ export type Observation = {
 };
 type Phase = { phase: string; wall_s: number; self_cpu_s: number | null; child_cpu_s: number | null };
 export type Check = { project: string; binary_sha: string; pid: number; step: string; start: number; end: number;
-  wall_s: number; cpu_resolution_s: number | null; phases: Phase[]; complete: boolean };
+  wall_s: number; cpu_resolution_s: number | null; self_peak_rss_kb: number | null;
+  child_peak_rss_kb: number | null; phases: Phase[]; complete: boolean };
 export type TimedStep = { name: string; started_at?: string; wall?: number };
 const CHECK_STEPS = new Set(["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc"]);
 const GROUPS: Record<string, string[]> = {
@@ -140,6 +141,10 @@ function cpu(row: Record<string, unknown>, a: string, b: string) {
   return typeof row[a] === "number" && typeof row[b] === "number" ? (row[a] as number) + (row[b] as number) : null;
 }
 
+function peakRss(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
 function readChecks(root: string, errors: string[]) {
   const checks: Check[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -162,6 +167,8 @@ function readChecks(root: string, errors: string[]) {
         start: begin.epoch, end: typeof last?.epoch === "number" ? last.epoch : begin.epoch,
         wall_s: typeof last?.wall_s === "number" ? last.wall_s : 0,
         cpu_resolution_s: typeof first.cpu_resolution_s === "number" ? first.cpu_resolution_s : null,
+        self_peak_rss_kb: peakRss(last?.self_peak_rss_kb),
+        child_peak_rss_kb: peakRss(last?.child_peak_rss_kb),
         phases, complete: Boolean(last),
       });
     } catch (e) { errors.push(`${entry.name}: ${(e as Error).message}`); }
@@ -203,6 +210,8 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       token_wait_s: distribution(tokens.flatMap(r => r.at === undefined || r.grant === undefined ? [] : [r.grant - r.at])),
       token_hold_s: distribution(tokens.flatMap(r => r.release === undefined || r.grant === undefined ? [] : [r.release - r.grant])),
       check_wall_s: distribution(completed.map(c => c.wall_s)), phases, phase_groups: phaseGroups,
+      self_peak_rss_kb: distribution(completed.flatMap(c => c.self_peak_rss_kb === null ? [] : [c.self_peak_rss_kb])),
+      child_peak_rss_kb: distribution(completed.flatMap(c => c.child_peak_rss_kb === null ? [] : [c.child_peak_rss_kb])),
       last_one_percent_completion_tail_s: completedAt.length && Number.isFinite(end)
         ? Math.max(0, end - completedAt[Math.max(0, Math.ceil(completedAt.length * .99) - 1)]) : null,
       cases: cases.map(c => {
@@ -220,6 +229,8 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       "Nested phase totals must not be added to their enclosing totals.",
       "Wait causes use policy events and 500 ms state samples; transitions between observations are approximate.",
       "CPU is process-wide self and waited children, at the recorded clock-tick resolution; absent CPU is unknown.",
+      "Self peak RSS is Linux VmHWM in KiB at standalone check completion: lifetime process peak, excluding children; child peak RSS is currently unknown.",
+      "RSS distributions count measured completed checks only; sums of per-check peaks are not simultaneous resident memory.",
       "Complete describes telemetry, never program agreement; missing telemetry never changes a gate verdict."], steps: byStep };
 }
 

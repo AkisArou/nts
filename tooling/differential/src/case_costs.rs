@@ -1,6 +1,8 @@
 //! Gate-only observations of a standalone `nts check`, never a verdict input.
 //! Linux CPU counters are process-wide and include waited children separately.
 //! Their tick resolution is recorded; unsupported hosts retain wall timings.
+//! `VmHWM` is the standalone process's lifetime self peak in KiB, excluding
+//! children. It is read once at check completion; child peaks remain unknown.
 
 use std::cell::RefCell;
 use std::io::Write as _;
@@ -65,6 +67,30 @@ fn sample() -> Sample {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn parse_peak_rss_kb(status: &str) -> Option<u64> {
+    let fields: Vec<_> = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))?
+        .split_whitespace()
+        .collect();
+    match fields.as_slice() {
+        [value, "kB"] => value.parse().ok(),
+        _ => None,
+    }
+}
+
+fn self_peak_rss_kb() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        parse_peak_rss_kb(&std::fs::read_to_string("/proc/self/status").ok()?)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 pub(crate) fn event(mut value: serde_json::Value) {
     CONTEXT.with_borrow_mut(|context| {
         if let Some(context) = context.as_mut().filter(|context| !context.failed) {
@@ -103,11 +129,16 @@ impl Drop for Span {
             let delta = start.cpu.zip(end.cpu).zip(hz).map(|((start, end), hz)| {
                 std::array::from_fn::<_, 4, _>(|i| (end[i] - start[i]) / hz)
             });
-            event(serde_json::json!({"event":"end", "phase":name,
+            let mut record = serde_json::json!({"event":"end", "phase":name,
                 "epoch":end.epoch, "start_epoch":start.epoch,
                 "wall_s":end.at.duration_since(start.at).as_secs_f64(),
                 "self_user_s":delta.map(|d| d[0]), "self_sys_s":delta.map(|d| d[1]),
-                "child_user_s":delta.map(|d| d[2]), "child_sys_s":delta.map(|d| d[3])}));
+                "child_user_s":delta.map(|d| d[2]), "child_sys_s":delta.map(|d| d[3])});
+            if *name == "check.total" {
+                record["self_peak_rss_kb"] = self_peak_rss_kb().into();
+                record["child_peak_rss_kb"] = serde_json::Value::Null;
+            }
+            event(record);
         }
     }
 }
@@ -219,6 +250,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn peak_rss_requires_a_kernel_value_and_its_unit() {
+        assert_eq!(
+            parse_peak_rss_kb("Name:\tnts\nVmHWM:\t 12345 kB\nVmRSS:\t1 kB"),
+            Some(12345)
+        );
+        for status in [
+            "",
+            "VmRSS: 12345 kB",
+            "VmHWM: unknown kB",
+            "VmHWM: 12345",
+            "VmHWM: 12345 MB",
+            "VmHWM: 12345 kB extra",
+        ] {
+            assert_eq!(parse_peak_rss_kb(status), None, "{status}");
+        }
+    }
+
+    #[test]
     #[cfg(unix)]
     fn observations_keep_an_actual_childs_output_and_nonzero_status() {
         let root =
@@ -251,6 +300,23 @@ mod tests {
         assert!(
             rows.iter()
                 .any(|row| row["event"] == "end" && row["phase"] == "check.total")
+        );
+        let total = rows
+            .iter()
+            .find(|row| row["event"] == "end" && row["phase"] == "check.total")
+            .unwrap();
+        #[cfg(target_os = "linux")]
+        assert!(total["self_peak_rss_kb"].as_u64().is_some_and(|kb| kb > 0));
+        #[cfg(not(target_os = "linux"))]
+        assert!(total["self_peak_rss_kb"].is_null());
+        assert_eq!(
+            total.get("child_peak_rss_kb"),
+            Some(&serde_json::Value::Null)
+        );
+        assert!(
+            rows.iter()
+                .filter(|row| row["phase"] != "check.total" || row["event"] != "end")
+                .all(|row| row.get("self_peak_rss_kb").is_none())
         );
         std::fs::remove_dir_all(root).unwrap();
     }
