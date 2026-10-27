@@ -30,6 +30,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { childSucceeded, completedJvmClasses, recordChild } from "./blockers-child.mjs";
+import { fixturePool, fixtureWorker } from "./blockers-pool.ts";
 
 /* Every emitted tree under one root, removed when the run ends.
  *
@@ -45,11 +46,14 @@ import { childSucceeded, completedJvmClasses, recordChild } from "./blockers-chi
  *
  * `NTS_KEEP_TEMP=1` keeps the tree, which is what anyone reducing a fixture by
  * hand will want. */
-const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-blockers-"));
+const worker = process.argv[2] === "--worker"
+  ? { name: process.argv[3], root: process.argv[4] } : null;
+const RUN_ROOT = worker?.root ?? mkdtempSync(join(tmpdir(), "nts-blockers-"));
 const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
 let retainRun = false;
 let childSequence = 0;
 process.on("exit", () => {
+  if (worker) return; // The parent owns cleanup, including failed workers' artifacts.
   if (process.env.NTS_KEEP_TEMP === undefined && !retainRun) {
     try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
   } else {
@@ -179,7 +183,7 @@ function run(args) {
     env: { NTS_CHECKERS: "1", ...process.env },
   });
   const child = recordChild(compiler, args, result);
-  const stem = join(RUN_ROOT, `child-${childSequence++}`);
+  const stem = join(RUN_ROOT, `child-${worker.name}-${childSequence++}`);
   // Before any verdict: failed or interrupted children cannot turn partial
   // diagnostics, an old file, or a completion phrase into a fixture result.
   const previousRetention = retainRun;
@@ -209,8 +213,9 @@ const names = readdirSync(FIXTURES, { withFileTypes: true })
   .map((e) => e.name)
   .sort();
 
+if (worker && !names.includes(worker.name)) throw new Error(`unknown blocker fixture ${worker.name}`);
 let unexpected = 0;
-for (const name of names) {
+for (const name of worker ? [worker.name] : []) {
   const tsconfig = join(FIXTURES, name, "tsconfig.json");
   const source = readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8");
   const expected = expectation(source);
@@ -826,45 +831,66 @@ for (const name of names) {
   for (const line of shown) console.log(`                got: ${line.trim().replace(/^-- \S+ /, "")}`);
 }
 
-console.log(
-  `\n  ${names.length} fixture(s), ${names.length - unexpected} as expected, ` +
-    `${unexpected} needing a person`,
-);
-// Not a failure: a blocker being fixed is the outcome this lane wants, and it
-// should be loud rather than red. The count is the signal.
-process.exitCode = 0;
-
-// **A fixture about to be committed is an input to `integrity`**, and one that
-// pins a refusal cuts module-scope statements -- violations that want their
-// `integrity.known` entries in the same commit. Three blockers landed without
-// them on 2026-09-29 and turned `integrity` red on main; each author had run
-// this check, which said `reproduces`. So the fixtures new or changed in the
-// working tree -- the ones a commit is about to carry -- go through
-// integrity.ts here, on the same compiler, and anything owed is a failure.
-// Committed fixtures are not re-judged: the gate's own `integrity` step does.
-const pending = [
-  ...new Set(
-    spawnSync("git", ["status", "--porcelain", "--untracked-files=all", "--", "tests/refusals"], { cwd: ROOT, encoding: "utf8" })
-      .stdout.split("\n")
-      .map((l) => /tests\/refusals\/([^/]+)\//.exec(l)?.[1])
-      .filter((n) => n !== undefined && names.includes(n)),
-  ),
-];
-if (pending.length > 0) {
-  const check = spawnSync("node", [join(HERE, "integrity.ts"), ...pending.map((n) => join("tests/refusals", n))], {
-    cwd: ROOT,
-    encoding: "utf8",
-    env: { ...process.env, NTS_BIN: compiler },
-    maxBuffer: 1 << 26,
-  });
-  const said = `${check.stdout ?? ""}${check.stderr ?? ""}`;
-  if (check.status === 0) {
-    console.log(`  integrity: clean over the ${pending.length} uncommitted fixture(s)`);
-  } else {
-    const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tests\/refusals\//.test(l));
-    console.log(`  integrity: the uncommitted fixture(s) owe ${owed.length} integrity.known entr${owed.length === 1 ? "y" : "ies"} -- add them in the same commit`);
-    for (const line of owed.slice(0, 20)) console.log(`  ${line.trim()}`);
-    if (owed.length === 0) console.log(`  ${said.trim().split("\n").slice(-2).join(" / ")}`);
-    process.exitCode = 1;
+if (worker) {
+  writeFileSync(3, JSON.stringify({ unexpected, retainRun }));
+} else {
+  try {
+    await fixturePool(names, Number(process.env.NTS_GATE_JOBS ?? 1), name =>
+      fixtureWorker(fileURLToPath(import.meta.url), name, RUN_ROOT), result => {
+      process.stdout.write(result.stdout);
+      process.stderr.write(result.stderr);
+      unexpected += result.unexpected;
+      retainRun ||= result.retainRun;
+    });
+  } catch (error) {
+    retainRun = true;
+    throw error;
   }
+
+  console.log(
+    `\n  ${names.length} fixture(s), ${names.length - unexpected} as expected, ` +
+      `${unexpected} needing a person`,
+  );
+  // Not a failure: a blocker being fixed is the outcome this lane wants, and it
+  // should be loud rather than red. The count is the signal.
+  process.exitCode = 0;
+
+  // **A fixture about to be committed is an input to `integrity`**, and one that
+  // pins a refusal cuts module-scope statements -- violations that want their
+  // `integrity.known` entries in the same commit. Three blockers landed without
+  // them on 2026-09-29 and turned `integrity` red on main; each author had run
+  // this check, which said `reproduces`. So the fixtures new or changed in the
+  // working tree -- the ones a commit is about to carry -- go through
+  // integrity.ts here, on the same compiler, and anything owed is a failure.
+  // Committed fixtures are not re-judged: the gate's own `integrity` step does.
+  const pending = [
+    ...new Set(
+      spawnSync("git", ["status", "--porcelain", "--untracked-files=all", "--", "tests/refusals"], { cwd: ROOT, encoding: "utf8" })
+        .stdout.split("\n")
+        .map((l) => /tests\/refusals\/([^/]+)\//.exec(l)?.[1])
+        .filter((n) => n !== undefined && names.includes(n)),
+    ),
+  ];
+  if (pending.length > 0) {
+    // The fixture leases have ended; integrity must acquire its own case tokens.
+    const env = { ...process.env, NTS_BIN: compiler };
+    delete env.NTS_GATE_TOKEN_HELD;
+    const check = spawnSync("node", [join(HERE, "integrity.ts"), ...pending.map((n) => join("tests/refusals", n))], {
+      cwd: ROOT,
+      encoding: "utf8",
+      env,
+      maxBuffer: 1 << 26,
+    });
+    const said = `${check.stdout ?? ""}${check.stderr ?? ""}`;
+    if (check.status === 0) {
+      console.log(`  integrity: clean over the ${pending.length} uncommitted fixture(s)`);
+    } else {
+      const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tests\/refusals\//.test(l));
+      console.log(`  integrity: the uncommitted fixture(s) owe ${owed.length} integrity.known entr${owed.length === 1 ? "y" : "ies"} -- add them in the same commit`);
+      for (const line of owed.slice(0, 20)) console.log(`  ${line.trim()}`);
+      if (owed.length === 0) console.log(`  ${said.trim().split("\n").slice(-2).join(" / ")}`);
+      process.exitCode = 1;
+    }
+  }
+
 }

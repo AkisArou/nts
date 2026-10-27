@@ -195,7 +195,7 @@ const STEPS = [
   // After `profile` when both run: build.sh reuses its `emit-c --napi` output
   // (NTS_ADDON_EMITTED) when profile emitted the module cleanly with this binary.
   { name: "addons", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["profile"], doc: "node modules build, load and publish" },
-  { name: "blockers", slots: 1, mem: 1, nts: true, fe: true, doc: "blocker fixtures still refuse as they say",
+  { name: "blockers", elastic: true, slots: 8, min: 2, mem: 8, nts: true, fe: true, doc: "blocker fixtures still refuse as they say",
     capabilities: ["jvm"],
   },
   { name: "divergence", slots: 1, mem: 1, nts: true, fe: true, after: ["addons"], doc: "node divergence instruments" },
