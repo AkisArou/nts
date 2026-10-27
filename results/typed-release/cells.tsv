@@ -1,0 +1,67 @@
+case	column	ns_per_call	measured	commit	note
+awfy-towers	bun	25038.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	cpp	14332.0	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	cpp_wasm	23007.7	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	java	22117.7	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	node	38457.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	nts_c	36557.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	nts_jvm	30683.1	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	nts_llvm	34870.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+awfy-towers	nts_wasm	43201.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	bun	32383.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	cpp	31454.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	cpp_wasm	49847.7	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	java	14507.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	node	25691.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	nts_c	131782.5	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	nts_jvm	18330.0	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	nts_llvm	127383.9	2026-10-27 09:21 UTC	9eb11bff1f95	
+cyclic-churn	nts_wasm	31051.3	2026-10-27 09:21 UTC	9eb11bff1f95	varied 115%
+json-build-append	bun	11288.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-build-append	node	18034.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-build-append	nts_c	9083.1	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-build-append	nts_jvm	15005.1	2026-10-27 09:21 UTC	9eb11bff1f95	varied 110%
+json-build-append	nts_llvm	8989.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-build-append	nts_wasm	18905.8	2026-10-27 09:21 UTC	9eb11bff1f95	varied 137%
+json-parse	bun	1239224.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-parse	node	748195.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-parse	nts_c	1006040.5	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-parse	nts_jvm	575261.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-parse	nts_llvm	1068347.0	2026-10-27 09:21 UTC	9eb11bff1f95	
+json-parse	nts_wasm	1508334.0	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	bun	24367.0	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	cpp	21767.7	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	cpp_wasm	16534.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	java	14693.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	node	32017.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	nts_c	20984.5	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	nts_jvm	19872.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	nts_llvm	20517.9	2026-10-27 09:21 UTC	9eb11bff1f95	
+map-entries-top-k	nts_wasm	30222.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	bun	41933.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	cpp	195528.1	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	cpp_wasm	99997.9	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	java	34635.9	2026-10-27 09:21 UTC	9eb11bff1f95	varied 112%
+release-acyclic	node	73604.0	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	nts_c	101646.4	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	nts_jvm	55943.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	nts_llvm	102432.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+release-acyclic	nts_wasm	57319.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	bun	32334.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	cpp	31920.9	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	cpp_wasm	40401.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	java	13404.1	2026-10-27 09:21 UTC	9eb11bff1f95	varied 116%
+sort-objects	node	54320.1	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	nts_c	158945.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	nts_jvm	128086.4	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	nts_llvm	129384.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+sort-objects	nts_wasm	187046.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	bun	64098.3	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	cpp	148064.7	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	cpp_wasm	113803.2	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	java	34473.1	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	node	66333.8	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	nts_c	30184.9	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	nts_jvm	34757.7	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	nts_llvm	31554.6	2026-10-27 09:21 UTC	9eb11bff1f95	
+tree-teardown	nts_wasm	54716.7	2026-10-27 09:21 UTC	9eb11bff1f95	
