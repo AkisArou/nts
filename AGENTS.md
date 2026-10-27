@@ -202,8 +202,11 @@ then a guard once fixed), `tests/memory/`.
   A gate step's memory pre-check is what a neighbour breaks, and a red gate
   costs its lane a half-hour rerun.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
-  measurement.** Gates and heavy jobs exclude both: `taskset -c 0-3,6-31`
-  (or a narrower set, such as E-cores `16-31`). `land.ts` and `pinned.sh`
+  measurement.** Every process an agent starts excludes both, monitors and
+  samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the
+  command (or a narrower set, such as E-cores `16-31`). A process started
+  from a systemd user unit is otherwise allowed on all 32 CPUs, and one light
+  monitor on CPU 5 is enough to make `with-lock.sh` time out. `land.ts` and `pinned.sh`
   apply the exclusion without widening their inherited affinity. A user scope
   with `AllowedCPUs` enforces a kernel ceiling when cpuset is delegated and a
   widening probe proves it. Otherwise the log says `best-effort`: a library
