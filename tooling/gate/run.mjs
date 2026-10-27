@@ -54,7 +54,7 @@
 //   NTS_GATE_SLOTS        CPU slots for the run (default: NTS_JOBS, else 3/4 of
 //                         the cores)
 //   NTS_GATE_MEM_GB       memory budget in GB (default 20)
-//   NTS_GATE_FRONTENDS    concurrent frontend-using workers (default 20)
+//   NTS_GATE_FRONTENDS    concurrent frontend-using workers (default CPU slots)
 //   NTS_GATE_FAIL_FAST=1  stop at the first FAIL (inner loop; never landing)
 //   NTS_GATE_ACCEPT_SKIP  step names whose SKIPPED does not make the run red
 //   NTS_GATE_RUN_DIR      where logs and the summary go
@@ -81,6 +81,7 @@ import { createTokenPool } from "./tokenpool.mjs";
 import { CaseCosts } from "./case-costs.ts";
 import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
 import { TEST_BUILD_DEBUG } from "./test-artifacts.ts";
+import { frontendBudget } from "./budget.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -293,7 +294,10 @@ const intEnv = (name, fallback) => {
 };
 const SLOTS = Math.floor(intEnv("NTS_GATE_SLOTS", intEnv("NTS_JOBS", Math.max(1, Math.floor((cores * 3) / 4)))));
 const MEM = intEnv("NTS_GATE_MEM_GB", Math.min(20, Math.floor(totalmem() / 2 ** 30 * 0.7)));
-const FRONTENDS = Math.floor(intEnv("NTS_GATE_FRONTENDS", 20));
+const FRONTENDS = (() => {
+  try { return frontendBudget(env, SLOTS); }
+  catch (error) { usage(error.message); }
+})();
 const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAST !== "0";
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
 const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
