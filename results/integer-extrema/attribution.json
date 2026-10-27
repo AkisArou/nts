@@ -1,0 +1,674 @@
+{
+  "profiles": {
+    "state": "PASS",
+    "profiles": 6,
+    "utc": "2026-10-27T14:53:49.801Z"
+  },
+  "repeat": {
+    "state": "PASS",
+    "current": null,
+    "completed": 90,
+    "utc": "2026-10-27T14:53:36.775Z"
+  },
+  "conversions": [
+    {
+      "name": "integer-extrema-control",
+      "backend": "c",
+      "arm": "base",
+      "functions": {
+        "main": [
+          "2887:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2908:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "2930:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2a23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2a28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2a36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "mergePositions": [
+          "2b78:\tc5 fb 2c c8          \tvcvttsd2si ecx,xmm0",
+          "2bf2:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2c4f:\tc4 c1 03 2a d1       \tvcvtsi2sd xmm2,xmm15,r9d",
+          "2c58:\tc5 7b 2c d2          \tvcvttsd2si r10d,xmm2",
+          "2c65:\tc5 83 2a db          \tvcvtsi2sd xmm3,xmm15,ebx",
+          "2c6d:\tc5 fb 2c db          \tvcvttsd2si ebx,xmm3",
+          "2c8b:\tc5 fb 2c eb          \tvcvttsd2si ebp,xmm3",
+          "2d02:\tc5 7b 2c fb          \tvcvttsd2si r15d,xmm3",
+          "2d19:\tc5 7b 2c fb          \tvcvttsd2si r15d,xmm3",
+          "2d40:\tc5 7b 2c fb          \tvcvttsd2si r15d,xmm3",
+          "2d59:\tc5 7b 2c fb          \tvcvttsd2si r15d,xmm3"
+        ],
+        "work": [
+          "2d86:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ]
+      }
+    },
+    {
+      "name": "integer-extrema-control",
+      "backend": "c",
+      "arm": "integers",
+      "functions": {
+        "main": [
+          "2887:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2908:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "2930:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2a23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2a28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2a36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "mergePositions": [
+          "2b78:\tc5 fb 2c c8          \tvcvttsd2si ecx,xmm0"
+        ],
+        "work": [
+          "2d56:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ]
+      }
+    },
+    {
+      "name": "integer-extrema-control",
+      "backend": "llvm",
+      "arm": "base",
+      "functions": {
+        "main": [
+          "2880:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2901:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "2930:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2a23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2a28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2a36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "mergePositions": [
+          "2b78:\tc5 fb 2c c8          \tvcvttsd2si ecx,xmm0",
+          "2bf2:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "2c4f:\tc4 c1 03 2a d1       \tvcvtsi2sd xmm2,xmm15,r9d",
+          "2c58:\tc5 7b 2c d2          \tvcvttsd2si r10d,xmm2",
+          "2c65:\tc4 c1 03 2a db       \tvcvtsi2sd xmm3,xmm15,r11d",
+          "2c6e:\tc5 7b 2c db          \tvcvttsd2si r11d,xmm3",
+          "2c8b:\tc5 fb 2c eb          \tvcvttsd2si ebp,xmm3",
+          "2ce0:\tc5 7b 2c f3          \tvcvttsd2si r14d,xmm3",
+          "2cf8:\tc5 7b 2c fb          \tvcvttsd2si r15d,xmm3",
+          "2d20:\tc5 7b 2c f3          \tvcvttsd2si r14d,xmm3",
+          "2d33:\tc5 7b 2c fb          \tvcvttsd2si r15d,xmm3"
+        ],
+        "work": [
+          "2d56:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ],
+        "nts_to_int32_fn": [
+          "2dc8:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0"
+        ]
+      }
+    },
+    {
+      "name": "integer-extrema-control",
+      "backend": "llvm",
+      "arm": "integers",
+      "functions": {
+        "main": [
+          "2a23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2a28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2a36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "work": [
+          "2b80:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0",
+          "2d48:\tc5 83 2a c1          \tvcvtsi2sd xmm0,xmm15,ecx"
+        ],
+        "nts_to_int32_fn": [
+          "2de8:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0"
+        ]
+      }
+    },
+    {
+      "name": "string-sort-control",
+      "backend": "c",
+      "arm": "base",
+      "functions": {
+        "main": [
+          "2b23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2b28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2b36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "stableStrings": [
+          "2d49:\tc5 fb 2c d1          \tvcvttsd2si edx,xmm1",
+          "2daa:\tc5 83 2a c2          \tvcvtsi2sd xmm0,xmm15,edx",
+          "2e06:\tc4 c1 03 2a c5       \tvcvtsi2sd xmm0,xmm15,r13d",
+          "2f5b:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "2f97:\tc4 e1 fb 2c ca       \tvcvttsd2si rcx,xmm2",
+          "2fa0:\tc4 e1 83 2a da       \tvcvtsi2sd xmm3,xmm15,rdx",
+          "2fca:\tc4 e1 fb 2c f4       \tvcvttsd2si rsi,xmm4",
+          "2fd3:\tc4 e1 83 2a ef       \tvcvtsi2sd xmm5,xmm15,rdi",
+          "2fe5:\tc4 e1 83 2a f6       \tvcvtsi2sd xmm6,xmm15,rsi",
+          "3025:\tc4 41 fb 2c c1       \tvcvttsd2si r8,xmm9",
+          "3031:\tc4 61 fb 2c cf       \tvcvttsd2si r9,xmm7",
+          "306b:\tc4 41 fb 2c c3       \tvcvttsd2si r8,xmm11",
+          "3080:\tc4 41 fb 2c d1       \tvcvttsd2si r10,xmm9"
+        ],
+        "work": [
+          "33f8:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+          "3463:\tc5 83 2a ca          \tvcvtsi2sd xmm1,xmm15,edx",
+          "34fb:\tc5 83 2a c3          \tvcvtsi2sd xmm0,xmm15,ebx"
+        ],
+        "nts_array_to_string": [
+          "43df:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "441a:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "4426:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "4437:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ],
+        "nts_number_to_string": [
+          "5c70:\tc5 fb 2c e8          \tvcvttsd2si ebp,xmm0",
+          "5c88:\tc5 83 2a cd          \tvcvtsi2sd xmm1,xmm15,ebp",
+          "5f16:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "5f2a:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_array_new": [
+          "6d01:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "6ddc:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_array_slice_ref": [
+          "7619:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "764a:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "764f:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "76ac:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "76cf:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "76ec:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "76f1:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "774e:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "78e2:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ]
+      }
+    },
+    {
+      "name": "string-sort-control",
+      "backend": "c",
+      "arm": "integers",
+      "functions": {
+        "main": [
+          "2b23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2b28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2b36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "stableStrings": [
+          "2d4b:\tc5 fb 2c d1          \tvcvttsd2si edx,xmm1",
+          "2dac:\tc5 83 2a c2          \tvcvtsi2sd xmm0,xmm15,edx",
+          "2e0c:\tc4 c1 03 2a c5       \tvcvtsi2sd xmm0,xmm15,r13d"
+        ],
+        "work": [
+          "3418:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+          "3483:\tc5 83 2a ca          \tvcvtsi2sd xmm1,xmm15,edx",
+          "351b:\tc5 83 2a c3          \tvcvtsi2sd xmm0,xmm15,ebx"
+        ],
+        "nts_array_to_string": [
+          "43ff:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "443a:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "4446:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "4457:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ],
+        "nts_number_to_string": [
+          "5c90:\tc5 fb 2c e8          \tvcvttsd2si ebp,xmm0",
+          "5ca8:\tc5 83 2a cd          \tvcvtsi2sd xmm1,xmm15,ebp",
+          "5f36:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "5f4a:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_array_new": [
+          "6d21:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "6dfc:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_array_slice_ref": [
+          "7639:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "766a:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "766f:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "76cc:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "76ef:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "770c:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "7711:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "776e:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "7902:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ]
+      }
+    },
+    {
+      "name": "string-sort-control",
+      "backend": "llvm",
+      "arm": "base",
+      "functions": {
+        "main": [
+          "2b23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2b28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2b36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "stableStrings": [
+          "2d51:\tc5 fb 2c d1          \tvcvttsd2si edx,xmm1",
+          "2db2:\tc5 83 2a c2          \tvcvtsi2sd xmm0,xmm15,edx",
+          "2e20:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "2f7b:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "2fb7:\tc4 e1 fb 2c ca       \tvcvttsd2si rcx,xmm2",
+          "2fc0:\tc4 e1 83 2a da       \tvcvtsi2sd xmm3,xmm15,rdx",
+          "2fea:\tc4 e1 fb 2c f4       \tvcvttsd2si rsi,xmm4",
+          "2ff3:\tc4 e1 83 2a ef       \tvcvtsi2sd xmm5,xmm15,rdi",
+          "3005:\tc4 e1 83 2a f6       \tvcvtsi2sd xmm6,xmm15,rsi",
+          "3045:\tc4 41 fb 2c c3       \tvcvttsd2si r8,xmm11",
+          "3051:\tc4 61 fb 2c cf       \tvcvttsd2si r9,xmm7",
+          "3086:\tc4 41 fb 2c c0       \tvcvttsd2si r8,xmm8",
+          "3097:\tc4 41 fb 2c d2       \tvcvttsd2si r10,xmm10"
+        ],
+        "work": [
+          "3418:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+          "3483:\tc5 83 2a ca          \tvcvtsi2sd xmm1,xmm15,edx",
+          "351b:\tc5 83 2a c3          \tvcvtsi2sd xmm0,xmm15,ebx"
+        ],
+        "nts_array_to_string": [
+          "43ff:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "443a:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "4446:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "4457:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ],
+        "nts_number_to_string": [
+          "5c90:\tc5 fb 2c e8          \tvcvttsd2si ebp,xmm0",
+          "5ca8:\tc5 83 2a cd          \tvcvtsi2sd xmm1,xmm15,ebp",
+          "5f36:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "5f4a:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_array_new": [
+          "6d21:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "6dfc:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_to_int32_fn": [
+          "7168:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0"
+        ],
+        "nts_check_fn": [
+          "721d:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_array_slice_ref": [
+          "7739:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "776a:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "776f:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "77cc:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "77ef:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "780c:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "7811:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "786e:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "7a02:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ]
+      }
+    },
+    {
+      "name": "string-sort-control",
+      "backend": "llvm",
+      "arm": "integers",
+      "functions": {
+        "main": [
+          "2b23:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "2b28:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "2b36:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "stableStrings": [
+          "2d5d:\tc5 fb 2c d1          \tvcvttsd2si edx,xmm1",
+          "2dbe:\tc5 83 2a c2          \tvcvtsi2sd xmm0,xmm15,edx",
+          "2e32:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "work": [
+          "3478:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+          "34e3:\tc5 83 2a ca          \tvcvtsi2sd xmm1,xmm15,edx",
+          "357b:\tc5 83 2a c3          \tvcvtsi2sd xmm0,xmm15,ebx"
+        ],
+        "nts_array_to_string": [
+          "445f:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "449a:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "44a6:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "44b7:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax"
+        ],
+        "nts_number_to_string": [
+          "5cf0:\tc5 fb 2c e8          \tvcvttsd2si ebp,xmm0",
+          "5d08:\tc5 83 2a cd          \tvcvtsi2sd xmm1,xmm15,ebp",
+          "5f96:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "5faa:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_array_new": [
+          "6d81:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "6e5c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_to_int32_fn": [
+          "71c8:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0"
+        ],
+        "nts_check_fn": [
+          "723d:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_array_slice_ref": [
+          "7759:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "778a:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "778f:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "77ec:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "780f:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "782c:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "7831:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "788e:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "7a22:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ]
+      }
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "arm": "base",
+      "functions": {
+        "main": [
+          "3b63:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "3b68:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "3b76:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "topWords": [
+          "3cce:\tc5 7b 2c f8          \tvcvttsd2si r15d,xmm0",
+          "3e58:\tc4 c1 03 2a cf       \tvcvtsi2sd xmm1,xmm15,r15d",
+          "5e59:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "60d4:\tc4 c1 03 2a c5       \tvcvtsi2sd xmm0,xmm15,r13d",
+          "6239:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "6285:\tc4 e1 fb 2c cb       \tvcvttsd2si rcx,xmm3",
+          "628e:\tc4 e1 83 2a e0       \tvcvtsi2sd xmm4,xmm15,rax",
+          "62aa:\tc4 e1 fb 2c d5       \tvcvttsd2si rdx,xmm5",
+          "62b6:\tc4 e1 83 2a f0       \tvcvtsi2sd xmm6,xmm15,rax",
+          "62c8:\tc4 e1 83 2a fa       \tvcvtsi2sd xmm7,xmm15,rdx",
+          "6305:\tc4 c1 fb 2c c3       \tvcvttsd2si rax,xmm11",
+          "630f:\tc4 c1 fb 2c d0       \tvcvttsd2si rdx,xmm8",
+          "634b:\tc4 c1 fb 2c c4       \tvcvttsd2si rax,xmm12",
+          "6359:\tc4 41 fb 2c cb       \tvcvttsd2si r9,xmm11",
+          "6780:\tc5 7b 2c f2          \tvcvttsd2si r14d,xmm2",
+          "6794:\tc5 83 2a d7          \tvcvtsi2sd xmm2,xmm15,edi",
+          "679e:\tc4 c1 03 2a de       \tvcvtsi2sd xmm3,xmm15,r14d",
+          "67b6:\tc4 c1 83 2a d8       \tvcvtsi2sd xmm3,xmm15,r8",
+          "88ec:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "8b54:\tc4 c1 03 2a c5       \tvcvtsi2sd xmm0,xmm15,r13d",
+          "8cb9:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "8d05:\tc4 e1 fb 2c cb       \tvcvttsd2si rcx,xmm3",
+          "8d0e:\tc4 e1 83 2a e0       \tvcvtsi2sd xmm4,xmm15,rax",
+          "8d2a:\tc4 e1 fb 2c d5       \tvcvttsd2si rdx,xmm5",
+          "8d36:\tc4 e1 83 2a f0       \tvcvtsi2sd xmm6,xmm15,rax",
+          "8d48:\tc4 e1 83 2a fa       \tvcvtsi2sd xmm7,xmm15,rdx",
+          "8d85:\tc4 c1 fb 2c c3       \tvcvttsd2si rax,xmm11",
+          "8d8f:\tc4 c1 fb 2c d0       \tvcvttsd2si rdx,xmm8",
+          "8dcb:\tc4 c1 fb 2c c4       \tvcvttsd2si rax,xmm12",
+          "8dd9:\tc4 41 fb 2c cb       \tvcvttsd2si r9,xmm11",
+          "9200:\tc5 7b 2c f2          \tvcvttsd2si r14d,xmm2",
+          "9214:\tc5 83 2a d7          \tvcvtsi2sd xmm2,xmm15,edi",
+          "921e:\tc4 c1 03 2a de       \tvcvtsi2sd xmm3,xmm15,r14d",
+          "9236:\tc4 c1 83 2a d8       \tvcvtsi2sd xmm3,xmm15,r8",
+          "92e3:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "943d:\tc5 83 2a c1          \tvcvtsi2sd xmm0,xmm15,ecx"
+        ],
+        "nts_array_to_string": [
+          "a48f:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "a4ca:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "a4d6:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "a4e7:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "a506:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "a51f:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_array_new": [
+          "c331:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "c40c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_str_append_number": [
+          "c785:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "c79e:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_array_slice_ref": [
+          "cd19:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "cd4a:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "cd4f:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "cdac:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "cdcf:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "cdec:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "cdf1:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "ce4e:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "cfe2:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_number_format.llvm.9833402154433861343": [
+          "d0d3:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "d0e7:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_map_new": [
+          "e031:\tc4 e1 fb 2c d8       \tvcvttsd2si rbx,xmm0"
+        ]
+      }
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "c",
+      "arm": "integers",
+      "functions": {
+        "main": [
+          "3b63:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "3b68:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "3b76:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "topWords": [
+          "3cce:\tc5 7b 2c f8          \tvcvttsd2si r15d,xmm0",
+          "3e58:\tc4 c1 03 2a cf       \tvcvtsi2sd xmm1,xmm15,r15d",
+          "5e5c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "60d8:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "67c0:\tc5 7b 2c f2          \tvcvttsd2si r14d,xmm2",
+          "67d4:\tc5 83 2a d7          \tvcvtsi2sd xmm2,xmm15,edi",
+          "67de:\tc4 c1 03 2a de       \tvcvtsi2sd xmm3,xmm15,r14d",
+          "67f6:\tc4 c1 83 2a d8       \tvcvtsi2sd xmm3,xmm15,r8",
+          "8929:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "8b98:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "9280:\tc5 7b 2c f2          \tvcvttsd2si r14d,xmm2",
+          "9294:\tc5 83 2a d7          \tvcvtsi2sd xmm2,xmm15,edi",
+          "929e:\tc4 c1 03 2a de       \tvcvtsi2sd xmm3,xmm15,r14d",
+          "92b6:\tc4 c1 83 2a d8       \tvcvtsi2sd xmm3,xmm15,r8",
+          "9363:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "94c1:\tc5 83 2a c1          \tvcvtsi2sd xmm0,xmm15,ecx"
+        ],
+        "nts_array_to_string": [
+          "a50f:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "a54a:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "a556:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "a567:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "a586:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "a59f:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_array_new": [
+          "c3b1:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "c48c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_str_append_number": [
+          "c805:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "c81e:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_array_slice_ref": [
+          "cd99:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "cdca:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "cdcf:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "ce2c:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "ce4f:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "ce6c:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "ce71:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "cece:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "d062:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_number_format.llvm.9833402154433861343": [
+          "d153:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "d167:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_map_new": [
+          "e0b1:\tc4 e1 fb 2c d8       \tvcvttsd2si rbx,xmm0"
+        ]
+      }
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "arm": "base",
+      "functions": {
+        "main": [
+          "3b63:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "3b68:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "3b76:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "topWords": [
+          "3d31:\tc5 7b 2c f0          \tvcvttsd2si r14d,xmm0",
+          "3d99:\tc4 c1 03 2a ce       \tvcvtsi2sd xmm1,xmm15,r14d",
+          "5d9c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "5e01:\tc5 7b 2c f8          \tvcvttsd2si r15d,xmm0",
+          "6038:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "61fa:\tc4 e1 8b 2a c1       \tvcvtsi2sd xmm0,xmm14,rcx",
+          "6243:\tc4 e1 fb 2c c3       \tvcvttsd2si rax,xmm3",
+          "6251:\tc4 e1 8b 2a e1       \tvcvtsi2sd xmm4,xmm14,rcx",
+          "626a:\tc4 e1 fb 2c cd       \tvcvttsd2si rcx,xmm5",
+          "627a:\tc4 e1 c3 2a f2       \tvcvtsi2sd xmm6,xmm7,rdx",
+          "6290:\tc4 e1 c3 2a f9       \tvcvtsi2sd xmm7,xmm7,rcx",
+          "62c5:\tc4 c1 fb 2c cd       \tvcvttsd2si rcx,xmm13",
+          "62d0:\tc4 c1 fb 2c f8       \tvcvttsd2si rdi,xmm8",
+          "6308:\tc4 c1 fb 2c c9       \tvcvttsd2si rcx,xmm9",
+          "6318:\tc4 41 fb 2c c3       \tvcvttsd2si r8,xmm11",
+          "67a0:\tc5 7b 2c f1          \tvcvttsd2si r14d,xmm1",
+          "67b9:\tc5 8b 2a cf          \tvcvtsi2sd xmm1,xmm14,edi",
+          "67c8:\tc4 c1 0b 2a d6       \tvcvtsi2sd xmm2,xmm14,r14d",
+          "67e5:\tc4 c1 8b 2a d0       \tvcvtsi2sd xmm2,xmm14,r8",
+          "8868:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "8ad8:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "8c3a:\tc4 e1 8b 2a c1       \tvcvtsi2sd xmm0,xmm14,rcx",
+          "8c83:\tc4 e1 fb 2c c3       \tvcvttsd2si rax,xmm3",
+          "8c91:\tc4 e1 8b 2a e1       \tvcvtsi2sd xmm4,xmm14,rcx",
+          "8caa:\tc4 e1 fb 2c cd       \tvcvttsd2si rcx,xmm5",
+          "8cba:\tc4 e1 c3 2a f2       \tvcvtsi2sd xmm6,xmm7,rdx",
+          "8cd0:\tc4 e1 c3 2a f9       \tvcvtsi2sd xmm7,xmm7,rcx",
+          "8d05:\tc4 c1 fb 2c cd       \tvcvttsd2si rcx,xmm13",
+          "8d10:\tc4 c1 fb 2c f8       \tvcvttsd2si rdi,xmm8",
+          "8d48:\tc4 c1 fb 2c c9       \tvcvttsd2si rcx,xmm9",
+          "8d58:\tc4 41 fb 2c c3       \tvcvttsd2si r8,xmm11",
+          "91e0:\tc5 7b 2c f1          \tvcvttsd2si r14d,xmm1",
+          "91f9:\tc5 8b 2a cf          \tvcvtsi2sd xmm1,xmm14,edi",
+          "9208:\tc4 c1 0b 2a d6       \tvcvtsi2sd xmm2,xmm14,r14d",
+          "9225:\tc4 c1 8b 2a d0       \tvcvtsi2sd xmm2,xmm14,r8",
+          "92d0:\tc4 c1 0b 2a c6       \tvcvtsi2sd xmm0,xmm14,r14d",
+          "942c:\tc5 83 2a c1          \tvcvtsi2sd xmm0,xmm15,ecx"
+        ],
+        "nts_array_to_string": [
+          "a3ef:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "a42a:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "a436:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "a447:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "a466:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "a47f:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_array_new": [
+          "c291:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "c36c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_str_append_number": [
+          "c6e5:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "c6fe:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_to_int32_fn": [
+          "cc78:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0"
+        ],
+        "nts_check_fn": [
+          "cd2d:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_array_slice_ref": [
+          "cd59:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "cd8a:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "cd8f:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "cdec:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "ce0f:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "ce2c:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "ce31:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "ce8e:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "d022:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_number_format.llvm.9833402154433861343": [
+          "d113:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "d127:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_map_new": [
+          "e071:\tc4 e1 fb 2c d8       \tvcvttsd2si rbx,xmm0"
+        ]
+      }
+    },
+    {
+      "name": "map-entries-top-k",
+      "backend": "llvm",
+      "arm": "integers",
+      "functions": {
+        "main": [
+          "3b63:\tc4 c1 83 2a c6       \tvcvtsi2sd xmm0,xmm15,r14",
+          "3b68:\tc4 c1 83 2a cf       \tvcvtsi2sd xmm1,xmm15,r15",
+          "3b76:\tc4 e1 83 2a cb       \tvcvtsi2sd xmm1,xmm15,rbx"
+        ],
+        "topWords": [
+          "3d31:\tc5 7b 2c f0          \tvcvttsd2si r14d,xmm0",
+          "3d99:\tc4 c1 03 2a ce       \tvcvtsi2sd xmm1,xmm15,r14d",
+          "5d9c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "5e01:\tc5 7b 2c f8          \tvcvttsd2si r15d,xmm0",
+          "6035:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "6780:\tc5 7b 2c f1          \tvcvttsd2si r14d,xmm1",
+          "6794:\tc5 83 2a cf          \tvcvtsi2sd xmm1,xmm15,edi",
+          "679e:\tc4 c1 03 2a d6       \tvcvtsi2sd xmm2,xmm15,r14d",
+          "67b6:\tc4 c1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,r8",
+          "8828:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "8a95:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "9180:\tc5 7b 2c f1          \tvcvttsd2si r14d,xmm1",
+          "9194:\tc5 83 2a cf          \tvcvtsi2sd xmm1,xmm15,edi",
+          "919e:\tc4 c1 03 2a d6       \tvcvtsi2sd xmm2,xmm15,r14d",
+          "91b6:\tc4 c1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,r8",
+          "925c:\tc4 c1 03 2a c6       \tvcvtsi2sd xmm0,xmm15,r14d",
+          "93c2:\tc5 83 2a c1          \tvcvtsi2sd xmm0,xmm15,ecx"
+        ],
+        "nts_array_to_string": [
+          "a38f:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax",
+          "a3ca:\tc4 a1 03 2a 04 b0    \tvcvtsi2sd xmm0,xmm15,DWORD PTR [rax+r14*4]",
+          "a3d6:\tc4 a1 83 2a 04 f0    \tvcvtsi2sd xmm0,xmm15,QWORD PTR [rax+r14*8]",
+          "a3e7:\tc5 83 2a c0          \tvcvtsi2sd xmm0,xmm15,eax",
+          "a406:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "a41f:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_array_new": [
+          "c231:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0"
+        ],
+        "nts_array_push_ref": [
+          "c30c:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_str_append_number": [
+          "c685:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+          "c69e:\tc4 c1 03 2a cd       \tvcvtsi2sd xmm1,xmm15,r13d"
+        ],
+        "nts_to_int32_fn": [
+          "cc18:\tc5 fb 2c c0          \tvcvttsd2si eax,xmm0"
+        ],
+        "nts_check_fn": [
+          "cc8d:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_array_slice_ref": [
+          "ccb9:\tc4 e1 83 2a d0       \tvcvtsi2sd xmm2,xmm15,rax",
+          "ccea:\tc4 e1 fb 2c c8       \tvcvttsd2si rcx,xmm0",
+          "ccef:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "cd4c:\tc4 61 fb 2c f0       \tvcvttsd2si r14,xmm0",
+          "cd6f:\tc4 61 fb 2c e1       \tvcvttsd2si r12,xmm1",
+          "cd8c:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+          "cd91:\tc4 e1 83 2a c1       \tvcvtsi2sd xmm0,xmm15,rcx",
+          "cdee:\tc4 61 fb 2c e0       \tvcvttsd2si r12,xmm0",
+          "cf82:\tc4 e1 83 2a c0       \tvcvtsi2sd xmm0,xmm15,rax"
+        ],
+        "nts_number_format.llvm.9833402154433861343": [
+          "d073:\tc4 e1 fb 2c c0       \tvcvttsd2si rax,xmm0",
+          "d087:\tc4 e1 fb 2c d0       \tvcvttsd2si rdx,xmm0"
+        ],
+        "nts_map_new": [
+          "dfd1:\tc4 e1 fb 2c d8       \tvcvttsd2si rbx,xmm0"
+        ]
+      }
+    }
+  ]
+}

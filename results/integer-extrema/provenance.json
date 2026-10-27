@@ -1,0 +1,28 @@
+{
+  "base": "e80073590754",
+  "measuredSource": "35180fa1eaf8b4f4d61aa7a17935dce868375b6b",
+  "rawDirectory": "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts",
+  "matrix": {
+    "state": "PASS",
+    "current": null,
+    "completed": 624,
+    "utc": "2026-10-27T14:44:02.681Z"
+  },
+  "cases": [
+    "array-copying-methods",
+    "map-entries-top-k",
+    "sort-objects",
+    "array-mutations",
+    "array-methods",
+    "release-acyclic",
+    "cyclic-churn",
+    "tree-teardown",
+    "awfy-towers",
+    "string-sort-control",
+    "integer-extrema-control",
+    "copy-within-control"
+  ],
+  "nativeWarmCalls": 2,
+  "pairedRounds": 5,
+  "hostLaunches": 5
+}

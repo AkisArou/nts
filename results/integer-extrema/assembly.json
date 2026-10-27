@@ -1,0 +1,90 @@
+[
+  {
+    "backend": "c",
+    "arm": "base",
+    "argv": [
+      "objdump",
+      "-d",
+      "-Mintel",
+      "--disassemble=work",
+      "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/ab/base/sort-objects/c"
+    ],
+    "floatToInteger": [
+      "2c93:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+      "3217:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+      "324a:\tc4 e1 fb 2c f3       \tvcvttsd2si rsi,xmm3",
+      "32a5:\tc4 41 fb 2c c1       \tvcvttsd2si r8,xmm9",
+      "32b1:\tc4 61 fb 2c ce       \tvcvttsd2si r9,xmm6",
+      "32ec:\tc4 41 fb 2c c2       \tvcvttsd2si r8,xmm10",
+      "32fc:\tc4 41 fb 2c d1       \tvcvttsd2si r10,xmm9",
+      "3620:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+      "3c77:\tc4 e1 fb 2c c9       \tvcvttsd2si rcx,xmm1",
+      "3caa:\tc4 e1 fb 2c f3       \tvcvttsd2si rsi,xmm3",
+      "3d05:\tc4 41 fb 2c c1       \tvcvttsd2si r8,xmm9",
+      "3d11:\tc4 61 fb 2c ce       \tvcvttsd2si r9,xmm6",
+      "3d4c:\tc4 41 fb 2c c2       \tvcvttsd2si r8,xmm10",
+      "3d5c:\tc4 41 fb 2c d1       \tvcvttsd2si r10,xmm9",
+      "4080:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0"
+    ]
+  },
+  {
+    "backend": "c",
+    "arm": "integers",
+    "argv": [
+      "objdump",
+      "-d",
+      "-Mintel",
+      "--disassemble=work",
+      "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/ab/integers/sort-objects/c"
+    ],
+    "floatToInteger": [
+      "2c93:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+      "35c0:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+      "3fa0:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0"
+    ]
+  },
+  {
+    "backend": "llvm",
+    "arm": "base",
+    "argv": [
+      "objdump",
+      "-d",
+      "-Mintel",
+      "--disassemble=work",
+      "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/ab/base/sort-objects/llvm"
+    ],
+    "floatToInteger": [
+      "2c93:\tc5 fb 2c d0          \tvcvttsd2si edx,xmm0",
+      "3217:\tc4 e1 fb 2c c1       \tvcvttsd2si rax,xmm1",
+      "324a:\tc4 e1 fb 2c d3       \tvcvttsd2si rdx,xmm3",
+      "32a5:\tc4 41 fb 2c c3       \tvcvttsd2si r8,xmm11",
+      "32b1:\tc4 61 fb 2c ce       \tvcvttsd2si r9,xmm6",
+      "32e6:\tc4 61 fb 2c c7       \tvcvttsd2si r8,xmm7",
+      "32f7:\tc4 41 fb 2c d1       \tvcvttsd2si r10,xmm9",
+      "3600:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+      "3cb7:\tc4 e1 fb 2c c1       \tvcvttsd2si rax,xmm1",
+      "3cea:\tc4 e1 fb 2c d3       \tvcvttsd2si rdx,xmm3",
+      "3d45:\tc4 41 fb 2c c3       \tvcvttsd2si r8,xmm11",
+      "3d51:\tc4 61 fb 2c ce       \tvcvttsd2si r9,xmm6",
+      "3d86:\tc4 61 fb 2c c7       \tvcvttsd2si r8,xmm7",
+      "3d97:\tc4 41 fb 2c d1       \tvcvttsd2si r10,xmm9",
+      "40c0:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0"
+    ]
+  },
+  {
+    "backend": "llvm",
+    "arm": "integers",
+    "argv": [
+      "objdump",
+      "-d",
+      "-Mintel",
+      "--disassemble=work",
+      "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/ab/integers/sort-objects/llvm"
+    ],
+    "floatToInteger": [
+      "2c93:\tc5 fb 2c d8          \tvcvttsd2si ebx,xmm0",
+      "3660:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0",
+      "4120:\tc5 7b 2c e8          \tvcvttsd2si r13d,xmm0"
+    ]
+  }
+]

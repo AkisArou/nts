@@ -1,0 +1,13 @@
+{
+  "state": "PASS",
+  "checkedTip": "25142b64a89c1dcbe7b59a624d43d65a7400d21e",
+  "source": "eb609152b42460effd820015d0cb7860207e987a",
+  "base": "bcba26f9bdacbd7327ba30a2d894b0a4d6bede7c",
+  "rustTests": 1768,
+  "profile": "nts-dev",
+  "commands": [
+    "node tooling/gate/inner.ts --base main --no-agree",
+    "cargo test --profile nts-dev --no-fail-fast -p nts-frontend-ts"
+  ],
+  "rawLog": "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-extrema-inner-final.log"
+}

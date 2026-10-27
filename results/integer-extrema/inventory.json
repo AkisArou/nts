@@ -1,0 +1,4057 @@
+[
+  {
+    "name": "absences",
+    "callee": "absences",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/absences/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/absences/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "absences"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/absences/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "absences"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "accumulate",
+    "callee": "accumulate",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/accumulate/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/accumulate/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "accumulate"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/accumulate/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "accumulate"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "array-copying-methods",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/array-copying-methods/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-copying-methods/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "f64",
+        "f64",
+        "f64",
+        "f64"
+      ],
+      "integer": 0,
+      "floating": 4
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-copying-methods/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "i64",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "integer": 4,
+      "floating": 0
+    },
+    "affected": true
+  },
+  {
+    "name": "array-from",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/array-from/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-from/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-from/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "array-methods",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/array-methods/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-methods/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-methods/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "array-mutations",
+    "callee": "mutations",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/array-mutations/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-mutations/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "mutations"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-mutations/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "mutations"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "array-predicates",
+    "callee": "predicates",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/array-predicates/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-predicates/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "predicates"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/array-predicates/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "predicates"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "arrays",
+    "callee": "convolve",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/arrays/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/arrays/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "convolve"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/arrays/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "convolve"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-bounce",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-bounce/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-bounce/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-bounce/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-list",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-list/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-list/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-list/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-mandelbrot",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-mandelbrot/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-mandelbrot/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-mandelbrot/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-nbody",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-nbody/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-nbody/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-nbody/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-permute",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-permute/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-permute/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-permute/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-queens",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-queens/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-queens/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-queens/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-sieve",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-sieve/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-sieve/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-sieve/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "awfy-towers",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/awfy-towers/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-towers/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/awfy-towers/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "bigint",
+    "callee": "mix",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/bigint/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/bigint/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "mix"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/bigint/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "mix"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "bytes",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/bytes/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/bytes/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/bytes/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "case-convert",
+    "callee": "convert",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/case-convert/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/case-convert/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "convert"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/case-convert/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "convert"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "checksum",
+    "callee": "checksum",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/checksum/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/checksum/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "checksum"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/checksum/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "checksum"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "closure-merge",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/closure-merge/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/closure-merge/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/closure-merge/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "closures",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/closures/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/closures/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/closures/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "cyclic-churn",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/cyclic-churn/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/cyclic-churn/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/cyclic-churn/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "dispatch",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/dispatch/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/dispatch/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/dispatch/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "elementwise",
+    "callee": "scale",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/elementwise/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/elementwise/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scale"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/elementwise/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scale"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "erasure-stored-typed",
+    "callee": "erasureStoredTyped",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/erasure-stored-typed/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-stored-typed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureStoredTyped"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-stored-typed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureStoredTyped"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "erasure-stored-unknown",
+    "callee": "erasureStoredUnknown",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/erasure-stored-unknown/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-stored-unknown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureStoredUnknown"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-stored-unknown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureStoredUnknown"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "erasure-typed",
+    "callee": "erasureTyped",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/erasure-typed/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-typed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureTyped"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-typed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureTyped"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "erasure-unknown",
+    "callee": "erasureUnknown",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/erasure-unknown/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-unknown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureUnknown"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/erasure-unknown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "erasureUnknown"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "event-state",
+    "callee": "event",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/event-state/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/event-state/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "event"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/event-state/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "event"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "exceptions",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/exceptions/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/exceptions/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/exceptions/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "face-fields",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/face-fields/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/face-fields/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/face-fields/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "fib",
+    "callee": "fib",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/fib/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/fib/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "fib"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/fib/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "fib"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "generator",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/generator/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/generator/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/generator/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "generator-dispatched",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/generator-dispatched/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/generator-dispatched/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/generator-dispatched/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "generic-classes",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/generic-classes/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/generic-classes/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/generic-classes/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "growth-fixed",
+    "callee": "scan",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/growth-fixed/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/growth-fixed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scan"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/growth-fixed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scan"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "growth-grown",
+    "callee": "scan",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/growth-grown/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/growth-grown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scan"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/growth-grown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scan"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "immutable-update",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/immutable-update/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/immutable-update/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/immutable-update/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "in-narrowing",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/in-narrowing/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/in-narrowing/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/in-narrowing/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "instanceof",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/instanceof/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/instanceof/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/instanceof/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-build-append",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-build-append/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-build-append/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-build-append/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-build-join",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-build-join/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-build-join/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-build-join/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-parse",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-parse/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-parse/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-parse/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-quote",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-quote/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-quote/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-quote/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-scan",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-scan/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-scan/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-scan/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-serialize",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-serialize/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-serialize/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-serialize/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-stringify-builtin",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-stringify-builtin/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-builtin/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-builtin/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-stringify-doc",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-stringify-doc/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-doc/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-doc/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-stringify-fused",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-stringify-fused/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-fused/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-fused/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-stringify-inline",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-stringify-inline/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-inline/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-inline/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "json-stringify-typed",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/json-stringify-typed/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-typed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/json-stringify-typed/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "logical-assignment",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/logical-assignment/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/logical-assignment/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/logical-assignment/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "loop",
+    "callee": "accumulate",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/loop/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/loop/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "accumulate"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/loop/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "accumulate"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "map-and-set",
+    "callee": "table",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/map-and-set/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-and-set/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "table"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-and-set/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "table"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "map-entries-top-k",
+    "callee": "topWords",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/map-entries-top-k/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-entries-top-k/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "topWords"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "f64",
+        "f64",
+        "f64",
+        "f64"
+      ],
+      "integer": 0,
+      "floating": 4
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-entries-top-k/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "topWords"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "i64",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "integer": 4,
+      "floating": 0
+    },
+    "affected": true
+  },
+  {
+    "name": "map-literal-keys",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/map-literal-keys/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-literal-keys/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-literal-keys/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "map-word-counts",
+    "callee": "mapWordCounts",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/map-word-counts/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-word-counts/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "mapWordCounts"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/map-word-counts/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "mapWordCounts"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "module-closures",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/module-closures/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/module-closures/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/module-closures/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "node-utf8",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/node-utf8/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/node-utf8/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/node-utf8/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "number-format",
+    "callee": "format",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/number-format/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/number-format/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "format"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/number-format/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "format"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "number-format-double",
+    "callee": "format",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/number-format-double/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/number-format-double/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "format"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/number-format-double/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "format"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "objects",
+    "callee": "simulate",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/objects/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/objects/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "simulate"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/objects/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "simulate"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "optional-chain",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/optional-chain/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/optional-chain/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/optional-chain/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "pipeline",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/pipeline/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/pipeline/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/pipeline/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "printer-erased",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/printer-erased/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/printer-erased/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/printer-erased/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "record-word-counts",
+    "callee": "wordCounts",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/record-word-counts/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/record-word-counts/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "wordCounts"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/record-word-counts/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "wordCounts"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "release-acyclic",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/release-acyclic/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/release-acyclic/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/release-acyclic/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "sort-objects",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/sort-objects/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/sort-objects/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "f64",
+        "f64",
+        "f64",
+        "f64"
+      ],
+      "integer": 0,
+      "floating": 4
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/sort-objects/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "i64",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "integer": 4,
+      "floating": 0
+    },
+    "affected": true
+  },
+  {
+    "name": "str-append-length",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-append-length/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-append-length/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-append-length/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-append-loop",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-append-loop/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-append-loop/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-append-loop/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-compare",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-compare/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-compare/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-compare/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-concat-pair",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-concat-pair/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-concat-pair/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-concat-pair/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-equal",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-equal/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-equal/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-equal/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-index-of",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-index-of/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-index-of/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-index-of/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-index-read",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-index-read/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-index-read/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-index-read/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-join",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-join/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-join/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-join/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-map-keys",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-map-keys/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-map-keys/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-map-keys/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-slice-keep",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-slice-keep/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-slice-keep/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-slice-keep/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-split",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-split/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-split/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-split/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-template",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-template/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-template/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-template/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "str-to-number",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/str-to-number/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-to-number/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/str-to-number/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "strings",
+    "callee": "scan",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/strings/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/strings/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scan"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/strings/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "scan"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "substrings",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/substrings/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/substrings/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "integer": 12,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/substrings/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "integer": 12,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "symbol-keyed-map",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/symbol-keyed-map/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/symbol-keyed-map/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/symbol-keyed-map/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "symbol-keys",
+    "callee": "keys",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/symbol-keys/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/symbol-keys/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "keys"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/symbol-keys/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "keys"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "tree-teardown",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/tree-teardown/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/tree-teardown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/tree-teardown/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "uniform-callback",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/uniform-callback/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/uniform-callback/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/uniform-callback/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "uniform-callback-arguments",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/uniform-callback-arguments/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/uniform-callback-arguments/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/uniform-callback-arguments/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "uniform-callback-default",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/uniform-callback-default/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/uniform-callback-default/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/uniform-callback-default/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "upcast",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/upcast/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/upcast/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/upcast/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "user-iterable",
+    "callee": "run",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/user-iterable/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/user-iterable/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/user-iterable/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "run"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  },
+  {
+    "name": "utf8-encode",
+    "callee": "work",
+    "source": "/home/akisarou/Projects/nts-lanes/compiler-helper/benchmarks/cases/utf8-encode/case.ts",
+    "directExtrema": false,
+    "base": {
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/base/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/utf8-encode/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "integer": {
+      "argv": [
+        "/home/akisarou/Projects/nts-lanes/compiler-helper/target/release/nts",
+        "hir",
+        "/home/akisarou/.cache/nts-scratch/runtime-20261027/integer-loop-facts/inventory/utf8-encode/tsconfig.json",
+        "--prepared",
+        "--backend",
+        "c",
+        "--rc",
+        "--entry",
+        "work"
+      ],
+      "status": 0,
+      "diagnostics": "",
+      "selections": [],
+      "integer": 0,
+      "floating": 0
+    },
+    "affected": false
+  }
+]
