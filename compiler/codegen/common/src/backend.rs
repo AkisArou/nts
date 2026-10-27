@@ -24,16 +24,14 @@ pub enum Backend {
     Llvm,
     /// JVM class files, written directly.
     Jvm,
-    /// Direct WebAssembly. Experimental bring-up, outside existing gate loops.
-    Wasm,
 }
 
 impl Backend {
     /// Whether this backend's tables answer a key's entry (`hir::entries`),
     /// so a key read and then written is looked up once: `Some` where the
     /// backend says so over its provider's answer, `None` to take the
-    /// provider's. Wasm's tables do, though a host owns its heap; the JVM's
-    /// do not, which is a host heap's answer; C's and LLVM's are the C
+    /// provider's. The JVM's tables do not, which is a host heap's answer;
+    /// C's and LLVM's are the C
     /// runtime's, which do. Every driver that prepares for a backend --
     /// the CLI, the differential, the benchmarks, the tests -- sets
     /// `hir::Options::table_entries` from here, so none prepares one
@@ -41,7 +39,6 @@ impl Backend {
     #[must_use]
     pub const fn table_entries(self) -> Option<bool> {
         match self {
-            Self::Wasm => Some(true),
             Self::C | Self::Llvm | Self::Jvm => None,
         }
     }
@@ -53,16 +50,14 @@ impl Backend {
             Self::C => "c",
             Self::Llvm => "llvm",
             Self::Jvm => "jvm",
-            Self::Wasm => "wasm",
         }
     }
 
-    /// The stable, gated backends. Wasm joins only after its M1 acceptance;
-    /// introducing its name must not add an unfinished lane to existing loops.
+    /// The stable, gated backends.
     pub const ALL: [Self; 3] = [Self::C, Self::Llvm, Self::Jvm];
 
     /// Names users can select, including experimental backends.
-    pub const RECOGNIZED: [Self; 4] = [Self::C, Self::Llvm, Self::Jvm, Self::Wasm];
+    pub const RECOGNIZED: [Self; 3] = Self::ALL;
 
     /// The backend `NTS_BACKEND` names, or [`Backend::C`] when it is unset.
     ///
@@ -146,8 +141,8 @@ mod tests {
     }
 
     #[test]
-    fn wasm_is_recognized_without_changing_the_existing_gate_population() {
-        assert_eq!("wasm".parse::<Backend>().unwrap(), Backend::Wasm);
+    fn the_retired_backend_is_not_a_silent_native_fallback() {
+        assert!("wasm".parse::<Backend>().is_err());
         assert_eq!(Backend::ALL, [Backend::C, Backend::Llvm, Backend::Jvm]);
     }
 }

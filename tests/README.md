@@ -15,7 +15,6 @@ program, a refusal that now compiles becomes a program. Its tsconfig's
 | [`outcomes/`](outcomes) | A recorded wrong answer or crash (`outcome.json`), then a guard once fixed. | `outcomes`, `integrity`, `jvm-verifies` |
 | [`agreements/`](agreements) | Node-agreement seam cases. | `tooling/conformance/agreement.mjs` |
 | [`memory/`](memory) | A program with the live-object counts it may reach (`expected`). | `memory` |
-| [`wasm/`](wasm) | The Wasm backend's own fixtures. | the Wasm backend's cargo tests (`tests`) |
 | [`interop/`](interop) | A native platform project (GTK, Apple, Windows, Java, N-API...), each built by its `build.sh`. | `interop` |
 | [`gjs/`](gjs) | GNOME Workbench ports, written as GJS writes them. | `tooling/gjs-corpus/run.sh` |
 | [`workspace/`](workspace) | The build-system fixture: `nts.config.ts` products across packages. | `config` |

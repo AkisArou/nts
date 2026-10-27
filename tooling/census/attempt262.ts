@@ -366,7 +366,7 @@ function linkC(stdout, out, tools) {
  * Every backend is told the case is a program (`--main`): its roots are the
  * module's evaluation, and what that reaches is what compiles. Without it an
  * emit is a library's, every export a root, so a harness function the case
- * never calls was compiled -- and could refuse -- on the JVM and Wasm, which
+ * never calls was compiled -- and could refuse -- on the JVM, which
  * then measured a different program from C's: 48 of 50 sampled cases emitted
  * other bytes on each (2026-10-16).
  */
@@ -397,27 +397,6 @@ export const BACKENDS = {
     emit: (tsconfig, out) => ["emit-jvm", tsconfig, "--out", out, "--main"],
     prepare: () => ({ objects: undefined }),
     run: (out) => jvmRun(out),
-    capsItself: true,
-  },
-  // `emit-wasm --host node` writes `program.mjs` and its module, or nothing:
-  // any refusal exits 1 with its NTS lines on stderr, which the emit arm reads
-  // as for C. `tooling/wasm/run-program.ts` is the program's host, as C's
-  // runtime is a native program's: it imports `program.mjs`, and ends the
-  // process with C's own lines -- `nts: uncaught <Class>: <message>`, `nts:
-  // refused at run time: <reason>` -- so one classifier reads every backend.
-  // Node's heap is capped by its own flag, never `ulimit -v`, which a Wasm GC
-  // engine's reservations exceed.
-  wasm: {
-    emit: (tsconfig, out) => ["emit-wasm", tsconfig, "--out", out, "--host", "node", "--main"],
-    prepare: () => ({ objects: undefined }),
-    run: (out, tools) => [
-      "node",
-      [
-        ...(tools.memoryCapKb ? [`--max-old-space-size=${Math.floor(Number(tools.memoryCapKb) / 2048)}`] : []),
-        join(dirname(fileURLToPath(import.meta.url)), "../wasm/run-program.ts"),
-        out,
-      ],
-    ],
     capsItself: true,
   },
 };

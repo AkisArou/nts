@@ -109,7 +109,7 @@ impl Metadata {
         Ok(hir::PreparationOptions {
             provider,
             roots: self.entry.as_deref().map_or_else(
-                || default_roots(self.configured, backend),
+                || default_roots(self.configured),
                 hir::reachable::Roots::Entry,
             ),
             callbacks_checkpoint: matches!(backend, Backend::C | Backend::Llvm)
@@ -130,22 +130,15 @@ pub(super) fn provided(backend: Backend) -> hir::features::Provided {
     hir::features::Provided::By(match backend {
         Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
         Backend::Jvm => nts_codegen_jvm::provides,
-        Backend::Wasm => nts_codegen_wasm::provides,
     })
 }
 
 /// The roots of a build that names no `--entry`.
 ///
-/// A configured project's product is its entry's surface. An unconfigured one
-/// may be a library any of whose `export`s is called from outside, so every
-/// `export` is a root -- except on Wasm, whose module publishes the entry's
-/// exports and nothing else (`program.public_api`, walked by the emitter's
-/// `module::emit`). Rooted at every `export`, a runtime module's exported
-/// helpers kept their parameters as wide as a host caller could make them,
-/// behind a `#whole` split, for a caller that does not exist: `node-utf8`'s
-/// `utf8Write` and `utf8Decode`, 3.66% of the row (2026-10-20).
-pub(super) fn default_roots(configured: bool, backend: Backend) -> hir::reachable::Roots<'static> {
-    if configured || matches!(backend, Backend::Wasm) {
+/// A configured project's product is its entry's surface. An unconfigured
+/// library may have any of its exports called from outside.
+pub(super) fn default_roots(configured: bool) -> hir::reachable::Roots<'static> {
+    if configured {
         hir::reachable::Roots::EntrySurface
     } else {
         hir::reachable::Roots::EveryExport
@@ -157,7 +150,7 @@ pub(super) fn default_roots(configured: bool, backend: Backend) -> hir::reachabl
 /// `nts build` before anything is written. Left to the lowering's usual
 /// course, the function reaching it would be refused and every statement
 /// calling that dropped, and the artifact would do less than its source says
-/// on C, LLVM and the JVM -- Wasm already declined such a program whole. The
+/// on C, LLVM and the JVM. The
 /// inspection commands (`emit-c`, `hir`, `check`) still compile what they can:
 /// what lowers is what they are for.
 fn unprovided_stops_the_build(prepared: &hir::Prepared, sources: &[SourceFile]) -> Result<()> {

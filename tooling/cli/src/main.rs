@@ -25,7 +25,6 @@ mod native_paths;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
-mod wasm;
 mod windows_surface;
 mod xcframework;
 
@@ -621,11 +620,11 @@ BUILDING
   check        compile, run, and compare against node
 
 EMITTING
-  emit         emit --backends c,llvm,jvm,wasm into --out/<backend>, sharing raw lowering
+  emit         emit --backends c,llvm,jvm into --out/<backend>, sharing raw lowering
   emit-c       render the program as C, to --out or stdout
   emit-llvm    render the program as textual LLVM IR, to stdout (--os windows)
   emit-jvm     render the program as class files, to --out
-  emit-wasm    render a WebAssembly module and its JS glue, to --out (--host node|browser)
+  emit-wasm    retired; see docs/targets/wasm.md
 
 BINDINGS
   bind-c       generate a TypeScript declaration from a C header
@@ -638,7 +637,7 @@ BINDINGS
 INSPECTING
   frontend     what the frontend answered, before lowering
   types        every type the frontend resolved, as the schema records it
-  hir          the lowered program; --prepared [--backend c|llvm|jvm|wasm] shows backend preparation
+  hir          the lowered program; --prepared [--backend c|llvm|jvm] shows backend preparation
   stats        what preparation did to the program, as `key value` counts (takes hir --prepared's flags)
   regions      which calls a region could serve under --rc, and why each other one cannot
   expect-ir    check the sources' `// expect-ir:` facts against the program each named backend receives
@@ -717,6 +716,18 @@ fn binary_identity() {
     }
 }
 
+const WASM_REBUILD_NOTICE: &str =
+    "the Wasm backend is being rebuilt on Binaryen; see docs/targets/wasm.md";
+
+#[derive(Debug)]
+struct RetiredWasm;
+impl std::fmt::Display for RetiredWasm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(WASM_REBUILD_NOTICE)
+    }
+}
+impl std::error::Error for RetiredWasm {}
+
 /// What was asked for, or `None` when the answer was the usage.
 ///
 /// **`--help` anywhere, not only alone.** `nts build --help` treated `--help`
@@ -725,6 +736,15 @@ fn binary_identity() {
 /// exists, so it is the more likely of the two to be typed.
 fn arguments() -> Result<Option<Vec<String>>> {
     let given: Vec<String> = std::env::args().skip(1).collect();
+    let retired = given.first().is_some_and(|command| command == "emit-wasm")
+        || (given.first().is_some_and(|command| command == "build")
+            && (given
+                .windows(2)
+                .any(|pair| pair[0] == "--target" && pair[1] == "wasm")
+                || given.iter().any(|arg| arg == "--target=wasm")));
+    if retired {
+        return Err(RetiredWasm.into());
+    }
     if arguments::validate(&given).map_err(anyhow::Error::msg)? {
         usage();
         return Ok(None);
@@ -739,6 +759,10 @@ fn main() -> Result<std::process::ExitCode> {
         .spawn(run_command)
         .context("starting the compiler thread")?;
     match worker.join() {
+        Ok(Err(error)) if error.is::<RetiredWasm>() => {
+            eprintln!("{error}");
+            Ok(std::process::ExitCode::FAILURE)
+        }
         Ok(Err(error)) if error.is::<CompletedFrontendDiagnostics>() => {
             eprintln!("Error: {error}");
             Ok(std::process::ExitCode::from(2))
@@ -846,7 +870,7 @@ fn run_command() -> Result<()> {
             )
             .map(drop)
         }
-        Some("emit-wasm") => wasm::command(&args.collect::<Vec<_>>(), Emission::from_flags()),
+        Some("emit-wasm") => Err(RetiredWasm.into()),
         // Every type the frontend resolved, as the schema records it. A
         // lowering refusal names a *type*, and until now there was no way to see
         // what that type actually is — which is a scavenger hunt for anyone
@@ -2604,7 +2628,7 @@ fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
         match arguments.iter().position(|arg| arg == "--backend") {
             Some(at) => arguments
                 .get(at + 1)
-                .context("--backend requires c, llvm, jvm or wasm")?
+                .context("--backend requires c, llvm or jvm")?
                 .parse()
                 .map_err(anyhow::Error::msg)?,
             None => nts_codegen_common::Backend::C,
@@ -2616,7 +2640,7 @@ fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
 fn provider_for(backend: nts_codegen_common::Backend) -> Result<hir::Provider> {
     Ok(match backend {
         nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => selected_provider(),
-        nts_codegen_common::Backend::Jvm | nts_codegen_common::Backend::Wasm => {
+        nts_codegen_common::Backend::Jvm => {
             nts_codegen_common::provider::host_gc(backend.name(), rc_requested())
                 .map_err(anyhow::Error::msg)?
         }
@@ -2695,7 +2719,7 @@ fn prepare_as(
         // `module#init` costs -- five module-level `const`s left null and a
         // benchmark answering 32768 against node's 10240.
         roots: entry.as_deref().map_or_else(
-            || emission::default_roots(configured, backend),
+            || emission::default_roots(configured),
             hir::reachable::Roots::Entry,
         ),
         table_entries: backend.table_entries(),
@@ -9111,7 +9135,7 @@ fn foreign_tables(
 /// was written to prevent.
 /// Whether the command line asked for reference counting by name.
 ///
-/// What a host-GC backend refuses (`provider::host_gc`): the JVM and Wasm
+/// What a host-GC backend refuses (`provider::host_gc`): the JVM
 /// manage memory through their host, and a `--rc` asked of them is a mistake
 /// worth a sentence. `nts build` counting on native by default is not a
 /// request, and a JVM or Android product built by it is no such mistake.

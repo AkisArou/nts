@@ -49,7 +49,7 @@ const PROJECT: &[Flag] = &[switch("--no-acquire"), CHECKER_COUNT];
 const ROOTS: &[Flag] = &[value("--entry", "name[,name]"), value("--product", "name")];
 const PROVIDER: &[Flag] = &[switch("--rc")];
 const SHAPE: &[Flag] = &[switch("--main"), switch("--napi"), switch("--glib")];
-const LISTING: &[Flag] = &[value("--backend", "c|llvm|jvm|wasm")];
+const LISTING: &[Flag] = &[value("--backend", "c|llvm|jvm")];
 const OUT: &[Flag] = &[value("--out", "path")];
 
 pub(crate) struct Command {
@@ -193,8 +193,7 @@ pub(crate) const COMMANDS: &[Command] = &[
             SHAPE,
             &[
                 inline("--out", "path"),
-                inline("--backends", "c,llvm,jvm,wasm"),
-                inline("--host", "node|browser"),
+                inline("--backends", "c,llvm,jvm"),
                 value("--os", "os"),
                 switch("--text"),
             ],
@@ -215,18 +214,7 @@ pub(crate) const COMMANDS: &[Command] = &[
         " [project]",
         &[PROJECT, OUT, ROOTS, PROVIDER, SHAPE, &[switch("--text")]],
     ),
-    command(
-        "emit-wasm",
-        " [project]",
-        &[
-            PROJECT,
-            OUT,
-            ROOTS,
-            PROVIDER,
-            SHAPE,
-            &[inline("--host", "node|browser")],
-        ],
-    ),
+    command("emit-wasm", " (retired)", &[]),
     command("types", " [project]", &[PROJECT]),
     command(
         "hir",

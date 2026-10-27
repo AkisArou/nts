@@ -20,6 +20,13 @@ fn every_command_rejects_a_bogus_flag_before_doing_work() {
             .unwrap();
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "{}: {error}", command.name);
+        if command.name == "emit-wasm" {
+            assert_eq!(
+                error.trim(),
+                "the Wasm backend is being rebuilt on Binaryen; see docs/targets/wasm.md"
+            );
+            continue;
+        }
         assert!(
             error.contains("unknown flag `--nts-unknown-option`"),
             "{}: {error}",
@@ -44,7 +51,7 @@ fn every_command_rejects_a_bogus_flag_before_doing_work() {
 #[test]
 fn check_cannot_silently_select_c_for_a_backend_flag() {
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args(["check", "--backend", "wasm"])
+        .args(["check", "--backend", "jvm"])
         .output()
         .unwrap();
     let error = String::from_utf8_lossy(&output.stderr);
@@ -73,18 +80,10 @@ fn option_values_and_inline_forms_keep_their_existing_meaning() {
         Ok(false)
     );
     assert_eq!(
-        arguments::validate(&args(&[
-            "emit",
-            "--out=here",
-            "--backends=c,llvm",
-            "--host=browser"
-        ])),
+        arguments::validate(&args(&["emit", "--out=here", "--backends=c,llvm"])),
         Ok(false)
     );
-    assert_eq!(
-        arguments::validate(&args(&["emit-wasm", "--host=browser"])),
-        Ok(false)
-    );
+    assert_eq!(arguments::validate(&args(&["emit-wasm"])), Ok(false));
     for values in [
         &["emit-c", "--out=here"][..],
         &["check", "--help", "--bogus"],
@@ -135,7 +134,7 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
                 "tests/programs/a-cast-reads-a-field-another-layout-holds",
                 "--no-acquire",
             ])
-            .env("NTS_BACKEND", "wasm")
+            .env("NTS_BACKEND", "jvm")
             .env("NTS_RC", "0");
         if counting {
             command.arg("--rc");
@@ -145,7 +144,7 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if counting {
             assert!(!output.status.success(), "{stdout}\n{stderr}");
-            assert!(stderr.contains("wasm declines --rc"), "{stdout}\n{stderr}");
+            assert!(stderr.contains("jvm declines --rc"), "{stdout}\n{stderr}");
         } else {
             assert!(output.status.success(), "{stdout}\n{stderr}");
             assert!(
@@ -374,20 +373,9 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
     ] {
         consumed.insert(name, flags(arm(&main, name)));
     }
-    for (name, source) in [
-        ("emit", include_str!("../src/multi_emit.rs")),
-        ("emit-wasm", include_str!("../src/wasm.rs")),
-    ] {
-        let before_tests = source.split("#[cfg(test)]").next().unwrap();
-        consumed.insert(name, flags(&tokens(before_tests)));
-    }
-    // Multi-backend emission delegates host parsing to the Wasm reader.
-    let wasm = tokens(include_str!("../src/wasm.rs"));
-    let (start, end) = functions(&wasm)["host"][0];
-    consumed
-        .get_mut("emit")
-        .unwrap()
-        .extend(flags(&wasm[start..end]));
+    let source = include_str!("../src/multi_emit.rs");
+    let before_tests = source.split("#[cfg(test)]").next().unwrap();
+    consumed.insert("emit", flags(&tokens(before_tests)));
     let differential = tokens(include_str!("../../differential/src/lib.rs"));
     let (start, end) = functions(&differential)["counting"][0];
     consumed.insert("counting", flags(&differential[start..end]));
@@ -412,7 +400,6 @@ fn declarations_match_the_options_the_legacy_command_readers_consume() {
             "emit-c" => &["project", "roots", "provider", "shape", "emit-c"],
             "emit-llvm" => &["project", "roots", "provider", "shape", "emit-llvm"],
             "emit-jvm" => &["project", "roots", "provider", "shape", "emit-jvm"],
-            "emit-wasm" => &["project", "roots", "provider", "shape", "emit-wasm"],
             "hir" => &["project", "roots", "provider", "shape", "listing", "hir"],
             "stats" | "regions" => &["project", "roots", "provider", "shape", "listing"],
             "expect-ir" => &["project", "roots", "provider", "shape"],
@@ -420,7 +407,7 @@ fn declarations_match_the_options_the_legacy_command_readers_consume() {
             "erasure" => &["project", "erasure"],
             "receivers" => &["project", "receivers"],
             "deps" => &["deps"],
-            "help" | "version" => &[],
+            "help" | "version" | "emit-wasm" => &[],
             other => panic!("audit the new command's readers: {other}"),
         };
         let mut reads: BTreeSet<_> = groups

@@ -120,14 +120,12 @@ mod tests {
     }
 
     #[test]
-    fn both_managed_targets_refuse_counting_by_name() {
-        for backend in ["jvm", "wasm"] {
-            assert_eq!(host_gc(backend, false), Ok(Provider::HostGc));
-            let Err(message) = host_gc(backend, true) else {
-                panic!("counting accepted")
-            };
-            assert!(message.contains(backend) && message.contains("--rc"));
-        }
+    fn the_managed_target_refuses_counting_by_name() {
+        assert_eq!(host_gc("jvm", false), Ok(Provider::HostGc));
+        let Err(message) = host_gc("jvm", true) else {
+            panic!("counting accepted")
+        };
+        assert!(message.contains("jvm") && message.contains("--rc"));
     }
 
     #[test]

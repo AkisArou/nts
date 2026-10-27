@@ -187,7 +187,7 @@ test("an empty population is refused, so a step cannot pass having checked nothi
   assert.match(headerOnly.refused ?? "", /names no case/);
   const elsewhere = populationOf(records, { named: { file: "other.tsv", text: "x.js\tpass\n" } });
   assert.match(elsewhere.refused ?? "", /none of the 1 case/);
-  const negatives = populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" }, backend: "wasm" });
-  assert.match(negatives.refused ?? "", /nothing selected runs on wasm/);
+  const negatives = populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" }, backend: "jvm" });
+  assert.match(negatives.refused ?? "", /nothing selected runs on jvm/);
   assert.ok("population" in populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" } }), "on C it runs");
 });

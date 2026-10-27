@@ -68,7 +68,7 @@ fn facts_that_hold_pass_on_every_backend_they_name() {
     assert!(passed, "{text}");
     assert_eq!(text.matches("PASS").count(), 4, "{text}");
     assert!(
-        text.contains("PASS        ") && text.contains("c llvm jvm wasm: no call.virtual in run"),
+        text.contains("PASS        ") && text.contains("c llvm jvm: no call.virtual in run"),
         "one line per fact, naming its backends:\n{text}"
     );
 }
@@ -100,7 +100,7 @@ fn named_helper_counts_do_not_count_other_external_calls() {
     let (passed, text) = expect_ir(&root);
     assert!(!passed, "{text}");
     assert_eq!(text.matches("PASS").count(), 2, "{text}");
-    assert_eq!(text.matches("FAIL").count(), 4, "{text}");
+    assert_eq!(text.matches("FAIL").count(), 3, "{text}");
     assert!(text.contains("0 found:"), "{text}");
 }
 

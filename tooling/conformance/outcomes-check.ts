@@ -28,7 +28,7 @@
 //   tests/outcomes/<name>/
 //     tsconfig.json   extends ../../../../tsconfig.fixtures.json
 //     src/main.ts     the program; `// run: build` (default) or `// run: check`,
-//                     and with `check`, optionally `// backend: jvm` (`llvm`, `wasm`)
+//                     and with `check`, optionally `// backend: jvm` (`llvm`)
 //                     `// provider: rc` selects reference counting, and
 //                     `// sanitizer: address` enables Clang ASan with no
 //                     virtual-address cap: in build mode with
@@ -319,7 +319,7 @@ function runNode(dir) {
  * line of its own, or null. Only the name: the prose a fixture writes about a
  * backend ("// backend: Wasm stores a bigint as one v128 ...") selects none.
  */
-const backendIn = (text) => /^\/\/\s*backend:\s*(jvm|llvm|wasm)\s*$/m.exec(text)?.[1] ?? null;
+const backendIn = (text) => /^\/\/\s*backend:\s*(jvm|llvm)\s*$/m.exec(text)?.[1] ?? null;
 /** The backend a `check` fixture names, from its `src/main.ts`. */
 const backendOf = (name) => backendIn(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"));
 
@@ -455,7 +455,6 @@ function selfCheck() {
   // `// backend:` names a backend on a line of its own and selects it; prose
   // about one selects nothing.
   for (const [text, want] of [
-    ["// run: check\n// backend: wasm\n", "wasm"],
     ["// run: check\n// backend: llvm\n", "llvm"],
     ["// run: check\n// backend: jvm\n", "jvm"],
     ["// backend: Wasm stores a bigint as one v128 and refuses there.\n", null],

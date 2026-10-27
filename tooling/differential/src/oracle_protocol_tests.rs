@@ -109,12 +109,6 @@ export function pending() { queueMicrotask(() => console.log("scheduled")); retu
     assert_eq!(finished.output.stdout, b"scheduled\n");
     let rows = std::fs::read_to_string(dir.join("results.txt")).unwrap();
     assert_eq!(rows, "ready 0 401c000000000000\n");
-    // The old oracle reader accepted precisely this unfinished prefix. Keep
-    // that control tied to the reader still used for the compiled Wasm arm.
-    assert_eq!(
-        node_results("node", &dir.join("results.txt"), &finished.output).unwrap(),
-        vec!["ready 0 401c000000000000"]
-    );
     let coverage = oracle_coverage::Coverage {
         count: 2,
         key: "test".into(),

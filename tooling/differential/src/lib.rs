@@ -461,14 +461,6 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
             &mut aborts,
             &mut timeouts,
         )?,
-        Backend::Wasm => run_wasm(
-            dir,
-            &prepared.program,
-            &snapshot.sources,
-            &testable,
-            &mut refused,
-            &mut aborts,
-        )?,
         Backend::C | Backend::Llvm => run_native(
             dir,
             &prepared.program,
@@ -510,20 +502,18 @@ fn prepare_check(
     source: &mut Frontend,
     backend: Backend,
 ) -> Result<PreparedCheck> {
-    let provider =
-        match backend {
-            Backend::Jvm => nts_codegen_common::provider::host_gc("jvm", counting())
-                .map_err(anyhow::Error::msg)?,
-            Backend::C | Backend::Llvm => {
-                if counting() {
-                    hir::Provider::ReferenceCounting
-                } else {
-                    hir::Provider::NoGc
-                }
+    let provider = match backend {
+        Backend::Jvm => {
+            nts_codegen_common::provider::host_gc("jvm", counting()).map_err(anyhow::Error::msg)?
+        }
+        Backend::C | Backend::Llvm => {
+            if counting() {
+                hir::Provider::ReferenceCounting
+            } else {
+                hir::Provider::NoGc
             }
-            Backend::Wasm => nts_codegen_common::provider::host_gc("wasm", counting())
-                .map_err(anyhow::Error::msg)?,
-        };
+        }
+    };
     let snapshot = case_costs::measure("capture", || source.snapshot(tsconfig))?;
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
@@ -681,7 +671,6 @@ fn pool_options(backend: Backend, provider: hir::Provider) -> hir::Options<'stat
         provided: hir::features::Provided::By(match backend {
             Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
             Backend::Jvm => nts_codegen_jvm::provides,
-            Backend::Wasm => nts_codegen_wasm::provides,
         }),
         ..hir::Options::default()
     }
@@ -2464,15 +2453,9 @@ fn growth(complaint: &str) -> Option<String> {
     })
 }
 
-/// The node-side driver: one line per case into `NTS_DIFF_RESULTS`, importing
-/// `import` -- the program's source for node, the module's generated glue for
-/// the Wasm backend -- so both runs ask the same questions in the same order.
-///
-/// A case that throws is `threw` (or `rejected`), whatever was thrown: neither
-/// side's value is compared. Under Wasm an input-contract decline is `refused`;
-/// a compiler stop or trap is an abort with its original message. An explicit
-/// error kind marks a compiler stop; its reason is never parsed. An uncaught
-/// object the program made carries `uncaught` and is its own throw.
+/// The Node oracle driver imports the source and writes one result per case
+/// into `NTS_DIFF_RESULTS`, in exactly the order of the compiled arm.
+/// A source throw or rejection is recorded separately from a returned value.
 fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
     let load = engine.load_module(import);
     let mut driver = format!(
@@ -2603,144 +2586,10 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
     driver
 }
 
-/// The program as a WebAssembly module, run by node with [`run_node`]'s driver.
-///
-/// The driver imports the module's generated glue instead of the source, so
-/// the pool, the order and every line are node's own and the two runs compare
-/// as any backend's do. A module declines a case by name without ending the
-/// process, so nothing restarts: a declined case's line says `refused`, and
-/// its index joins `refused` as a native stop on that case does.
-///
-/// **Only the testable functions cross to JavaScript; every function is still
-/// compiled.** The emitter lowers every body, published or not, so a decline
-/// in any of them -- a non-scalar export's included -- fails the program as a
-/// C decline does. Publishing an export this check never calls would only
-/// decline the program over a boundary nothing crosses here, which the census
-/// and the boundary work measure.
-fn run_wasm(
-    dir: &Utf8Path,
-    program: &hir::Program,
-    sources: &[nts_diagnostics::SourceFile],
-    testable: &[Testable],
-    refused: &mut Vec<usize>,
-    aborts: &mut Vec<String>,
-) -> Result<Run> {
-    let mut program = program.clone();
-    let called: std::collections::HashSet<&str> =
-        testable.iter().map(|one| one.name.as_str()).collect();
-    program
-        .public_api
-        .retain(|(emitted, _)| called.contains(emitted.as_str()));
-    program.public_namespaces.clear();
-    let emitted = match case_costs::measure("wasm.emit", || nts_codegen_wasm::emit(&program)) {
-        Ok(emitted) => emitted,
-        Err(nts_codegen_wasm::EmitError::Declined(diagnostics)) => {
-            for diagnostic in &diagnostics {
-                eprintln!(
-                    "  not emitted: {}",
-                    nts_diagnostics::diagnostic_line(sources, diagnostic)
-                );
-            }
-            bail!(
-                "the Wasm backend declined {} shape(s), listed above; nothing can be \
-                 checked until they are removed or supported",
-                diagnostics.len()
-            );
-        }
-        Err(error) => return Err(error.into()),
-    };
-    // A check calls every export it keeps, so one the boundary declined stops
-    // it as a declined shape does, where the module would otherwise be emitted
-    // without it.
-    if !emitted.declined.is_empty() {
-        for declined in &emitted.declined {
-            let line = declined.diagnostic().map_or_else(
-                || declined.to_string(),
-                |diagnostic| nts_diagnostics::diagnostic_line(sources, &diagnostic),
-            );
-            eprintln!("  not emitted: {line}");
-        }
-        bail!(
-            "the Wasm backend declined {} export(s), listed above; nothing can be \
-             checked until they are removed or supported",
-            emitted.declined.len()
-        );
-    }
-    let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node)
-        .map_err(anyhow::Error::msg)?;
-    let module = dir.join("wasm");
-    std::fs::create_dir_all(&module)?;
-    std::fs::write(module.join("program.wasm"), &emitted.bytes)?;
-    std::fs::write(module.join(nts_codegen_wasm::PROGRAM_FILE), glue.program)?;
-    std::fs::write(module.join(nts_codegen_wasm::INSTANCE_FILE), glue.instance)?;
-    let import = format!("file://{}", module.join(nts_codegen_wasm::PROGRAM_FILE));
-    let path = dir.join("wasm_driver.mjs");
-    std::fs::write(&path, driver(&import, testable, Engine::Wasm))?;
-    let results_path = dir.join("results-wasm.txt");
-    let _ = std::fs::remove_file(&results_path);
-    let run = case_costs::child("program.total", || {
-        without_colour(bounded("node"))
-            .env("NTS_DIFF_RESULTS", results_path.as_str())
-            .arg(&path)
-            .output()
-            .context("running the Wasm module under node")
-    })?;
-    let results = wasm_results(
-        node_results("wasm", &results_path, &run)?,
-        testable,
-        refused,
-        aborts,
-    )?;
-    Ok(Run {
-        results,
-        output: lines(&run.stdout),
-        thrown: Vec::new(),
-    })
-}
-
-/// Read the driver's own results channel. A compiler abort is not an input
-/// decline, even if earlier cases answered or a later case also throws in node.
-/// JSON keeps a reason containing quotes or newlines on one physical line.
-fn wasm_results(
-    lines: Vec<String>,
-    testable: &[Testable],
-    refused: &mut Vec<usize>,
-    aborts: &mut Vec<String>,
-) -> Result<Vec<String>> {
-    let expected = results(testable);
-    let mut collected = Vec::new();
-    let mut at = 0;
-    for line in lines {
-        if let Some(outcome) = expected
-            .get(at)
-            .and_then(|prefix| line.strip_prefix(prefix))
-        {
-            if let Some(message) = outcome.strip_prefix("abort ") {
-                aborts.push(serde_json::from_str(message).context("reading a Wasm compiler stop")?);
-                // Align node's answer, just as collect_restarting does for a
-                // native abort. Report.aborts makes the check fail regardless.
-                refused.push(at);
-            } else if outcome == "refused" {
-                refused.push(at);
-            } else {
-                collected.push(line);
-            }
-            at += 1;
-        } else if let Some(message) = line.strip_prefix("abort ") {
-            // The initializer stopped before any exported case was called.
-            aborts.push(serde_json::from_str(message).context("reading a Wasm initializer stop")?);
-        } else {
-            bail!("the Wasm driver wrote an unexpected result: {line}");
-        }
-    }
-    Ok(collected)
-}
-
 /// Which engine a driver's import is run on.
 #[derive(Clone, Copy)]
 enum Engine {
     Node,
-    Wasm,
 }
 
 impl Engine {
@@ -2749,34 +2598,12 @@ impl Engine {
             Self::Node => {
                 "function stopped(name, at, error, word) { emit(`${name} ${at} ${word}\\n`); }\n"
             }
-            Self::Wasm => {
-                "function compilerStop(error) {\n\
-                 \x20 if (error?.kind === \"compiler-stop\") return `nts: refused at run time: ${error.reason}`;\n\
-                 \x20 if (error instanceof WebAssembly.RuntimeError) return `nts: wasm trap: ${error.message}`;\n\
-                 \x20 return null;\n\
-                 }\n\
-                 function stopped(name, at, error, word) {\n\
-                 \x20 const why = compilerStop(error);\n\
-                 \x20 if (why !== null) { emit(`${name} ${at} abort ${JSON.stringify(why)}\\n`); return; }\n\
-                 \x20 const declined = error?.code === \"NTS5001\" && !error.uncaught;\n\
-                 \x20 emit(`${name} ${at} ${declined ? \"refused\" : word}\\n`);\n\
-                 }\n"
-            }
         }
     }
 
     fn load_module(self, import: &str) -> String {
         match self {
             Self::Node => format!("const m = await import({import:?});\n"),
-            Self::Wasm => format!(
-                "let m;\n\
-                 try {{ m = await import({import:?}); }} catch (error) {{\n\
-                 \x20 const why = compilerStop(error);\n\
-                 \x20 if (why === null) throw error;\n\
-                 \x20 emit(`abort ${{JSON.stringify(why)}}\\n`);\n\
-                 \x20 emit(\"done 0\\n\"); closeSync(resultsFd); process.exit(1);\n\
-                 }}\n"
-            ),
         }
     }
 }
@@ -2872,52 +2699,6 @@ fn without_colour(mut command: std::process::Command) -> std::process::Command {
         .env_remove("CLICOLOR_FORCE")
         .env("NO_COLOR", "1");
     command
-}
-
-/// The compiled Wasm driver's results, with its existing termination accounting.
-/// The Node oracle uses `oracle_coverage::measured_rows` instead: it must deliver
-/// its complete recorded population, even when this compiled arm stopped early.
-fn node_results(
-    engine: &str,
-    results_path: &Utf8Path,
-    run: &std::process::Output,
-) -> Result<Vec<String>> {
-    let mut results = std::fs::read(results_path)
-        .map(|bytes| lines(&bytes))
-        .unwrap_or_default();
-    if results.last().is_some_and(|last| last.starts_with("done ")) {
-        results.pop();
-    } else {
-        // **Said, and not fatal.** Node stopping part-way -- a pool value in a
-        // loop bound, or its heap exhausted by one (`tests/programs/array-from` asks
-        // for an array of 2^31) -- was always tolerated: the cases it answered
-        // are compared and the rest are "not reached". The `done` line's job
-        // is to make that *visible* rather than a short run that looks whole,
-        // so it is printed here; turning it into an error lost three examples'
-        // worth of answered cases on its first corpus run.
-        if results.is_empty() && !run.status.success() {
-            bail!("{engine}: {}", String::from_utf8_lossy(&run.stderr));
-        }
-        // Split by how it ended. Non-zero or a signal: the run died, which its
-        // status already says, and the answered cases are kept. **Exit 0 with no
-        // `done`**: the driver wrote fewer cases than it answered, or was cut
-        // off by something that still exited zero -- nothing legitimate does
-        // that, so it is not a notice.
-        if run.status.success() {
-            bail!(
-                "{engine} exited 0 without writing its `done` line: the results file is truncated"
-            );
-        }
-        eprintln!(
-            "  {engine} stopped part-way: {} result(s), no `done` line ({})",
-            results.len(),
-            String::from_utf8_lossy(&run.stderr)
-                .lines()
-                .find(|l| !l.trim().is_empty())
-                .unwrap_or("no message")
-        );
-    }
-    Ok(results)
 }
 
 /// A resolve hook that follows TypeScript's `.js` specifiers to the `.ts` files
@@ -3128,7 +2909,7 @@ mod structural_cast_array_stop {
         if std::env::var_os("NTS_CAST_STOP_ARM").is_none() {
             // Each runner reads its backend from the environment. Child test
             // processes keep that choice isolated from concurrent tests.
-            for backend in ["c", "llvm", "jvm", "wasm"] {
+            for backend in ["c", "llvm", "jvm"] {
                 let output = std::process::Command::new(std::env::current_exe().unwrap())
                     .args(["--exact", TEST, "--nocapture"])
                     .env("NTS_CAST_STOP_ARM", backend)
@@ -3156,8 +2937,7 @@ mod structural_cast_array_stop {
             ),
             EXPECTED,
         );
-        // A literal of the face's own shape can give Wasm a concrete GC
-        // projection. A mismatch must use the same core reason there too.
+        // A mismatch must use the same core reason for the face's own shape.
         check_case(
             "own-shape",
             "function kindOf(value: unknown): string {\n  const held = value as { stack?: string };\n  return typeof held.stack;\n}\nexport function aControl(n: number): string {\n  const own: { stack?: string } = { stack: String(n) };\n  return kindOf(own);\n}\nfunction zStopped(n: number): string { return kindOf([n]); }\n",
@@ -3211,304 +2991,6 @@ mod structural_cast_array_stop {
             report.aborts
         );
         assert!(!report.agreed(), "a named compiler stop is not agreement");
-    }
-}
-
-#[cfg(test)]
-mod wasm_compiler_stop_guard {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
-
-    use super::*;
-    use nts_core::hir::{Absent, Block, Callee, Func, Op, OpKind, Provider, Terminator, ValueId};
-
-    const REASON: &str = "`Example#method` was refused: the original lowering reason";
-
-    fn case(name: &str) -> Testable {
-        Testable {
-            name: name.to_owned(),
-            returns: HirType::NUMBER,
-            result_absent: Absent::Impossible,
-            params: Vec::new(),
-            excluded_tuples: Vec::new(),
-        }
-    }
-
-    fn directory(label: &str) -> Scratch {
-        let path = Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("nts-wasm-stop-{label}-{}", std::process::id())),
-        )
-        .unwrap();
-        std::fs::create_dir_all(&path).unwrap();
-        Scratch::holding(path)
-    }
-
-    fn run_driver(
-        dir: &Utf8Path,
-        source: &str,
-        cases: &[Testable],
-        refused: &mut Vec<usize>,
-        aborts: &mut Vec<String>,
-    ) -> Vec<String> {
-        let module = dir.join("wrapper.mjs");
-        std::fs::write(&module, source).unwrap();
-        let path = dir.join("driver.mjs");
-        std::fs::write(
-            &path,
-            driver(&format!("file://{module}"), cases, Engine::Wasm),
-        )
-        .unwrap();
-        let results = dir.join("driver-results.txt");
-        let run = without_colour(bounded("node"))
-            .env("NTS_DIFF_RESULTS", results.as_str())
-            .arg(path)
-            .output()
-            .unwrap();
-        wasm_results(
-            node_results("wasm", &results, &run).unwrap(),
-            cases,
-            refused,
-            aborts,
-        )
-        .unwrap()
-    }
-
-    fn program() -> hir::Program {
-        let origin = nts_semantic_schema::Origin::source(nts_diagnostics::Location {
-            file: nts_diagnostics::SourceId(0),
-            span: nts_diagnostics::Span { start: 0, end: 0 },
-        });
-        let op = |kind, ty| Op {
-            kind,
-            ty,
-            origin: origin.clone(),
-        };
-        let mut stopped = Func {
-            name: "stopped".to_owned(),
-            params: Vec::new(),
-            return_type: HirType::NUMBER,
-            written_return: None,
-            written_return_elements: Vec::new(),
-            result_absent: Absent::Impossible,
-            values: vec![
-                op(
-                    OpKind::ConstString(REASON.into()),
-                    HirType::Managed(hir::ManagedType::String),
-                ),
-                op(
-                    OpKind::Call {
-                        callee: Callee::External("nts_refused".to_owned()),
-                        args: vec![ValueId(0)],
-                        frame: None,
-                    },
-                    HirType::Void,
-                ),
-            ],
-            blocks: vec![Block {
-                params: Vec::new(),
-                ops: vec![ValueId(0), ValueId(1)],
-                terminator: Terminator::Unreachable,
-            }],
-            origin: origin.clone(),
-            exported: true,
-            initializes_receiver: false,
-            abstract_declaration: false,
-            async_result: None,
-            frame: None,
-            obligations: Vec::new(),
-            exact: nts_core::hir::ExactArithmetic::default(),
-        };
-        let mut control = stopped.clone();
-        control.name = "control".to_owned();
-        control.values = vec![op(OpKind::ConstFloat(7.0), HirType::NUMBER)];
-        control.blocks = vec![Block {
-            params: Vec::new(),
-            ops: vec![ValueId(0)],
-            terminator: Terminator::Return(Some(ValueId(0))),
-        }];
-        stopped.exported = true;
-        hir::Program {
-            funcs: vec![control, stopped],
-            provider: Provider::HostGc,
-            public_api: vec![
-                ("control".to_owned(), "control".to_owned()),
-                ("stopped".to_owned(), "stopped".to_owned()),
-            ],
-            ..hir::Program::default()
-        }
-    }
-
-    #[test]
-    fn a_wasm_named_runtime_stop_is_a_compiler_stop_with_its_message() {
-        let scratch = directory("named");
-        let dir = &scratch.path;
-        let program = program();
-        // The emitter and the runner work: the same program's ordinary export
-        // answers, with no skipped input, before the named-stop subject runs.
-        let mut refused = Vec::new();
-        let mut aborts = Vec::new();
-        let control = run_wasm(
-            dir,
-            &program,
-            &[],
-            &[case("control")],
-            &mut refused,
-            &mut aborts,
-        )
-        .unwrap();
-        assert_eq!(control.results.len(), 1);
-        assert!(refused.is_empty() && aborts.is_empty());
-        let cases = [case("control"), case("stopped")];
-        let result = run_wasm(dir, &program, &[], &cases, &mut refused, &mut aborts).unwrap();
-        // C's corresponding stop is a compiler defect, never an input decline.
-        let message = format!("nts: refused at run time: {REASON}");
-        assert_eq!(
-            stopped_with(Some(134), None, &message),
-            Stopped::Defect(message.clone())
-        );
-        assert_eq!(aborts, [message]);
-        assert_eq!(refused, [1]);
-        assert_eq!(
-            result.results.len(),
-            1,
-            "the earlier control still answered"
-        );
-        let report = Report {
-            checked: 1,
-            aborts,
-            ..Report::default()
-        };
-        assert!(
-            !report.agreed(),
-            "a compiler stop cannot count as agreement"
-        );
-    }
-
-    #[test]
-    fn an_assertion_declines_but_a_wasm_trap_aborts() {
-        let scratch = directory("assertion-trap");
-        let mut program = program();
-        let mut asserted = program.funcs[1].clone();
-        asserted.name = "asserted".into();
-        let OpKind::Call { callee, .. } = &mut asserted.values[1].kind else {
-            panic!("fixture call");
-        };
-        *callee = Callee::External("nts_assertion_failed".into());
-        let mut trapped = asserted.clone();
-        trapped.name = "trapped".into();
-        trapped.values.clear();
-        trapped.blocks[0].ops.clear();
-        for f in [asserted, trapped] {
-            program.public_api.push((f.name.clone(), f.name.clone()));
-            program.funcs.push(f);
-        }
-        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
-        let result = run_wasm(
-            &scratch.path,
-            &program,
-            &[],
-            &[case("control"), case("asserted"), case("trapped")],
-            &mut refused,
-            &mut aborts,
-        )
-        .unwrap();
-        assert_eq!(result.results.len(), 1);
-        assert_eq!(refused, [1, 2]);
-        assert_eq!(
-            aborts.len(),
-            1,
-            "the representation assertion is not a compiler abort"
-        );
-        assert!(aborts[0].starts_with("nts: wasm trap: ") && aborts[0].contains("unreachable"));
-    }
-
-    #[test]
-    fn an_async_compiler_stop_keeps_its_reason_and_source_throws_stay_throws() {
-        let scratch = directory("async");
-        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
-        run_wasm(
-            &scratch.path,
-            &program(),
-            &[],
-            &[case("control"), case("stopped")],
-            &mut refused,
-            &mut aborts,
-        )
-        .unwrap();
-        refused.clear();
-        aborts.clear();
-        let mut cases = [
-            case("control"),
-            case("sourceThrow"),
-            case("sourceReject"),
-            case("asyncStop"),
-        ];
-        for at in [2, 3] {
-            cases[at].returns =
-                HirType::Managed(hir::ManagedType::Promise(Box::new(HirType::NUMBER)));
-        }
-        let result = run_driver(
-            &scratch.path,
-            "import { control, stopped } from './wasm/program.mjs';\n\
-             export { control };\n\
-             export function sourceThrow() { throw 17; }\n\
-             export async function sourceReject() { throw 17; }\n\
-             export async function asyncStop() { return stopped(); }\n",
-            &cases,
-            &mut refused,
-            &mut aborts,
-        );
-        assert_eq!(result.len(), 3);
-        assert_eq!(result[1], "sourceThrow 0 threw");
-        assert_eq!(result[2], "sourceReject 0 rejected");
-        assert_eq!(refused, [3]);
-        assert_eq!(aborts, [format!("nts: refused at run time: {REASON}")]);
-    }
-
-    #[test]
-    fn a_compiler_stop_while_importing_is_an_abort_not_a_short_clean_run() {
-        let scratch = directory("init");
-        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
-        run_wasm(
-            &scratch.path,
-            &program(),
-            &[],
-            &[case("control"), case("stopped")],
-            &mut refused,
-            &mut aborts,
-        )
-        .unwrap();
-        refused.clear();
-        aborts.clear();
-        let result = run_driver(
-            &scratch.path,
-            "import { stopped } from './wasm/program.mjs'; stopped();\n",
-            &[case("control")],
-            &mut refused,
-            &mut aborts,
-        );
-        assert!(result.is_empty() && refused.is_empty());
-        assert_eq!(aborts, [format!("nts: refused at run time: {REASON}")]);
-    }
-
-    #[test]
-    fn a_compiler_stop_reason_cannot_write_case_records() {
-        let scratch = directory("reason");
-        let mut program = program();
-        let reason = "a \"quoted\" reason\ncontrol 0 nan\ndone 99\nλ";
-        program.funcs[1].values[0].kind = OpKind::ConstString(reason.into());
-        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
-        let result = run_wasm(
-            &scratch.path,
-            &program,
-            &[],
-            &[case("control"), case("stopped")],
-            &mut refused,
-            &mut aborts,
-        )
-        .unwrap();
-        assert_eq!(result.results.len(), 1);
-        assert_eq!(refused, [1]);
-        assert_eq!(aborts, [format!("nts: refused at run time: {reason}")]);
     }
 }
 

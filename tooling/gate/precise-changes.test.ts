@@ -29,7 +29,7 @@ test("classification prose owes audit without record replay, class/match edits o
     if (old.features) updated.features["AggregateError"].class = "supported";
     else updated.exclusions[0].match = "other.js";
     const meaning = steps(path, text, JSON.stringify(updated));
-    for (const name of ["audit", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"]) assert.ok(meaning.includes(name), name);
+    for (const name of ["audit", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"]) assert.ok(meaning.includes(name), name);
   }
 });
 

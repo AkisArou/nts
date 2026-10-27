@@ -1,5 +1,5 @@
-//! One byte-level guard covers the four backends, including emitted sources,
-//! packaged classes, native objects, and Wasm's source-origin metadata.
+//! One byte-level guard covers the three backends, including emitted sources,
+//! packaged classes and native objects.
 #![cfg(target_os = "linux")]
 
 use std::collections::BTreeMap;
@@ -69,10 +69,6 @@ fn all_backends_build_identical_bytes_in_different_environments() {
             "llvm/linux-gnu-x86_64/program.ll",
             "llvm/linux-gnu-x86_64/libllvm.so",
             "jvm/java-8/jvm.jar",
-            "wasm/program.wasm",
-            "wasm/program.mjs",
-            "wasm/program.instance.mjs",
-            "wasm/program.origins.json",
         ] {
             assert!(
                 !files.get(Path::new(required)).expect(required).is_empty(),
@@ -100,11 +96,6 @@ fn all_backends_build_identical_bytes_in_different_environments() {
     assert!(
         changed.is_empty(),
         "artifacts depend on path/depth, cwd, TMPDIR, time or timezone: {changed:?}"
-    );
-    let origins = String::from_utf8_lossy(&outputs[0][Path::new("wasm/program.origins.json")]);
-    assert!(
-        origins.contains("nts-workspace:///../shared/helper.ts"),
-        "the outside helper lost its origin: {origins}"
     );
 }
 
@@ -151,20 +142,16 @@ fn build_project(tree: &Path, index: usize) -> PathBuf {
         // ZIP's legacy timestamps have a two-second resolution.
         std::thread::sleep(std::time::Duration::from_secs(3));
     }
-    for backend in ["c", "llvm", "jvm", "wasm"] {
+    for backend in ["c", "llvm", "jvm"] {
         // NTS_BIN also lets this exact guard run against a pinned old compiler.
         let compiler =
             std::env::var_os("NTS_BIN").unwrap_or_else(|| env!("CARGO_BIN_EXE_nts").into());
         let mut command = Command::new(compiler);
         command
-            .arg(if backend == "wasm" {
-                "emit-wasm"
-            } else {
-                "build"
-            })
+            .arg("build")
             .arg(app.join("tsconfig.json"))
             .arg("--product")
-            .arg(if backend == "wasm" { "c" } else { backend })
+            .arg(backend)
             .current_dir(if index == 0 { &app } else { tree })
             .env("TMPDIR", &tmp)
             .env(
@@ -177,9 +164,6 @@ fn build_project(tree: &Path, index: usize) -> PathBuf {
             )
             .env("NTS_NO_SNAPSHOT_CACHE", "1")
             .env("NTS_CHECKERS", "1");
-        if backend == "wasm" {
-            command.arg("--out").arg(app.join(".nts/build/wasm"));
-        }
         let out = command.output().expect("building deterministic artifacts");
         assert!(
             out.status.success(),

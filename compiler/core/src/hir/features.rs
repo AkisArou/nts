@@ -29,10 +29,8 @@ use super::{OpKind, Program};
 ///
 /// Each backend's own table is the one truth: the C runtime's header for C and
 /// LLVM (the LLVM signature table, generated from it and checked against it),
-/// the JVM's closed table of the helpers it maps, and the Wasm backend's catalog
-/// of the ones it supports. A driver that prepares for a backend says which
-/// (`nts_codegen_llvm::provides`, `nts_codegen_jvm::provides`,
-/// `nts_codegen_wasm::provides`).
+/// and the JVM's closed table. Every driver names the table for its backend
+/// (`nts_codegen_llvm::provides` or `nts_codegen_jvm::provides`).
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Provided {
     /// No backend named, so nothing is provided. Always safe: the arm a guard

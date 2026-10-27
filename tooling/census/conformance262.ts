@@ -4,7 +4,7 @@
 //   node tooling/census/conformance262.ts [--under test/language] [--jobs N]
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
-//        [--backend c|llvm|jvm|wasm] [--paths-from <tsv> ...] [--fresh]
+//        [--backend c|llvm|jvm] [--paths-from <tsv> ...] [--fresh]
 //        [--suite test262|typescript]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
@@ -268,7 +268,7 @@ const describeMachine = (m) =>
   `${m.available_gb} GB available, swap ${m.swap_used_gb}/${m.swap_total_gb} GB, load ${m.load[0]}/${m.load[1]} (1m/5m), ${m.cores} cores`;
 
 // Which backend compiles and runs each case (`attempt262.ts` `BACKENDS`): `c`,
-// `jvm` or `wasm`. test262 runs on every backend; each records its own outcomes.
+// `llvm` or `jvm`. test262 runs on every backend; each records its own outcomes.
 const BACKEND = flag("--backend", "c");
 if (!(BACKEND in BACKENDS)) {
   process.stderr.write(`conformance262: --backend ${BACKEND} is none of ${Object.keys(BACKENDS).join(", ")}\n`);

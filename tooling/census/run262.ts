@@ -138,7 +138,7 @@ if (limit > 0) chosen = chosen.slice(0, limit);
 // `attempt` and the self-checks live in `attempt262.ts`, shared with
 // `conformance262.ts`: one derivation of what a file did, not two.
 
-// Which backend compiles and runs each case: `c`, `jvm` or `wasm`
+// Which backend compiles and runs each case: `c`, `llvm` or `jvm`
 // (`attempt262.ts` `BACKENDS`).
 const BACKEND = flag("--backend", "c");
 if (!(BACKEND in BACKENDS)) {

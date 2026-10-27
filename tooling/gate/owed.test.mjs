@@ -59,7 +59,6 @@ test("tool-written result outputs owe tree checks while recorded baselines retai
     ["results/test262/c/builtins.tsv","test262-builtins-cases"],
     ["results/test262/c/staging.tsv","test262-rest-cases"],
     ["results/test262/jvm/language.tsv","test262-jvm"],
-    ["results/test262/wasm/language.tsv","test262-wasm"],
     ["results/test262/llvm/language.tsv","test262-llvm"],
     ["results/typescript/jvm/cases.tsv","typescript-cases"],
   ]) assert.ok(stepsFor(path).includes(expected), path);
@@ -118,12 +117,11 @@ test("a representation fact is checked wherever the program it describes can cha
     superset(stepsFor(path), ["expect-ir"], path);
   }
   // A backend emits from the prepared program; it cannot move a fact.
-  assert.ok(!stepsFor("compiler/codegen/wasm/src/lib.rs").includes("expect-ir"));
 });
 
 test("a compiler change runs the core and leaves the wide steps to the full run", () => {
   const got = stepsFor("compiler/core/src/hir/lower.rs");
-  for (const s of ["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc", "memory", "test262-cases", "outcomes", "blockers", "expect-ir", "benches", "c-compiles"]) {
+  for (const s of ["examples", "llvm", "jvm", "rc", "llvm-rc", "memory", "test262-cases", "outcomes", "blockers", "expect-ir", "benches", "c-compiles"]) {
     assert.ok(got.includes(s), `lowering should run ${s} per landing; runs ${got.join(" ")}`);
   }
   for (const s of WIDE) assert.ok(!got.includes(s), `lowering should leave ${s} to the full run`);
@@ -219,9 +217,6 @@ test("a crate no rule names owes what the crates that use it owe", () => {
 });
 
 test("a backend the CLI selects owes the steps that select it, not everything the CLI owes", () => {
-  // Only its own tests and the `wasm` step run the Wasm backend, through the
-  // CLI or the differential's NTS_BACKEND=wasm: none of the C steps.
-  owes("compiler/codegen/wasm/src/lib.rs", ["tests", "wasm", "test262-wasm"], { not: ["interop", "examples", "profile", "test262-cases", "test262-jvm", "outcomes", "blockers"] });
   owes("compiler/codegen/napi/src/lib.rs", ["addons", "profile", "divergence"], { not: ["interop", "examples"] });
   // The JVM and LLVM backends build interop projects and pinned outcomes
   // through the CLI, so their own rules owe those.
@@ -248,7 +243,6 @@ test("interop builds only the projects a range reaches, when it can say which", 
   assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts", "compiler/codegen/jvm/src/lib.rs"), [...new Set(["gtk-hello", ...jvm])].sort());
   // The runner owes every project.
   assert.equal(projects("tooling/gate/token.sh"), "all");
-  assert.equal(projects("compiler/codegen/wasm/src/lib.rs"), null);
 });
 
 test("what a step runs owes that step", () => {
@@ -261,9 +255,8 @@ test("what a step runs owes that step", () => {
   owes("tooling/gate/definitions", ["definitions"]);
   owes("results/test262/c/language.tsv", ["test262-cases"]);
   // A backend's records owe that backend's step alone.
-  owes("results/test262/jvm/language.tsv", ["test262-jvm"], { not: ["test262-wasm", "test262-cases", "examples"] });
-  owes("results/test262/wasm/builtins.tsv", ["test262-wasm"], { not: ["test262-jvm", "test262-cases", "examples"] });
-  owes("results/test262/llvm/staging.tsv", ["test262-llvm"], { not: ["test262-jvm", "test262-wasm", "test262-cases", "examples"] });
+  owes("results/test262/jvm/language.tsv", ["test262-jvm"], { not: ["test262-cases", "examples"] });
+  owes("results/test262/llvm/staging.tsv", ["test262-llvm"], { not: ["test262-jvm", "test262-cases", "examples"] });
   // The TypeScript suite: a case or a record owes its step alone, on every backend at once.
   owes("results/typescript/jvm/cases.tsv", ["typescript-cases"], { not: ["test262-jvm", "test262-cases", "examples"] });
   // A case is also an input of the runner every test262 step drives (its
@@ -373,7 +366,7 @@ test("documentation owes its two readers, not the gate", () => {
 test("the hand-written rules still decide what they name", () => {
   owes("tests/programs/strings/src/main.ts", ["examples", "llvm", "llvm-rc", "jvm", "rc"]);
   owes("runtime/c/nts_runtime.h", ["tests", "bench-agree", "format"]);
-  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases", "jvm-verifies", "benches"]);
+  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-llvm", "typescript-cases", "jvm-verifies", "benches"]);
   // The JVM runtime owes the program step that runs it and the JVM's test262
   // rows, not only the lane's wide trio. (It owes the other test262 steps too,
   // but through their shared runner, which names the jar: `stepInputs`.)
@@ -386,28 +379,16 @@ test("the hand-written rules still decide what they name", () => {
   // lane's direct wide trio stays as it was.
   owes("runtime/jvm/nts-runtime.jar", ["jvm", "jvm-verifies", "test262-jvm", "dex", "bench-agree", "interop"]);
   owes("compiler/jvm-emitter/src/lib.rs", ["jvm", "jvm-verifies", "test262-jvm"]);
-  // The Wasm test host, named at run time, owes what runs it, not the full gate.
-  owes("tooling/wasm/run-program.ts", ["tests", "test262-wasm"], { not: ["examples", "test262-jvm"] });
   // The CLI's manifest and the runner's shared pieces owe both backends' rows.
-  owes("tooling/cli/Cargo.toml", ["test262-jvm", "test262-wasm"]);
+  owes("tooling/cli/Cargo.toml", ["test262-jvm"]);
   for (const file of ["tooling/census/attempt262.ts", "tooling/census/project.ts", "tooling/census/conformance262.ts"]) {
-    owes(file, ["test262-cases", "test262-jvm", "test262-wasm"]);
+    owes(file, ["test262-cases", "test262-jvm"]);
   }
   // And the runner's tests are the tool step's now.
   owes("tooling/census/project.test.ts", ["tooling"]);
   owes("runtime/node/path/index.ts", ["definitions", "integrity-runtime", "addons", "compile-time"]);
 });
 
-test("the WebAssembly backend owes its executable fixtures", () => {
-  // Not the CLI's interop and config: no interop project or config builds for
-  // Wasm, and the CLI runs this backend only for emit-wasm (SELECTED_BY_THE_CLI).
-  owes("compiler/codegen/wasm/src/body.rs", ["tests"], { not: ["interop", "config"] });
-  // Native runtime inputs also reach Wasm through the workspace's crate
-  // graph. An unplaced new backend must not turn that reach into everything.
-  const rules = owed([{ path: "runtime/c/nts_runtime.h", added: false }]);
-  assert.ok(rules.some((r) => r.name === "the WebAssembly backend, through the crate graph"));
-  assert.ok(!rules.some((r) => r.full));
-});
 
 test("every step the rules can owe exists", () => {
   const all = new Set(allSteps());
@@ -535,4 +516,13 @@ test("the stable TypeScript sample stays core; full population enforcement is de
   assert.ok(!WIDE.has("corpus"));
   assert.ok(!allSteps().includes("ts-corpus"));
   assert.ok(landing().includes("corpus"));
+});
+
+test("the retired backend has no runnable or selected gate step", () => {
+  for (const name of ["wasm", "test262-wasm"]) {
+    assert.ok(!allSteps().includes(name), name);
+    for (const path of ["compiler/core/src/hir/lower.rs", "tooling/cli/src/main.rs", "tests/programs/example/src/main.ts"]) {
+      assert.ok(!stepsFor(path).includes(name), `${path}: ${name}`);
+    }
+  }
 });

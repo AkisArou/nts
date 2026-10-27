@@ -20,8 +20,7 @@
 //! // expect-ir: all: draw param max is integer
 //! ```
 //!
-//! Before the colon, the backends it holds on: `all`, or any of `c llvm jvm
-//! wasm`. After it, one of six facts:
+//! Before the colon, the backends it holds on: `all`, or any of `c llvm jvm`. After it, one of six facts:
 //!
 //! | Fact | Holds when |
 //! |---|---|
@@ -57,7 +56,7 @@ use nts_codegen_common::Backend;
 use nts_core::hir::{self, BinOp, Func, HirType, OpKind, UnOp};
 
 /// Every backend, in the order facts are reported.
-const BACKENDS: [Backend; 4] = [Backend::C, Backend::Llvm, Backend::Jvm, Backend::Wasm];
+const BACKENDS: [Backend; 3] = Backend::ALL;
 
 /// One `// expect-ir:` line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -433,10 +432,10 @@ pub(crate) fn parse(text: &str) -> Result<(Vec<Backend>, Fact), String> {
         if word == "all" {
             backends.extend(BACKENDS);
         } else {
-            backends
-                .push(word.parse::<Backend>().map_err(|_| {
-                    format!("`{word}` is not a backend: all, c, llvm, jvm or wasm")
-                })?);
+            backends.push(
+                word.parse::<Backend>()
+                    .map_err(|_| format!("`{word}` is not a backend: all, c, llvm or jvm"))?,
+            );
         }
     }
     backends.sort_by_key(|backend| BACKENDS.iter().position(|b| b == backend));
@@ -778,8 +777,8 @@ mod tests {
             )
         );
         assert_eq!(
-            parsed("wasm c: count call.virtual in work <= 1").0,
-            vec![Backend::C, Backend::Wasm],
+            parsed("jvm c: count call.virtual in work <= 1").0,
+            vec![Backend::C, Backend::Jvm],
             "backends in report order, whatever order they are written in"
         );
         assert!(matches!(

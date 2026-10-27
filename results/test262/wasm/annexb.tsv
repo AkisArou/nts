@@ -1,8 +1,0 @@
-# Test262 test/annexB cases that ran, and what each did. Written by
-# tooling/census/conformance262.ts --record; compared by --check.
-# compiler 6768eb8d0734aa63, commit 07b52742d0686dea30f111f5ac465af1defd8651, backend wasm, harness d6442dbc09f91ad0; machine at start: 23.9 GB available, swap 4.9/31.5 GB, load 4.4/3.8 (1m/5m), 16 cores; 4 worker(s)
-test/annexB/language/statements/try/catch-redeclared-for-in-var.js	fail	nts: uncaught Test262Error: during loop body evaluation
-test/annexB/language/statements/try/catch-redeclared-for-of-var.js	fail	nts: uncaught Test262Error: during loop body evaluation
-test/annexB/language/statements/try/catch-redeclared-for-var.js	pass	
-test/annexB/language/statements/try/catch-redeclared-var-statement-captured.js	pass	
-test/annexB/language/statements/try/catch-redeclared-var-statement.js	pass	

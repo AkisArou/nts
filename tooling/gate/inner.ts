@@ -24,8 +24,8 @@
 //    runtime C the change edited.
 // 2. `cargo clippy --workspace --all-targets -- -D warnings`.
 // 3. `cargo test --profile nts-dev --no-fail-fast` over the touched crates
-//    and the four backends, with the frontend compiled into this tree's binary.
-// 4. `agree.mjs` on c, llvm, jvm and wasm, main's pinned compiler before and
+//    and the three backends, with the frontend compiled into this tree's binary.
+// 4. `agree.mjs` on c, llvm and jvm, main's pinned compiler before and
 //    this tree's `nts-dev` build after -- and with `NTS_RC=1` on c and llvm
 //    when the change reaches the compiler or a runtime, since reference
 //    counting is decided in core.
@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 import { memAvailableGB, RESUME_AT_GB } from "./admission.ts";
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
-const BACKENDS = ["nts-codegen-c", "nts-codegen-llvm", "nts-codegen-jvm", "nts-codegen-wasm"];
+const BACKENDS = ["nts-codegen-c", "nts-codegen-llvm", "nts-codegen-jvm"];
 
 export type Package = { name: string; dir: string };
 
@@ -147,7 +147,7 @@ type Step = { name: string; status: number; seconds: number };
 const USAGE = `node tooling/gate/inner.ts [--base <rev>] [--no-agree] [--keep-going]
 
 The gate's core commands, fast, before a change is queued: fmt, clippy, the
-tests over the touched crates and the four backends in the nts-dev profile,
+tests over the touched crates and the three backends in the nts-dev profile,
 and agree.mjs on four backends against <rev>'s pinned compiler (main).`;
 
 function main(argv: readonly string[]): number {
@@ -192,7 +192,7 @@ function main(argv: readonly string[]): number {
     const before = text("node", ["tooling/conformance/pin.ts", base]).trim().split("\n").at(-1) ?? "";
     const after = join(ROOT, "target/nts-dev/nts");
     const built = step("build", () => heavy("the compiler", "14G", "cargo", ["build", "--profile", "nts-dev", "-p", "nts-cli"]));
-    const runs: [string, string][] = [["c", "0"], ["llvm", "0"], ["jvm", "0"], ["wasm", "0"]];
+    const runs: [string, string][] = [["c", "0"], ["llvm", "0"], ["jvm", "0"]];
     if (reachesCounting(changed)) {
       runs.push(["c", "1"], ["llvm", "1"]);
     }

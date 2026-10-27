@@ -30,7 +30,6 @@ refused by name.
 | Native, through C | C, compiled by clang into executables and libraries |
 | Native, through LLVM | LLVM IR, for the same native outputs and for cross targets (iOS, Android) |
 | JVM | class files and jars, and DEX for Android |
-| WebAssembly | WasmGC modules with their JavaScript glue, for node or the browser |
 | Node.js addons | N-API native modules |
 
 Memory follows the target: reference counting with a cycle collector natively,

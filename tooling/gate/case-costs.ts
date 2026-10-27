@@ -30,10 +30,10 @@ export function recordAggregatePeak(group: string, scopeBudgetBytes: number, env
     }) + "\n");
   } catch { /* Telemetry cannot change a worker's result or cleanup. */ }
 }
-const CHECK_STEPS = new Set(["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc"]);
+const CHECK_STEPS = new Set(["examples", "llvm", "jvm", "rc", "llvm-rc"]);
 const GROUPS: Record<string, string[]> = {
   capture:["capture"], lowering:["lower"], preparation:["prepare"],
-  emission:["c.emit","llvm.emit","jvm.emit","wasm.emit"],
+  emission:["c.emit","llvm.emit","jvm.emit"],
   toolchain:["llvm.assemble","native.runtime_objects","native.link","jvm.toolchain"],
   program:["program.total"], oracle:["oracle.total"],
 };

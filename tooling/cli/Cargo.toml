@@ -19,7 +19,6 @@ nts-jvm-emitter.workspace = true
 rustc-hash.workspace = true
 nts-codegen-llvm.workspace = true
 nts-codegen-napi.workspace = true
-nts-codegen-wasm.workspace = true
 nts-core.workspace = true
 nts-deps.workspace = true
 nts-differential.workspace = true

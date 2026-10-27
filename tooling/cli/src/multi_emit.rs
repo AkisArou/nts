@@ -8,13 +8,12 @@ use nts_core::hir;
 use super::emission::{Input, Metadata, Report};
 use super::{
     Emission, emit_c_prepared, emit_jvm_prepared, host_arch, host_os, llvm_platform, project_to,
-    provider_for, wasm,
+    provider_for,
 };
 
 struct BackendEmission<'a> {
     backend: Backend,
     emission: Emission<'a>,
-    host: Option<nts_codegen_wasm::Host>,
     text: bool,
 }
 
@@ -70,14 +69,9 @@ fn settings<'a>(
     args: &[String],
     mut emission: Emission<'a>,
 ) -> Result<BackendEmission<'a>> {
-    // Incompatible provider and host requests belong to this backend, not to
+    // Incompatible provider requests belong to this backend, not to
     // the shared input: native emissions still run under a mixed --rc request.
     provider_for(backend)?;
-    let host = if backend == Backend::Wasm {
-        Some(wasm::selected_host(args)?)
-    } else {
-        None
-    };
     if backend == Backend::Llvm {
         let os = args
             .windows(2)
@@ -88,7 +82,6 @@ fn settings<'a>(
     Ok(BackendEmission {
         backend,
         emission,
-        host,
         text: args.iter().any(|arg| arg == "--text"),
     })
 }
@@ -138,13 +131,6 @@ fn emit(
             report,
         )
         .map(drop),
-        Backend::Wasm => wasm::emit_prepared(
-            &prepared,
-            &metadata.sources,
-            out,
-            settings.host.context("missing Wasm host")?,
-            report,
-        ),
     }
 }
 

@@ -5,7 +5,7 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const CENSUS_STEPS = ["test262-cases", "test262-builtins-cases", "test262-rest-cases",
-  "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"] as const;
+  "test262-jvm", "test262-llvm", "typescript-cases"] as const;
 const GIB = 2 ** 30;
 type Peak = { train: string; verdict: string; workers: number; elastic: boolean; peak_bytes: number };
 

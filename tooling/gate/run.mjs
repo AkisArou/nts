@@ -132,11 +132,10 @@ const STEPS = [
   { name: "test262-rest-cases", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
   // The five records on one backend each (all.sh's test262_backend): one
   // frontend per case as on C, plus the backend's own run -- a JVM per case
-  // under its fixed -Xmx, node for Wasm.
+  // under its fixed -Xmx.
   { name: "test262-jvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on the JVM",
     capabilities: ["jvm"],
   },
-  { name: "test262-wasm", slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "every recorded test262 row reproduces on Wasm" },
   { name: "test262-llvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
   { name: "typescript-cases", slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
     capabilities: ["jvm"],
@@ -182,7 +181,6 @@ const STEPS = [
   { name: "jvm", elastic: true, slots: 8, min: 2, mem: 8, nts: true, fe: true, doc: "every example agrees with node on the JVM",
     capabilities: ["jvm"],
   },
-  { name: "wasm", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on Wasm" },
   { name: "dex", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes",
     capabilities: ["android", "jvm"],
   },
@@ -427,7 +425,7 @@ function stepEnv(step, slots) {
   e.NTS_GATE_RUN_DIR = RUN_DIR;
   delete e.NTS_GATE_CASE_COSTS_DIR;
   if (caseCosts?.available) e.NTS_GATE_CASE_COSTS_DIR = caseCosts.root;
-  if (caseCosts?.available && ["assembles", "jvm-verifies", "dex", "bench-agree", "examples", "rc", "llvm", "llvm-rc", "jvm", "wasm"].includes(step.name)) {
+  if (caseCosts?.available && ["assembles", "jvm-verifies", "dex", "bench-agree", "examples", "rc", "llvm", "llvm-rc", "jvm"].includes(step.name)) {
     e.NTS_GATE_SHADOW_DIR ??= join(homedir(), ".cache/nts-gate/artifact-shadow/v1");
     e.NTS_GATE_SHADOW_HELPER = join(HERE, "artifact-shadow.ts");
   } else delete e.NTS_GATE_SHADOW_DIR;

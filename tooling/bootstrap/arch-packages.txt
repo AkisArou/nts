@@ -13,15 +13,7 @@
 clang              extra  the C backend's compiler and the LLVM backend's assembler and linker driver
 llvm               extra  opt, llc, llvm-mca, FileCheck, llvm-objdump: reading and measuring LLVM output
 lld                extra  the linker clang drives
-binaryen           extra  wasm-opt: Wasm size, and an optimised baseline to compare the Wasm backend with
 
-# The Wasm backend's comparators and second engine
-wabt               extra  wasm2wat, wasm-objdump: reading what the Wasm backend emits
-wasmtime           extra  a second Wasm engine, to tell an engine effect from ours
-wasi-libc          extra  C compiled to Wasm: the Wasm backend's comparator
-wasi-compiler-rt   extra  the same, its compiler runtime
-wasi-libc++        extra  C++ compiled to Wasm (Are We Fast Yet's C++ versions)
-wasi-libc++abi     extra  the same, its ABI library
 
 # Measuring and profiling
 perf               extra  counters (cycles, instructions, IPC, cache and branch misses), perf record

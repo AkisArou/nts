@@ -1659,29 +1659,6 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/jvm.log.
   backend_examples 676 "through the JVM backend" exact 10 ); }
-# The programs through the WebAssembly backend, by the same `nts check` as
-# every other backend: the module the WasmGC backend emits, run by node through
-# its generated glue, against node running the source -- one pool, one order,
-# one comparison. Only the functions the check calls cross to JavaScript, and
-# every function is still compiled, so a body Wasm declines fails its program
-# as a C decline does (`tests/wasm/check-compiles-every-body`).
-#
-# **614 of 614, exact**, measured by the official Wasm step on the clean
-# 92c28eecd8e4 corpus and pin (2026-10-18; nts sha256 0403dfad8c16f2da).
-# Evidence: ~/.cache/nts-scratch/wasm/array-written-prefix-main968-20261018/wasm-gate.log.
-# Ten programs compare only part of their cases: a case Wasm refuses by name
-# where node answers. The partial ceiling tracks those remaining parity gaps;
-# the program floor tracks the measured corpus, including prior main changes.
-wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  # 663 -> 676, 2026-10-21: the official Wasm step in landing gate
-  # 586a40d24f4e measured 676 of 676, the same ten partials.
-  # Evidence: ~/.cache/nts-land/runs/586a40d24f4e-1792592808805/.
-  # 614 -> 663, 2026-10-21: the official Wasm step in landing gate
-  # b535ed908510 measured 663 of 663, the same ten partials.
-  # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/wasm.log.
-  # Array.with's replacedHoleIsNotRead is safe but outside the typed-hole
-  # proof. The Wasm execution test pins that refusal and runs the other exports.
-  backend_examples 676 "through the Wasm backend" exact 10 "array-with" ); }
 corpus() {
   node tooling/gate/corpus.ts "$root" core
 }
@@ -2026,7 +2003,7 @@ test262_rest_cases() {
 # under results/test262/<backend>/ re-run on that backend and held to itself.
 # test262 runs on every backend (the user, 2026-10-14), and until these steps
 # a backend's records were checked only by hand, in its lane's reviews -- a
-# core change could regress a JVM or Wasm row and land.
+# core change could regress a JVM row and land.
 #
 # **The record is the ratchet, so there is no floor.** A recorded pass that
 # does anything else is REGRESSED, a changed failure CHANGED, a row that did
@@ -2078,9 +2055,6 @@ test262_backend() {
 test262_jvm() {
   test262_backend jvm
 }
-test262_wasm() {
-  test262_backend wasm
-}
 # LLVM shares C's runtime and most of its pipeline, which is why it had no
 # records until 2026-10-19: first written from C's paths on a pin of
 # 362b32f13, 4,909 passes over the five. It has no lane, so a core change that
@@ -2101,7 +2075,7 @@ typescript_cases() {
     return 77
   fi
   failed=""
-  for backend in c llvm jvm wasm; do
+  for backend in c llvm jvm; do
     record=results/typescript/$backend/cases.tsv
     echo "  tests/typescript on $backend, against $record:"
     held_to_record "$record" --suite typescript --backend "$backend" || failed="$failed $backend"
@@ -2569,7 +2543,6 @@ step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
 step "test262-jvm" test262_jvm
-step "test262-wasm" test262_wasm
 step "test262-llvm" test262_llvm
 step "typescript-cases" typescript_cases
 step "outcomes" outcomes
@@ -2758,7 +2731,6 @@ step "sweep" sweep
 step "llvm" llvm
 step "llvm-rc" llvm_rc
 step "jvm" jvm
-step "wasm" wasm
 # `dex` asks whether `d8` will accept what this backend emits; `on-device` asks
 # whether the accepted thing then *answers the same*. Nothing else in this
 # repository can: the `jvm` step runs on HotSpot and the differential's oracle

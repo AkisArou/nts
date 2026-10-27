@@ -79,7 +79,7 @@ fn combined_emission_is_the_same_files_and_bytes_as_each_command() {
     .unwrap();
     for flags in [vec![], vec!["--main"], vec!["--entry", "twice"]] {
         let out = fixture.0.join(format!("combined-{}", flags.join("-")));
-        let mut combined_flags = vec!["--backends", "c,llvm,jvm,wasm"];
+        let mut combined_flags = vec!["--backends", "c,llvm,jvm"];
         combined_flags.extend(&flags);
         let combined = fixture.run("emit", &out, &combined_flags);
         assert!(
@@ -89,7 +89,7 @@ fn combined_emission_is_the_same_files_and_bytes_as_each_command() {
         );
         let results = report(&out);
         assert_eq!(results["version"], 1);
-        for backend in ["c", "llvm", "jvm", "wasm"] {
+        for backend in ["c", "llvm", "jvm"] {
             let own = fixture.0.join(format!("separate-{backend}"));
             let separate = fixture.run(&format!("emit-{backend}"), &own, &flags);
             assert!(
@@ -132,10 +132,10 @@ fn combined_emission_is_the_same_files_and_bytes_as_each_command() {
 fn a_managed_provider_failure_does_not_stop_a_later_native_backend() {
     let fixture = Fixture::new("export function answer(): number { return 42; }\n");
     let out = fixture.0.join("provider");
-    let combined = fixture.run("emit", &out, &["--backends", "jvm,c,wasm,llvm", "--rc"]);
+    let combined = fixture.run("emit", &out, &["--backends", "jvm,c,llvm", "--rc"]);
     assert!(!combined.status.success());
     let results = report(&out);
-    for backend in ["jvm", "wasm"] {
+    for backend in std::iter::once("jvm") {
         assert_eq!(results["backends"][backend]["exit_code"], 1);
         assert!(
             results["backends"][backend]["stderr"]
@@ -166,28 +166,7 @@ fn an_output_failure_does_not_stop_the_next_backend() {
 }
 
 #[test]
-fn a_backend_decline_is_reported_under_its_own_name() {
-    let fixture = Fixture::new(
-        "export function keyed(xs: Uint8Array): number { const seen = new Map<Uint8Array, number>(); seen.set(xs, 1); return seen.size; }\n",
-    );
-    let out = fixture.0.join("declined");
-    let combined = fixture.run("emit", &out, &["--backends", "wasm,c"]);
-    assert!(!combined.status.success());
-    let results = report(&out);
-    assert_eq!(results["backends"]["wasm"]["exit_code"], 1);
-    assert!(
-        results["backends"]["wasm"]["stderr"]
-            .as_str()
-            .unwrap()
-            .contains("NTS5001")
-    );
-    assert!(inventory(&out.join("wasm")).is_empty());
-    assert_eq!(results["backends"]["c"]["exit_code"], 0);
-    assert!(out.join("c/program.c").is_file());
-}
-
-#[test]
-fn sharing_avoids_three_actual_raw_lowerings() {
+fn sharing_avoids_two_actual_raw_lowerings() {
     let fixture = Fixture::new("export function answer(): number { return 42; }\n");
     let trace = fixture.0.join("lowerings");
     let invoke = |command: &str, out: &Path, flags: &[&str]| {
@@ -208,7 +187,7 @@ fn sharing_avoids_three_actual_raw_lowerings() {
     invoke(
         "emit",
         &fixture.0.join("one"),
-        &["--backends", "c,llvm,jvm,wasm"],
+        &["--backends", "c,llvm,jvm"],
     );
     assert_eq!(
         std::fs::read_to_string(&trace).unwrap().lines().count(),
@@ -216,12 +195,12 @@ fn sharing_avoids_three_actual_raw_lowerings() {
         "count the actual lower_with boundary, not a claimed statistic"
     );
     std::fs::remove_file(&trace).unwrap();
-    for backend in ["c", "llvm", "jvm", "wasm"] {
+    for backend in ["c", "llvm", "jvm"] {
         invoke(&format!("emit-{backend}"), &fixture.0.join(backend), &[]);
     }
     assert_eq!(
         std::fs::read_to_string(trace).unwrap().lines().count(),
-        4,
+        3,
         "the unshared control must really lower once per backend"
     );
 }
@@ -230,10 +209,10 @@ fn sharing_avoids_three_actual_raw_lowerings() {
 fn a_frontend_error_blocks_every_backend_with_the_original_diagnostic() {
     let fixture = Fixture::new("export const wrong: string = 1;\n");
     let out = fixture.0.join("type-error");
-    let combined = fixture.run("emit", &out, &["--backends", "c,llvm,jvm,wasm"]);
+    let combined = fixture.run("emit", &out, &["--backends", "c,llvm,jvm"]);
     assert!(!combined.status.success());
     let results = report(&out);
-    for backend in ["c", "llvm", "jvm", "wasm"] {
+    for backend in ["c", "llvm", "jvm"] {
         let own = fixture.0.join(format!("error-{backend}"));
         let separate = fixture.run(&format!("emit-{backend}"), &own, &[]);
         assert!(!separate.status.success());
@@ -257,7 +236,7 @@ fn malformed_requests_fail_before_frontend_acquisition() {
         (vec!["--backends", "c,llvmm"], "unknown backend"),
         (vec!["--backends", "c,"], "unknown backend"),
         (
-            vec!["--backends", "c", "--backends=wasm"],
+            vec!["--backends", "c", "--backends=llvm"],
             "given more than once",
         ),
     ] {
@@ -272,35 +251,5 @@ fn malformed_requests_fail_before_frontend_acquisition() {
         let text = String::from_utf8(result.stderr).unwrap();
         assert!(text.contains(complaint), "{text}");
         assert!(!out.exists());
-    }
-}
-
-#[test]
-fn browser_glue_and_backend_order_keep_the_same_bytes() {
-    let fixture = Fixture::new("export function answer(): number { return 42; }\n");
-    let out = fixture.0.join("browser");
-    let combined = fixture.run("emit", &out, &["--backends=wasm,c", "--host=browser"]);
-    assert!(
-        combined.status.success(),
-        "{}",
-        String::from_utf8_lossy(&combined.stderr)
-    );
-    let own = fixture.0.join("separate-browser");
-    let separate = fixture.run("emit-wasm", &own, &["--host=browser"]);
-    assert!(separate.status.success());
-    assert!(!inventory(&own).is_empty());
-    assert_eq!(inventory(&out.join("wasm")), inventory(&own));
-    let forward = fixture.0.join("forward");
-    let result = fixture.run(
-        "emit",
-        &forward,
-        &["--backends", "c,wasm", "--host", "browser"],
-    );
-    assert!(result.status.success());
-    for backend in ["wasm", "c"] {
-        assert_eq!(
-            inventory(&out.join(backend)),
-            inventory(&forward.join(backend))
-        );
     }
 }

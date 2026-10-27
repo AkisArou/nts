@@ -161,7 +161,6 @@ export const ASKS = {
   llvm: ["answers", "the same on LLVM"],
   "llvm-rc": ["answers", "the same on LLVM with reference counting"],
   jvm: ["answers", "the same on the JVM, whose verifier types what C (`T *`) and LLVM (`ptr`) agree on by construction"],
-  wasm: ["answers", "the same on Wasm, as a module node runs"],
   dex: ["valid", "does d8 accept what the JVM backend emits"],
   "jvm-verifies": ["valid", "does the runtime's and the outcomes' JVM output load, verify and link -- the jvm step runs examples only"],
   rc: ["answers", "the same on C with reference counting, where a lifetime error shows"],
@@ -181,7 +180,6 @@ export const ASKS = {
   "test262-builtins-cases": ["answers", "the same over test/built-ins"],
   "test262-rest-cases": ["answers", "the same over test/annexB, test/staging and test/harness"],
   "test262-jvm": ["answers", "does every recorded test262 row on the JVM still do what it did"],
-  "test262-wasm": ["answers", "the same on Wasm"],
   "test262-llvm": ["answers", "the same on LLVM"],
   "typescript-cases": ["answers", "does every recorded TypeScript conformance case still do what it did, on every backend"],
   // A corpus of its own, and the only step that compiles it: `any` as Erased
@@ -257,9 +255,9 @@ export const RULES = [
   {
     name: "a new example",
     when: (p, added) => added && /^tests\/programs\/[^/]+\/tsconfig\.json$/.test(p),
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity"],
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity"],
     arms: [
-      { kind: "answers", asks: "does it agree on every backend -- by hand, because the differential reads the shared tree and cannot see an example not yet in it", run: "node tooling/differential/agree.mjs <after> --only=<example>   # and NTS_BACKEND=llvm, llvm+NTS_RC=1, jvm, wasm, NTS_RC=1" },
+      { kind: "answers", asks: "does it agree on every backend -- by hand, because the differential reads the shared tree and cannot see an example not yet in it", run: "node tooling/differential/agree.mjs <after> --only=<example>   # and NTS_BACKEND=llvm, llvm+NTS_RC=1, jvm, NTS_RC=1" },
       { kind: "answers", asks: "does it guard the change: it must not agree on the binary before", run: "node tooling/differential/agree.mjs <before> <after> --only=<example>" },
       { kind: "hygiene", asks: "can a pinned gate see it", run: "commit it before a pinned gate run: a worktree gate cannot see an uncommitted example" },
     ],
@@ -267,7 +265,7 @@ export const RULES = [
   {
     name: "an example changed",
     when: (p, added) => !added && /^tests\/(programs\/[^/]+|interop|gjs|workspace)\//.test(p),
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "wasm", "rc"],
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc"],
     arms: [],
   },
   {
@@ -304,7 +302,7 @@ export const RULES = [
     // written for a lowering that got slower: a lowering change reaches every
     // program the gate compiles, so addons, profile, assembles, memory,
     // bench-agree, corpus and dex read its output as much as examples does.
-    steps: ["expect-ir", "examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
+    steps: ["expect-ir", "examples", "llvm", "llvm-rc", "jvm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
@@ -355,19 +353,9 @@ export const RULES = [
     ],
   },
   {
-    name: "the WebAssembly backend",
-    when: (p) => /^compiler\/codegen\/wasm\//.test(p),
-    steps: ["tests", "wasm", "test262-wasm", "typescript-cases"],
-    arms: [
-      { kind: "answers", asks: "do scalar operations and reducible and irreducible CFGs agree with their independent oracles", run: "cargo test -p nts-codegen-wasm --locked -- --test-threads=2   # includes Node execution and the arbitrary-graph oracle" },
-      { kind: "answers", asks: "which code is emitted, on Wasm: every example through `nts check`, as the `wasm` step runs it", run: "NTS_BACKEND=wasm node tooling/differential/agree.mjs <before> <after>" },
-      { kind: "answers", asks: "the exported boundary and Chromium, which `nts check` does not reach: which examples publish, emit and agree, and which decline by name", run: "python3 tooling/wasm/census.py --nts <after> --out <evidence-dir>/node && python3 tooling/wasm/census.py --nts <after> --out <evidence-dir>/browser --host browser   # all examples, both hosts; zero invalid or wrong answers, identical rows" },
-    ],
-  },
-  {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
-    steps: ["types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
+    steps: ["types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"],
     arms: [
       { kind: "hygiene", asks: "does a cache written by the old schema get rejected", run: "bump SCHEMA_VERSION if a semantic-schema struct changed" },
       { kind: "valid", asks: "the examples' type tables too, not only the runtime's", run: "NTS_BIN=<after> node tooling/conformance/types-check.mjs --examples" },
@@ -405,7 +393,7 @@ export const RULES = [
     // nor a table -- nothing in it said who parses the line it changed.
     name: "the printed diagnostics",
     when: (p) => /^(tooling\/cli\/src|compiler\/diagnostics|tooling\/differential\/src)\//.test(p),
-    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
+    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"],
     arms: [
       { if: "it changes what a printed diagnostic line says or how it is shaped", kind: "valid", asks: "who parses this line: every reader of it, widened to accept both shapes before the shape changes", run: "git grep -nE 'TS(.d|.0-9)|refused:|not (rendered|emitted):' -- '*.mjs' '*.sh' '*.ts' ':!*.d.ts'   # `.` is the \\ of a JS reader's \\d and the [ of a shell one's [0-9]" },
     ],
@@ -477,7 +465,7 @@ export const RULES = [
   {
     name: "the backends' common code",
     when: (p) => /^compiler\/codegen\/common\//.test(p),
-    steps: ["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc", "assembles", "jvm-verifies", "dex", "bench-agree", "benches", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
+    steps: ["examples", "llvm", "jvm", "rc", "llvm-rc", "assembles", "jvm-verifies", "dex", "bench-agree", "benches", "test262-jvm", "test262-llvm", "typescript-cases"],
     arms: [],
   },
   {
@@ -527,23 +515,6 @@ export const RULES = [
     arms: [],
   },
   {
-    // The Wasm programs' host: every Wasm test262 case runs through it
-    // (attempt262.ts's BACKENDS.wasm), and it decides how an uncaught throw,
-    // a refusal, a trap and a rejected promise read. Named by a path joined at
-    // run time, which `stepInputs` cannot follow, so it owed the full gate.
-    // The crate's tests run it too (codegen/wasm/tests/execute.rs).
-    name: "the Wasm test host",
-    when: (p) => p === "tooling/wasm/run-program.ts",
-    steps: ["tests", "test262-wasm"],
-    arms: [],
-  },
-  {
-    name: "a Wasm test262 record",
-    when: (p) => /^results\/test262\/wasm\/[^/]+\.tsv$/.test(p),
-    steps: ["test262-wasm"],
-    arms: [],
-  },
-  {
     name: "an LLVM test262 record",
     when: (p) => /^results\/test262\/llvm\/[^/]+\.tsv$/.test(p),
     steps: ["test262-llvm"],
@@ -575,7 +546,7 @@ export const RULES = [
   {
     name: "the CLI",
     when: (p) => /^tooling\/cli\//.test(p),
-    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "wasm", "rc", "expect-ir", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
+    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "rc", "expect-ir", "test262-jvm", "test262-llvm", "typescript-cases"],
     arms: [],
   },
   {
@@ -603,7 +574,7 @@ export const RULES = [
   {
     name: "the suite and the test262 protocol",
     when: (p) => /^tooling\/suite\//.test(p),
-    steps: ["corpus", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
+    steps: ["corpus", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"],
     arms: [],
   },
   {
@@ -826,31 +797,17 @@ export function cargoDirOf(path) {
 
 /**
  * **The CLI runs a backend only when a command selects it.** `nts` links every
- * backend, and `emit-llvm`, `emit-jvm`, `emit-wasm`, `--napi`, a config's
+ * backend, and `emit-llvm`, `emit-jvm`, `--napi`, a config's
  * `backend` or NTS_BACKEND decide which one runs; every other command never
  * enters it. So a change inside one of these backends changes what the CLI
  * does on exactly the steps that select that backend -- which the backend's
- * own rule lists -- and not on everything the CLI's rule owes. Through the
- * crate graph alone, a Wasm-only change owed interop's GTK builds, the native
- * examples, profile and test262, none of which runs the Wasm backend: each
- * Wasm landing paid about 26 minutes of interop for nothing it could change
- * (2026-10-14).
+ * own rule lists -- and not on everything the CLI's rule owes.
  *
  * The C backend is not here: it is what every one of those runs by default.
  * The other crates that link a backend (the differential, the bench driver,
  * the suite) call into it in their own code, and keep their reach.
  */
-const SELECTED_BY_THE_CLI = new Set(["compiler/codegen/llvm", "compiler/codegen/jvm", "compiler/codegen/wasm", "compiler/codegen/napi", "compiler/jvm-emitter"]);
-
-/**
- * **And the differential runs the Wasm backend only under `NTS_BACKEND=wasm`,**
- * which no step but `wasm` sets -- that backend's own rule owes it. So a Wasm
- * change does not take on the C steps the differential's rule owes (the
- * refusal tables, test262), as it does not take on the CLI's. The JVM and LLVM
- * backends are wired into the differential's own code paths and keep its
- * reach.
- */
-const SELECTED_BY_THE_DIFFERENTIAL = new Set(["compiler/codegen/wasm"]);
+const SELECTED_BY_THE_CLI = new Set(["compiler/codegen/llvm", "compiler/codegen/jvm", "compiler/codegen/napi", "compiler/jvm-emitter"]);
 
 /**
  * `dir` and every crate that depends on it, directly or not -- except the CLI
@@ -861,13 +818,12 @@ const SELECTED_BY_THE_DIFFERENTIAL = new Set(["compiler/codegen/wasm"]);
 export function dependents(dir) {
   const all = crates();
   const selected = SELECTED_BY_THE_CLI.has(dir);
-  const byName = SELECTED_BY_THE_DIFFERENTIAL.has(dir);
   const seen = new Set([dir]);
   const queue = [dir];
   while (queue.length) {
     for (const u of all.get(queue.shift())?.users ?? []) {
       const name = all.get(u)?.name;
-      if (seen.has(u) || (selected && name === "nts-cli") || (byName && name === "nts-differential")) continue;
+      if (seen.has(u) || (selected && name === "nts-cli")) continue;
       seen.add(u);
       queue.push(u);
     }
@@ -883,7 +839,7 @@ export function dependents(dir) {
 // `member` decides membership by the path alone, so a deleted or renamed
 // program still owes its corpus: the tree no longer has it to list.
 const CORPORA = [
-  { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "expect-ir", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity", "example-refusals", "dex"] },
+  { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "expect-ir", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex"] },
   { name: "the interop projects", wide: true, member: /^tests\/interop\/[^/]+\//, dirs: () => kids("tests/interop"), steps: ["interop"] },
   { name: "the blockers", member: /^tests\/refusals\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tests\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
@@ -1220,7 +1176,7 @@ export function owed(changes) {
     // include_str!/build inputs observe prose bytes too, not just tokens.
     if (precise === "comments" && (covering(embedded(), path).size || (path.endsWith(".rs") && !ownCrate))) precise = null;
     if (precise) {
-      const records = ["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"];
+      const records = ["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"];
       // A changed/removed feature also owes the full metadata selection: it
       // can leave an upstream feature unclassified. Prose cannot do that.
       const steps = precise === "classification meaning" ? ["audit", "test262", ...records] : [...TREE_CHECKS];
@@ -1383,7 +1339,7 @@ function selfTest() {
   const printed = owed([{ path: "tooling/cli/src/main.rs", added: false }]).find((r) => r.name === "the printed diagnostics");
   if (!printed?.steps.includes("test262-cases") || !printed.arms.some((a) => /git grep/.test(a.run))) return "a change to the driver's printing does not owe its readers";
   const lowered = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
-  if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets on every backend";
+  if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets on every backend";
   if (!lowered.steps.includes("benches")) return "a lowering change does not owe the benches corpus";
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.

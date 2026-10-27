@@ -107,14 +107,6 @@
  *      its own comment argues that it is the instrument that should speak in
  *      its crate rather than in somebody's gate step.
  *
- * And one more for **every** function this header declares, a helper or not:
- *
- *   5. `compiler/codegen/wasm/src/support_catalog.rs` -- a decision, in sorted
- *      position, and the name in `tooling/wasm/header-helpers.json`, which
- *      `python3 tooling/wasm/helper-inventory.py --write-header-manifest`
- *      rewrites from clang. `nts_process_start`, which only an executable's
- *      `main` calls, owed this and none of the four above.
- *
  * Written here because this is where the writer is. The tests are the readers
  * and each of them already says what it wants; what none of them could say is
  * how many others there are. */

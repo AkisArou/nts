@@ -9,7 +9,7 @@
 //!
 //! - `cells.tsv` -- the data: the newest measurement of each case and column,
 //!   one line each, so it grows with the table and not with the runs.
-//! - `c.md`, `llvm.md`, `jvm.md`, `wasm.md` -- one table per target: nts
+//! - `c.md`, `llvm.md`, `jvm.md` -- one table per target: nts
 //!   against node and against that target's own reference.
 //!
 //! Written in the tree the run is made from, and landed like any change.
@@ -24,25 +24,22 @@ use super::{Row, human, lane_matches};
 
 /// The columns kept: the key in `cells.tsv`, and the label a lane filter
 /// matches.
-const COLUMNS: [(&str, &str); 9] = [
+const COLUMNS: [(&str, &str); 7] = [
     ("cpp", "C++"),
     ("nts_c", "nts"),
     ("nts_llvm", "nts (LLVM)"),
     ("nts_jvm", "nts (JVM)"),
     ("java", "Java"),
-    ("nts_wasm", "nts (Wasm)"),
-    ("cpp_wasm", "C++ (wasm)"),
     ("node", "V8"),
     ("bun", "Bun"),
 ];
 
 /// Each target's file: its name, its nts column, its reference column and
 /// what the reference is called.
-const TARGETS: [(&str, &str, &str, &str); 4] = [
+const TARGETS: [(&str, &str, &str, &str); 3] = [
     ("c", "nts_c", "cpp", "C++"),
     ("llvm", "nts_llvm", "cpp", "C++"),
     ("jvm", "nts_jvm", "java", "Java"),
-    ("wasm", "nts_wasm", "cpp_wasm", "C++ (wasm)"),
 ];
 
 const HEADER: &str = "case\tcolumn\tns_per_call\tmeasured\tcommit\tnote";
@@ -187,8 +184,6 @@ fn value(row: &Row, key: &str) -> (Option<f64>, bool) {
         "nts_llvm" => nts(row.llvm),
         "nts_jvm" => nts(row.jvm),
         "java" => (row.java, false),
-        "nts_wasm" => nts(row.wasm),
-        "cpp_wasm" => (row.cpp_wasm, false),
         "node" => (Some(row.node), false),
         "bun" => (row.bun, false),
         _ => (None, false),

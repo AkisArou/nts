@@ -161,7 +161,7 @@ fn function(name: &str, case: Case) -> Func {
 fn all_three_results_agree_on_every_backend() {
     const TEST: &str = "table_membership_tests::all_three_results_agree_on_every_backend";
     if std::env::var_os("NTS_TABLE_MEMBERSHIP_ARM").is_none() {
-        for backend in ["c", "llvm", "jvm", "wasm"] {
+        for backend in ["c", "llvm", "jvm"] {
             let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--exact", TEST, "--nocapture"])
                 .env("NTS_TABLE_MEMBERSHIP_ARM", backend)
@@ -239,14 +239,6 @@ fn all_three_results_agree_on_every_backend() {
             &mut refused,
             &mut aborts,
             &mut timeouts,
-        ),
-        Backend::Wasm => run_wasm(
-            &scratch.path,
-            &program,
-            &[],
-            &testable,
-            &mut refused,
-            &mut aborts,
         ),
     }
     .unwrap();

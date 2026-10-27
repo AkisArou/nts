@@ -552,24 +552,6 @@
     ]
   },
   {
-    "name": "leb128fmt",
-    "version": "0.1.0",
-    "source": "registry+https://github.com/rust-lang/crates.io-index",
-    "checksum": "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2",
-    "license": "MIT OR Apache-2.0",
-    "repository": "https://github.com/bluk/leb128fmt",
-    "texts": [
-      {
-        "upstream": "LICENSE-APACHE",
-        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
-      },
-      {
-        "upstream": "LICENSE-MIT",
-        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      }
-    ]
-  },
-  {
     "name": "libc",
     "version": "0.2.191",
     "source": "registry+https://github.com/rust-lang/crates.io-index",
@@ -1298,50 +1280,6 @@
       {
         "upstream": "LICENSE-MIT",
         "sha256": "3fa4ca83dcc9237839b1bdeb2e6d16bdfb5ec0c5ce42b24694d8bbf0dcbef72c"
-      }
-    ]
-  },
-  {
-    "name": "wasm-encoder",
-    "version": "0.261.0",
-    "source": "registry+https://github.com/rust-lang/crates.io-index",
-    "checksum": "2608e8bb6d67fd68f5a8d0eb1363d6e7bcbc1f8ded5a0bd3a1e382462b876b22",
-    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-    "texts": [
-      {
-        "upstream": "LICENSE-APACHE",
-        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
-      },
-      {
-        "upstream": "LICENSE-Apache-2.0_WITH_LLVM-exception",
-        "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
-      },
-      {
-        "upstream": "LICENSE-MIT",
-        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      }
-    ]
-  },
-  {
-    "name": "wasmparser",
-    "version": "0.261.0",
-    "source": "registry+https://github.com/rust-lang/crates.io-index",
-    "checksum": "4f20f20e44f7e8aeb6744823ea9d869ede51e51be4fdaedede2852282e54d2d8",
-    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-    "texts": [
-      {
-        "upstream": "LICENSE-APACHE",
-        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
-      },
-      {
-        "upstream": "LICENSE-Apache-2.0_WITH_LLVM-exception",
-        "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
-      },
-      {
-        "upstream": "LICENSE-MIT",
-        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       }
     ]
   },

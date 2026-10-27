@@ -46,7 +46,7 @@ test("checked-in promises use compact sorted rows with complete measured identit
     assert.ok(!seen.has(identity), identity); seen.add(identity);
     assert.ok(previous.localeCompare(identity, "en") <= 0); previous = identity;
     for (const field of [row.signature, row.cases_sha256, row.driver_sha256]) assert.match(field, /^[0-9a-f]{64}$/);
-    assert.deepEqual(Object.keys(row.keys).sort(), ["c", "jvm", "llvm", "wasm"]);
+    assert.deepEqual(Object.keys(row.keys).sort(), ["c", "jvm", "llvm"]);
     for (const key of Object.values(row.keys)) assert.match(key as string, /^[0-9a-f]{32}$/);
     if (row.kind === "no-oracle") {
       assert.equal(row.source, "tests/programs/jsx/src/main.tsx");
