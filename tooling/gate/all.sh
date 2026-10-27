@@ -2692,21 +2692,29 @@ step "frontend-tsrs" frontend_tsrs
 # stopped refusing at all. A hundred and fifty-two fixtures that nothing executes
 # are a hundred and fifty-two claims nobody is checking.
 blockers() {
-  out=$(node tooling/conformance/blockers-check.mjs 2>&1)
+  # Keep the interpreter's ordered progress even if the step is interrupted.
+  # The gate's final messages below remain the same filtered view.
+  if [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
+    fixtures_log="$NTS_GATE_RUN_DIR/blockers-fixtures.log"
+  else
+    fixtures_log=$(mktemp "$TMPDIR/nts-blockers-fixtures.XXXXXX")
+    printf '  log: %s\n' "$fixtures_log"
+  fi
+  node tooling/conformance/blockers-check.mjs > "$fixtures_log" 2>&1
   # Its status counts. It exits 2 when it finds no compiler or no Node-API
   # headers -- having judged no fixture -- and 1 when an uncommitted fixture
   # owes integrity entries, and both were read as a pass, because only the
   # FIXED / NO OUTPUT / CHANGED lines below were looked at.
   checked=$?
   if [ "$checked" -ne 0 ]; then
-    printf '%s\n' "$out" | tail -25
+    tail -25 "$fixtures_log"
     echo "  ^ blockers-check.mjs exited $checked"
     return 1
   fi
-  printf '%s\n' "$out" | tail -1
-  fixed=$(printf '%s\n' "$out" | grep -c '^  FIXED ' || true)
+  tail -1 "$fixtures_log"
+  fixed=$(grep -c '^  FIXED ' "$fixtures_log" || true)
   [ "$fixed" -gt 0 ] && {
-    printf '%s\n' "$out" | grep '^  FIXED '
+    grep '^  FIXED ' "$fixtures_log"
     echo "  ^ convert these to guards; not a failure"
   }
   # **A fixture that produced no `program.c` was not evaluated in either
@@ -2722,15 +2730,15 @@ blockers() {
   # gate looking for it. Checked before the loud ones, because a run that could
   # not evaluate some fixtures is not a run whose other verdicts should be read
   # first.
-  silent=$(printf '%s\n' "$out" | grep -c '^  NO OUTPUT ' || true)
+  silent=$(grep -c '^  NO OUTPUT ' "$fixtures_log" || true)
   [ "$silent" = "0" ] || {
-    printf '%s\n' "$out" | grep '^  NO OUTPUT ' -A 1
+    grep '^  NO OUTPUT ' -A 1 "$fixtures_log"
     echo "  ^ emit-c wrote no program.c: these were not measured either way"
     return 1
   }
-  changed=$(printf '%s\n' "$out" | grep -cE '^  (CHANGED|REGRESSED) ' || true)
+  changed=$(grep -cE '^  (CHANGED|REGRESSED) ' "$fixtures_log" || true)
   [ "$changed" = "0" ] || {
-    printf '%s\n' "$out" | grep -E '^  (CHANGED|REGRESSED) ' -A 2
+    grep -E '^  (CHANGED|REGRESSED) ' -A 2 "$fixtures_log"
     echo "  ^ a fixture measuring something other than what it says"
     return 1
   }
