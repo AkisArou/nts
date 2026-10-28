@@ -3,6 +3,8 @@
 // recording capability deliberately fail if a supports() implementation calls them.
 import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
+import { createCipheriv, createDecipheriv } from "node:crypto";
+import type { CipherGCMTypes } from "node:crypto";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
@@ -261,6 +263,35 @@ test("empty OCB IV is a native capability limit and does not become shared draft
   assert.equal(SubtleCrypto.supports("encrypt", algorithm), false);
   assert.equal(provider.queries.length, 2, "the draft-valid parameter reaches each provider");
   assert.equal(SubtleCrypto.supports("encrypt", { name: "AES-OCB", iv: new Uint8Array(1) }), true);
+});
+
+test("GCM supports reports the native 128-byte IV maximum without narrowing shared policy", (t) => {
+  const { provider } = fixture(t);
+  const accepted = new Uint8Array(128);
+  const rejected = new Uint8Array(129);
+  for (const bits of [128, 192, 256]) {
+    const name = "aes-" + bits + "-gcm" as CipherGCMTypes;
+    const key = new Uint8Array(bits / 8);
+    // Explicit native controls establish the backend boundary independently of
+    // the metadata query. The supports implementation never runs these probes.
+    const cipher = createCipheriv(name, key, accepted);
+    const encrypted = cipher.final();
+    const decipher = createDecipheriv(name, key, accepted);
+    decipher.setAuthTag(cipher.getAuthTag());
+    assert.equal(decipher.update(encrypted).byteLength + decipher.final().byteLength, 0);
+    assert.throws(() => createCipheriv(name, key, rejected), { code: "ERR_CRYPTO_INVALID_IV" });
+    assert.throws(() => createDecipheriv(name, key, rejected), { code: "ERR_CRYPTO_INVALID_IV" });
+  }
+  for (const operation of ["encrypt", "decrypt"]) {
+    assert.equal(SubtleCrypto.supports(operation, { name: "AES-GCM", iv: accepted }), true);
+    assert.equal(SubtleCrypto.supports(operation, { name: "AES-GCM", iv: rejected }), true);
+  }
+  provider.native = true;
+  for (const operation of ["encrypt", "decrypt"]) {
+    assert.equal(SubtleCrypto.supports(operation, { name: "AES-GCM", iv: accepted }), true);
+    assert.equal(SubtleCrypto.supports(operation, { name: "AES-GCM", iv: rejected }), false);
+  }
+  assert.equal(provider.queries.length, 8, "both draft-valid lengths reach the selected capability");
 });
 
 test("RSA support separates shared mathematical bounds from native exponent and modulus limits", (t) => {

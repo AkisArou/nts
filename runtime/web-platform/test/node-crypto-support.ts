@@ -59,6 +59,9 @@ function querySupport(query: CryptoSupportQuery): boolean {
       // Both native GCM and OCB reject an empty IV. OCB's draft permits it;
       // supports must still report a known all-input native failure (§3.3).
       if ((p.name === "AES-GCM" || p.name === "AES-OCB") && p.ivBytes === 0) return false;
+      // Node 24.20/OpenSSL accepts at most 128 IV bytes for GCM, in both
+      // directions and for every AES key width. The shared draft range stays.
+      if (p.name === "AES-GCM" && p.ivBytes !== undefined && p.ivBytes > 128) return false;
       if (p.additionalDataBytes !== undefined && p.additionalDataBytes > 0x7fff_ffff) return false;
       if (p.keyBits !== undefined) return nativeCiphers.has(cipherName(p.name, p.keyBits));
       return nativeCiphers.has(cipherName(p.name, 128)) || nativeCiphers.has(cipherName(p.name, 192))
