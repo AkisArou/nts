@@ -1,0 +1,3574 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
+    "xhr/formdata": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "url": "4832db47614f5f48cc57374cbf5c1f70937fad48",
+    "common": "dbd648158d337580885e70a54f929daf215211a0",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "destinationRoot": "runtime/web-platform/test/wpt",
+  "scope": "A4 Blob, File, asynchronous FileReader, FormData and application/x-www-form-urlencoded parsing, without network.",
+  "inventoryNote": "Every FileAPI and xhr/formdata path and the requested url/urlencoded-parser fixture is selected, used as support, excluded with a reason or classified as metadata. Source files are unedited. Counts describe one ordinary-node host execution, not every WPT global variant. Two Document-dependent registrations are listed separately and never counted as executed or blocked.",
+  "nodeCompatibilityContext": {
+    "version": "v24.20.0",
+    "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+    "versionsPath": "test/fixtures/wpt/versions.json",
+    "versionsURL": "https://github.com/nodejs/node/blob/71b8b174857e25106d39b61a9e6f30d927da8b01/test/fixtures/wpt/versions.json",
+    "note": "FileAPI and url use exact versions.json directory commits. Node does not vendor xhr/formdata, which uses the recent revision reserved by Fetch A3. Every Node-vendored FileAPI and URL byte sequence was independently checked against upstream Git blobs; none differs. Node omits one FileAPI and three URL Python resources, which are inventoried from upstream. Node expected failures and platform-specific skips below are compatibility context only and do not skip package cases.",
+    "statusFiles": [
+      {
+        "path": "test/wpt/status/FileAPI/blob.cjs",
+        "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+        "sourceURL": "https://github.com/nodejs/node/blob/71b8b174857e25106d39b61a9e6f30d927da8b01/test/wpt/status/FileAPI/blob.cjs",
+        "sha256": "707041ab2a204e18e6e6b7fe7daa45d454ee2ed65d23932cb4c273cfcf112775",
+        "gitBlob": "bf40df1b8425887eb712c381059c43674dda49b4",
+        "content": "'use strict';\n\nconst os = require('node:os');\n\n// On AIX, V8's OS::DecommitPages() has an inherent race condition caused by\n// AIX's non-POSIX MAP_FIXED behavior. The implementation must munmap() then\n// mmap(), and another thread can steal the address range in between. The\n// Blob.arrayBuffer() tests trigger this by creating enough GC pressure\n// (especially the concurrent reads test) to hit the race window.\n// See deps/v8/src/base/platform/platform-aix.cc, lines 168-203.\nconst isAIX = os.type() === 'AIX';\n\nconst conditionalSkips = {};\n\nif (isAIX) {\n  conditionalSkips['Blob-array-buffer.any.js'] = {\n    skip: 'V8 DecommitPages race condition on AIX (munmap/mmap non-atomic)',\n  };\n}\n\nmodule.exports = {\n  ...conditionalSkips,\n  'Blob-constructor-dom.window.js': {\n    skip: 'Depends on DOM API',\n  },\n  'Blob-constructor.any.js': {\n    fail: {\n      flaky: [\n        'Passing typed arrays as elements of the blobParts array should work.',\n        'Passing a Float16Array as element of the blobParts array should work.',\n        'Passing a Float64Array as element of the blobParts array should work.',\n        'Passing BigInt typed arrays as elements of the blobParts array should work.',\n      ],\n    },\n  },\n  'Blob-in-worker.worker.js': {\n    skip: 'Depends on Web Workers API',\n  },\n};\n"
+      },
+      {
+        "path": "test/wpt/status/FileAPI/file.json",
+        "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+        "sourceURL": "https://github.com/nodejs/node/blob/71b8b174857e25106d39b61a9e6f30d927da8b01/test/wpt/status/FileAPI/file.json",
+        "sha256": "29a0ec251378b0397f05bbfa7a46fd50ddb2387fdb30ab27d68f44ab85b7008f",
+        "gitBlob": "6b50bcec1539e39078ad4d41dc32b89d8fee471b",
+        "content": "{\n  \"Worker-read-file-constructor.worker.js\": {\n    \"skip\": true\n  },\n  \"send-file-formdata-punctuation.any.js\": {\n    \"skip\": true\n  },\n  \"send-file-formdata-utf-8.any.js\": {\n    \"skip\": true\n  },\n  \"send-file-formdata.any.js\": {\n    \"skip\": true\n  },\n  \"send-file-formdata-controls.any.js\": {\n    \"skip\": true\n  }\n}\n"
+      }
+    ]
+  },
+  "environmentRequirements": {
+    "provider": "createHostNodeWebPlatform; no outbound transport permitted",
+    "canonicalClasses": [
+      "Blob",
+      "File",
+      "FileReader",
+      "ProgressEvent",
+      "FormData",
+      "URLSearchParams",
+      "Request",
+      "Response",
+      "Event",
+      "EventTarget",
+      "DOMException",
+      "ReadableStream",
+      "TextEncoder",
+      "TextDecoder"
+    ],
+    "testGlobals": [
+      "self aliases the actual VM global",
+      "genuine host ECMAScript constructors",
+      "actual host gc under --expose-gc"
+    ],
+    "harnessAdditions": [
+      "format_value",
+      "assert_class_string",
+      "assert_less_than",
+      "assert_less_than_equal",
+      "assert_greater_than_equal",
+      "EventWatcher",
+      "explicit defaultTestName from unchanged META title"
+    ],
+    "notSubstituted": [
+      "Node Blob/File/FormData/Request/Response",
+      "Node streams",
+      "FileReader",
+      "URL",
+      "Navigator",
+      "Document",
+      "Window",
+      "Worker",
+      "MessageChannel"
+    ]
+  },
+  "fixtures": [
+    {
+      "path": "FileAPI/FileReader/progress_event_bubbles_cancelable.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/progress_event_bubbles_cancelable.html",
+      "sha256": "52f52764bb2301d093e4fd781d95548316d2873fa86ba2ad3bf93c97d7add0c3",
+      "gitBlob": "6a03243f934081b18cf456d741c3fc2d1660f9c3",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/FileReader/progress_event_bubbles_cancelable.html",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "Check the values of bubbles and cancelable are false when the progress event is dispatched"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-array-buffer.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-array-buffer.any.js",
+      "sha256": "eb5ac8ab115dfb3f91202132c144b33c1e530a456f463324066dbe11ade2f60b",
+      "gitBlob": "2310646e5fdeab300bcea66e4035adbdf3651685",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-array-buffer.any.js",
+      "format": "javascript",
+      "support": [
+        "FileAPI/support/Blob.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {},
+      "expectedRunnableTests": 5,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "Blob.arrayBuffer()"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.arrayBuffer() empty Blob data"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.arrayBuffer() non-ascii input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.arrayBuffer() non-unicode input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.arrayBuffer() concurrent reads"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-bytes.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-bytes.any.js",
+      "sha256": "a305534e59646650d71826a838e499a57da1c2ea60ebb3fdb899f1ea0d6a5964",
+      "gitBlob": "5173b3715c8054ff724899c336fea5c3d221a0d2",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-bytes.any.js",
+      "format": "javascript",
+      "support": [
+        "FileAPI/support/Blob.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {},
+      "expectedRunnableTests": 5,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "Blob.bytes()"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.bytes() empty Blob data"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.bytes() non-ascii input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.bytes() non-unicode input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.bytes() concurrent reads"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-constructor.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-constructor.any.js",
+      "sha256": "7a09f45aa13c1634489425c08a0d77f69f92fc5da4bc2d3cf341e9e290aabe8b",
+      "gitBlob": "03155b99cb20ea34fa5167e5107141e18fc08647",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-constructor.any.js",
+      "format": "javascript",
+      "support": [
+        "FileAPI/support/Blob.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 73,
+      "blockedTests": {
+        "blobParts not an object: boolean with Boolean.prototype[Symbol.iterator]": {
+          "category": "excluded-language-feature",
+          "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+        },
+        "blobParts not an object: string with String.prototype[Symbol.iterator]": {
+          "category": "excluded-language-feature",
+          "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+        },
+        "blobParts not an object: number with Number.prototype[Symbol.iterator]": {
+          "category": "excluded-language-feature",
+          "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+        },
+        "blobParts not an object: BigInt with BigInt.prototype[Symbol.iterator]": {
+          "category": "excluded-language-feature",
+          "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+        },
+        "blobParts not an object: Symbol with Symbol.prototype[Symbol.iterator]": {
+          "category": "excluded-language-feature",
+          "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+        },
+        "Passing a FrozenArray as the blobParts array should work (FrozenArray<MessagePort>).": {
+          "category": "compiler-capability",
+          "reason": "Requires compiler-owned MessageChannel/MessagePort transfer to obtain an actual FrozenArray<MessagePort>. No available canonical provider exposes that capability, and Node message classes or a fabricated event.ports array are not substituted."
+        }
+      },
+      "expectedRunnableTests": 67,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "Blob interface object"
+        },
+        {
+          "kind": "test",
+          "name": "Blob constructor with no arguments"
+        },
+        {
+          "kind": "test",
+          "name": "Blob constructor with no arguments, without 'new'"
+        },
+        {
+          "kind": "test",
+          "name": "Blob constructor without brackets"
+        },
+        {
+          "kind": "test",
+          "name": "Blob constructor with undefined as first argument"
+        },
+        {
+          "kind": "test",
+          "name": "Passing non-objects, Dates and RegExps for blobParts should throw a TypeError."
+        },
+        {
+          "kind": "promise_test",
+          "name": "A plain object with @@iterator should be treated as a sequence for the blobParts argument."
+        },
+        {
+          "kind": "test",
+          "name": "A plain object with custom @@iterator should be treated as a sequence for the blobParts argument."
+        },
+        {
+          "kind": "promise_test",
+          "name": "A plain object with @@iterator and a length property should be treated as a sequence for the blobParts argument."
+        },
+        {
+          "kind": "promise_test",
+          "name": "A String object should be treated as a sequence for the blobParts argument."
+        },
+        {
+          "kind": "promise_test",
+          "name": "A Uint8Array object should be treated as a sequence for the blobParts argument."
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: boolean"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: boolean with Boolean.prototype[Symbol.iterator]"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: string"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: string with String.prototype[Symbol.iterator]"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: number"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: number with Number.prototype[Symbol.iterator]"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: BigInt"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: BigInt with BigInt.prototype[Symbol.iterator]"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: Symbol"
+        },
+        {
+          "kind": "test",
+          "name": "blobParts not an object: Symbol with Symbol.prototype[Symbol.iterator]"
+        },
+        {
+          "kind": "test",
+          "name": "The length getter should be invoked and any exceptions should be propagated."
+        },
+        {
+          "kind": "test",
+          "name": "ToUint32 should be applied to the length and any exceptions should be propagated."
+        },
+        {
+          "kind": "test",
+          "name": "Getters and value conversions should happen in order until an exception is thrown."
+        },
+        {
+          "kind": "test",
+          "name": "ToString should be called on elements of the blobParts array and any exceptions should be propagated."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Changes to the blobParts array should be reflected in the returned Blob (pop)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Changes to the blobParts array should be reflected in the returned Blob (unshift)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "ToString should be called on elements of the blobParts array."
+        },
+        {
+          "kind": "promise_test",
+          "name": "ArrayBuffer elements of the blobParts array should be supported."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing typed arrays as elements of the blobParts array should work."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing a Float16Array as element of the blobParts array should work."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing a Float64Array as element of the blobParts array should work."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing BigInt typed arrays as elements of the blobParts array should work."
+        },
+        {
+          "kind": "async_test",
+          "name": "Passing a FrozenArray as the blobParts array should work (FrozenArray<MessagePort>)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Array with two blobs"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Array with two buffers"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Array with two bufferviews"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Array with mixed types"
+        },
+        {
+          "kind": "test",
+          "name": "options properties should be accessed in lexicographic order."
+        },
+        {
+          "kind": "test",
+          "name": "Arguments should be evaluated from left to right."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing null (index 0) for options should use the defaults."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing null (index 0) for options should use the defaults (with newlines)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing undefined (index 1) for options should use the defaults."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing undefined (index 1) for options should use the defaults (with newlines)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing object \"[object Object]\" (index 2) for options should use the defaults."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing object \"[object Object]\" (index 2) for options should use the defaults (with newlines)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing object \"[object Object]\" (index 3) for options should use the defaults."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing object \"[object Object]\" (index 3) for options should use the defaults (with newlines)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing object \"/regex/\" (index 4) for options should use the defaults."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing object \"/regex/\" (index 4) for options should use the defaults (with newlines)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing function \"function() {}\" (index 5) for options should use the defaults."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Passing function \"function() {}\" (index 5) for options should use the defaults (with newlines)."
+        },
+        {
+          "kind": "test",
+          "name": "Passing 123 for options should throw"
+        },
+        {
+          "kind": "test",
+          "name": "Passing 123.4 for options should throw"
+        },
+        {
+          "kind": "test",
+          "name": "Passing true for options should throw"
+        },
+        {
+          "kind": "test",
+          "name": "Passing \"abc\" for options should throw"
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"a\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"A\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"text/html\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"TEXT/HTML\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"text/plain;charset=utf-8\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"å\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"𐑾\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \" image/gif \""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"\\timage/gif\\t\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"image/gif;\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"İmage/gif\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"ımage/gif\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"image/gif\\0\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"unknown/unknown\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"text/plain\""
+        },
+        {
+          "kind": "test",
+          "name": "Blob with type \"image/png\""
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-newobject.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-newobject.any.js",
+      "sha256": "64257c4adfd0ff059fb492605a62e921ff17b63c9b66c3a87d94c1626a9c3444",
+      "gitBlob": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-newobject.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "Blob.stream() returns [NewObject]"
+        },
+        {
+          "kind": "test",
+          "name": "Blob.text() returns [NewObject]"
+        },
+        {
+          "kind": "test",
+          "name": "Blob.arrayBuffer() returns [NewObject]"
+        },
+        {
+          "kind": "test",
+          "name": "Blob.bytes() returns [NewObject]"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-slice-overflow.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-slice-overflow.any.js",
+      "sha256": "5da17f7ad6fa2e15a0ae6e8435f9cfd0413b64a39ea337bedd99e915048d8d5d",
+      "gitBlob": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-slice-overflow.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "slice start is negative, relativeStart will be max((size + start), 0)"
+        },
+        {
+          "kind": "test",
+          "name": "slice start is greater than blob size, relativeStart will be min(start, size)"
+        },
+        {
+          "kind": "test",
+          "name": "slice end is negative, relativeEnd will be max((size + end), 0)"
+        },
+        {
+          "kind": "test",
+          "name": "slice end is greater than blob size, relativeEnd will be min(end, size)"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-slice.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-slice.any.js",
+      "sha256": "506fc067d18adb43b2b3b01fcc1123fadaaaf78bfed311b8e863c5f7edd64cda",
+      "gitBlob": "bedc8d737302a0f4c0464db103c66bfe1ca2e3e2",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-slice.any.js",
+      "format": "javascript",
+      "support": [
+        "FileAPI/support/Blob.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 150,
+      "blockedTests": {},
+      "expectedRunnableTests": 150,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "no-argument Blob slice"
+        },
+        {
+          "kind": "test",
+          "name": "Slices"
+        },
+        {
+          "kind": "promise_test",
+          "name": "blob1."
+        },
+        {
+          "kind": "promise_test",
+          "name": "blob2."
+        },
+        {
+          "kind": "promise_test",
+          "name": "undefined start/end Blob slice"
+        },
+        {
+          "kind": "promise_test",
+          "name": "undefined start Blob slice"
+        },
+        {
+          "kind": "promise_test",
+          "name": "undefined end Blob slice"
+        },
+        {
+          "kind": "promise_test",
+          "name": "null type Blob slice"
+        },
+        {
+          "kind": "promise_test",
+          "name": "undefined type Blob slice"
+        },
+        {
+          "kind": "promise_test",
+          "name": "no type Blob slice"
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,4)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,4)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,5)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,5)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,6)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,6)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,7)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,7)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (0,8)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (0,8)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,4)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,4)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,5)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,5)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,6)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,6)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,7)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,7)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,8)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,8)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (1,9)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (1,9)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,4)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,4)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,5)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,5)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,6)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,6)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (2,7)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (2,7)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (3,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (3,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (3,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (3,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (3,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (3,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (3,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (3,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (4,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (4,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (4,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (4,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (4,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (4,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (4,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (4,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (4,4)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (4,4)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (4,5)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (4,5)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (5,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (5,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (5,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (5,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (5,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (5,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (5,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (5,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (5,4)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (5,4)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (6,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (6,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (6,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (6,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (6,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (6,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (6,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (6,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (7,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (7,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (7,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (7,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (7,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (7,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (8,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (8,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (8,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (8,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (8,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (8,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (8,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (8,3)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (9,0)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (9,0)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (9,1)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (9,1)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (9,2)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (9,2)."
+        },
+        {
+          "kind": "test",
+          "name": "Slicing test (9,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Slicing test: slice (9,3)."
+        },
+        {
+          "kind": "promise_test",
+          "name": "Invalid contentType (\"ÿ\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Invalid contentType (\"te\\txt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Invalid contentType (\"te\\0xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Invalid contentType (\"te\\x1fxt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Invalid contentType (\"text/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te(xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te)xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te<xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te>xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te@xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te,xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te;xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te:xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te\\\\xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te\\\"xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te/xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te[xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te]xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te?xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te=xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te{xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te}xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"te xt/plain\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"TEXT/PLAIN\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"text/plain;charset = UTF-8\")"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Valid contentType (\"text/plain;charset=UTF-8\")"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/blob/Blob-stream.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-stream.any.js",
+      "sha256": "7cdb21fa95a5e9f0383fa9d3a4519a542e5f58df14fa6a358158d35dbf469504",
+      "gitBlob": "453144cac964a627bb2a004d435887b15ddc96d3",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-stream.any.js",
+      "format": "javascript",
+      "support": [
+        "FileAPI/support/Blob.js",
+        "common/gc.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "Blob.stream()"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.stream() empty Blob"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.stream() non-unicode input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.stream() garbage collection of blob shouldn't break stream consumption"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.stream() garbage collection of stream shouldn't break stream consumption"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Reading Blob.stream() with BYOB reader"
+        }
+      ],
+      "interpretationNote": "The gc.js helper uses the actual exposed host gc function under --expose-gc. These are host-runtime collection controls, not evidence for nts allocation or cycle collection."
+    },
+    {
+      "path": "FileAPI/blob/Blob-text.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-text.any.js",
+      "sha256": "e1fa952af9b0bb70c103d0aa63a9524142904b66d60481e25d4c957426e13101",
+      "gitBlob": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-text.any.js",
+      "format": "javascript",
+      "support": [
+        "FileAPI/support/Blob.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 8,
+      "blockedTests": {},
+      "expectedRunnableTests": 8,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "Blob.text()"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() empty blob data"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() multi-element array in constructor"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() non-unicode"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() different charset param in type option"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() different charset param with non-ascii input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() invalid utf-8 input"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Blob.text() concurrent reads"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/file/File-constructor.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/File-constructor.any.js",
+      "sha256": "106ca99025bf075fbcad76a37c919064f07036845b5805be9963eecc51a4ae85",
+      "gitBlob": "0b0185c40bf83c5781630c72878764f2ef5588c6",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/file/File-constructor.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 49,
+      "blockedTests": {},
+      "expectedRunnableTests": 49,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "File interface object exists"
+        },
+        {
+          "kind": "test",
+          "name": "Required arguments"
+        },
+        {
+          "kind": "test",
+          "name": "empty fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "DOMString fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Unicode DOMString fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "String object fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Empty Blob fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Blob fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Empty File fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "File fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "ArrayBuffer fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Typed array fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Various fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Number in fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Array in fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Object in fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Object with toString in fileBits"
+        },
+        {
+          "kind": "test",
+          "name": "Custom @@iterator"
+        },
+        {
+          "kind": "test",
+          "name": "Invalid bits argument: \"hello\""
+        },
+        {
+          "kind": "test",
+          "name": "Invalid bits argument: 0"
+        },
+        {
+          "kind": "test",
+          "name": "Invalid bits argument: null"
+        },
+        {
+          "kind": "test",
+          "name": "Bits argument: object that throws"
+        },
+        {
+          "kind": "test",
+          "name": "Using fileName"
+        },
+        {
+          "kind": "test",
+          "name": "No replacement when using special character in fileName"
+        },
+        {
+          "kind": "test",
+          "name": "Using null fileName"
+        },
+        {
+          "kind": "test",
+          "name": "Using number fileName"
+        },
+        {
+          "kind": "test",
+          "name": "Using empty string fileName"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: text/plain"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: text/plain;charset=UTF-8"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: TEXT/PLAIN"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: 𝓽𝓮𝔁𝓽/𝔭𝔩𝔞𝔦𝔫"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: ascii/nonprintable\u001f"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: ascii/nonprintable"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: nonasciiî"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: nonasciiሴ"
+        },
+        {
+          "kind": "test",
+          "name": "Using type in File constructor: nonparsable"
+        },
+        {
+          "kind": "test",
+          "name": "Using lastModified"
+        },
+        {
+          "kind": "test",
+          "name": "Misusing name"
+        },
+        {
+          "kind": "test",
+          "name": "Unknown properties are ignored"
+        },
+        {
+          "kind": "test",
+          "name": "Invalid property bag: 123"
+        },
+        {
+          "kind": "test",
+          "name": "Invalid property bag: 123.4"
+        },
+        {
+          "kind": "test",
+          "name": "Invalid property bag: true"
+        },
+        {
+          "kind": "test",
+          "name": "Invalid property bag: \"abc\""
+        },
+        {
+          "kind": "test",
+          "name": "Unusual but valid property bag: null"
+        },
+        {
+          "kind": "test",
+          "name": "Unusual but valid property bag: undefined"
+        },
+        {
+          "kind": "test",
+          "name": "Unusual but valid property bag: 1,2,3"
+        },
+        {
+          "kind": "test",
+          "name": "Unusual but valid property bag: /regex/"
+        },
+        {
+          "kind": "test",
+          "name": "Unusual but valid property bag: function() {}"
+        },
+        {
+          "kind": "test",
+          "name": "Property bag propagates exceptions"
+        }
+      ],
+      "deferredRegistrations": [
+        {
+          "kind": "test",
+          "name": "HTMLBodyElement in fileBits",
+          "category": "browser-dependent-registration",
+          "reason": "The unchanged source registers this case only when globalThis.document exists. This ordinary-node host has no Document; the case is not included in registration, pass or blocked counts."
+        },
+        {
+          "kind": "test",
+          "name": "Using object fileName",
+          "category": "browser-dependent-registration",
+          "reason": "The unchanged source registers this case only when globalThis.document exists. This ordinary-node host has no Document; the case is not included in registration, pass or blocked counts."
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/fileReader.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/fileReader.any.js",
+      "sha256": "c759afe96b4f94065748fee5edcad52e33e9abe7d70eb0c7524805c8504cc07f",
+      "gitBlob": "2876dcb4ce314e3441e1e61a37505235209f4e2e",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/fileReader.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "FileReader interface object"
+        },
+        {
+          "kind": "test",
+          "name": "no-argument FileReader constructor"
+        },
+        {
+          "kind": "async_test",
+          "name": "FileReader States -- abort"
+        },
+        {
+          "kind": "async_test",
+          "name": "FileReader States -- events"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/Determining-Encoding.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/Determining-Encoding.any.js",
+      "sha256": "ecb92d96b05bba4d6c564c6bdfa4c6d47eac8949123d63b0d93ab5461ba55744",
+      "gitBlob": "5b69f7ed9821acefa84ecd1d5cc849f6e0f60b78",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/Determining-Encoding.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "Blob Determing Encoding with encoding argument"
+        },
+        {
+          "kind": "async_test",
+          "name": "Blob Determing Encoding with type attribute"
+        },
+        {
+          "kind": "async_test",
+          "name": "Blob Determing Encoding with UTF-8 BOM"
+        },
+        {
+          "kind": "async_test",
+          "name": "Blob Determing Encoding without anything implying charset."
+        },
+        {
+          "kind": "async_test",
+          "name": "Blob Determing Encoding with UTF-16BE BOM"
+        },
+        {
+          "kind": "async_test",
+          "name": "Blob Determing Encoding with UTF-16LE BOM"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
+      "sha256": "4596cbb1023131aafb9c12b9ef48b37a3bcd4446daf9578147c3f8ec9f1fe262",
+      "gitBlob": "fc71c6434812e220455c2f9d3df19426b4091fb1",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "FileReader.onloadstart: initial value"
+        },
+        {
+          "kind": "test",
+          "name": "FileReader.onprogress: initial value"
+        },
+        {
+          "kind": "test",
+          "name": "FileReader.onload: initial value"
+        },
+        {
+          "kind": "test",
+          "name": "FileReader.onabort: initial value"
+        },
+        {
+          "kind": "test",
+          "name": "FileReader.onerror: initial value"
+        },
+        {
+          "kind": "test",
+          "name": "FileReader.onloadend: initial value"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+      "sha256": "89a20ca7126ed96e02183093af2642d713ddd812955f6d7f02a876fca96a761c",
+      "gitBlob": "4b19c69b425188acd52f647e98963d70b350ca83",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {
+        "test FileReader InvalidStateError exception for readAsDataURL": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        }
+      },
+      "expectedRunnableTests": 5,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "test FileReader InvalidStateError exception for readAsText"
+        },
+        {
+          "kind": "test",
+          "name": "test FileReader InvalidStateError exception for readAsDataURL"
+        },
+        {
+          "kind": "test",
+          "name": "test FileReader InvalidStateError exception for readAsArrayBuffer"
+        },
+        {
+          "kind": "async_test",
+          "name": "test FileReader InvalidStateError exception in onloadstart event for readAsArrayBuffer"
+        },
+        {
+          "kind": "async_test",
+          "name": "test FileReader no InvalidStateError exception in loadend event handler for readAsArrayBuffer"
+        },
+        {
+          "kind": "async_test",
+          "name": "test abort and restart in onloadstart event for readAsText"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_abort.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_abort.any.js",
+      "sha256": "3f1b3ed7c3a714d1ead98e474c45ab96d90e30ec4c6a065a93ab0b7d846bb369",
+      "gitBlob": "c778ae55bb573bc2b7f8d5c1b76f9cd4c866d51f",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_abort.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "Aborting before read"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Aborting after read"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_error.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_error.any.js",
+      "sha256": "f31c1b1c96453f38e8dbd8fe5393fd4b1f9af8f59af9babd4c0b40493443ba5e",
+      "gitBlob": "9845962090132e6620aecb0668081e65441e143c",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_error.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "FileAPI Test: filereader_error",
+          "defaultNameFromTitle": true
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_events.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_events.any.js",
+      "sha256": "40af04891eab2b344efb050b0fd79b248e417b0a9be0c690529e54076f841325",
+      "gitBlob": "ac692907d119f7c8cc9c6e028df4819f27a5112e",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_events.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "events are dispatched in the correct order for an empty blob"
+        },
+        {
+          "kind": "promise_test",
+          "name": "events are dispatched in the correct order for a non-empty blob"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+      "sha256": "643a9cf575a43653da531172c9d9c353623bc04ba0b91958968732803a1a85e6",
+      "gitBlob": "88c4f4d26cc0b25598ce46d010200f25d493ad75",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "FileAPI Test: filereader_readAsArrayBuffer",
+          "defaultNameFromTitle": true
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
+      "sha256": "11ad046a792954af389807e542e64ae64dc8760f1e55992d145f6dd6c4ecaeb7",
+      "gitBlob": "e69ff15e75b5903bdf984fff9fb35b1805a62f22",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "FileAPI Test: filereader_readAsBinaryString",
+          "defaultNameFromTitle": true
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "sha256": "346b0c45c6c33b87b5d5f7632de5f9859cf6c54edeea00b0b7d88626e1565586",
+      "gitBlob": "4f9dbf7a754a87694c737487a903467a4725cc7a",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {
+        "FileReader readyState during readAsDataURL": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        },
+        "readAsDataURL result for Blob with specified MIME type": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        },
+        "readAsDataURL result for Blob with unspecified MIME type": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        },
+        "readAsDataURL result for empty Blob": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        }
+      },
+      "expectedRunnableTests": 0,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "FileReader readyState during readAsDataURL"
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsDataURL result for Blob with specified MIME type"
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsDataURL result for Blob with unspecified MIME type"
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsDataURL result for empty Blob"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsText.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsText.any.js",
+      "sha256": "4f48486e0aa10c62ca33c310fe2e772e631ba304945242d60689514f65bc921c",
+      "gitBlob": "4d0fa113931d3425833e176f73e4ebca14cf918e",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsText.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "readAsText should correctly read UTF-8."
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsText should correctly read UTF-16."
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readystate.any.js",
+      "sha256": "924eb4046feffe81760debf79c625a7f88f6cbb2a553e2c0411af36322820519",
+      "gitBlob": "3cb36ab999653bfddffc7c765b7e1e8e266bf90c",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readystate.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {
+        "FileAPI Test: filereader_readystate": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        }
+      },
+      "expectedRunnableTests": 0,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "FileAPI Test: filereader_readystate",
+          "defaultNameFromTitle": true
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_result.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_result.any.js",
+      "sha256": "39e1714101e263d0fa5ae91ab61ff0f7ba4f62d24b9ec0cd5fb63703e61c359d",
+      "gitBlob": "28c068bb349c3de4ea1af8bea2d277159ccf171d",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_result.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 12,
+      "blockedTests": {
+        "readAsDataURL": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        },
+        "result is null during \"loadstart\" event for readAsDataURL": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        },
+        "result is null during \"progress\" event for readAsDataURL": {
+          "category": "provider-capability",
+          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+        }
+      },
+      "expectedRunnableTests": 9,
+      "registrations": [
+        {
+          "kind": "async_test",
+          "name": "readAsText"
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsDataURL"
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsArrayBuffer"
+        },
+        {
+          "kind": "async_test",
+          "name": "readAsBinaryString"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"loadstart\" event for readAsText"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"loadstart\" event for readAsDataURL"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"loadstart\" event for readAsArrayBuffer"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"loadstart\" event for readAsBinaryString"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"progress\" event for readAsText"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"progress\" event for readAsDataURL"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"progress\" event for readAsArrayBuffer"
+        },
+        {
+          "kind": "promise_test",
+          "name": "result is null during \"progress\" event for readAsBinaryString"
+        }
+      ]
+    },
+    {
+      "path": "FileAPI/unicode.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/unicode.html",
+      "sha256": "74d569fadfbde3742590e8087e1ad92491f13a5df0867aca90f0591547f24f6d",
+      "gitBlob": "ce3e3579d7c2c74c27d907ccd25c953588ef87f2",
+      "destination": "runtime/web-platform/test/wpt/FileAPI/unicode.html",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4,
+      "registrations": [
+        {
+          "kind": "promise_test",
+          "name": "Test that strings are not NFC normalized by Blob constructor"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Test that strings are not NFC normalized by File constructor"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Test that unpaired surrogates are replaced by Blob constructor"
+        },
+        {
+          "kind": "promise_test",
+          "name": "Test that unpaired surrogates are replaced by File constructor"
+        }
+      ]
+    },
+    {
+      "path": "url/urlencoded-parser.any.js",
+      "revision": "4832db47614f5f48cc57374cbf5c1f70937fad48",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/4832db47614f5f48cc57374cbf5c1f70937fad48/url/urlencoded-parser.any.js",
+      "sha256": "9d3514f33a6bce8ab4d0163a77d79f0231ef30239ca237cf75f9e206a8b0c3e8",
+      "gitBlob": "847465cb9214e1feac1babb6a1b86ecec9597028",
+      "destination": "runtime/web-platform/test/wpt/url/urlencoded-parser.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 105,
+      "blockedTests": {},
+      "expectedRunnableTests": 105,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: test"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: test"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: test"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: ﻿test=﻿"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: ﻿test=﻿"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: ﻿test=﻿"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %EF%BB%BFtest=%EF%BB%BF"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %EF%BB%BFtest=%EF%BB%BF"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %EF%BB%BFtest=%EF%BB%BF"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %EF%BF%BF=%EF%BF%BF"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %EF%BF%BF=%EF%BF%BF"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %EF%BF%BF=%EF%BF%BF"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %FE%FF"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %FE%FF"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %FE%FF"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %FF%FE"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %FF%FE"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %FF%FE"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: †&†=x"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: †&†=x"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: †&†=x"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %C2"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %C2"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %C2"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %C2x"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %C2x"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %C2x"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: _charset_=windows-1252&test=%C2x"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: _charset_=windows-1252&test=%C2x"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: _charset_=windows-1252&test=%C2x"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: "
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: "
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: "
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a=b"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a=b"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a=b"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a="
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a="
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a="
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: =b"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: =b"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: =b"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: &"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: &"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: &"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: &a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: &a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: &a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a&"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a&"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a&"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a&a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a&a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a&a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a&b&c"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a&b&c"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a&b&c"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a=b&c=d"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a=b&c=d"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a=b&c=d"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a=b&c=d&"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a=b&c=d&"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a=b&c=d&"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: &&&a=b&&&&c=d&"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: &&&a=b&&&&c=d&"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: &&&a=b&&&&c=d&"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a=a&a=b&a=c"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a=a&a=b&a=c"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a=a&a=b&a=c"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a==a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a==a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a==a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: a=a+b+c+d"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: a=a+b+c+d"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: a=a+b+c+d"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %=a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %a=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %a=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %a=a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %a_=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %a_=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %a_=a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %61=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %61=a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %61=a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: %61+%4d%4D="
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: %61+%4d%4D="
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: %61+%4d%4D="
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: id=0&value=%"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: id=0&value=%"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: id=0&value=%"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: b=%2sf%2a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: b=%2sf%2a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: b=%2sf%2a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: b=%2%2af%2a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: b=%2%2af%2a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: b=%2%2af%2a"
+        },
+        {
+          "kind": "test",
+          "name": "URLSearchParams constructed with: b=%%2a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "request.formData() with input: b=%%2a"
+        },
+        {
+          "kind": "promise_test",
+          "name": "response.formData() with input: b=%%2a"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/append.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/append.any.js",
+      "sha256": "0adedf9be59114773d698e6c2b90f87b33c15f633854e7b3a948bbcad03a7a41",
+      "gitBlob": "6871f69df591cc468e5fd99ae6456d48ad96e3a9",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/append.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 7,
+      "blockedTests": {},
+      "expectedRunnableTests": 7,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "testFormDataAppend1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataAppend2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataAppendUndefined1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataAppendUndefined2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataAppendNull1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataAppendNull2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataAppendEmptyBlob"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/constructor.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/constructor.any.js",
+      "sha256": "a49b4e2e5f194f35e5a3fb626ad0665b45d6a02d09fbb5185b2ba9d0e6f6c391",
+      "gitBlob": "43704538ab2489a6cbd7a2449532a040fdb4adbd",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/constructor.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "Constructors should throw a type error"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/delete.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/delete.any.js",
+      "sha256": "8a83a4a9112522a7099924300bd5191d6879b33b1c1a7df390758a943088ff77",
+      "gitBlob": "9424614f961b2e4b88ad0355d4da9d9e3ad9bccf",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/delete.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "testFormDataDelete"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataDeleteNonExistentKey"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataDeleteOtherKey"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/foreach.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/foreach.any.js",
+      "sha256": "7b94892d20c70699c6b7be5858b643714b439e01e5ce9e1683c30b936b26536b",
+      "gitBlob": "9fc1e2d9b399fe08acf090f0aaa4a9f6bbe33c3f",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/foreach.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "Iterator should return duplicate keys and non-deleted values"
+        },
+        {
+          "kind": "test",
+          "name": "Entries iterator should return duplicate keys and non-deleted values"
+        },
+        {
+          "kind": "test",
+          "name": "Keys iterator should return duplicates"
+        },
+        {
+          "kind": "test",
+          "name": "Values iterator should return non-deleted values"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/get.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/get.any.js",
+      "sha256": "fd983b9ccc39eebc7f4f7591d78a7710f3d16b12e1c5024896dc97a127e61955",
+      "gitBlob": "b307f1edd0ad3b739c1fa44b178d90f4697f465a",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/get.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "testFormDataGet"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataGetNull1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataGetNull2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataGetAll"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataGetAllEmpty1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataGetAllEmpty2"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/has.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/has.any.js",
+      "sha256": "cbe1e781d18a5d8930a29ec7045c2876216b173eebbe9edac318bbc2b2eb0cc7",
+      "gitBlob": "2c1a3fdafe3480732f177be32584a7d8a889e493",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/has.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "testFormDataHas"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataHasEmpty1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataHasEmpty2"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/iteration.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/iteration.any.js",
+      "sha256": "e98147f85dfe7aa744c7e4eb4c4a0111cc26a5999c3c242171bf3169fed21231",
+      "gitBlob": "1633fd9c4daa792f7050723220b7fcaa38b20858",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/iteration.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "Iteration skips elements removed while iterating"
+        },
+        {
+          "kind": "test",
+          "name": "Removing elements already iterated over causes an element to be skipped during iteration"
+        },
+        {
+          "kind": "test",
+          "name": "Appending a value pair during iteration causes it to be reached during iteration"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/set-blob.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/set-blob.any.js",
+      "sha256": "c5724281fc7f0b4d29a2acddb8a40081cb922c607acaf3987b96c7429b002c5c",
+      "gitBlob": "6a8b5c717050598058d44ac6772ed04722924be3",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/set-blob.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "blob without type"
+        },
+        {
+          "kind": "test",
+          "name": "blob with type"
+        },
+        {
+          "kind": "test",
+          "name": "blob with custom name"
+        },
+        {
+          "kind": "test",
+          "name": "file without lastModified or custom name"
+        },
+        {
+          "kind": "test",
+          "name": "file with lastModified and custom name"
+        },
+        {
+          "kind": "test",
+          "name": "append() should create a single File for each Blob"
+        }
+      ]
+    },
+    {
+      "path": "xhr/formdata/set.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/set.any.js",
+      "sha256": "a58a8a2393077834aac649dc52e0633578d5b63e1f7ae7cc2f51388f4ecbe92e",
+      "gitBlob": "734e55bb759cad5df13bb4e374a30eac28e85f2a",
+      "destination": "runtime/web-platform/test/wpt/xhr/formdata/set.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 7,
+      "blockedTests": {},
+      "expectedRunnableTests": 7,
+      "registrations": [
+        {
+          "kind": "test",
+          "name": "testFormDataSet1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataSet2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataSetUndefined1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataSetUndefined2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataSetNull1"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataSetNull2"
+        },
+        {
+          "kind": "test",
+          "name": "testFormDataSetEmptyBlob"
+        }
+      ]
+    }
+  ],
+  "support": [
+    {
+      "path": "FileAPI/support/Blob.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/Blob.js",
+      "sha256": "a1152b82af45d952c56f8b6f82c3a87e9ac58f834114a9813778418bfa7df25d",
+      "gitBlob": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
+    },
+    {
+      "path": "common/gc.js",
+      "revision": "dbd648158d337580885e70a54f929daf215211a0",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/gc.js",
+      "sha256": "186144288438fb6d520defdc16a6a86fff193184a30fe04e901fe93febe3f8c4",
+      "gitBlob": "ac43a4cfaf7735a08dfd1be177918167f815e800"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/LICENSE.md",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
+    "identifier": "BSD-3-Clause",
+    "note": "Copy the original licence bytes; preserve every existing fixture header and do not insert new text into upstream files."
+  },
+  "harnessReferences": [
+    {
+      "path": "resources/testharness.js",
+      "revision": "6a2f32237615d7ea9c1eb1e30453066b5555c603",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/6a2f32237615d7ea9c1eb1e30453066b5555c603/resources/testharness.js",
+      "sha256": "d2399236c2a09c429804ff2299ad6629e17e2b53f17a74dd341e936adb11ae3e",
+      "gitBlob": "c7ce4f51e1db075809f861255417c27478b2c179"
+    },
+    {
+      "path": "resources/testharnessreport.js",
+      "revision": "6a2f32237615d7ea9c1eb1e30453066b5555c603",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/6a2f32237615d7ea9c1eb1e30453066b5555c603/resources/testharnessreport.js",
+      "sha256": "3777176fc736b0a78cf7617b9613b220f635daae7536ec7ebb99c61dbb525aae",
+      "gitBlob": "405a2d8b06f00fe8292e0e9d5b917e193cfd416c"
+    }
+  ],
+  "excluded": [
+    {
+      "path": "FileAPI/Blob-methods-from-detached-frame.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/Blob-methods-from-detached-frame.html",
+      "sha256": "c1ef89fac13154c168dd7bde36c2ff7f91acd94767266dbdf77c3c95e01af3b1",
+      "gitBlob": "78f08e8270e2f65deff7949bb1ba0bf7b3ab1151",
+      "category": "browser-realms",
+      "reason": "Creates and removes a real iframe and calls Blob methods from its detached browser realm."
+    },
+    {
+      "path": "FileAPI/BlobURL/cross-partition-navigation.https.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/BlobURL/cross-partition-navigation.https.html",
+      "sha256": "1a47bda056b6cf33a90322f478adc1e6642c95a9500d3606d13f451dd4375e8a",
+      "gitBlob": "a92e0f7a8a9b2074cee346a892a2f8348989d818",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/BlobURL/cross-partition-self-fetch.https.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/BlobURL/cross-partition-self-fetch.https.html",
+      "sha256": "2aa9fae2d1b2087d602a83bf06cdb1404424651ca0b484e1103687dd3cbce9c1",
+      "gitBlob": "cbff2fa18fa15d34f8eb1d8b2e1cb847319e48be",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/BlobURL/cross-partition-worker-creation.https.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/BlobURL/cross-partition-worker-creation.https.html",
+      "sha256": "dad1f4510d43514795ad0fef40b205b00bfe41fb54f6fe8479eb6abd41922093",
+      "gitBlob": "e8d0bad4c975800f0664100a6c0aa55133fe7b97",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/BlobURL/cross-partition.https.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/BlobURL/cross-partition.https.html",
+      "sha256": "543a8d4a2ef3b288c7827af6b61f82c48fbd4ee4ddbe3d99c9ae636bef6a63e6",
+      "gitBlob": "cb66ebe77093bc5d56862e4cc7c2001c5b360d3b",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/BlobURL/resources/common.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/BlobURL/resources/common.js",
+      "sha256": "dd56a27e94cacd24cb9ad6fbd14bc9c992cc02d374a7b1fc2d3e35bfe0d663a9",
+      "gitBlob": "60a97d6a5ea5fea9edd09f9d9bf15d06b5b1881e",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/BlobURL/test2-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/BlobURL/test2-manual.html",
+      "sha256": "cc6285f22ae8c8081fd6bd1e789b12f1b67496c90a6cdef0ff638d44b026d17c",
+      "gitBlob": "07fb27ef8af10b130fdc52c3798e6ce2e999dcc0",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/FileReader/support/file_test1.txt",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/support/file_test1.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gitBlob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/FileReader/test_errors-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/test_errors-manual.html",
+      "sha256": "e73a14c4fc63771d9476894cd91d42f382cbf37991d4362ab607d656eba0ee17",
+      "gitBlob": "b8c3f84d2bf23ae675f20057021b0908cee23017",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/FileReader/test_notreadableerrors-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/test_notreadableerrors-manual.html",
+      "sha256": "d1dd4b0dcaebc0c4f8eb6eb8ae30bfd70d88e0c7a0a0b12133ffdb86ced6f1b5",
+      "gitBlob": "46d73598a0f91a52e2faa364a665a5f3d871ab78",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/FileReader/test_securityerrors-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/test_securityerrors-manual.html",
+      "sha256": "d1c28812fdee8f6e21174bed686922062089dd607847742626c99f457d39ff33",
+      "gitBlob": "add93ed69d139a5118e05ffd8ea38f1b2ca81356",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/FileReader/workers.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/workers.html",
+      "sha256": "617fc649c05c14b7b21f5c0c7534b3afed1c932f184ab87dca189e5401be037a",
+      "gitBlob": "8e114eeaf86ff55e6944bff0b17a099f6d8a02f8",
+      "category": "worker-lifecycle",
+      "reason": "Creates a Blob URL Worker and reads during worker shutdown using self.close and postMessage; no Worker/URL provider is present."
+    },
+    {
+      "path": "FileAPI/FileReaderSync.worker.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReaderSync.worker.js",
+      "sha256": "94df96faf5c1c416161bc065c9d9226ab48b3f06dc188c96cee2fc33757a8320",
+      "gitBlob": "3d7a0222f31266eaf65927efe0a5193cdbcb80a9",
+      "category": "unsupported-synchronous-reader",
+      "reason": "Requires FileReaderSync in a worker. This item implements asynchronous FileReader, and supplies neither a canonical synchronous reader nor a worker environment."
+    },
+    {
+      "path": "FileAPI/blob/Blob-constructor-dom.window.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-constructor-dom.window.js",
+      "sha256": "91321dc643a6f627901782beb7514e6a11bac281ca466fac906081bdeb573adf",
+      "gitBlob": "4fd4a43ec4bea7ad12ce6a0c95b7ea52f56637f0",
+      "category": "browser-document",
+      "reason": "Uses Window, DOM nodes, document.all, element children and options collections as Blob constructor inputs."
+    },
+    {
+      "path": "FileAPI/blob/Blob-constructor-endings.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-constructor-endings.html",
+      "sha256": "7bd2223edf087762f25e4bd449e63d392fc388eeab547c388056510cfb850b21",
+      "gitBlob": "04edd2a303b1359d7f00c154c9b109df3610a1c6",
+      "category": "provider-platform-global",
+      "reason": "Reads navigator.platform at top level before registering any cases to select native newline expectations. No canonical Navigator/platform capability is available; the unchanged file cannot register without fabricating this global. Native-ending and option-conversion behavior can be covered by separate specification controls."
+    },
+    {
+      "path": "FileAPI/blob/Blob-in-worker.worker.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-in-worker.worker.js",
+      "sha256": "7086aac2afb74a98d63dc26f04bad2dedfcd47957fcea83f53db0b6191ea1e7e",
+      "gitBlob": "a0ca84551dd7cc3fd3a3bfb2850f414787bacac8",
+      "category": "worker-environment",
+      "reason": "Worker-only test imports testharness with importScripts and asserts behavior in that worker context. The source-provider VM is not a WorkerGlobalScope and no Worker provider is supplied; equivalent local operations are covered by selected Blob/FileReader fixtures."
+    },
+    {
+      "path": "FileAPI/blob/Blob-stream-byob-crash.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-stream-byob-crash.html",
+      "sha256": "23b1aa8ae61388ae57f51e2d5326187dc6a1d0bcdedf24fddc328074f71c5968",
+      "gitBlob": "5992ed1396ca907049f1f4181e5cf7a93ae7e7ef",
+      "category": "browser-crash-lifecycle",
+      "reason": "Module-script browser crash regression without testharness registrations; a host process exit would not be equivalent crash-test coverage."
+    },
+    {
+      "path": "FileAPI/blob/Blob-stream-sync-xhr-crash.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-stream-sync-xhr-crash.html",
+      "sha256": "15d5ca698ad313c72cf66c7a7a9769809748f74d3abe0bf73e6f2f4efe2e16f4",
+      "gitBlob": "fe54fb615b1579a8a75396184f24f0b4ed3d2984",
+      "category": "browser-crash-and-xhr",
+      "reason": "Browser crash regression executes a Blob stream with synchronous XMLHttpRequest and HTTP resources, without testharness registrations."
+    },
+    {
+      "path": "FileAPI/file/File-constructor-endings.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/File-constructor-endings.html",
+      "sha256": "20e4386dfbef804738d65e5e93295fb7033edbdde056bf9f21a2a37318dda903",
+      "gitBlob": "1282b6c5ac2c790803eea11ad74183ae8d78bd07",
+      "category": "provider-platform-global",
+      "reason": "Reads navigator.platform at top level before registering any cases to select native newline expectations. No canonical Navigator/platform capability is available; the unchanged file cannot register without fabricating this global. Native-ending and option-conversion behavior can be covered by separate specification controls."
+    },
+    {
+      "path": "FileAPI/file/Worker-read-file-constructor.worker.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/Worker-read-file-constructor.worker.js",
+      "sha256": "02aab2a9d039ae6c35f8431eb4115c6b68f4a83bfc0b2b33d00e4e9ce352d8f8",
+      "gitBlob": "4e003b3c958a94da268f41edf9b7a3e0d5eeb97e",
+      "category": "worker-environment",
+      "reason": "Worker-only test imports testharness with importScripts and asserts behavior in that worker context. The source-provider VM is not a WorkerGlobalScope and no Worker provider is supplied; equivalent local operations are covered by selected Blob/FileReader fixtures."
+    },
+    {
+      "path": "FileAPI/file/resources/echo-content-escaped.py",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/resources/echo-content-escaped.py",
+      "sha256": "b236cafdadcf43816cb8a4a6d7a4e2a6d1546c98f95e6a217eff9b45a2bf173a",
+      "gitBlob": "5370e1e46ac8071f564fb1582ab40492a08f50ec",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form-controls.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form-controls.html",
+      "sha256": "9e0b1aee982e3d406d252730ed33097e79ff76565ee05a13ea4e5db3cbc3a8fb",
+      "gitBlob": "6347065bcae14b6e927a6918bfae61d58cb2b98e",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form-iso-2022-jp.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form-iso-2022-jp.html",
+      "sha256": "584f767a82b1e04427acc5a47a7d26e3abe72aa0faf5f58e7121dd79df07f4ed",
+      "gitBlob": "c931c9be3aba8c6e81c7ef98c66852b939fba134",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form-punctuation.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form-punctuation.html",
+      "sha256": "6361f1fec19e1ad064384b938b133a37898aaf4d09fbcf95b22d42af0a90722b",
+      "gitBlob": "a6568e2e56e4d524a0cc439c7b75474ff5e1783c",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form-utf-8.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form-utf-8.html",
+      "sha256": "b57a3cd3539a63d3c49ab55dde2c778eeafc78f5da87b463159badac5c6e794d",
+      "gitBlob": "1be44f4f4db09efdf155e5fe27bb18cacecf18e9",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form-windows-1252.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form-windows-1252.html",
+      "sha256": "4894d8b15641ebe6ab19ff57fb4f37faf860272582276ef280453f48234ab7a7",
+      "gitBlob": "21b219ffd2d066092f8f2126b8cdce6f45063994",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form-x-user-defined.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form-x-user-defined.html",
+      "sha256": "c2886c2983368be8fef7185d3bd5a1024f05af37285fd3d0d61060ad864d7c2b",
+      "gitBlob": "8d6605d86deb1c24e2385381c106fd57fc4a29ac",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-form.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-form.html",
+      "sha256": "bdbe5e24d30b9d9cacf97492f6c6355c917f06d36f45c5107a933f1cbc734238",
+      "gitBlob": "baa8d4286c5789c55168cebf5496982b20d06083",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-formdata-controls.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-formdata-controls.any.js",
+      "sha256": "65d69503faa9ec8afeb715c036ef9036f00252f23d77069c4f17d36916d9e2c8",
+      "gitBlob": "e95d3aada4421fc1d8f4d1328b569008e5654eca",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-formdata-punctuation.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-formdata-punctuation.any.js",
+      "sha256": "1a43a9d8efaccc9e69dcd57ae35cd3db59667de8a8963dc5941e08cf5f9e64a6",
+      "gitBlob": "987dba39aff3a15f419c91254b7645a8c5b7af64",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-formdata-utf-8.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-formdata-utf-8.any.js",
+      "sha256": "02b4e686cd260be6be15b3e130e9dd2c55c288b7c0e5016e48621307d9aedef1",
+      "gitBlob": "b8bd74c717a1b35e894cb963101b89ee01edff0e",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/file/send-file-formdata.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/send-file-formdata.any.js",
+      "sha256": "bba3d3c408ddc34a0cccac95ad7996e169c816dade10c5047c964fc63c5df012",
+      "gitBlob": "e13a34828a0ebe7eae04aeb2301fbc4ce4875353",
+      "category": "network-file-upload",
+      "reason": "Exercises actual HTTP form/FormData upload encoding and server echo handling; this item performs no network operations."
+    },
+    {
+      "path": "FileAPI/filelist-section/filelist.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/filelist-section/filelist.html",
+      "sha256": "61b072f41d295ba2d2f3c52cca1cdda4251f3245b7e87cff29371a416b619150",
+      "gitBlob": "b97dcde19f647c80c2454483424b99ea0c512abf",
+      "category": "browser-filelist",
+      "reason": "Requires FileList and actual HTML file inputs or their manual-upload support resources; no browser file chooser or FileList source implementation is supplied."
+    },
+    {
+      "path": "FileAPI/filelist-section/filelist_multiple_selected_files-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/filelist-section/filelist_multiple_selected_files-manual.html",
+      "sha256": "a14922523b1ba687344fe322d5a01bcc2c13dc578b29789bb0288ea0d2cf9186",
+      "gitBlob": "2efaa059fa48978e999a2a23ef28669e45b00c54",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/filelist-section/filelist_selected_file-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/filelist-section/filelist_selected_file-manual.html",
+      "sha256": "3ea46ff19491de18ec2060bcd1dca895682677176ddb940be1446c12d376854d",
+      "gitBlob": "966aadda615589d52bc87df8b3dfcb0569e33693",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/filelist-section/support/upload.txt",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/filelist-section/support/upload.txt",
+      "sha256": "9c517ce8d1065fbf6479b08383800a5b3b2dc98a5ff942518c1b504a8607f32d",
+      "gitBlob": "f45965b711f127b6ae2060b00e0753fe08299019",
+      "category": "browser-filelist",
+      "reason": "Requires FileList and actual HTML file inputs or their manual-upload support resources; no browser file chooser or FileList source implementation is supplied."
+    },
+    {
+      "path": "FileAPI/filelist-section/support/upload.zip",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/filelist-section/support/upload.zip",
+      "sha256": "b2c8ae5f6c1c14ae8437920a51888e7b2865354ed19680fb9cc946424acf5372",
+      "gitBlob": "a933d6a949428cc52dc51687c126af4ba66cc084",
+      "category": "browser-filelist",
+      "reason": "Requires FileList and actual HTML file inputs or their manual-upload support resources; no browser file chooser or FileList source implementation is supplied."
+    },
+    {
+      "path": "FileAPI/historical.https.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/historical.https.html",
+      "sha256": "39522a6d5acb73cc9d4ebce1a23fd60943b72f5f9b14853505b090780d3d422b",
+      "gitBlob": "4f841f1763945946a4e2445a85a23b5d4326c386",
+      "category": "browser-exposure-and-service-worker",
+      "reason": "Checks historical API exposure on Window and a registered service worker, with service-worker browser helpers and HTTP setup."
+    },
+    {
+      "path": "FileAPI/idlharness-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/idlharness-manual.html",
+      "sha256": "448bd6a673f26b1f6bad52d67500ba61fa947bc6f7d5b06b4e3f996f9b69debf",
+      "gitBlob": "c1d8b0c7149d75ede72aa38a55a8d0db689c2b64",
+      "category": "idl-browser-and-descriptor-surface",
+      "reason": "Requires the upstream IDL harness/parser, browser exposure environment and IDL/prototype/descriptor checks. Runtime descriptors and prototype reflection are excluded by current compiler rules; no IDL harness globals are fabricated."
+    },
+    {
+      "path": "FileAPI/idlharness.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/idlharness.any.js",
+      "sha256": "6918411b69b5f409bc042522e625d3a2fd5ce7ee28b12492fafa28affa98dc34",
+      "gitBlob": "1744242b9f3ff17b531839ca4210dc0a107f69ff",
+      "category": "idl-browser-and-descriptor-surface",
+      "reason": "Requires the upstream IDL harness/parser, browser exposure environment and IDL/prototype/descriptor checks. Runtime descriptors and prototype reflection are excluded by current compiler rules; no IDL harness globals are fabricated."
+    },
+    {
+      "path": "FileAPI/idlharness.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/idlharness.html",
+      "sha256": "06196563cb77ed035c07cb486a3b14963c8df9ee3f8c27635e34e5aee3792608",
+      "gitBlob": "45e8684f0027b2c86c2533791c9b414851e34608",
+      "category": "idl-browser-and-descriptor-surface",
+      "reason": "Requires the upstream IDL harness/parser, browser exposure environment and IDL/prototype/descriptor checks. Runtime descriptors and prototype reflection are excluded by current compiler rules; no IDL harness globals are fabricated."
+    },
+    {
+      "path": "FileAPI/idlharness.worker.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/idlharness.worker.js",
+      "sha256": "4615f2bf116347a547c6a5db4429ada3ecb2258fdacd7c96af121d2b806d0c3d",
+      "gitBlob": "002aaed40a562e94fbe4f733d026b0e0f0842591",
+      "category": "idl-browser-and-descriptor-surface",
+      "reason": "Requires the upstream IDL harness/parser, browser exposure environment and IDL/prototype/descriptor checks. Runtime descriptors and prototype reflection are excluded by current compiler rules; no IDL harness globals are fabricated."
+    },
+    {
+      "path": "FileAPI/progress-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/progress-manual.html",
+      "sha256": "ecdd3639c9c3588b54fff11e1746c6116b47f7ca7ccbbe0bb20712f8becbeafc",
+      "gitBlob": "b2e03b3eb27387414391721fa09fd5ab283e1fda",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_file-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_file-manual.html",
+      "sha256": "987f957c383a6c266f6b991725c5d58b355473162491d042c2c058687ba25740",
+      "gitBlob": "702ca9afd7b06702564d89558676c6e1b80a6611",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_file_img-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_file_img-manual.html",
+      "sha256": "af50f928f122f93ecdb92ac5282ddebf603e68527bbd52b13d51a920c14d4a7d",
+      "gitBlob": "fca42c7fceba48ae5fd7229a92a89eacff9e252f",
+      "category": "manual-file-input",
+      "reason": "Manual fixture requires user-selected filesystem files, real input controls or browser permission/error setup; it cannot run unchanged as an unattended ordinary-node constructor/read test."
+    },
+    {
+      "path": "FileAPI/reading-data-section/support/blue-100x100.png",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/support/blue-100x100.png",
+      "sha256": "a03ccffa82eea2505991e4cb5d8098c2bd2d22708b2a473f4311ea5699941aab",
+      "gitBlob": "5748719ff22a34993eeb4de4d1fe7cfd27e92959",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/document-domain-setter.sub.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/document-domain-setter.sub.html",
+      "sha256": "c63666064010d7d16b9c41e37ba1fcaceed69918e7d9726320f2c6fbb2bd943a",
+      "gitBlob": "61aebdf326679cdd7e4d9318e2fa1cf90283eb82",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/empty-document.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/empty-document.html",
+      "sha256": "46b12f16295ca1e336720f37f5873dbb616002ca0d860c0e8a08aa912dc4b2d2",
+      "gitBlob": "b9cd130a07f77ee1a54f4bf54df54dc126fec1ee",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/historical-serviceworker.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/historical-serviceworker.js",
+      "sha256": "71e5c998cc721a4b157509cb51ad937363ba0b6406e788dffd67a7ebd94d8b9b",
+      "gitBlob": "8bd89a23adb70fd0075131d29b6c4d36cb079d18",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/incumbent.sub.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/incumbent.sub.html",
+      "sha256": "05b8b9930de145f79bb7f04b6542392c0a0ab9f2457d242f585b252b9f78c0dc",
+      "gitBlob": "63a81cd3281c464d621f49f7660ab8edb0a4bb8b",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/send-file-form-helper.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/send-file-form-helper.js",
+      "sha256": "b417dc511cefeec1802ed1716d7907f8fe19cd0a1dcf4b80bebf0b06ea0d6972",
+      "gitBlob": "d6adf21ec337957e22876f601ba05d5711ee3d3b",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/send-file-formdata-helper.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/send-file-formdata-helper.js",
+      "sha256": "688e2ca4f4eab51f0a4888c4a8954dceae870c37785c903da23e0dff6fda59b0",
+      "gitBlob": "53c8cca7e09b8e8c039828ebcdcb21293fb2699e",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/upload.txt",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/upload.txt",
+      "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+      "gitBlob": "5ab2f8a4323abafb10abb68657d9d39f1a775057",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/support/url-origin.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/url-origin.html",
+      "sha256": "2c157edbcf9155aa86653acae94b18c03b907129cc18dfc54a93733b21edc38b",
+      "gitBlob": "63755113915f9f59eec9d292fc04422e7d219f90",
+      "category": "excluded-support",
+      "reason": "Support resource used only by excluded browser, manual file-input, object-URL or network fixtures."
+    },
+    {
+      "path": "FileAPI/url/cross-global-revoke.sub.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/cross-global-revoke.sub.html",
+      "sha256": "c2e64f76308a2eac1f88196e2cfe1601ea0de4ab174ba1739fce448f1f649d77",
+      "gitBlob": "ce9d680709e05811712b76e491336e7c38832f0b",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/multi-global-origin-serialization.sub.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/multi-global-origin-serialization.sub.html",
+      "sha256": "5abe7a287dc252955e1fdac3795a32fe4c52147d38f8c08c64329f42a30e85e1",
+      "gitBlob": "0052b26fa62130fa953d27d2278aa350881f1059",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/resources/create-helper.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/resources/create-helper.html",
+      "sha256": "ea6b93b01862342e877f34e66db927d5a1619a12a43e91b71603b3c92bf3c879",
+      "gitBlob": "fa6cf4e671e8356072e8400f53e3b918b1fc4608",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/resources/create-helper.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/resources/create-helper.js",
+      "sha256": "7f0553b9a822336a7f2ffdd931ccf45b5d74819fe943c4d060741f63e35eda67",
+      "gitBlob": "e6344f700ced602af361c9db0d6db2cf63f9f999",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/resources/fetch-tests.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/resources/fetch-tests.js",
+      "sha256": "5cd54c56e1d3a99c198a72bac1b31cfa3d0b3470513150010e6403584b7c2c76",
+      "gitBlob": "a81ea1e7b1de350fbf8a29a47cdbe2bdb48d2cb3",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/resources/revoke-helper.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/resources/revoke-helper.html",
+      "sha256": "c8096107a342ff7b46fedd5c1dcb7b05c301c649b98b8ffdfec356e9e6f5d0cc",
+      "gitBlob": "adf5a014a668d6dbf1922451dec2a682e8d8a610",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/resources/revoke-helper.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/resources/revoke-helper.js",
+      "sha256": "a6e146cc40fe5fc1277d7bffa730bb82084ff33e5dba645ee90aa4313af870ba",
+      "gitBlob": "c3e05b64b1a6c8e6dc1bb28c14055f13138ac73d",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/sandboxed-iframe.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/sandboxed-iframe.html",
+      "sha256": "847a3bb4e6ea0ada448e899f8c67b5f1a46130fd07f4cc210636ce1e661b8a9d",
+      "gitBlob": "a52939a3eb297c8c07e06479c2d2c1b7370075d3",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/unicode-origin.sub.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/unicode-origin.sub.html",
+      "sha256": "1693f7186a6ff6ed62cfdf8d6061d9e227d4a1b6e96e6f6f69923d426523aca0",
+      "gitBlob": "2c4921c03449986f4ae261155376f44b27f04977",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-charset.window.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-charset.window.js",
+      "sha256": "4a24509c07313c3723f9a32e017fa34b0c1e86967e2f30fd063941b378c512ce",
+      "gitBlob": "777709b64a50e51b9ba37c5ce240073aa4b1f8ef",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-format.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-format.any.js",
+      "sha256": "83f48ef27ec11348da644f4d767132244d0c4e49e29768212c6c2928c3d81700",
+      "gitBlob": "69c51113e6b99b0a1575b9373aa2a2482779638d",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-in-tags-revoke.window.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-in-tags-revoke.window.js",
+      "sha256": "f3e3a3a592c876cf47218525c4751041023672a4d498a9d198685f38c2ebc2fb",
+      "gitBlob": "1cdad79f7e34e080c62ba639f2f363efd4ed26a9",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-in-tags.window.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-in-tags.window.js",
+      "sha256": "ca207e9d61cfb8d7ca37e2913b452224a9a6fb35689dbcb3b9fa945bbb8d60dd",
+      "gitBlob": "8a722dcac82b66cb80e6d428afd6f15186e468b4",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-lifetime.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-lifetime.html",
+      "sha256": "fac3f2fd0db8538760f5feb066ba763be46daa35c723dd9482f3631bb8431aa8",
+      "gitBlob": "ad5d667193a3d005d28c29fc8ca46364f614a7b1",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-reload.window.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-reload.window.js",
+      "sha256": "42f362526b79e29406da028df2f0b4186c17a8ea36c0e4e2d51da8cce7c82c70",
+      "gitBlob": "d333b3a74aa82c58fafc5b3e5b0fab40730d13f1",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-with-fetch.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-with-fetch.any.js",
+      "sha256": "60ba3c9e310bb148be006b1b4406936403a99d887b96321c9a77b92cdcbda723",
+      "gitBlob": "54e6a3da5afe9e9283a7d2a9fe7b8dbda4dea761",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url-with-xhr.any.js",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url-with-xhr.any.js",
+      "sha256": "a4f7836532ac72754130bf13195a6a0e734bc29e432c8491795f917a295ecccb",
+      "gitBlob": "29d83080ab584564ab2f9c54bc1674f497f24eec",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url_createobjecturl_file-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url_createobjecturl_file-manual.html",
+      "sha256": "6ed89845bc896b104521b94c65c9d929a4b01b431a904e458c02de98796aa8e0",
+      "gitBlob": "7ae32512e07c76a19bda89c106f63a8ceb94b4c4",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url_createobjecturl_file_img-manual.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url_createobjecturl_file_img-manual.html",
+      "sha256": "92ef0b9e073ba79cb7076b4e60d5bb0e4cbe11e4f4505891224ea3c4fb8f6b79",
+      "gitBlob": "534c1de9968da89036e57ff52a8ac6feb8d5b377",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url_xmlhttprequest_img-ref.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url_xmlhttprequest_img-ref.html",
+      "sha256": "2c05edd281371e2660c971fa4541a63f59009a7416900c7e2a5c5d15be5bae2f",
+      "gitBlob": "7d7390442d3631c9cdc190a1357497a4ef457345",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "FileAPI/url/url_xmlhttprequest_img.html",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/url/url_xmlhttprequest_img.html",
+      "sha256": "c75da1a77438b4e1284e3d473d53f97fef61deb30de1d7c94badb2ac72938d96",
+      "gitBlob": "468dcb086d770a5a9a5e385166539f674799fa9b",
+      "category": "url-and-browser-integration",
+      "reason": "Object URL construction/revocation, origin or partition behavior is separately owned URL work. These paths also depend on canonical URL globals, browser documents/workers, navigation, XHR or HTTP integration. No Node URL substitute or browser environment is provided."
+    },
+    {
+      "path": "xhr/formdata/append-formelement.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/append-formelement.html",
+      "sha256": "fdef2e9f8f0447574b967c1c71c51b4c5e89fd2c6be29ab5659a0c606e6f5e9a",
+      "gitBlob": "72c81aa808a2e1fadea44910354fd35cc3dffa30",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/constructor-formelement.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/constructor-formelement.html",
+      "sha256": "f45585072109e7c03998d12a2f39cc96f965bc8615c72fbeab9fbf326ffa3408",
+      "gitBlob": "813e1d2a6c0ef432e743d4d1658deb8acefcbc18",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/constructor-submitter-coordinate.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/constructor-submitter-coordinate.html",
+      "sha256": "ffb242237e188e64c9789a55e9c0c46082ca234a4acb18573cf06e41ef356f2a",
+      "gitBlob": "b7bf128bd1207a7f52327216304794c2fb6d048d",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/constructor-submitter.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/constructor-submitter.html",
+      "sha256": "c16edcf14a632f6070a9c26118ddd3afaad8e92faa7e2121da4aa6e6c0720340",
+      "gitBlob": "553a102acf1dd8e7a631ad6055fd7d09c47edb26",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/delete-formelement.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/delete-formelement.html",
+      "sha256": "5fdcb6f64d236ba248123b2dbecb6b86fc7e2fe14476528899299ffb97eaca9c",
+      "gitBlob": "62862bd571b943962b6b9851638596fcd1226182",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/get-formelement.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/get-formelement.html",
+      "sha256": "85d9894bb502c502653b778702d4c9a21ed79dd564553062f76d7891b6e22dff",
+      "gitBlob": "801db6c6f64006ae480ebbd8b02760427c2923ec",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/has-formelement.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/has-formelement.html",
+      "sha256": "1273ee73b9f784a7b7d4e3d92a2370d56f81c7e78566a83b4976250f183ec606",
+      "gitBlob": "9edbad3665089afe66c869c4a6bb81f48edf0c23",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/set-formelement.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/set-formelement.html",
+      "sha256": "c4168c1e1e5ab2f597249b98a91bcafb795e727c31d759885599849cebfb27b0",
+      "gitBlob": "d3213f85792d5ca002e127216f4600a291d5b5f5",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    },
+    {
+      "path": "xhr/formdata/submitter-coordinate-value.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/submitter-coordinate-value.html",
+      "sha256": "ccddac4a103cec866225d6dd2a25c19bfa9c53758bf8aca34e6d4f9b4b26be0d",
+      "gitBlob": "69bea0ac3f94f48fec9e201b6eda640870557756",
+      "category": "browser-form-controls",
+      "reason": "Constructs FormData from real HTML form/control/submitter elements or verifies form submission. The ordinary-node source provider exposes no Document or HTMLFormElement; no fake form tree or network submission is supplied."
+    }
+  ],
+  "metadata": [
+    {
+      "path": "FileAPI/META.yml",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/META.yml",
+      "sha256": "adced274a4ac9f11776b7a330280db3630c31216433d18563c732c1065d5a1a9",
+      "gitBlob": "66227c8224bc46739a6f2fb9229a4263ab4e7d15",
+      "category": "metadata",
+      "reason": "Upstream ownership or Web Features metadata; not executable test code."
+    },
+    {
+      "path": "FileAPI/WEB_FEATURES.yml",
+      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/WEB_FEATURES.yml",
+      "sha256": "b0d3e08195862eec13c4e10b147b694707ecc8c64a6a5bbe544e0d6704eefca8",
+      "gitBlob": "8d279ceaaeab216dfcb59b15dffddb82e093c7c6",
+      "category": "metadata",
+      "reason": "Upstream ownership or Web Features metadata; not executable test code."
+    }
+  ],
+  "summary": {
+    "selectedFixtureFiles": 34,
+    "selectedSupportFiles": 2,
+    "expectedRegisteredTests": 502,
+    "explicitlyBlockedTests": 15,
+    "expectedRunnableTests": 487,
+    "blocksByCategory": {
+      "excluded-language-feature": 5,
+      "compiler-capability": 1,
+      "provider-capability": 9
+    },
+    "deferredBrowserDependentRegistrations": 2,
+    "excludedSourcePaths": 84,
+    "metadataPaths": 2,
+    "totalRequestedSourcePaths": 121
+  }
+}
