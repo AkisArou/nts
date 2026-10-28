@@ -2923,6 +2923,16 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
     for (key, value) in rows {
         println!("{key} {value}");
     }
+    println!(
+        "accumulators.candidates {}",
+        prepared.accumulators.sites.len()
+    );
+    println!("accumulators.rewritten {}", prepared.accumulators.rewritten);
+    println!("accumulators.visits {}", prepared.accumulators.visits);
+    println!(
+        "accumulators.budget_exhaustions {}",
+        prepared.accumulators.budget_exhaustions
+    );
     // Counting only where the provider counts: a zero would read as "no
     // retains were needed" on a program that was never asked.
     if matches!(program.provider, hir::Memory::ReferenceCounting) {
@@ -3025,6 +3035,22 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
         println!("{header}");
         print_contents(&prepared.contents, &mut locations);
+        println!(
+            "// accumulators: {} candidate(s), {} wrapping rewrite(s), {} operation visit(s), {} budget exhaustion(s)",
+            prepared.accumulators.sites.len(),
+            prepared.accumulators.rewritten,
+            prepared.accumulators.visits,
+            prepared.accumulators.budget_exhaustions,
+        );
+        for site in &prepared.accumulators.sites {
+            println!(
+                "// accumulator {} %{} @ {}: {}",
+                site.function,
+                site.sink.0,
+                locations.where_it_spans(&site.origin.location),
+                site.decision.reason(),
+            );
+        }
         if let Some(invalid) = invalid {
             eprintln!("{invalid}");
         }

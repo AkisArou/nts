@@ -24,6 +24,7 @@
 //!   one [`ValueId`]. Binding identity is what makes that possible, which is why
 //!   symbol resolution had to land before this.
 
+pub mod accumulators;
 mod appended_results;
 pub mod bounds;
 mod boxing;
@@ -5241,6 +5242,8 @@ pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {
 /// checked. Both have happened; neither is visible in the output.
 #[derive(Debug)]
 pub struct Prepared {
+    /// Fixed-i32 truncating arithmetic, licensed by coupled runtime facts.
+    pub accumulators: accumulators::Report,
     /// Identity-based payload proofs and inert cleanup elisions, independent
     /// of written container element types.
     pub contents: contents::Report,
@@ -8021,6 +8024,15 @@ fn prepare_lowered(
 
     conversions += reconcile(&mut program);
 
+    // Representation and operand widths are settled. Replace only a final
+    // ToInt32 of two proved int32 operands, before DCE/counting and the fresh
+    // final bounds/exactness analyses. No facts survive across this rewrite.
+    let accumulators = if specialize_numbers {
+        accumulators::rewrite(&mut program)
+    } else {
+        accumulators::Report::default()
+    };
+
     // **The same rule again, now that the stores have their fields' types.**
     //
     // `simplify` above runs before `reconcile`, and a field read whose answer
@@ -8169,6 +8181,7 @@ fn prepare_lowered(
     }
 
     Prepared {
+        accumulators,
         contents,
         cloned,
         copied,

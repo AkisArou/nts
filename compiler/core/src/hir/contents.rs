@@ -133,6 +133,16 @@ impl Tags {
     }
 
     #[must_use]
+    pub const fn intersect(self, other: Self) -> Self {
+        Self(self.0 & other.0)
+    }
+
+    #[must_use]
+    pub const fn without(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+
+    #[must_use]
     pub const fn is_inert(self) -> bool {
         self.0 != 0 && self.0 & Self::MANAGED.0 == 0
     }

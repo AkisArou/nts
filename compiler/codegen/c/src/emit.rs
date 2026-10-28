@@ -5374,6 +5374,15 @@ fn wrapping_arithmetic(
     if !matches!(bin, BinOp::Add | BinOp::Sub | BinOp::Mul) {
         return None;
     }
+    if bits == 32 {
+        // Unsigned arithmetic supplies the modulo bits. Copying those bits
+        // avoids C's implementation-defined unsigned-to-signed conversion.
+        return Some(format!(
+            "{{ uint32_t wrapped = (uint32_t){} {operator} (uint32_t){}; memcpy(&{name}, &wrapped, sizeof({name})); }}",
+            value_name(lhs),
+            value_name(rhs)
+        ));
+    }
     Some(format!(
         "{name} = (int{bits}_t)((uint{bits}_t){} {operator} (uint{bits}_t){});",
         value_name(lhs),
@@ -6747,7 +6756,9 @@ mod tests {
             let text = binary_text(&func, &op, "out", bin, ValueId(0), ValueId(1), false);
             assert_eq!(
                 text,
-                format!("out = (int32_t)((uint32_t)v0 {operator} (uint32_t)v1);"),
+                format!(
+                    "{{ uint32_t wrapped = (uint32_t)v0 {operator} (uint32_t)v1; memcpy(&out, &wrapped, sizeof(out)); }}"
+                ),
                 "`{operator}` on two int32 must wrap rather than invite the optimizer",
             );
         }

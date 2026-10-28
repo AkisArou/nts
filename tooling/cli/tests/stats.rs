@@ -40,7 +40,7 @@ function drive(f: (x: number) => number, times: number): number {
 ";
 
 /// The keys, in the order `nts stats` prints them without `--rc`.
-const KEYS: [&str; 25] = [
+const KEYS: [&str; 29] = [
     "verified",
     "functions",
     "layouts",
@@ -66,6 +66,10 @@ const KEYS: [&str; 25] = [
     "calls.closure.uniform",
     "calls.external",
     "typed_signatures",
+    "accumulators.candidates",
+    "accumulators.rewritten",
+    "accumulators.visits",
+    "accumulators.budget_exhaustions",
 ];
 
 fn fixture(name: &str) -> PathBuf {

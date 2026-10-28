@@ -7,6 +7,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::{Facts, Tags, Unknown, ValueFact};
 use crate::hir::{self, Callee, Func, HirType, OpKind, Origin, Terminator, ValueId};
 
+mod refine;
+
 const MAX_VALUES: usize = 4096;
 const MAX_BLOCKS: usize = 256;
 const WORK: usize = 65_536;
@@ -63,6 +65,16 @@ impl FunctionFacts {
 
     #[must_use]
     pub fn of(func: &Func) -> Self {
+        Self::build(func, false)
+    }
+
+    /// Candidate-only arithmetic queries also need ordinary scalar producers
+    /// when a function has no container. They use this same lattice/provider.
+    pub(crate) fn for_arithmetic(func: &Func) -> Self {
+        Self::build(func, true)
+    }
+
+    fn build(func: &Func, numbers: bool) -> Self {
         // Reject large inputs before scanning roots or cloning an edge. Block
         // and value counts do not bound repeated operands, so charge those
         // separately before visiting or allocating their vectors below.
@@ -99,7 +111,7 @@ impl FunctionFacts {
                 ..Self::default()
             };
         }
-        if roots.is_empty() {
+        if roots.is_empty() && !numbers {
             return Self {
                 fallback: Some(Unknown::AmbiguousIdentity),
                 visits: budget.used(),
@@ -140,6 +152,7 @@ struct Identities<'a, 'b> {
     roots: FxHashSet<ValueId>,
     incoming: Vec<Vec<ValueId>>,
     cache: FxHashMap<ValueId, Identity>,
+    context: Option<refine::Contexts>,
     budget: &'b mut Budget,
 }
 
@@ -182,6 +195,7 @@ impl<'a, 'b> Identities<'a, 'b> {
             roots: roots.iter().copied().collect(),
             incoming,
             cache: FxHashMap::default(),
+            context: None,
             budget,
         })
     }
@@ -345,6 +359,35 @@ fn propagated(
                 fact
             }
         }),
+        OpKind::Convert(value) | OpKind::Unerase { value, .. }
+            if func.value(id).ty == (HirType::Float { bits: 64 }) =>
+        {
+            let incoming = values[value.0 as usize];
+            match incoming {
+                Some(fact) => {
+                    let fact = if fact.numeric().is_some() {
+                        fact
+                    } else {
+                        if identities.context.is_none() {
+                            identities.context =
+                                Some(refine::Contexts::new(func, identities.budget)?);
+                        }
+                        identities.context.as_ref().ok_or(())?.at(
+                            func,
+                            id,
+                            *value,
+                            fact,
+                            identities.budget,
+                        )?
+                    };
+                    // An unproved coercion still returns a number, but not a
+                    // bounded one. Never use just the numeric subset while
+                    // undefined or managed alternatives remain possible.
+                    Some(ValueFact::number(fact.numeric().unwrap_or(Facts::TOP)))
+                }
+                None => None,
+            }
+        }
         OpKind::Convert(value) | OpKind::Unerase { value, .. } => values[value.0 as usize],
         OpKind::BlockParam(_) => {
             identities
@@ -364,7 +407,7 @@ fn analyze(func: &Func, roots: &[ValueId], budget: &mut Budget) -> Result<Functi
         reads,
     } = effects(&mut identities, roots)?;
     identities.budget.charge(func.values.len())?;
-    let mut values: Vec<_> = func.values.iter().map(scalar).collect();
+    let mut values: Vec<_> = func.values.iter().map(|op| scalar(func, op)).collect();
     let mut contents: FxHashMap<ValueId, Option<ValueFact>> = roots
         .iter()
         .map(|root| {
@@ -482,7 +525,7 @@ fn join_ready(arriving: &[ValueId], values: &[Option<ValueFact>]) -> Option<Valu
     Some(result)
 }
 
-fn scalar(op: &hir::Op) -> Option<ValueFact> {
+fn scalar(func: &Func, op: &hir::Op) -> Option<ValueFact> {
     let known = |tags| {
         Some(ValueFact::Known {
             tags,
@@ -497,13 +540,33 @@ fn scalar(op: &hir::Op) -> Option<ValueFact> {
         {
             return None;
         }
+        OpKind::Unerase { .. } | OpKind::BlockParam(_)
+            if op.ty == (HirType::Float { bits: 64 }) =>
+        {
+            return None;
+        }
+        OpKind::Convert(value)
+            if op.ty == (HirType::Float { bits: 64 })
+                && matches!(
+                    func.value(*value).ty,
+                    HirType::Int {
+                        bits: 8 | 16 | 32,
+                        ..
+                    } | HirType::Float { bits: 32 | 64 }
+                ) =>
+        {
+            return None;
+        }
         _ => {}
     }
     match op.ty {
-        HirType::Float { .. } => Some(ValueFact::number(match op.kind {
+        HirType::Float { bits: 64 } => Some(ValueFact::number(match op.kind {
             OpKind::ConstFloat(value) => Facts::constant(value),
             _ => Facts::TOP,
         })),
+        // A narrower store may round a constant across an int32 boundary.
+        // This first numeric consumer makes no range claim for that storage.
+        HirType::Float { .. } => Some(ValueFact::number(Facts::TOP)),
         HirType::Int { bits, signed } => {
             let facts = if bits <= 32 {
                 let (lo, hi) = if signed {
@@ -535,6 +598,8 @@ mod tests {
     use super::*;
     use hir::{Absent, Block, JsText, ManagedType, Op, Program, Terminator};
     use nts_diagnostics::{Location, SourceId, Span};
+
+    mod numeric;
 
     fn origin() -> Origin {
         Origin::source(Location {
