@@ -76,14 +76,18 @@ sends whole arguments to the clone and everything else (`NaN`, `1e300`, `1.5`)
 to the original body (`hir::guards`). A function named by a dispatch table
 keeps the table's signature.
 
-**Truncated sums** (being built). `(a + b) | 0` observes only the low 32 bits
-of a sum that is exact when both operands are int32, so it is one wrapping
-integer instruction. A loop's int32 accumulator whose addend is not proved
-int32 tests the addend once per update, with the same `ToInt32(b) == b` the
-roots use, and keeps the original double arithmetic as the fallback. The
-general form is backward truncation demand, as V8's simplified lowering
-computes it, joined with the forward facts above. The accumulator is its first
-case.
+**Truncated sums** (designed). `(a + b) | 0` observes only the low 32 bits of
+a sum that is exact when both operands are int32, so it is one wrapping integer
+instruction. Both operands must be proved int32; for an addend read from a
+container, the proof is the container's content summary
+([memory](memory.md#the-one-memory-analysis)). Testing an unproved addend in
+the loop instead (`ToInt32(b) == b`, with the double arithmetic as the
+fallback) was measured and is not used: it shortens the accumulator's
+dependency chain at the price of a conversion, a comparison and a branch on
+every update, which wins only where that chain is the critical path, and
+nothing static says where it is. The general form is backward truncation
+demand, as V8's simplified lowering computes it, joined with the forward facts
+above.
 
 | operation | cost on native |
 |---|---|

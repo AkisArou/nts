@@ -236,7 +236,9 @@ proposals wait on research.
 Noted, not scheduled:
 - `Map<K, number>` values stored unboxed (Bun 3.9× and Java 3.1× faster on
   `map-literal-keys`);
-- integer accumulators, so that `(a + b) | 0` stays in int32;
+- integer accumulators, so that `(a + b) | 0` stays in int32: needs
+  container content facts to prove the addend (the guarded form was measured
+  and parked, since it lost where the accumulator was not the bottleneck);
 - argument ranges through recursion: an index computed as `(3 - from) - to`
   across recursive calls widens to an unbounded range with `NaN`, so the
   recursive methods of `awfy-towers` keep double indices and check them twice;
