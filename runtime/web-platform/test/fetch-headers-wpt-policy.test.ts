@@ -118,7 +118,9 @@ test("Headers completes outer sequence conversion before validating an earlier h
 });
 
 // https://webidl.spec.whatwg.org/#es-record
-test("Headers converts each record value before reading the next one", () => {
+test("Headers converts each record value before reading the next one", {
+  skip: "The requested nts Object.entries record profile gathers values before conversion; ordinary getters can observe this difference from full Web IDL too.",
+}, () => {
   const order: string[] = [];
   const init = {
     get first(): object {
@@ -197,7 +199,9 @@ test("Headers rechecks a later record property's existence after an earlier gett
   assert.deepEqual([...headers], [["first", "one"]]);
 });
 
-test("Headers rejects an enumerable symbol record key before reading its value", () => {
+test("Headers rejects an enumerable symbol record key before reading its value", {
+  skip: "nts Headers records contain Object.entries own enumerable string keys; symbol-key rejection and descriptor reflection are outside the source profile.",
+}, () => {
   const key = Symbol("not a ByteString key");
   let reads = 0;
   const init = {
@@ -208,11 +212,49 @@ test("Headers rejects an enumerable symbol record key before reading its value",
   assert.equal(reads, 0);
 });
 
-test("Headers rejects a non-ByteString record key before reading its value", () => {
+test("Headers rejects a non-ByteString record key before reading its value", {
+  skip: "The requested nts Object.entries record profile gathers values before ByteString key conversion, including ordinary getter effects.",
+}, () => {
   let reads = 0;
   const init = { get "\u0100"(): string { reads++; return "one"; } };
   assert.throws(() => new Headers(init), TypeError);
   assert.equal(reads, 0);
+});
+
+// The maintainer-selected record profile uses Object.entries. These controls
+// keep its ordinary-record behavior explicit without claiming Proxy semantics.
+test("Headers preserves own string-entry order when names combine case-insensitively", () => {
+  class RecordWithInheritedMember {
+    X = "first";
+    x = "second";
+    get inherited(): string { throw new Error("an inherited property is not a record entry"); }
+  }
+  const headers = new Headers(new RecordWithInheritedMember() as unknown as HeadersInit);
+  assert.deepEqual([...headers], [["x", "first, second"]]);
+});
+
+test("Headers gathers ordinary record values before converting them", () => {
+  const order: string[] = [];
+  const init = {
+    get first(): object {
+      order.push("get first");
+      return { toString(): string { order.push("convert first"); return "one"; } };
+    },
+    get second(): object {
+      order.push("get second");
+      return { toString(): string { order.push("convert second"); return "two"; } };
+    },
+  };
+  const headers = new Headers(init as unknown as HeadersInit);
+  assert.deepEqual(order, ["get first", "get second", "convert first", "convert second"]);
+  assert.deepEqual([...headers], [["first", "one"], ["second", "two"]]);
+});
+
+test("Headers still rejects an invalid string record key after gathering its value", () => {
+  let reads = 0;
+  const init = { get "\u0100"(): string { reads++; return "one"; } };
+  assert.throws(() => new Headers(init), TypeError);
+  assert.equal(reads, 1);
 });
 
 // https://webidl.spec.whatwg.org/#es-operations
