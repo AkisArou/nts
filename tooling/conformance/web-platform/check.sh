@@ -57,6 +57,10 @@ node --expose-gc \
   runtime/web-platform/test/wpt-global-errors.test.ts \
   runtime/web-platform/test/global-errors-policy.test.ts \
   runtime/web-platform/test/global-errors-harness-policy.test.ts \
+  runtime/web-platform/test/wpt-versions.test.ts \
+  runtime/web-platform/test/wpt-encoding.test.ts \
+  runtime/web-platform/test/encoding-policy.test.ts \
+  runtime/web-platform/test/encoding-stream-policy.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \
   runtime/web-platform/test/abort-wpt-policy.test.ts \
