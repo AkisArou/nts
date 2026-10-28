@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
-import { compileSync, MemoryRun, memoryRun } from "./worker-memory.ts";
+import { compileSync, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -82,46 +82,58 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
 test("aggregate OOM retains a survivor verdict and per-worker counters outlive scopes", { timeout: TEST_HANG_MS }, async (t) => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const fifo = spawnTest("mkfifo", [join(directory, "release")], { encoding: "utf8" });
-  assert.equal(fifo.status, 0, fifo.stderr);
-  const budgetBytes = 512 * 2 ** 20;
-  const workerBytes = 2 * 2 ** 30;
-  // The API bounds each worker by its reservation. Tighten this test's own
-  // parent afterwards, leaving worker ceilings above the victim's request.
-  const memory = new MemoryRun({ budgetBytes: workerBytes, id: "aggregate-oom-control" });
-  t.after(() => memory.close());
-  const tightened = spawnTest("systemctl", ["--user", "set-property", "--runtime", memory.slice, `MemoryMax=${budgetBytes}`], { encoding: "utf8" });
-  assert.equal(tightened.status, 0, tightened.stderr);
-  assert.equal(Number(readFileSync(join(CGROUP, memory.group, "memory.max"), "utf8")), budgetBytes);
+  for (const path of ["pressure-a", "pressure-b"]) {
+    const fifo = spawnTest("mkfifo", [join(directory, `release-${path}`)], { encoding: "utf8" });
+    assert.equal(fifo.status, 0, fifo.stderr);
+  }
+  const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "aggregate-oom-control" });
   const rows: any[] = [];
-  let deltas: number[] = [];
-  let aggregate = 0;
-  await runMemoryWorkers({
-    paths: ["survivor", "victim", "after"], jobs: 2, memory, workerBytes,
-    args: () => [fixture, directory],
-    onRow: (row) => {
-      rows.push(row);
-      // The survivor opens the FIFO before readiness. A dead/missing reader
-      // fails with ENXIO; the parent never blocks its own test hang guard.
-      if (row.path === "victim" && row.bucket === "memory-cap") writeFileSync(join(directory, "release"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK });
-      deltas = readdirSync(join(CGROUP, memory.group)).filter((name) => name.endsWith(".slice")).map((name) => kills(join(memory.group, name))).sort();
-      aggregate = memory.aggregateOoms();
+  const reports: string[] = [];
+  const summary = await runMemoryWorkers({
+    paths: ["pressure-a", "pressure-b"], jobs: 2, memory, workerBytes: 640 * 2 ** 20,
+    args: (index) => [fixture, directory, String(index)],
+    onRow: (row) => rows.push(row),
+    report: message => {
+      reports.push(message);
+      if (message.startsWith("resident pressure: requeued ")) {
+        for (const path of ["pressure-a", "pressure-b"]) {
+          try { writeFileSync(join(directory, `release-${path}`), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); }
+          catch (error) { if (error.code !== "ENXIO") throw error; } // A killed reader has no wait to release.
+        }
+      }
     },
   });
-  assert.deepEqual(rows.map((row) => [row.path, row.bucket]).sort(), [["after", "strict-pass"], ["survivor", "strict-pass"], ["victim", "memory-cap"]]);
-  assert.deepEqual(deltas, [0, 1], "only the actual killed worker increments oom_kill");
-  assert.ok(aggregate > 0, "the aggregate ceiling, not a worker ceiling, fired");
-  const survivor = JSON.parse(readFileSync(join(directory, "survivor-ready"), "utf8"));
-  const victim = JSON.parse(readFileSync(join(directory, "victim-request"), "utf8"));
-  assert.equal(survivor.heldBytes, 4 * 2 ** 20, "the survivor never fills a fraction of the cap");
-  assert.ok(survivor.residentBytes < budgetBytes / 4, `survivor needs ample headroom: ${JSON.stringify(survivor)}`);
-  assert.equal(survivor.workerBytes, workerBytes);
-  assert.equal(survivor.aggregateBytes, budgetBytes);
-  assert.equal(victim.requestedBytes, budgetBytes * 2, "only the victim exceeds the entire aggregate");
-  assert.equal(victim.oomScoreAdj, 1000, "the allocating fixture is the chosen kernel victim");
-  assert.equal(victim.aggregateBytes, budgetBytes);
-  assert.equal(victim.workerBytes, workerBytes);
-  assert.ok(victim.requestedBytes < victim.workerBytes, "the request cannot reach a worker cap");
+  assert.deepEqual(rows.map(row => [row.path, row.bucket]).sort(), [["pressure-a", "strict-pass"], ["pressure-b", "strict-pass"]]);
+  assert.equal(rows.length, 2, "each input has exactly one final verdict");
+  assert.ok(summary.pressureRequeues >= 1 && summary.pressureRequeues <= 2, JSON.stringify(summary));
+  assert.equal(summary.isolatedReplays, summary.pressureRequeues);
+  assert.ok(summary.aggregatePressureKills > 0, JSON.stringify(summary));
+  assert.equal(rows.reduce((n, row) => n + row.residentPressureRetries, 0), summary.pressureRequeues);
+  for (const row of rows) assert.equal(row.held, 400 * 2 ** 20, "replay does the same allocation");
+  assert.ok(reports.some(message => message.startsWith("resident pressure requeues:")), reports.join("\n"));
+  assert.equal(existsSync(join(CGROUP, memory.group)), false);
+});
+
+// Counter origins, not the location of an OOM victim, decide whether a cap
+// is a case verdict. No test invokes the machine-wide OOM killer.
+test("only a worker-subtree OOM establishes a memory-cap verdict", () => {
+  const before = { oom: 3, kills: 5 };
+  assert.equal(memoryCause(before, { oom: 3, kills: 6 }, 7, 8), "aggregate-pressure");
+  assert.equal(memoryCause(before, { oom: 3, kills: 6 }, 7, 7), "system-pressure");
+  assert.equal(memoryCause(before, { oom: 4, kills: 6 }, 7, 8), "own-limit");
+  assert.equal(memoryCause(before, { oom: 4, kills: 5 }, 7, 7), "own-limit");
+  assert.equal(memoryCause(before, before, 7, 8), undefined, "pressure without a kill loses no case");
+  assert.throws(() => memoryCause(before, { oom: 2, kills: 5 }, 7, 7), /counters went backwards/);
+});
+
+test("a worker death without any OOM evidence is an instrument failure", async t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const rows: any[] = [];
+  const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "lost-worker-control" });
+  await assert.rejects(runMemoryWorkers({ paths: ["lost"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
+    args: () => [fixture, directory], onRow: row => rows.push(row) }), /no OOM kill recorded/);
+  assert.deepEqual(rows, []);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
 });
 

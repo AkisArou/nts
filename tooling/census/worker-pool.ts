@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { Admission, createFeed } from "../gate/admission.ts";
-import { MemoryRun } from "./worker-memory.ts";
+import { MemoryRun, memoryCause, type MemoryCounters } from "./worker-memory.ts";
 
 export type ResidentPoolOptions = {
   paths: string[];
@@ -18,32 +18,61 @@ export type ResidentPoolOptions = {
   admission?: Admission;
 };
 
-export async function runMemoryWorkers({ paths, jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission = new Admission({ report }) }: ResidentPoolOptions) {
-  const queue = createFeed(paths, admission);
+type Dispatch = { path: string; ordinal: number };
+type Pressure = { dispatch: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
+
+async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission = new Admission({ report }) }: ResidentPoolOptions,
+  work: Dispatch[], isolated: boolean, indexOffset = 0): Promise<Pressure[]> {
+  const queue = createFeed(work.map((_, index) => String(index)), admission);
+  const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   const worker = async (index: number) => {
     const bound = memory.worker(index, workerBytes);
     let again = true;
     while (again) {
       again = await new Promise<boolean>((resolve, reject) => {
-        const scope = bound.scope(command, args(index));
+        const scope = bound.scope(command, args(index + indexOffset));
         const child = spawn("systemd-run", scope.argv, { stdio: ["pipe", "pipe", "inherit"], env: scope.env });
         let exited = false;
         let restarting = false;
-        let active: string | undefined;
-        let before = 0;
-        const capped = (path: string) => ({ path, bucket: "memory-cap", why: "worker or child killed in resident scope", residentWorkerBytes: bound.bytes, residentRunBytes: memory.budgetBytes });
+        let active: Dispatch | undefined;
+        let before: MemoryCounters = { oom: 0, kills: 0 };
+        let aggregateBefore = 0;
+        const finish = (row?: any) => {
+          if (!active) throw new Error(`worker ${index} answered without an in-flight case`);
+          const dispatch = active;
+          const after = bound.counters();
+          const aggregateAfter = memory.aggregateOoms();
+          const cause = memoryCause(before, after, aggregateBefore, aggregateAfter);
+          active = undefined;
+          if (cause === "own-limit") {
+            onRow({ path: dispatch.path, bucket: "memory-cap", why: "worker's own resident limit fired",
+              residentWorkerBytes: bound.bytes, residentRunBytes: memory.budgetBytes, residentPressureRetries: Number(isolated) });
+            return true;
+          }
+          if (cause) {
+            if (isolated) throw new Error(`resident instrument failure: isolated replay of ${dispatch.path} was killed by ${cause}, without an own-limit OOM`);
+            pressure.push({ dispatch, cause, kills: after.kills - before.kills });
+            report(`resident pressure: requeued ${dispatch.path} after ${cause}; no verdict recorded`);
+            return true;
+          }
+          if (!row) throw new Error(`worker ${index} lost ${dispatch.path}; no OOM kill recorded`);
+          if (row.bucket === "memory-cap") throw new Error(`resident instrument failure: ${dispatch.path} reported memory-cap without an own-limit OOM`);
+          onRow({ ...row, residentPressureRetries: Number(isolated) });
+          return row.bucket === "timeout";
+        };
         const fail = (error: unknown) => {
           exited = true;
           try { bound.stop(scope); } catch {}
           reject(error);
         };
         const feed = () => queue.feed({
-          write: (path) => {
+          write: (token) => {
             if (active !== undefined) throw new Error(`worker ${index} already owns ${active}`);
-            before = bound.kills();
-            active = path;
-            child.stdin.write(`${path}\n`);
+            before = bound.counters();
+            aggregateBefore = memory.aggregateOoms();
+            active = work[Number(token)];
+            child.stdin.write(`${active.path}\n`);
           },
           end: () => child.stdin.end(),
           exited: () => exited || restarting,
@@ -53,13 +82,11 @@ export async function runMemoryWorkers({ paths, jobs, memory, workerBytes, comma
         createInterface({ input: child.stdout }).on("line", (line) => {
           try {
             const row = JSON.parse(line);
-            if (row.path !== active) throw new Error(`worker ${index} answered ${row.path}, expected ${active}`);
-            const killed = bound.kills() !== before;
-            active = undefined;
-            onRow(killed ? capped(row.path) : row);
+            if (row.path !== active?.path) throw new Error(`worker ${index} answered ${row.path}, expected ${active?.path}`);
+            const restart = finish(row);
             // Stop the entire scope before reuse, including any compiler child
             // left by a timed-out command. Only this worker is replaced.
-            if (killed || row.bucket === "memory-cap" || row.bucket === "timeout") {
+            if (restart) {
               restarting = true;
               bound.stop(scope);
             } else {
@@ -75,14 +102,11 @@ export async function runMemoryWorkers({ paths, jobs, memory, workerBytes, comma
           try {
             bound.stop(scope);
             if (active !== undefined) {
-              if (bound.kills() === before) throw new Error(`worker ${index} lost ${active}: ${signal ?? code}; no OOM kill recorded`);
-              onRow(capped(active));
-              active = undefined;
-              restarting = true;
+              restarting = finish();
             } else if (code !== 0 && !restarting) {
               throw new Error(`worker ${index} exited ${signal ?? code} without an in-flight OOM case`);
             }
-            resolve(restarting && queue.dispatched < paths.length);
+            resolve(restarting && queue.dispatched < work.length);
           } catch (error) { reject(error); }
         });
         const start = async () => {
@@ -99,10 +123,9 @@ export async function runMemoryWorkers({ paths, jobs, memory, workerBytes, comma
     }
   };
   try {
-    for (let index = 0; index < Math.min(jobs, paths.length); index++) tasks.push(worker(index));
+    for (let index = 0; index < Math.min(jobs, work.length); index++) tasks.push(worker(index));
     await Promise.all(tasks);
-    const ooms = memory.aggregateOoms();
-    if (ooms) report(`resident aggregate cap fired ${ooms} time(s); only workers with an oom_kill delta lost their cases`);
+    return pressure;
   } catch (error) {
     memory.close();
     await Promise.allSettled(tasks);
@@ -110,4 +133,31 @@ export async function runMemoryWorkers({ paths, jobs, memory, workerBytes, comma
   } finally {
     memory.close();
   }
+}
+
+
+export type ResidentPoolSummary = {
+  pressureRequeues: number; aggregatePressureKills: number; systemPressureKills: number; isolatedReplays: number;
+};
+
+/** Each input has one final row. Parallel pressure is retried once, alone in
+ * fresh cgroups after every parallel scope and its charges have been removed. */
+export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<ResidentPoolSummary> {
+  const { paths, jobs, memory, report = () => {} } = options;
+  const budgetBytes = memory.effectiveBudgetBytes();
+  const pressure = await round(options, paths.map((path, ordinal) => ({ path, ordinal })), false);
+  const summary: ResidentPoolSummary = {
+    pressureRequeues: pressure.length,
+    aggregatePressureKills: pressure.filter(p => p.cause === "aggregate-pressure").reduce((n, p) => n + p.kills, 0),
+    systemPressureKills: pressure.filter(p => p.cause === "system-pressure").reduce((n, p) => n + p.kills, 0),
+    isolatedReplays: 0,
+  };
+  for (const { dispatch } of pressure.sort((a, b) => a.dispatch.ordinal - b.dispatch.ordinal)) {
+    const isolated = new MemoryRun({ budgetBytes });
+    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, jobs + summary.isolatedReplays);
+    summary.isolatedReplays++;
+  }
+  report(`resident pressure requeues: ${summary.pressureRequeues}; aggregate kills ${summary.aggregatePressureKills}; system-wide kills ${summary.systemPressureKills}; isolated replays ${summary.isolatedReplays}`);
+  if (paths.length > 0 && summary.pressureRequeues / paths.length > 0.05) report("resident pressure advisory: over 5% of cases needed isolated replay; review the aggregate reservation");
+  return summary;
 }

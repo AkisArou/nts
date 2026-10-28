@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -56,6 +56,18 @@ const events = (group: string, local = false) => {
   };
   return { oom: field("oom"), kills: field("oom_kill") };
 };
+
+export type MemoryCounters = { oom: number; kills: number };
+export type MemoryCause = "own-limit" | "aggregate-pressure" | "system-pressure";
+
+/** A kill's location is not the limit that caused it. Ancestor OOM events
+ * propagate upward only, so the retained worker subtree names its own caps. */
+export function memoryCause(before: MemoryCounters, after: MemoryCounters, aggregateBefore: number, aggregateAfter: number): MemoryCause | undefined {
+  if (after.oom < before.oom || after.kills < before.kills || aggregateAfter < aggregateBefore) throw new Error("resident cap: memory counters went backwards");
+  if (after.oom > before.oom) return "own-limit";
+  if (after.kills === before.kills) return undefined;
+  return aggregateAfter > aggregateBefore ? "aggregate-pressure" : "system-pressure";
+}
 
 // The shell execs the actual worker, so the guard costs no resident process.
 // All values are argv, never interpolated shell source. A setup failure never
@@ -132,6 +144,11 @@ export class MemoryRun {
     return worker;
   }
   aggregateOoms() { return events(this.group, true).oom; }
+  effectiveBudgetBytes() {
+    const bytes = Number(readFileSync(join(CGROUP, this.group, "memory.max"), "utf8"));
+    if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > this.budgetBytes) throw new Error("resident cap: aggregate ceiling changed outside its reservation");
+    return bytes;
+  }
   close() {
     if (this.#closed) return;
     this.#closed = true;
@@ -163,6 +180,7 @@ export class MemoryWorker {
     this.run = run; this.slice = slice; this.group = validGroup(slice, group, run.group); this.bytes = bytes;
   }
   kills() { return events(this.group).kills; }
+  counters(): MemoryCounters { return events(this.group); }
   scope(command: string, args: readonly string[]): MemoryScope {
     if (this.#closed) throw new Error("resident worker is closed");
     const unit = `${this.slice.slice(0, -6)}-g${this.#generation++}.scope`;
@@ -242,9 +260,12 @@ export function compileSync(tools, command: string, args: readonly string[], opt
   const noAddressLimit = ["-c", 'ulimit -c 0; exec "$0" "$@"', command, ...args];
   if (inResidentWorker()) {
     const boundary = process.env.NTS_CENSUS_WORKER_GROUP!;
-    const before = events(boundary).kills;
+    const before = events(boundary);
+    const aggregateBefore = events(dirname(boundary), true).oom;
     const result = spawnSync("sh", noAddressLimit, options);
-    return { ...result, memoryKilled: events(boundary).kills !== before, residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
+    const cause = memoryCause(before, events(boundary), aggregateBefore, events(dirname(boundary), true).oom);
+    if (cause === "aggregate-pressure" || cause === "system-pressure") throw new Error(`resident ${cause}: compiler OOM kill is not a case verdict`);
+    return { ...result, memoryKilled: cause === "own-limit", residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
   }
   // Standalone callers are bounded too. Serial runners and parallel census
   // workers enter a scope once, then compile without a per-case bus round trip.
@@ -256,7 +277,8 @@ export function compileSync(tools, command: string, args: readonly string[], opt
     direct!.workers.set(bytes, worker);
   }
   const scope = worker.scope("sh", noAddressLimit);
-  const before = worker.kills();
+  const before = worker.counters();
+  const aggregateBefore = worker.run.aggregateOoms();
   let result;
   try {
     result = spawnSync("systemd-run", scope.argv, { ...options, env: { ...scope.env, ...options.env } });
@@ -264,5 +286,7 @@ export function compileSync(tools, command: string, args: readonly string[], opt
   } finally {
     worker.stop(scope);
   }
-  return { ...result, memoryKilled: worker.kills() !== before, residentLimitBytes: worker.bytes, residentRunBytes: worker.run.budgetBytes };
+  const cause = memoryCause(before, worker.counters(), aggregateBefore, worker.run.aggregateOoms());
+  if (cause === "aggregate-pressure" || cause === "system-pressure") throw new Error(`resident ${cause}: compiler OOM kill is not a case verdict`);
+  return { ...result, memoryKilled: cause === "own-limit", residentLimitBytes: worker.bytes, residentRunBytes: worker.run.budgetBytes };
 }
