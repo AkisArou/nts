@@ -1,4 +1,5 @@
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
+import { ignoreRejection } from "../core/promise.ts";
 import { TextDecoderStream } from "../core/encoding-streams.ts";
 import { LimitError } from "../core/errors.ts";
 import { coerceToUSVString } from "../core/webidl.ts";
@@ -13,20 +14,18 @@ import { parsePlainText } from "../json/plain.ts";
 import type { RandomSource } from "../provider/primitives.ts";
 import {
   ReadableStream,
+  acquireReadableStreamDefaultReader,
+  ChunkSlot,
+  readChunk,
+  readableStreamPipeTo,
+  kStreamCancelInternal,
+  kStreamLocked,
   kStreamDisturbed,
   readableStreamClose,
   tee,
   transfer,
 } from "../streams/readable.ts";
 import type { TransportBodySource } from "./transport.ts";
-
-// Fetch's internal pipe-through operation must not invoke a script replacement
-// on the body's stream. Capture the canonical operation once, without an array
-// of call arguments on each textStream() call.
-const pipeBodyThroughDecoder: (
-  stream: ReadableStream<Uint8Array>,
-  decoder: TextDecoderStream,
-) => ReadableStream<string> = Function.prototype.call.bind(ReadableStream.prototype.pipeThrough);
 
 export type BodyInit =
   | string
@@ -170,7 +169,7 @@ export class BodyState {
   ): BodyState {
     if (input === undefined || input === null) return BodyState.empty(policy);
     if (input instanceof ReadableStream) {
-      if (input.locked || input[kStreamDisturbed]) throw new TypeError("Body stream is unusable");
+      if (input[kStreamLocked] || input[kStreamDisturbed]) throw new TypeError("Body stream is unusable");
       return new BodyState(input, null, null, null, policy);
     }
     let blob: Blob;
@@ -199,7 +198,7 @@ export class BodyState {
   }
 
   get unusable(): boolean {
-    return this.used || (this.stream?.locked ?? false);
+    return this.used || (this.stream?.[kStreamLocked] ?? false);
   }
 
   get replayable(): boolean {
@@ -249,11 +248,12 @@ export class BodyState {
   async consume(): Promise<Uint8Array> {
     if (this.unusable) throw new TypeError("Body is already used or locked");
     if (this.stream === null) return new Uint8Array(0);
-    const reader = this.stream.getReader();
+    const reader = acquireReadableStreamDefaultReader(this.stream);
+    const result = new ChunkSlot<Uint8Array>();
     const chunks: Uint8Array[] = [];
     let total = 0;
     while (true) {
-      const result = await reader.read();
+      await readChunk(reader, result);
       if (result.done) return concatBytes(chunks, total);
       if (!(result.value instanceof Uint8Array)) {
         throw new TypeError("Response body stream chunks must be Uint8Array values");
@@ -263,7 +263,7 @@ export class BodyState {
         const error = new LimitError("Body consumption exceeded configured limit");
         // Cancellation belongs to this configured resource policy, not Fetch's
         // read-all-bytes failure steps for a malformed chunk or source error.
-        void reader.cancel(error).catch(() => {});
+        ignoreRejection(this.stream[kStreamCancelInternal](error));
         throw error;
       }
       chunks.push(result.value);
@@ -311,7 +311,13 @@ export abstract class Body {
       return empty;
     }
     // Fetch always chooses UTF-8, independently of any Content-Type charset.
-    return pipeBodyThroughDecoder(stream, new TextDecoderStream());
+    const decoder = new TextDecoderStream();
+    // Fetch runs ReadableStreamPipeTo internally; subclass overrides of the
+    // public pipeThrough/getReader methods cannot intercept the operation.
+    ignoreRejection(readableStreamPipeTo(stream, decoder.writable, {
+      preventAbort: false, preventCancel: false, preventClose: false, signal: undefined,
+    }));
+    return decoder.readable;
   }
 
   async json(): Promise<unknown> {

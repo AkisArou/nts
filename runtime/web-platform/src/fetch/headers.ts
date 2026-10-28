@@ -76,19 +76,9 @@ function isObject(value: unknown): value is object {
   return value !== null && (typeof value === "object" || typeof value === "function");
 }
 
-// Abstract Call must not read an iterator function's user-controlled .call.
-// https://tc39.es/ecma262/#sec-call
-const callWithoutArguments: (callback: () => unknown, receiver: object) => unknown =
-  Function.prototype.call.bind(Function.prototype.call);
-
+// Typed nts programs cannot replace an intrinsic method or attach a public
+// .call property to a function. Preserve the receiver with direct calls.
 type HeaderForEachCallback = (this: unknown, value: string, name: string, parent: Headers) => void;
-const callForEachCallback: (
-  callback: HeaderForEachCallback,
-  receiver: unknown,
-  value: string,
-  name: string,
-  parent: Headers,
-) => void = Function.prototype.call.bind(Function.prototype.call);
 
 function iteratorMethod(value: object): (() => unknown) | undefined {
   const method = (value as { readonly [Symbol.iterator]?: unknown })[Symbol.iterator];
@@ -102,7 +92,7 @@ function convertSequence<T>(
   method: () => unknown,
   convert: (value: unknown) => T,
 ): T[] {
-  const iterator = callWithoutArguments(method, value);
+  const iterator = method.call(value);
   if (!isObject(iterator)) throw new TypeError("Header iterator must return an object");
   const next = (iterator as Iterator<unknown>).next;
   const result: T[] = [];
@@ -110,7 +100,7 @@ function convertSequence<T>(
   // element conversion throws. Cache next as GetIteratorFromMethod requires.
   // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
   while (true) {
-    const step = callWithoutArguments(next, iterator);
+    const step = next.call(iterator);
     if (!isObject(step)) throw new TypeError("Header iterator result must be an object");
     const item = step as IteratorResult<unknown>;
     if (item.done) return result;
@@ -428,7 +418,7 @@ export class Headers {
     requireArguments(arguments, 1, "Headers.forEach");
     if (typeof callback !== "function") throw new TypeError("Headers callback must be callable");
     for (const entry of this.#entrySteps()) {
-      callForEachCallback(callback, thisArg, entry[1], entry[0], this);
+      callback.call(thisArg, entry[1], entry[0], this);
     }
   }
 

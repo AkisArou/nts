@@ -59,7 +59,7 @@ export interface ReadRequest<T> {
  * which performs the `Get` for `then` this whole arrangement exists to avoid. The slot is the
  * caller's own object and is never handed to promise resolution.
  */
-class ChunkSlot<T> {
+export class ChunkSlot<T> {
   value: T | undefined = undefined;
   done = false;
 }
@@ -71,7 +71,7 @@ class ChunkSlot<T> {
  * `undefined` -- not an Object, so no `then` is looked up on anything. The chunk arrives in
  * `slot`. An error still rejects, which is ordinary and unobservable in the same way.
  */
-function readChunk<T>(reader: ReadableStreamDefaultReader<T>, slot: ChunkSlot<T>): Promise<void> {
+export function readChunk<T>(reader: ReadableStreamDefaultReader<T>, slot: ChunkSlot<T>): Promise<void> {
   const settled = Promise.withResolvers<void>();
   reader[kReaderReadRequest]({
     chunk: (value: T) => {
@@ -315,6 +315,7 @@ export const kStreamByteStream: unique symbol = Symbol("ReadableStream byteStrea
 export const kStreamCanCloseOrEnqueue: unique symbol = Symbol("ReadableStream canCloseOrEnqueue");
 export const kStreamCancelInternal: unique symbol = Symbol("ReadableStream cancelInternal");
 export const kStreamDesiredSize: unique symbol = Symbol("ReadableStream desiredSize");
+export const kStreamLocked: unique symbol = Symbol("ReadableStream locked");
 export const kStreamDisturbed: unique symbol = Symbol("ReadableStream disturbed");
 export const kStreamEnqueue: unique symbol = Symbol("ReadableStream enqueue");
 export const kStreamFail: unique symbol = Symbol("ReadableStream fail");
@@ -437,6 +438,10 @@ export class ReadableStream<T> {
   }
 
   get locked(): boolean {
+    return this[kStreamLocked];
+  }
+
+  get [kStreamLocked](): boolean {
     return this.#currentReader !== null;
   }
 
@@ -494,11 +499,11 @@ export class ReadableStream<T> {
     if (this.locked) {
       throw new TypeError("Stream is locked");
     }
-    return new ReadableStreamDefaultReader(this);
+    return acquireReadableStreamDefaultReader(this);
   }
 
   [kStreamAttach](reader: ReadableStreamDefaultReader<T>): void {
-    if (this.locked) {
+    if (this.#currentReader !== null) {
       throw new TypeError("Stream is locked");
     }
     this.#currentReader = reader;
@@ -566,7 +571,7 @@ export class ReadableStream<T> {
     if (writable.locked) {
       throw new TypeError("WritableStream is locked");
     }
-    const piping = startPipe(this, writable, converted);
+    const piping = readableStreamPipeTo(this, writable, converted);
     ignoreRejection(piping);
     return readable;
   }
@@ -589,7 +594,7 @@ export class ReadableStream<T> {
       if (destination.locked) {
         throw new TypeError("WritableStream is locked");
       }
-      return startPipe(this, destination, converted);
+      return readableStreamPipeTo(this, destination, converted);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -2212,6 +2217,11 @@ export function readableStreamStoredError<T>(stream: ReadableStream<T>): unknown
   return stream[readableStreamStoredErrorValue];
 }
 
+/** @internal Acquire a default reader without an overridable getReader call. */
+export function acquireReadableStreamDefaultReader<T>(stream: ReadableStream<T>): ReadableStreamDefaultReader<T> {
+  return new ReadableStreamDefaultReader(stream);
+}
+
 export class ReadableStreamDefaultReader<T> {
   #stream: ReadableStream<T> | null;
   #closedCapability = Promise.withResolvers<void>();
@@ -2331,12 +2341,13 @@ Object.defineProperty(ReadableStreamDefaultReader.prototype, Symbol.toStringTag,
 });
 
 
-function startPipe<T>(
+/** @internal ReadableStreamPipeTo; shared by the public methods and Fetch. */
+export function readableStreamPipeTo<T>(
   source: ReadableStream<T>,
   destination: WritableStream<T>,
   options: ConvertedPipeOptions,
 ): Promise<void> {
-  const reader = new ReadableStreamDefaultReader(source);
+  const reader = acquireReadableStreamDefaultReader(source);
   const writer = acquireWritableStreamDefaultWriter(destination);
   source[kStreamMarkDisturbed]();
   const pipe = new PipeState(source, destination, reader, writer, options);

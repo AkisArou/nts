@@ -490,3 +490,18 @@ for (const factory of bodyFactories) {
     assert.equal(subject.bodyUsed, true);
   });
 }
+
+test("Body consumption and piping bypass subclass stream methods", async () => {
+  let overrides = 0;
+  class Source extends ReadableStream<Uint8Array> {
+    override getReader(): never { overrides++; throw new Error("public getReader"); }
+    override pipeThrough(): never { overrides++; throw new Error("public pipeThrough"); }
+    override get locked(): never { overrides++; throw new Error("public locked"); }
+  }
+  function source(): Source {
+    return new Source({ start(controller) { controller.enqueue(new Uint8Array([0x61])); controller.close(); } });
+  }
+  assert.equal(await new Response(source()).text(), "a");
+  assert.equal(await readTextStream(textStreamFrom(new Response(source()))), "a");
+  assert.equal(overrides, 0);
+});
