@@ -2,6 +2,8 @@
 import { coerceToDOMString } from "./webidl.ts";
 
 export class DOMException extends Error {
+  readonly #exceptionName: string;
+  readonly #exceptionMessage: string;
   static readonly INDEX_SIZE_ERR = 1;
   static readonly DOMSTRING_SIZE_ERR = 2;
   static readonly HIERARCHY_REQUEST_ERR = 3;
@@ -33,8 +35,19 @@ export class DOMException extends Error {
     // https://webidl.spec.whatwg.org/#dom-domexception-domexception
     const convertedMessage = coerceToDOMString(message);
     const convertedName = coerceToDOMString(name);
-    super(convertedMessage);
-    this.name = convertedName;
+    // Error without a message retains Error identity/stack support without an
+    // own message property. DOMException exposes branded inherited getters.
+    super();
+    this.#exceptionName = convertedName;
+    this.#exceptionMessage = convertedMessage;
+  }
+
+  override get name(): string {
+    return this.#exceptionName;
+  }
+
+  override get message(): string {
+    return this.#exceptionMessage;
   }
 
   get INDEX_SIZE_ERR(): number {
@@ -138,7 +151,9 @@ export class DOMException extends Error {
   }
 
   get code(): number {
-    switch (this.name) {
+    // The legacy code depends on the stored name, never a public override.
+    // https://webidl.spec.whatwg.org/#dom-domexception-code
+    switch (this.#exceptionName) {
       case "IndexSizeError":
         return 1;
       case "HierarchyRequestError":
