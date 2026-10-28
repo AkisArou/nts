@@ -213,3 +213,77 @@ test("Headers rejects a non-ByteString record key before reading its value", () 
   assert.throws(() => new Headers(init), TypeError);
   assert.equal(reads, 0);
 });
+
+// https://webidl.spec.whatwg.org/#es-operations
+// Missing arguments fail before any conversion; explicit undefined is a value.
+for (const operation of ["append", "set"] as const) {
+  test(`Headers.${operation} checks both required arguments before coercion or mutation`, () => {
+    const headers = new Headers([["kept", "one"]]);
+    const invoke = headers[operation] as (...args: unknown[]) => unknown;
+    assert.throws(() => invoke.call(headers), TypeError);
+    let reads = 0;
+    const marker = new Error("name conversion");
+    const name = { toString(): never { reads++; throw marker; } };
+    assert.throws(() => invoke.call(headers, name), TypeError);
+    assert.equal(reads, 0);
+    assert.deepEqual([...headers], [["kept", "one"]]);
+    invoke.call(headers, undefined, undefined);
+    assert.equal(headers.get("undefined"), "undefined");
+  });
+}
+
+for (const operation of ["get", "has", "delete"] as const) {
+  test(`Headers.${operation} distinguishes a missing name from explicit undefined`, () => {
+    const headers = new Headers([["undefined", "one"]]);
+    const invoke = headers[operation] as (...args: unknown[]) => unknown;
+    assert.throws(() => invoke.call(headers), TypeError);
+    assert.equal(headers.get("undefined"), "one");
+    const result = invoke.call(headers, undefined);
+    assert.equal(result, operation === "get" ? "one" : operation === "has" ? true : undefined);
+    assert.equal(headers.has("undefined"), operation !== "delete");
+  });
+}
+
+// https://webidl.spec.whatwg.org/#es-forEach
+for (const empty of [true, false]) {
+  test(`Headers.forEach validates its callback for an ${empty ? "empty" : "nonempty"} list`, () => {
+    const headers = new Headers(empty ? [] : [["x", "one"]]);
+    const invoke = headers.forEach as (...args: unknown[]) => unknown;
+    assert.throws(() => invoke.call(headers), TypeError);
+    let calls = 0;
+    const noncallable = { call(): void { calls++; } };
+    for (const value of [undefined, null, 0, {}, noncallable]) {
+      assert.throws(() => invoke.call(headers, value), TypeError);
+    }
+    assert.equal(calls, 0);
+    assert.equal(headers.forEach.length, 1);
+  });
+}
+
+test("Headers.forEach uses abstract Call and observes mutations during traversal", () => {
+  const headers = new Headers([["a", "one"], ["b", "two"]]);
+  const context = {};
+  const visited: string[] = [];
+  const callback = function (this: unknown, value: string, name: string, parent: Headers): void {
+    assert.equal(this, context);
+    assert.equal(parent, headers);
+    visited.push(name + "=" + value);
+    if (name === "a") parent.append("c", "three");
+  };
+  (callback as unknown as { call: () => never }).call = () => {
+    throw new Error("callback.call must not be read");
+  };
+  headers.forEach(callback, context);
+  assert.deepEqual(visited, ["a=one", "b=two", "c=three"]);
+});
+
+test("Headers.forEach preserves a callback error and stops traversal", () => {
+  const headers = new Headers([["a", "one"], ["b", "two"]]);
+  const marker = new Error("callback failed");
+  const visited: string[] = [];
+  assert.throws(() => headers.forEach((_value, name) => {
+    visited.push(name);
+    throw marker;
+  }), (error) => error === marker);
+  assert.deepEqual(visited, ["a"]);
+});
