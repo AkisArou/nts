@@ -57,7 +57,8 @@ export type SecretAlgorithmName = AesAlgorithmName | "HMAC" | KmacAlgorithmName 
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
 export type EcAlgorithmName = "ECDSA" | "ECDH";
 export type OkpAlgorithmName = "Ed25519" | "X25519" | "Ed448" | "X448";
-export type KdfAlgorithmName = "HKDF" | "PBKDF2";
+export type Argon2AlgorithmName = "Argon2d" | "Argon2i" | "Argon2id";
+export type KdfAlgorithmName = "HKDF" | "PBKDF2" | Argon2AlgorithmName;
 type RegisteredAlgorithmName = CryptoDigestName | CshakeAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
 
 /** Modern Algorithms §13.3. Dictionary conversion precedes BufferSource snapshots. */
@@ -327,6 +328,37 @@ export class Pbkdf2Params extends Algorithm<"PBKDF2"> {
   }
 }
 
+/** Modern Algorithms §17.3. RFC bounds and version defaults are operation policy. */
+export class Argon2Params extends Algorithm<Argon2AlgorithmName> {
+  readonly nonce: Uint8Array;
+  readonly parallelism: number;
+  readonly memory: number;
+  readonly passes: number;
+  readonly version: number | undefined;
+  readonly secretValue: Uint8Array | undefined;
+  readonly associatedData: Uint8Array | undefined;
+
+  constructor(
+    name: Argon2AlgorithmName,
+    nonce: Uint8Array,
+    parallelism: number,
+    memory: number,
+    passes: number,
+    version: number | undefined,
+    secretValue: Uint8Array | undefined,
+    associatedData: Uint8Array | undefined,
+  ) {
+    super(name);
+    this.nonce = nonce;
+    this.parallelism = parallelism;
+    this.memory = memory;
+    this.passes = passes;
+    this.version = version;
+    this.secretValue = secretValue;
+    this.associatedData = associatedData;
+  }
+}
+
 export type NormalizedAlgorithm =
   | DigestAlgorithm
   | CShakeParams
@@ -352,7 +384,8 @@ export type NormalizedAlgorithm =
   | EcdhKeyDeriveParams
   | Ed448Params
   | HkdfParams
-  | Pbkdf2Params;
+  | Pbkdf2Params
+  | Argon2Params;
 
 class AlgorithmRegistration {
   readonly name: RegisteredAlgorithmName;
@@ -478,6 +511,15 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("PBKDF2", "deriveBits"),
   new AlgorithmRegistration("PBKDF2", "importKey"),
   new AlgorithmRegistration("PBKDF2", "get key length"),
+  new AlgorithmRegistration("Argon2d", "deriveBits"),
+  new AlgorithmRegistration("Argon2d", "importKey"),
+  new AlgorithmRegistration("Argon2d", "get key length"),
+  new AlgorithmRegistration("Argon2i", "deriveBits"),
+  new AlgorithmRegistration("Argon2i", "importKey"),
+  new AlgorithmRegistration("Argon2i", "get key length"),
+  new AlgorithmRegistration("Argon2id", "deriveBits"),
+  new AlgorithmRegistration("Argon2id", "importKey"),
+  new AlgorithmRegistration("Argon2id", "get key length"),
 ];
 
 /** Web IDL's (object or DOMString) union conversion, before later argument conversions. */
@@ -638,6 +680,36 @@ function normalizeRegisteredAlgorithm(
     const saltBytes = normalizedBytes(salt, copyBuffers || typeof hash !== "string");
     const normalizedHash = normalizeHashAlgorithm(hash);
     return new Pbkdf2Params(name, normalizedHash, saltBytes, iterations);
+  }
+
+  if (name === "Argon2d" || name === "Argon2i" || name === "Argon2id") {
+    if (operation !== "deriveBits") return new Algorithm(name);
+    const input = algorithm as {
+      readonly nonce?: unknown;
+      readonly parallelism?: unknown;
+      readonly memory?: unknown;
+      readonly passes?: unknown;
+      readonly version?: unknown;
+      readonly secretValue?: unknown;
+      readonly associatedData?: unknown;
+    };
+    // Web IDL converts the inherited name, then own members lexicographically.
+    // Every getter/conversion finishes before any BufferSource snapshot.
+    const associatedDataValue = input.associatedData;
+    const associatedData = associatedDataValue === undefined ? undefined : toCryptoBufferSource(associatedDataValue);
+    const memory = toCryptoUnsignedInteger(requiredMember(input.memory, "Argon2.memory"), 32);
+    const nonce = toCryptoBufferSource(requiredMember(input.nonce, "Argon2.nonce"));
+    const parallelism = toCryptoUnsignedInteger(requiredMember(input.parallelism, "Argon2.parallelism"), 32);
+    const passes = toCryptoUnsignedInteger(requiredMember(input.passes, "Argon2.passes"), 32);
+    const secretValueInput = input.secretValue;
+    const secretValue = secretValueInput === undefined ? undefined : toCryptoBufferSource(secretValueInput);
+    const versionValue = input.version;
+    const version = versionValue === undefined ? undefined : toCryptoUnsignedInteger(versionValue, 8);
+    // §18.4.4 takes snapshots in declared member order after conversion.
+    const nonceBytes = normalizedBytes(nonce, copyBuffers);
+    const secretBytes = secretValue === undefined ? undefined : normalizedBytes(secretValue, copyBuffers);
+    const associatedBytes = associatedData === undefined ? undefined : normalizedBytes(associatedData, copyBuffers);
+    return new Argon2Params(name, nonceBytes, parallelism, memory, passes, version, secretBytes, associatedBytes);
   }
 
   if (name === "HMAC") {

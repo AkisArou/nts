@@ -348,10 +348,32 @@ export interface CryptoPbkdf2Parameters {
   readonly byteLength: number;
 }
 
+/**
+ * RFC 9106's Argon2 v1.3. The native primitive performs the complete
+ * memory-hard derivation, including Blake2b and all memory/lane processing.
+ * Memory is measured in KiB; RFC 9106 rounds it down internally to a multiple
+ * of four times parallelism. Empty optional inputs are equivalent to absence.
+ * The nonce and all input/output bounds belong to the native RFC operation;
+ * failure, including allocation failure, returns a CryptoFailure value.
+ * https://wicg.github.io/webcrypto-modern-algos/#argon2-operations-derive-bits
+ */
+export interface CryptoArgon2Parameters {
+  readonly name: "Argon2d" | "Argon2i" | "Argon2id";
+  readonly nonce: Uint8Array;
+  readonly parallelism: number;
+  readonly memory: number;
+  readonly passes: number;
+  readonly version: 0x13;
+  readonly secretValue: Uint8Array | undefined;
+  readonly associatedData: Uint8Array | undefined;
+  readonly byteLength: number;
+}
+
 export type CryptoDerivationParameters =
   | CryptoAgreementParameters
   | CryptoHkdfParameters
-  | CryptoPbkdf2Parameters;
+  | CryptoPbkdf2Parameters
+  | CryptoArgon2Parameters;
 
 /** A native failure value; the shared operation selects its specified DOMException. */
 export interface CryptoFailure {
