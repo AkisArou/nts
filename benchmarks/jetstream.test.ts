@@ -103,3 +103,66 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+// BEGIN LISTFORMAT INTL: complete original workload checks.
+{
+  const name = "jetstream-listformat-intl";
+  if (modules.has(name)) {
+    checked.add(name);
+    const intlListFormat = await import("./cases/jetstream-listformat-intl/case.ts");
+
+
+    test("jetstream-listformat-intl retains the complete original Intl workload", () => {
+        assert.equal(intlListFormat.seed, 1);
+        assert.equal(intlListFormat.originalIterations, 2);
+        assert.equal(intlListFormat.defaultEnabled, false);
+        assert.equal(intlListFormat.work(0), 0);
+        const snapshot = intlListFormat.render(1);
+        assert.equal(snapshot.iterations.length, 1);
+        assert.equal(snapshot.expectedMinLength, 506000);
+        assert.ok(snapshot.totalLength >= snapshot.expectedMinLength);
+        const counts: Record<string, number> = {};
+        for (const output of snapshot.iterations[0].outputs)
+            counts[output.kind] = (counts[output.kind] ?? 0) + 1;
+        assert.deepEqual(counts, {
+        "options": 225,
+        "format": 2250,
+        "parts": 2250
+    });
+        function fold(previous: number): number {
+            let result = (previous * 31 + snapshot.totalLength) >>> 0;
+            if (typeof snapshot.lastResult === "string") {
+                for (let i = 0; i < snapshot.lastResult.length; ++i)
+                    result = (result * 31 + snapshot.lastResult.charCodeAt(i)) >>> 0;
+            } else if (typeof snapshot.lastResult === "number") {
+                result = (result * 31 + snapshot.lastResult) >>> 0;
+            }
+            return result;
+        }
+        assert.equal(intlListFormat.work(1), fold(0));
+        assert.equal(intlListFormat.work(2), fold(fold(0)));
+        assert.equal(intlListFormat.work(0), 0);
+        assert.equal(intlListFormat.work(1), fold(0));
+        // Exact oracle text is tied to the recorded Intl data and timezone;
+        // all-host original thresholds, full call counts and repeatability above
+        // remain checked when running this test on a different host environment.
+        if (process.version === "v24.20.0" && process.versions.icu === "78.3" &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone === "UTC") {
+            assert.equal(snapshot.totalLength, 508496);
+            assert.equal(fold(0), 846399107);
+            assert.equal(createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
+                "00b139e2556a944c4ff9137796af28d8ebe600016687b6571553817da345604b");
+        }
+    });
+  }
+}
+// END LISTFORMAT INTL.
+
+
+
+
+
