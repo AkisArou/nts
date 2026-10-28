@@ -1,0 +1,1113 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "scope": "B Performance, core PerformanceEntry, User Timing marks/measures and timeline queries in a non-Window environment.",
+  "revisions": {
+    "hr-time": "34cafd797e58dad280d20040eee012d49ccfa91f",
+    "user-timing": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+    "performance-timeline": "94caab7038b27c16d605fa3547dacbee3a2fde4e"
+  },
+  "fixtures": [
+    {
+      "path": "hr-time/basic.any.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/34cafd797e58dad280d20040eee012d49ccfa91f/hr-time/basic.any.js",
+      "sha256": "83751a3306d9ee4f9c83e405bd91c293476b25240e958d0277f5e80a93cd8c67",
+      "gitBlob": "4cd6e42dfc2274ac04ab46fb2f12d30ca150865b",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {}
+    },
+    {
+      "path": "hr-time/monotonic-clock.any.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/34cafd797e58dad280d20040eee012d49ccfa91f/hr-time/monotonic-clock.any.js",
+      "sha256": "cfbbde21f4ffcb2e3e4d60542297ece40089364b90720de646c7a716afdfb6e9",
+      "gitBlob": "c53b04d844e4f587891595c09c56e336f3893f9b",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {}
+    },
+    {
+      "path": "performance-timeline/performanceentry-tojson.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/94caab7038b27c16d605fa3547dacbee3a2fde4e/performance-timeline/performanceentry-tojson.any.js",
+      "sha256": "aa7fd6ddc5f172c9eb54a9be6941c683f540915b6358fb1bc0e736a85bcac6ce",
+      "gitBlob": "44f0156eec19241970028c28e5897be4d6f1cb81",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/clear_all_marks.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/clear_all_marks.any.js",
+      "sha256": "b5efcfaad5934c383be44596f1ec74e5a606990f70409ae8493e7f96d28ecf59",
+      "gitBlob": "35cd2a04f610369f69442bd27e2e8f00f01a27b1",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/clear_all_measures.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/clear_all_measures.any.js",
+      "sha256": "0057a98fd421332b64b7b0bc80597fcdc7b0a003b8edf735d3938bf56aa6cd0b",
+      "gitBlob": "32c993f2827a301feb7bcb69c11317d4020f12f2",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/clear_non_existent_mark.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/clear_non_existent_mark.any.js",
+      "sha256": "f74b2a757397c4be454b2ce3645ede5830ec749f29b5d107caf0439371e5a6c4",
+      "gitBlob": "c7d8b4786134015f7aea7ab1852ef7ad0277926b",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/clear_non_existent_measure.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/clear_non_existent_measure.any.js",
+      "sha256": "311898bd94d26a8f07b9e5e12e251cd81197a919706d83ea9c2bbd914371a00f",
+      "gitBlob": "9de0b5f266d4e2815f28fb29468ea571ba7a1bad",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/clear_one_mark.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/clear_one_mark.any.js",
+      "sha256": "6e6844bef0278656db15833e0504219e258607d0157ec6e6d7375ec586502954",
+      "gitBlob": "c180199d8c9f9224311d09c2299d2f1220dff970",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/clear_one_measure.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/clear_one_measure.any.js",
+      "sha256": "568062688d22b721a803f7bcc2880587fcd5d305d2dc2d3ca74cdab8b152764b",
+      "gitBlob": "a5e663772c8bbe9ce9f845ac471fbf10dd5a2867",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/entry_type.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/entry_type.any.js",
+      "sha256": "ed18748fe847e72a3367a089b2dd7aae9ad7f4c877ad202923e251acf21cb233",
+      "gitBlob": "1e37453d09d42ea9c530bc2902cccb8f66fd6efd",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/mark-entry-constructor.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/mark-entry-constructor.any.js",
+      "sha256": "ea31875d8e54925219a2241d0edfb1cd2afb215b0f315ebbeb2b9f043415b005",
+      "gitBlob": "ef9c403dda67236893e72f0f65a4bff4718b12ed",
+      "format": "javascript",
+      "support": [
+        "user-timing/resources/user-timing-helper.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {
+        "Mark entry can be created by 'new PerformanceMark(string, {detail})'.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "Mark entry can be created by 'new PerformanceMark(string, {startTime, detail})'.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        }
+      }
+    },
+    {
+      "path": "user-timing/mark-errors.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/mark-errors.any.js",
+      "sha256": "431c69918c2e24f51f31bff94d22be112b7c0f343d9d25c423db5136174d488c",
+      "gitBlob": "39bafc045cb721c520d99b3f38c8e460bf6d4bcc",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 10,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/mark-l3.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/mark-l3.any.js",
+      "sha256": "9b903b18302d8d6a34000542db68ffac4d8b04ca3644008ee8466ba3d5130262",
+      "gitBlob": "407a5c8bba6a3c82a05df6a54d829b37f3a72264",
+      "format": "javascript",
+      "support": [
+        "user-timing/resources/user-timing-helper.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {
+        "mark entries' detail and startTime are customizable.": {
+          "category": "outside-assigned-surface",
+          "reason": "This case requires PerformanceObserver delivery as well as structured cloning of object detail. PerformanceObserver is outside the assigned now/mark/measure/query API surface, and no native structured-clone capability is available."
+        }
+      }
+    },
+    {
+      "path": "user-timing/mark-measure-feature-detection.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/mark-measure-feature-detection.html",
+      "sha256": "6923092e3186a6daecb586b3c10c7c177a8b7d32b8471e4c4eadb9077767a1c8",
+      "gitBlob": "6f1ad489e95680fc5d1be4e25dcaa2eeee9a0aa5",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 2,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/mark-measure-return-objects.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/mark-measure-return-objects.any.js",
+      "sha256": "c24e02c8d67fb38f54f8afccd51fcd5a4803cfe2e1f2ae7f9dee1619a195e50e",
+      "gitBlob": "bb15c5839818babf731bfec600395e13e5b794aa",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/mark.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/mark.any.js",
+      "sha256": "831224e2cf0fe06c2b3fa5a0a4162dcb16a1752a739ff9a4f2356d80218a0e6c",
+      "gitBlob": "7e814d2074ca8bb9015bea02b741ce9875decec2",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 22,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/measure-l3.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/measure-l3.any.js",
+      "sha256": "e93efe2e27e2bcc244fed0cdfb4c705884f462657471a30b32dc7e9ff3179bba",
+      "gitBlob": "642b55ab635e2c021d99c1aaf3e924ca2c5c0c29",
+      "format": "javascript",
+      "support": [
+        "user-timing/resources/user-timing-helper.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/measure-with-dict.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/measure-with-dict.any.js",
+      "sha256": "9fdc63e13d899f3bad040da20ac079671277f2d9144c518ff50ae91ef2267548",
+      "gitBlob": "b452feb0de6fbb4749208baf0153bb12ab79ef04",
+      "format": "javascript",
+      "support": [
+        "user-timing/resources/user-timing-helper.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {
+        "measure entries' detail and start/end are customizable": {
+          "category": "outside-assigned-surface",
+          "reason": "This case requires PerformanceObserver delivery as well as structured cloning of object detail. PerformanceObserver is outside the assigned now/mark/measure/query API surface, and no native structured-clone capability is available."
+        }
+      }
+    },
+    {
+      "path": "user-timing/measure_syntax_err.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/measure_syntax_err.any.js",
+      "sha256": "5e1587ce95cfb26fb9ee544e458fde58e2d234b8d514c4cc05052c62304a1f4a",
+      "gitBlob": "9b762a40906351500527b9464837f50c04f77f3b",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/structured-serialize-detail.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/structured-serialize-detail.any.js",
+      "sha256": "632d8d086b3ebcee2eae8080c43561d4093e0e415496a0edc882b68245e28b9e",
+      "gitBlob": "dcceffde278df17a1dcf86f9ee11c519bbdc1abd",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 9,
+      "blockedTests": {
+        "The detail property in the mark constructor should be structured-clone.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "The detail property in the mark method should be structured-clone.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "Mark: Throw an exception when the detail property cannot be structured-serialized.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "The detail property in the measure method should be structured-clone.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "The detail property in the measure method should be the same reference.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "Measure: Throw an exception when the detail property cannot be structured-serialized.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        },
+        "The detail object is cloned when passed to mark API.": {
+          "category": "compiler-capability",
+          "reason": "Object-valued User Timing detail requires HTML StructuredSerialize/StructuredDeserialize. This provider has no generated structured-clone capability; the source does not fake a clone."
+        }
+      }
+    },
+    {
+      "path": "user-timing/user-timing-tojson.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/user-timing-tojson.html",
+      "sha256": "bba6fb530d347f2cfe28d90f8327f51b1df1c0f8a72ee7ad877b300f696d531d",
+      "gitBlob": "6aef7fa904ab958a4c3f8600ea592fac418d0522",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 2,
+      "blockedTests": {}
+    },
+    {
+      "path": "user-timing/user_timing_exists.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/user_timing_exists.any.js",
+      "sha256": "82ab5156834e8183910b54b010a2b7e7bfd7388e744914ae0957c8fefe3aa07c",
+      "gitBlob": "adf9052ebd58d8b3bb7ad85bca385095212b38ea",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {}
+    }
+  ],
+  "support": [
+    {
+      "path": "user-timing/resources/user-timing-helper.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5ae85bf8267ac617833dc013dee9774c9e2a18b7/user-timing/resources/user-timing-helper.js",
+      "sha256": "0bb55d3f261a5beac0248e08e4837298ae0236dc85b53c460675a28a20c0370d",
+      "gitBlob": "8d43768ec2819620bf637c41918e8a6e6bc72181"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/LICENSE.md",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
+    "identifier": "BSD-3-Clause",
+    "note": "Copy the original licence bytes; preserve every existing fixture header and do not insert new text into upstream files."
+  },
+  "excludedNodeVendorPaths": [
+    {
+      "path": "hr-time/META.yml",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Upstream directory metadata, not a test.",
+      "sha256": "6d26db34016604f460c915e1073db157b45d35ddce69938bcaa2ab523ee0b2a7"
+    },
+    {
+      "path": "hr-time/clamped-time-origin-isolated.https.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "af535764f76d71e0fe7e4cfd6fd1b94f888aaf98fb405c604d9a21d3f3580e02"
+    },
+    {
+      "path": "hr-time/clamped-time-origin-isolated.https.html.headers",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "723a493a3656f2af2fa5ca1de0ca5c23efa9d6d7c44a568736ae3458b1124bf7"
+    },
+    {
+      "path": "hr-time/clamped-time-origin.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "10914c210d3f6ea7b16e172599aa8ef276051aa46596cf5271803c56e4e76d06"
+    },
+    {
+      "path": "hr-time/cross-origin-isolated-timing-attack.https.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "9890e75bdce3e32dbf30d28e37f6a4e9919724d497324c1b47af7e75cc035f93"
+    },
+    {
+      "path": "hr-time/cross-origin-isolated-timing-attack.https.html.headers",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "723a493a3656f2af2fa5ca1de0ca5c23efa9d6d7c44a568736ae3458b1124bf7"
+    },
+    {
+      "path": "hr-time/idlharness-shadowrealm.window.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "IDL and descriptor/exposure harness is outside the current fixed-layout source profile; focused constructor, brand, attributes and method controls cover this PR.",
+      "sha256": "490d94abcaf4f6d4bd847e9f12109bf2433276ee67cd7c894c674ef83450d286"
+    },
+    {
+      "path": "hr-time/idlharness.any.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "IDL and descriptor/exposure harness is outside the current fixed-layout source profile; focused constructor, brand, attributes and method controls cover this PR.",
+      "sha256": "370a9a1db4dc4756d3a32d426eed19494b822b02c798e1760adda4a299adb17f"
+    },
+    {
+      "path": "hr-time/navigation-start-post-before-unload.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "2bc2ec8d55b9d4277d0a8b070085cde2d141e2c41e91bd0530af3799ce8f2612"
+    },
+    {
+      "path": "hr-time/performance-tojson.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "fa96398bf0dc9a77855980f7034058b84c2e025a98d255a8d05675a0730cd5db"
+    },
+    {
+      "path": "hr-time/resources/clamped-time-origin.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "8a063f0d59eec73b6ac5450bb3533d6247a5cd36ce98e4acebed36934469589a"
+    },
+    {
+      "path": "hr-time/resources/now_frame.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "745137e501de2946a6a91be67fbcd5bc2c2639f24ffe79b60848da0a8b8b0d98"
+    },
+    {
+      "path": "hr-time/resources/post.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "27726ead3082a56ff6d58a6f49f1caf3d39c88cc970de7b20113ce1628184147"
+    },
+    {
+      "path": "hr-time/resources/timing-attack.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "3521167f07b9441860fa23db1f587cb39c90a1e56ea6d5ce53c8e85d84ef8c57"
+    },
+    {
+      "path": "hr-time/resources/unload-a.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "fe6eb6b327168545c1edde50ae3ebeeee73120d841192a44e5313479c7ba5e88"
+    },
+    {
+      "path": "hr-time/resources/unload-b.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "9dcab0c063712cc3272b6392183ef159113c460ba323fd7be97f50d5e1824501"
+    },
+    {
+      "path": "hr-time/resources/unload-c.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "af4d90efbb0d9df873832299b0b2ee5638cab0cd05cd5a5acf8be1d8c8daedba"
+    },
+    {
+      "path": "hr-time/resources/unload.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "413926ed9a591124938c52593d459ba0785d3d48f7c5ceca813914de72bef559"
+    },
+    {
+      "path": "hr-time/test_cross_frame_start.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "50e49e13a3a0d0e76298ba520283aa2de8939f1804ceb7fdc1b7afce61c62e01"
+    },
+    {
+      "path": "hr-time/timeOrigin.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "60ed9b4cbd0c8ae59a3b4a54ce9442df73012f9e10cd80ffede4d998b5fcc42f"
+    },
+    {
+      "path": "hr-time/timing-attack.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "05c05e81f96996f5f50b75195e436402d6a057a80e8022a9b8550e71891e64bd"
+    },
+    {
+      "path": "hr-time/unload-manual.html",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "8983e8826f5afa960fb34ad243e4cd2c83ef18889ed8b305fbb918cc5622f4c4"
+    },
+    {
+      "path": "hr-time/window-worker-timeOrigin.window.js",
+      "revision": "34cafd797e58dad280d20040eee012d49ccfa91f",
+      "reason": "Needs browser navigation/worker/cross-origin lifecycle or epoch-origin/provider security policy beyond the existing monotonic capability; no fake browser environment is supplied.",
+      "sha256": "ff95ce876c2f74533d8e111f948203e4fdd619c28b3cbcb6020cdbd1d3b09f2d"
+    },
+    {
+      "path": "user-timing/META.yml",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Upstream directory metadata, not a test.",
+      "sha256": "5279d740b16d3a836ec9debf989c57d5c77fc942503a2de767138855af745023"
+    },
+    {
+      "path": "user-timing/buffered-flag.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs PerformanceObserver delivery/support registry, which is outside the assigned four classes and timeline query methods.",
+      "sha256": "6083d1d1ca3c7812b4ef416198a58a4416a183f0c79c7a55c4a620cb88c642d4"
+    },
+    {
+      "path": "user-timing/case-sensitivity.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs PerformanceObserver delivery/support registry, which is outside the assigned four classes and timeline query methods.",
+      "sha256": "53cfdc5393f2ca2d07801cb5f96213c07b2dc1563267c8bd6b4d1a71673ff9be"
+    },
+    {
+      "path": "user-timing/clearMarks.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "9d20ff14277af23dd24b082da0a1f894272dce2edede676762c4264de26163ec"
+    },
+    {
+      "path": "user-timing/clearMeasures.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "90d7d00b7adf622dfb44adf194f7b0545e50a9079531ff2d2f5c4a5e8066bedc"
+    },
+    {
+      "path": "user-timing/idlharness-shadowrealm.window.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "IDL and descriptor/exposure harness is outside the current fixed-layout source profile; focused constructor, brand, attributes and method controls cover this PR.",
+      "sha256": "b1eafc58b166ba1a936fda1116ae0982f7d2b699cafb71548e95e0433e09fb6d"
+    },
+    {
+      "path": "user-timing/idlharness.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "IDL and descriptor/exposure harness is outside the current fixed-layout source profile; focused constructor, brand, attributes and method controls cover this PR.",
+      "sha256": "4b65531be521a6a3df731006b981c77850d2d1af553e7acd99190ed3f866f883"
+    },
+    {
+      "path": "user-timing/invoke_with_timing_attributes.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "8224f3addd5b4d40a0de2abbe390a88313e02421610767f8c016de47eb05109f"
+    },
+    {
+      "path": "user-timing/invoke_with_timing_attributes.worker.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Requires worker importScripts harness support, absent from this source-only VM adapter. Node v24.20.0 test/wpt/status/user-timing.json skips the same files for importScripts; focused source controls cover the non-Window reserved-name behavior.",
+      "sha256": "cd005f22b289418b82a8acc49c8a42154cd12dbb74d99275edeed25393129320"
+    },
+    {
+      "path": "user-timing/invoke_without_parameter.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "c1c5991eb3bf2f898595e2201b7ee288bc119be52ac4cafb277ceb8b92e38af6"
+    },
+    {
+      "path": "user-timing/mark.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "096518bcc50ab28c28a2647a6f17f5a162bc1ac98857c6027cdc8faf0c9c8720"
+    },
+    {
+      "path": "user-timing/mark_exceptions.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "69b5411da41474317afd63889aa3a3c5590135100f2274cc6f5618aac2137391"
+    },
+    {
+      "path": "user-timing/measure-exceptions.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "f1b2282d34d9af234a340358f2a34ed1e983e54c0f009e6a410bd8dadf74c17f"
+    },
+    {
+      "path": "user-timing/measure.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "fdcae1f31d8d8d44ce79cbf8abb5d809cae37e7fc91ed30f9d373abce7a9e0c1"
+    },
+    {
+      "path": "user-timing/measure_associated_with_navigation_timing.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "5e222816b717e53ccb2a1a1a88fbf068264b449f9146cd58fe00859d3f7214c6"
+    },
+    {
+      "path": "user-timing/measure_exception.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "5db50a59f8462f56f4be40084d89abeb397fcdc84feaf41b9b4121bd26c36783"
+    },
+    {
+      "path": "user-timing/measure_exceptions_navigation_timing.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "bd5e54c43ac416555e70cd1fffd11878861fe9104542e7422e144936bf7a8bdf"
+    },
+    {
+      "path": "user-timing/measure_navigation_timing.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "8b3b2f0950b39f0abbd12fa7a388fb47f8020086570a6d21d89b89d34b130cfa"
+    },
+    {
+      "path": "user-timing/measures.html",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs actual Window/document load/navigation timing or Worker/importScripts; the assigned environment has no browser lifecycle.",
+      "sha256": "312ac3ccb7f9c333aeadf1165a3fa17b3de4773c648f06adf67930a0d7c64c84"
+    },
+    {
+      "path": "user-timing/performance-measure-invalid.worker.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Requires worker importScripts harness support, absent from this source-only VM adapter. Node v24.20.0 test/wpt/status/user-timing.json skips the same files for importScripts; focused source controls cover the non-Window reserved-name behavior.",
+      "sha256": "1070142a7f6f964dbd969bbf147b459a8e2fd752abc41f19f4bdd43568f9fbcf"
+    },
+    {
+      "path": "user-timing/resources/webperftestharness.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Legacy helper used by the excluded Window/navigation and worker importScripts fixtures. It is not a standalone test and is not imported by this selected corpus.",
+      "sha256": "1d4d143cea730c7c16c839ecc8bde4d98860e54d546441796d3bc4fc74c3a0d9"
+    },
+    {
+      "path": "user-timing/resources/webperftestharnessextension.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Legacy helper used by the excluded Window/navigation and worker importScripts fixtures. It is not a standalone test and is not imported by this selected corpus.",
+      "sha256": "021eec118dcea77d8c56c98a3923b2e1c6a4bae8f9bcd3d301b62b9bd5ae761f"
+    },
+    {
+      "path": "user-timing/supported-usertiming-types.any.js",
+      "revision": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+      "reason": "Needs PerformanceObserver delivery/support registry, which is outside the assigned four classes and timeline query methods.",
+      "sha256": "4551f67ef2e7b38e9b6c2ba600eccbd47306055ca97c2fd467560357b944df93"
+    },
+    {
+      "path": "performance-timeline/META.yml",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Upstream directory metadata, not a test.",
+      "sha256": "6950da2b77ec05fe96947bcbeeb39b32d4cbefb970b978b297da3e028fd8e5c4"
+    },
+    {
+      "path": "performance-timeline/back-forward-cache-restoration.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "85b0be8f6d131744873139c9a0ae39aef8a36d734d127742311ddd9d68151cde"
+    },
+    {
+      "path": "performance-timeline/buffered-flag-after-timeout.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "4dfe0e65835578c82da0c081832a7ca01eff9e0d61e865c318fe193bffc43e80"
+    },
+    {
+      "path": "performance-timeline/buffered-flag-observer.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "d5fffee7629c4072b08acae23f96e136356173d27da4889409e3574a1f3d167c"
+    },
+    {
+      "path": "performance-timeline/case-sensitivity.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "4e3486a2ab0b3e8854b09bbc9c693710fb70470cf22ae33eb1a3e980757231b5"
+    },
+    {
+      "path": "performance-timeline/droppedentriescount.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "0f97c9aef578a557e07c5c0e980193092eb0f4861de5a71a97306d1bb3bc2093"
+    },
+    {
+      "path": "performance-timeline/get-invalid-entries.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "c8981d5fd0c9011160d424da95fde913b5d7c7c4807ae5eea72a3461ff0ed8f1"
+    },
+    {
+      "path": "performance-timeline/idlharness-shadowrealm.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "IDL and descriptor/exposure harness is outside the current fixed-layout source profile; focused constructor, brand, attributes and method controls cover this PR.",
+      "sha256": "318cb3d4b3b3e339b8fd6c7b2d3ea0144961a57e4f6d683c599b2be66ee2b7ea"
+    },
+    {
+      "path": "performance-timeline/idlharness.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "IDL and descriptor/exposure harness is outside the current fixed-layout source profile; focused constructor, brand, attributes and method controls cover this PR.",
+      "sha256": "1a84c7e9c4dfbc205e0d6dd02df50906366bc47f48af0f000bfc28026370e9a7"
+    },
+    {
+      "path": "performance-timeline/multiple-buffered-flag-observers.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "d6d3049de548c49122c8425d4a5d4fb1838ea6404db52c66d1926a254e4f9d89"
+    },
+    {
+      "path": "performance-timeline/navigation-id-detached-frame.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "8ee03714bb769265124e629e4c04b272599192f621731a6c0a049087e92d9ecf"
+    },
+    {
+      "path": "performance-timeline/navigation-id-element-timing.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "c5ef358342af0a549ee3b304f003169dd515b3d08497037c083a204d500d2eec"
+    },
+    {
+      "path": "performance-timeline/navigation-id-initial-load.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "2efe432837bf37190e294a723d50969f6346a8e2fb085c055daa711b71e2f0a6"
+    },
+    {
+      "path": "performance-timeline/navigation-id-long-task-task-attribution.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ad7a8a97e08b21c363022901a2bbe46de696356b838a8e681aca110dbb905a06"
+    },
+    {
+      "path": "performance-timeline/navigation-id-mark-measure.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "c625c0fe30c7ce5255a51330efa8898db618399f809234ee15a3fcd8683c8bca"
+    },
+    {
+      "path": "performance-timeline/navigation-id-reset.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "28c83763af760ced71e0811fa8b881a0e3d4a7e2d2e234f5f1a22c7a6f87b8c7"
+    },
+    {
+      "path": "performance-timeline/navigation-id-resource-timing.tentative.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "65abbcb2369e17303f00ae98dc27741454bd9e5334ea909dc5460d7a6daf2949"
+    },
+    {
+      "path": "performance-timeline/navigation-id-worker-created-entries.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "b27da70a1fa190d7dd137fe8a49138539b13181569b69c92d94acee174ac5a4d"
+    },
+    {
+      "path": "performance-timeline/navigation-id.helper.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "41255217af3efe9ef1744857bb3ff71516bcfb811fd0ce98dddee5466776ae82"
+    },
+    {
+      "path": "performance-timeline/not-clonable.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "f43a307fea55485415741389932be35cb0c12a7ea7ac58ed5a4169af0c9b3ac5"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/abort-block-bfcache.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "6bc2f51c5084b1c28c0285c0c7cf5d2b60497c0d9659aa4079088ffc357401b6"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-attributes.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "6272cb3e3c3b63735d4ee9cccddf91a1ded20479b203041c820a17bce3dc61da"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-bfcache-reasons-stay.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "f66a4e6db71f761b5f8e4482c1ac51a3f381550ddb5a6862a411c4196bd8bcf1"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-bfcache.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "0832a8cdcaa13389fa25a5f5357ad8e1a130d5c3b4569cc7f1c876d42eca1ad9"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-cross-origin-bfcache.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "3b188ca8276333e2c573e45bd38e852788e07d8671d72f41c13ef10537441929"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-fetch.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "017c9c171354fe01cd7ec49e8eb8432e05f1c0812cff308a8e8ed615322c156f"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-iframes-without-attributes.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "f717d46fa1d50116e660c9294434eb9e0373b161bdc889cb4a29dd7bfc7e0308"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-lock.https.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "348910b68bcbe9a4cd904a700191f4eecf668e4373fba64c06b02997960dc025"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-navigation-failure.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ef975de014f546ae0096f8deed94d61fc75c66938fbfec2589219d49835a9115"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-not-bfcached.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "bc52d7c14ba97d9e2a4ef8ac7c183d17b8ee54b8ba7e166563dc399160644243"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-redirect-on-history.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "c942cc89f2e79940a3a45d5be5945ecf9fa9f01a2e0515d0167a282369ce2fe7"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-reload.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "9c06762aeb6ef1e3ed16bc76d75774c6f1b3d1b793555a2fb25282d826526d08"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-same-origin-bfcache.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "36f59a2d75620c3431973123f390215fd274482b52d606fa2c8a8cee1f37aff7"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/performance-navigation-timing-same-origin-replace.tentative.window.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "a6a7f9114297a6a076ea9e6fc798a71b257f1646115092d1a12b53919b0b319b"
+    },
+    {
+      "path": "performance-timeline/not-restored-reasons/test-helper.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ce03188f4a930faa8db6d7d1099976bb53593d36fa8102822dcf0e0ceeb6c035"
+    },
+    {
+      "path": "performance-timeline/observer-buffered-false.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "157cf052f38e811fc066d577ac200592151a3997ba1981cd9f7f259f16d576c2"
+    },
+    {
+      "path": "performance-timeline/performanceobservers.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "5bdf0c8c54d9170740785cf4184e6a8fd4ddb2342e1213cf8aecbbd006425ae2"
+    },
+    {
+      "path": "performance-timeline/po-callback-mutate.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "338b471fc808a023e0e8f160334c912d3e644fb64269e4132035d842be0a751c"
+    },
+    {
+      "path": "performance-timeline/po-disconnect-removes-observed-types.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "03a336fede84373bac16d1a161cfb82b607c9b57fa23b4c552f9f7385993d1f8"
+    },
+    {
+      "path": "performance-timeline/po-disconnect.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "a7fa1d18dffd6cc17492b9bad0db1477c703383d2e4c778088873758f7ea7eb9"
+    },
+    {
+      "path": "performance-timeline/po-entries-sort.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "5e6175ef0682e2cd17f062d89972f84bffed13ca107235078284ff096e07c594"
+    },
+    {
+      "path": "performance-timeline/po-getentries.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "e1f11e314b4fbdd00530f714a5c8b6ad07ebf72b85df632f4f9d1bde99b1c425"
+    },
+    {
+      "path": "performance-timeline/po-mark-measure.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "5805780c4c34b6daf14bd00dd0c554dd7fb50417bc76fe69cd80768ae536e307"
+    },
+    {
+      "path": "performance-timeline/po-observe-repeated-type.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ab7e407dd5ec4b647bc14d27dbd4dadd21465f89a6bcf951b137ac4d31320beb"
+    },
+    {
+      "path": "performance-timeline/po-observe-type.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "d6189c132eed6f4f9711e235aeaee94b2420f567f29348bf5ed2d990c165cf08"
+    },
+    {
+      "path": "performance-timeline/po-observe.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "dbabce825f496cbff4c5d6d54ed5675e0630ad56697b9801b1ccd9dd92f0a09a"
+    },
+    {
+      "path": "performance-timeline/po-observe.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "3f4cf2a8d00dd55fa7d534467cf6da5779f53320322d3f97eadaba0f36a6b20e"
+    },
+    {
+      "path": "performance-timeline/po-resource.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "091c061b6ab929f5272071b2972eb3bce88bc8fe3139cbcc7aca9728ed59e243"
+    },
+    {
+      "path": "performance-timeline/po-takeRecords.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "3113e0a510aa2217bf9ddc6656585974d6014d251b51a265aff084afa5927581"
+    },
+    {
+      "path": "performance-timeline/resources/child-frame.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "65c8899a8bbdd59bccf1a9973256d3d08a573ad1db8b9e4a4390e35b47938776"
+    },
+    {
+      "path": "performance-timeline/resources/empty.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "performance-timeline/resources/going-back.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "06eeb411c2a1dd054a0a96073bab8e3ac2629099aac41e7829e026f380dc2350"
+    },
+    {
+      "path": "performance-timeline/resources/include-frames-helper.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "87a2d6cbe66e1b15ecbcac3b03fa8e74d3620ced884f548dd2401e5b721a858b"
+    },
+    {
+      "path": "performance-timeline/resources/include-frames-subframe.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "f9c0669ca50f8d12e15643101c64c23d09e194261f711eb7fbdf82fa8448094e"
+    },
+    {
+      "path": "performance-timeline/resources/json_resource.json",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "04ac9e69a061bc28f294da7666f06143a38cbeb0e30b2cc8797ade6ba7af5dd4"
+    },
+    {
+      "path": "performance-timeline/resources/make_long_task.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "a2873af0c1e7747805b5174f64e377bfd53468cd38aeb559d4d8d6b39a179563"
+    },
+    {
+      "path": "performance-timeline/resources/navigation-id-detached-frame-page.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "f2dcfada103dcc72e2bbd806efa49bbb7982d7ba545a09b21dc50cecf43ecd7c"
+    },
+    {
+      "path": "performance-timeline/resources/postmessage-entry.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ff2e67af932c2ba19b47b216670603fbcd64da20ba9e69c4fd37f179e57f6ec0"
+    },
+    {
+      "path": "performance-timeline/resources/square.png",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "1e73aca87cc819b9a827f3ee83c150d5ee34829121c25b3a1cf9136d0db12c51"
+    },
+    {
+      "path": "performance-timeline/resources/worker-invalid-entries.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "5ea48a98d72598f7f8e7287920ee8adcf1ebb8d5577d0ecb1173349584773235"
+    },
+    {
+      "path": "performance-timeline/resources/worker-navigation-id.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "b57b968c9abd153c6e92a87fa211d2f231f0a7b330a1ff493a8206211e1e15f3"
+    },
+    {
+      "path": "performance-timeline/resources/worker-with-performance-observer.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "34d24b1d4f7ad76eb043007fec624a49d1aeec8270f9d7e1d5945a1290787ddb"
+    },
+    {
+      "path": "performance-timeline/supportedEntryTypes-cross-realm-access.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "3bc3b8358b740298219e2fbfd5bbcfcb2825a01402ab004049b019712a701668"
+    },
+    {
+      "path": "performance-timeline/supportedEntryTypes.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "e669d9b019d094bf6498470bcbca54f8c9135a38bb463bcc6fbee8ecb82f4ace"
+    },
+    {
+      "path": "performance-timeline/tentative/detached-frame.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "235a8c23a09bce7329da02e0de84ab804d94ec5048edee793579653f5b1b253e"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-A-A.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "fea5ce727a688fa277544eb1c44a08b44e95b573322a302d2e7d0c37ad8e2b7e"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-A.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "0ea4d5f0d665a6011023d5c118c9e7c4e3db9729dd23c547ebc7e2eba953fa86"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-AA.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "aa550e6be470bc8d3c90f250a02df829b155c389a97dee7deca45353bed61095"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-AB.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "700c2def83bdbaa97e820e104948a310d3ffac2b6c0c54c6a6515bca651d4cac"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-B-A.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "fc2b501a5f6a94aa3da1e82f33b502964c045d6d1d3511c6ba2127af2926c516"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-B-B.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "b937318ae8520b1a6c8564efc4fc4d4c953d40cdfb2fb9c269e629cef733b859"
+    },
+    {
+      "path": "performance-timeline/tentative/include-frames-originA-B.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "02e2e786e95209ce3273f9d6f0380fb1a5b9f503d69f16948fd65188fb7e461f"
+    },
+    {
+      "path": "performance-timeline/tentative/performance-entry-source.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "71943ba9503d1a431276af5184dffcc85293130fa9dcd52c7bc40f8db63f3221"
+    },
+    {
+      "path": "performance-timeline/tentative/with-filter-options-originA.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ed16807469d7b9d458d43ab35df72b74bdcc6465bd26ba29e60ad9fbb02ca66c"
+    },
+    {
+      "path": "performance-timeline/timing-removed-iframe.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "ac3fe7b82dd74d516039cf026716837492753829c020339e288d28e84cd17b52"
+    },
+    {
+      "path": "performance-timeline/webtiming-resolution.any.js",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "974ec19c8dcf911c9eaed11dc1d2c50ae85c1c36b32b5b850ef9e78c495b9475"
+    },
+    {
+      "path": "performance-timeline/worker-with-performance-observer.html",
+      "revision": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+      "reason": "Broader timeline features (PerformanceObserver, resource/navigation entries, document/worker lifecycle and new entry IDs) are outside the assigned User Timing getter surface.",
+      "sha256": "5fe854966671896568c43dea7ad6ffb28050d466a62b6463ef08f933de46eced"
+    }
+  ],
+  "notClaimed": [
+    "PerformanceObserver",
+    "Navigation/resource/browser entries",
+    "Cross-context origin mapping or coarsening",
+    "New draft entry id/navigationId",
+    "Compiled nts execution"
+  ],
+  "sourceNote": "Copied byte-for-byte from Node24.20 fixtures at its recorded per-directory WPT pins; upstream identity verification recorded separately.",
+  "upstreamVerification": {
+    "method": "Every selected fixture, helper and retained LICENSE was downloaded from raw.githubusercontent.com/web-platform-tests/wpt at its manifest revision and compared byte-for-byte with the local file.",
+    "verifiedFiles": 24,
+    "date": "2026-10-28"
+  },
+  "nodeStatusContext": {
+    "repository": "https://github.com/nodejs/node/tree/v24.20.0/test/wpt/status",
+    "user-timing": "Node skips the two worker importScripts files and ShadowRealm IDL. The selected files have no named Node failures in this status file. Node own Performance implementation was not rerun here.",
+    "performance-timeline": "Node names id/navigationId IDL failures, unavailable location in the broader case-sensitivity file, flaky webtiming-resolution and browser/resource dependencies. These are outside the selected core entry JSON case."
+  }
+}

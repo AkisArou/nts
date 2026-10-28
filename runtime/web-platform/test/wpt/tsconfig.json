@@ -47,6 +47,7 @@
     "../wpt-promise-rejection-event.test.ts",
     "../promise-rejection-event-policy.test.ts",
     "../wpt-performance-adapter.test.ts",
-    "../performance-policy.test.ts"
+    "../performance-policy.test.ts",
+    "../wpt-performance.test.ts"
   ]
 }

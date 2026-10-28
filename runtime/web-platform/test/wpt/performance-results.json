@@ -1,0 +1,410 @@
+{
+  "date": "2026-10-28",
+  "environment": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "execution": "Fresh node:vm contexts inject the canonical source classes, backed only by the ordinary-node host provider monotonic capability.",
+    "compiledNts": "not verified; compiler and maintainers gate not run"
+  },
+  "baseline": {
+    "pullRequest": 27,
+    "commit": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
+    "method": "Archive the exact src and host paths from the base commit. Run the new unedited corpus and shared adapter against that archive with the same named blocks. Do not supply missing Performance globals or inherit Node web APIs. Collect registered results even when finish() separately reports a cleanup error."
+  },
+  "reviewedSourceCommit": "8003453d0b9109c33ef5fb66fac6b102c2eb2015",
+  "sourceGitBlobs": {
+    "src/performance/performance.ts": "4e67bf9178ffc18b90a3b1cd6b63e6de3d24e257",
+    "src/provider/performance.ts": "b3b4ae2bbfd7e6594f06c3d0826958747fcae1ba"
+  },
+  "manifestSHA256": "7bc7c13231f7ed82484a6b14691749d939470ba0fef8c4c437436ba6ca8f9562",
+  "wpt": {
+    "fixtureFiles": 22,
+    "supportFiles": 1,
+    "upstreamVerifiedFilesIncludingLicense": 24,
+    "beforeRegistered": 67,
+    "before": {
+      "pass": 1,
+      "fail": 55,
+      "blocked": 11
+    },
+    "beforeNotRegistered": 20,
+    "beforeHarnessErrors": 1,
+    "afterRegistered": 87,
+    "after": {
+      "pass": 76,
+      "fail": 0,
+      "blocked": 11
+    },
+    "perFile": [
+      {
+        "path": "hr-time/basic.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 5,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "hr-time/monotonic-clock.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "performance-timeline/performanceentry-tojson.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/clear_all_marks.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/clear_all_measures.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/clear_non_existent_mark.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/clear_non_existent_measure.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/clear_one_mark.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/clear_one_measure.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/entry_type.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/mark-entry-constructor.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 4,
+          "blocked": 2
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 2
+        }
+      },
+      {
+        "path": "user-timing/mark-errors.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 10,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 10,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/mark-l3.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 1
+        },
+        "after": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 1
+        }
+      },
+      {
+        "path": "user-timing/mark-measure-feature-detection.html",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/mark-measure-return-objects.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 5,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/mark.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 22,
+          "fail": 0,
+          "blocked": 0
+        },
+        "beforeNotRegistered": 20
+      },
+      {
+        "path": "user-timing/measure-l3.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 3,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/measure-with-dict.any.js",
+        "before": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 1
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 1
+        },
+        "beforeHarnessErrors": [
+          "ReferenceError: performance is not defined"
+        ]
+      },
+      {
+        "path": "user-timing/measure_syntax_err.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 5,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/structured-serialize-detail.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 7
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 7
+        }
+      },
+      {
+        "path": "user-timing/user-timing-tojson.html",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "user-timing/user_timing_exists.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 4,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        }
+      }
+    ],
+    "baselineCaveats": [
+      "mark.any.js fills expectedTimes in two initial tests, then registers ten checks per successful setup entry. Missing mark() prevents both setup entries: the baseline has two failures and twenty checks never register. They are not counted as failures or exclusions.",
+      "measure-with-dict.any.js has an apparent baseline pass because dereferencing the absent performance object itself throws TypeError. Its registered cleanup then raises ReferenceError: performance is not defined; this is recorded as a separate harness error. That baseline pass provides no API conformance evidence.",
+      "mark-errors.any.js extracts the unbound performance.mark method. Some checks can pass from receiver TypeError rather than the intended argument conversion; focused bound-call source controls cover those inputs."
+    ]
+  },
+  "sourceControls": {
+    "file": "../performance-policy.test.ts",
+    "pass": 30,
+    "fail": 0,
+    "details": "Includes deterministic clock call counting and origin alignment, conversions and error ordering, all measure argument combinations, most recent marks, timeline queries and clearing, missing capabilities, explicit initialization, and genuine host structuredClone boundary controls. The test-only clone adapter is not installed in ordinary-provider WPT."
+  },
+  "adapterControls": {
+    "file": "../wpt-performance-adapter.test.ts",
+    "pass": 2,
+    "fail": 0,
+    "positiveAssertions": 6,
+    "deliberatelyFailingAssertionsDetected": 7
+  },
+  "commands": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exit": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exit": 0
+    },
+    {
+      "command": "node --expose-gc --test runtime/web-platform/test/wpt-performance.test.ts runtime/web-platform/test/wpt-performance-adapter.test.ts runtime/web-platform/test/performance-policy.test.ts",
+      "exit": 0,
+      "nodeTestTotals": {
+        "tests": 142,
+        "pass": 131,
+        "fail": 0,
+        "skipped": 11
+      },
+      "note": "Node test totals include the outer suite and per-file wrapper subtests; actual WPT case counts are recorded above."
+    }
+  ],
+  "sabotage": {
+    "mutation": "Replace the canonical Performance.now implementation with return 0, without changing any fixture or adapter.",
+    "fixture": "hr-time/monotonic-clock.any.js",
+    "sabotageExit": 1,
+    "sabotagedCases": {
+      "pass": 1,
+      "fail": 1,
+      "blocked": 0
+    },
+    "restoredExit": 0,
+    "restoredCases": {
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    "restoredByteIdentical": true,
+    "sourceSha256": "629552a099b653d59dccaabc75f788b943f37ecbdaae909014ce97ae6d313de8"
+  },
+  "adapterChanges": [
+    {
+      "file": "harness.ts",
+      "name": "assert_approx_equals",
+      "behavior": "Pinned testharness.js inclusive epsilon comparison for finite operands; rejects non-number actual values; coercing isFinite for expected; exact equality for two non-finite operands."
+    },
+    {
+      "file": "tsconfig.json",
+      "name": "Performance driver and control registration",
+      "behavior": "Adds the three new test files to strict TypeScript checking."
+    }
+  ],
+  "nativeCapabilitiesMissing": [
+    "Correlated selected-environment epoch origin in the same clock domain as runtime.monotonicMilliseconds(). No Date.now()-now approximation is supplied.",
+    "StructuredSerialize/StructuredDeserialize for object-valued detail, supplied as a result value across the binding. The ordinary provider exposes no such capability."
+  ],
+  "notVerified": [
+    "Compiled nts execution and maintainers full gate.",
+    "Browser/worker lifecycle, coarsening/security profile, cross-context clock comparability and suspend behavior.",
+    "PerformanceObserver/resource/navigation timelines; latest PerformanceEntry id/navigationId fields; descriptor flags and full IDL harness.",
+    "Global exposure is delegated to a separate provider bootstrap pull request."
+  ]
+}
