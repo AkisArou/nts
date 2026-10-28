@@ -103,3 +103,64 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+// BEGIN BIGINT NOBLE BLS12 381: complete original workload checks.
+{
+  const name = "jetstream-bigint-noble-bls12-381";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { seed, work } = await import("./cases/jetstream-bigint-noble-bls12-381/case.ts");
+    const { G2_VECTORS, runNobleBenchmark } = await import("./cases/jetstream-bigint-noble-bls12-381/benchmark.ts");
+    type BenchmarkResult = import("./cases/jetstream-bigint-noble-bls12-381/benchmark.ts").BenchmarkResult;
+    // Independent full original-operation oracle; root retains absent-directory gating.
+
+
+
+
+    function blsBytesHex(value: Uint8Array): string { return Buffer.from(value).toString("hex"); }
+
+    function blsOriginalRecord(result: BenchmarkResult) {
+      return {
+        pairing: blsBytesHex(result.pairing.toBytes()), publicKey: blsBytesHex(result.publicKey),
+        signature: result.signature.toHex(), verified: result.verified,
+        aggregatePublicKey: result.aggregatePublicKey.toHex(), aggregateSignature: result.aggregateSignature.toHex(),
+        hashG1: result.hashG1.toHex(), hashG2: result.hashG2.toHex(),
+        vectorPublicKeys: result.vectorPublicKeys.map(blsBytesHex),
+        raw: [result.pairing.c0.c0.c0.value, result.signature.x.c0.value,
+          result.aggregatePublicKey.x.value, result.aggregateSignature.x.c0.value,
+          result.hashG1.x.value, result.hashG2.x.c0.value].map(String)
+      };
+    }
+
+    test("JetStream Noble BLS12-381 preserves complete original operation results", async () => {
+      assert.equal(seed, 1);
+      assert.equal(G2_VECTORS.length, 32);
+      assert.ok(G2_VECTORS.every(vector => vector.length === 3));
+      const result = await runNobleBenchmark();
+      assert.equal(result.vectorPublicKeys.length, 32);
+      assert.ok(result.vectorPublicKeys.every(key => key.length === 48));
+      assert.equal(result.pairing.toBytes().length, 576);
+      assert.equal(result.verified, true);
+      assert.equal(createHash("sha256").update(JSON.stringify(blsOriginalRecord(result))).digest("hex"),
+        "8c5c6fee0dfc2d706d6987b0a0f4034bf661a42c5e741edde63e864e093a6372");
+    });
+
+    test("JetStream Noble BLS12-381 awaits whole deterministic iterations", async () => {
+      assert.equal(await work(0), 0);
+      assert.equal(await work(1), 1288326282);
+      assert.equal(await work(2), 549204404);
+    });
+  }
+}
+// END BIGINT NOBLE BLS12 381.
+
+
