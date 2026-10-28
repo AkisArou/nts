@@ -725,3 +725,13 @@ suite("WebSocketStream queues a provider close failure before settling its reada
   assert.ok(error instanceof WebSocketError);
   await assert.rejects(read, (reason: unknown) => reason === error);
 });
+
+// Draft section 4.3 and Web IDL DOMString/default conversion distinguish null.
+suite("WebSocketError defaults only an omitted or undefined message", () => {
+  assert.equal(new WebSocketError().message, "");
+  assert.equal(new WebSocketError(undefined).message, "");
+  // @ts-expect-error -- JavaScript null must undergo DOMString conversion.
+  assert.equal(new WebSocketError(null).message, "null");
+  assert.equal(new WebSocketError("").message, "");
+  assert.equal(new WebSocketError("\ud800").message, "\ud800", "message is DOMString, not USVString");
+});
