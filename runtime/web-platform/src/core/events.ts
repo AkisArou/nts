@@ -276,12 +276,17 @@ for (const [name, value] of [
   ["AT_TARGET", 2],
   ["BUBBLING_PHASE", 3],
 ] as const) {
-  Object.defineProperty(Event.prototype, name, {
-    value,
-    writable: false,
-    enumerable: true,
-    configurable: false,
-  });
+  // TypeScript's static readonly declaration does not enforce these attributes
+  // at run time. Web IDL requires the same descriptor on both objects.
+  // https://webidl.spec.whatwg.org/#es-constants
+  for (const owner of [Event, Event.prototype]) {
+    Object.defineProperty(owner, name, {
+      value,
+      writable: false,
+      enumerable: true,
+      configurable: false,
+    });
+  }
 }
 // Web IDL member attributes. Safe now: the dispatch algorithm's grip on Event object and
 // the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
