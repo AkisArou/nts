@@ -26,20 +26,22 @@ const abortSignalConstructorKey: unique symbol = Symbol("construct NTS AbortSign
 
 export class AbortSignal extends EventTarget implements AbortSignalOperations {
   readonly [abortSignalBrand] = true;
-  private isAborted = false;
-  private abortReason: unknown = undefined;
-  private firstAlgorithm: AbortAlgorithm | null = null;
-  private lastAlgorithm: AbortAlgorithm | null = null;
-  private runningAlgorithms = false;
-  private readonly sourceSignals: WeakRef<AbortSignal>[] = [];
-  private readonly dependentSignals: WeakRef<AbortSignal>[] = [];
-  private readonly retainedDependents: AbortSignal[] = [];
-  private selfReference: WeakRef<AbortSignal> | null = null;
-  private dependentCleanup: FinalizationRegistry<WeakRef<AbortSignal>> | null = null;
-  private abortListenerCount = 0;
-  private abortAlgorithmCount = 0;
-  private retainedBySources = false;
-  private readonly abortHandler: EventHandlerSlot<AbortSignal, Event> = {
+  // DOM abort state is stored in internal slots, not ordinary script properties.
+  // https://dom.spec.whatwg.org/#interface-abortsignal
+  #isAborted = false;
+  #abortReason: unknown = undefined;
+  #firstAlgorithm: AbortAlgorithm | null = null;
+  #lastAlgorithm: AbortAlgorithm | null = null;
+  #runningAlgorithms = false;
+  readonly #sourceSignals: WeakRef<AbortSignal>[] = [];
+  readonly #dependentSignals: WeakRef<AbortSignal>[] = [];
+  readonly #retainedDependents: AbortSignal[] = [];
+  #selfReference: WeakRef<AbortSignal> | null = null;
+  #dependentCleanup: FinalizationRegistry<WeakRef<AbortSignal>> | null = null;
+  #abortListenerCount = 0;
+  #abortAlgorithmCount = 0;
+  #retainedBySources = false;
+  readonly #abortHandler: EventHandlerSlot<AbortSignal, Event> = {
     callback: null,
     listener: null,
   };
@@ -55,28 +57,28 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   }
 
   get onabort(): ((this: AbortSignal, event: Event) => void) | null {
-    return this.abortHandler.callback;
+    return this.#abortHandler.callback;
   }
 
   set onabort(callback: ((this: AbortSignal, event: Event) => void) | null) {
-    this[eventTargetSetHandler](this, this.abortHandler, "abort", callback, (_event): _event is Event => true);
+    this[eventTargetSetHandler](this, this.#abortHandler, "abort", callback, (_event): _event is Event => true);
   }
 
   get aborted(): boolean {
-    return this.isAborted;
+    return this.#isAborted;
   }
 
   get reason(): unknown {
-    return this.abortReason;
+    return this.#abortReason;
   }
 
   throwIfAborted(): void {
-    if (this.isAborted) throw this.abortReason;
+    if (this.#isAborted) throw this.#abortReason;
   }
 
   /** Internal cancellation algorithms cannot be blocked by stopImmediatePropagation. */
   [abortSignalSubscribe](callback: () => void): () => void {
-    if (this.isAborted) {
+    if (this.#isAborted) {
       try {
         callback();
       } catch (error) {
@@ -87,13 +89,13 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     const algorithm: AbortAlgorithm = {
       callback,
       active: true,
-      previous: this.lastAlgorithm,
+      previous: this.#lastAlgorithm,
       next: null,
     };
-    if (this.lastAlgorithm === null) this.firstAlgorithm = algorithm;
-    else this.lastAlgorithm.next = algorithm;
-    this.lastAlgorithm = algorithm;
-    this.abortAlgorithmCount++;
+    if (this.#lastAlgorithm === null) this.#firstAlgorithm = algorithm;
+    else this.#lastAlgorithm.next = algorithm;
+    this.#lastAlgorithm = algorithm;
+    this.#abortAlgorithmCount++;
     this.#updateSourceRetention();
     return () => this.#removeAlgorithm(algorithm);
   }
@@ -133,23 +135,25 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       if (!isObject(result)) throw new TypeError("The signal iterator result must be an object");
       if (result.done) break;
       const signal = result.value;
-      if (!(signal instanceof AbortSignal))
+      // Interface conversion tests the brand, independently of the prototype chain.
+      // https://webidl.spec.whatwg.org/#es-interface
+      if (!isObject(signal) || !(#isAborted in signal))
         throw new TypeError("signals must contain AbortSignal values");
       converted.push(signal);
     }
 
     const result = new AbortSignal(abortSignalConstructorKey);
     for (const signal of converted) {
-      if (signal.aborted) {
-        result[abortSignalTrigger](signal.reason);
+      if (signal.#isAborted) {
+        result[abortSignalTrigger](signal.#abortReason);
         return result;
       }
     }
 
     for (const signal of converted) {
-      if (signal.sourceSignals.length === 0) result.#addSourceSignal(signal);
+      if (signal.#sourceSignals.length === 0) result.#addSourceSignal(signal);
       else {
-        for (const sourceReference of signal.sourceSignals) {
+        for (const sourceReference of signal.#sourceSignals) {
           const source = sourceReference.deref();
           if (source !== undefined) result.#addSourceSignal(source);
         }
@@ -173,37 +177,37 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   }
 
   #markAborted(reason: unknown): boolean {
-    if (this.isAborted) return false;
-    this.isAborted = true;
-    this.abortReason = reason === undefined ? abortError() : reason;
+    if (this.#isAborted) return false;
+    this.#isAborted = true;
+    this.#abortReason = reason === undefined ? abortError() : reason;
     return true;
   }
 
   #markDependentsAborted(): AbortSignal[] {
     const pending: AbortSignal[] = [];
-    const cleanup = this.dependentCleanup;
-    for (const reference of this.dependentSignals) {
+    const cleanup = this.#dependentCleanup;
+    for (const reference of this.#dependentSignals) {
       cleanup?.unregister(reference);
       const dependent = reference.deref();
-      if (dependent !== undefined && dependent.#markAborted(this.abortReason))
+      if (dependent !== undefined && dependent.#markAborted(this.#abortReason))
         pending.push(dependent);
     }
-    this.dependentSignals.length = 0;
-    this.retainedDependents.length = 0;
+    this.#dependentSignals.length = 0;
+    this.#retainedDependents.length = 0;
     return pending;
   }
 
   #runAbortSteps(): void {
-    let algorithm = this.firstAlgorithm;
-    this.firstAlgorithm = null;
-    this.lastAlgorithm = null;
-    this.runningAlgorithms = true;
+    let algorithm = this.#firstAlgorithm;
+    this.#firstAlgorithm = null;
+    this.#lastAlgorithm = null;
+    this.#runningAlgorithms = true;
     try {
       while (algorithm !== null) {
         const next = algorithm.next;
         if (algorithm.active) {
           algorithm.active = false;
-          this.abortAlgorithmCount--;
+          this.#abortAlgorithmCount--;
           try {
             algorithm.callback();
           } catch (error) {
@@ -215,8 +219,8 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
         algorithm = next;
       }
     } finally {
-      this.runningAlgorithms = false;
-      this.abortAlgorithmCount = 0;
+      this.#runningAlgorithms = false;
+      this.#abortAlgorithmCount = 0;
       this.#updateSourceRetention();
     }
     this[eventTargetDispatchTrusted](new Event("abort"));
@@ -225,25 +229,25 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   #removeAlgorithm(algorithm: AbortAlgorithm): void {
     if (!algorithm.active) return;
     algorithm.active = false;
-    this.abortAlgorithmCount--;
+    this.#abortAlgorithmCount--;
     this.#updateSourceRetention();
-    if (this.runningAlgorithms) return;
+    if (this.#runningAlgorithms) return;
 
     const previous = algorithm.previous;
     const next = algorithm.next;
-    if (previous === null) this.firstAlgorithm = next;
+    if (previous === null) this.#firstAlgorithm = next;
     else previous.next = next;
-    if (next === null) this.lastAlgorithm = previous;
+    if (next === null) this.#lastAlgorithm = previous;
     else next.previous = previous;
     algorithm.previous = null;
     algorithm.next = null;
   }
 
   #addSourceSignal(source: AbortSignal): void {
-    for (const reference of this.sourceSignals) if (reference.deref() === source) return;
+    for (const reference of this.#sourceSignals) if (reference.deref() === source) return;
 
     const sourceReference = source.#reference();
-    this.sourceSignals.push(sourceReference);
+    this.#sourceSignals.push(sourceReference);
     source.#addDependentSignal(this, this.#reference());
   }
 
@@ -251,73 +255,73 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     dependent: AbortSignal,
     dependentReference: WeakRef<AbortSignal>,
   ): void {
-    this.dependentSignals.push(dependentReference);
-    if (this.dependentCleanup === null) {
+    this.#dependentSignals.push(dependentReference);
+    if (this.#dependentCleanup === null) {
       const sourceReference = this.#reference();
-      this.dependentCleanup = new FinalizationRegistry((reference) => {
+      this.#dependentCleanup = new FinalizationRegistry((reference) => {
         // Written out rather than optionally chained: an optional chain cannot carry a
         // private identifier, and the receiver is another instance of this class.
         const source = sourceReference.deref();
         if (source !== undefined) source.#removeDependentSignal(reference);
       });
     }
-    this.dependentCleanup.register(dependent, dependentReference, dependentReference);
+    this.#dependentCleanup.register(dependent, dependentReference, dependentReference);
   }
 
   #removeDependentSignal(reference: WeakRef<AbortSignal>): void {
-    this.dependentCleanup?.unregister(reference);
-    const index = this.dependentSignals.indexOf(reference);
+    this.#dependentCleanup?.unregister(reference);
+    const index = this.#dependentSignals.indexOf(reference);
     if (index < 0) return;
-    for (let read = index + 1; read < this.dependentSignals.length; read++) {
-      const current = this.dependentSignals[read];
-      if (current !== undefined) this.dependentSignals[read - 1] = current;
+    for (let read = index + 1; read < this.#dependentSignals.length; read++) {
+      const current = this.#dependentSignals[read];
+      if (current !== undefined) this.#dependentSignals[read - 1] = current;
     }
-    this.dependentSignals.length--;
+    this.#dependentSignals.length--;
   }
 
   #retainDependentSignal(dependent: AbortSignal): void {
-    if (!this.retainedDependents.includes(dependent)) this.retainedDependents.push(dependent);
+    if (!this.#retainedDependents.includes(dependent)) this.#retainedDependents.push(dependent);
   }
 
   #releaseDependentSignal(dependent: AbortSignal): void {
-    const index = this.retainedDependents.indexOf(dependent);
+    const index = this.#retainedDependents.indexOf(dependent);
     if (index < 0) return;
-    for (let read = index + 1; read < this.retainedDependents.length; read++) {
-      const current = this.retainedDependents[read];
-      if (current !== undefined) this.retainedDependents[read - 1] = current;
+    for (let read = index + 1; read < this.#retainedDependents.length; read++) {
+      const current = this.#retainedDependents[read];
+      if (current !== undefined) this.#retainedDependents[read - 1] = current;
     }
-    this.retainedDependents.length--;
+    this.#retainedDependents.length--;
   }
 
   #detachFromSources(): void {
-    if (this.selfReference !== null) {
-      for (const reference of this.sourceSignals) {
+    if (this.#selfReference !== null) {
+      for (const reference of this.#sourceSignals) {
         const source = reference.deref();
-        if (source !== undefined) source.#removeDependentSignal(this.selfReference);
+        if (source !== undefined) source.#removeDependentSignal(this.#selfReference);
       }
     }
-    this.sourceSignals.length = 0;
-    this.retainedBySources = false;
+    this.#sourceSignals.length = 0;
+    this.#retainedBySources = false;
   }
 
   #reference(): WeakRef<AbortSignal> {
-    if (this.selfReference === null) this.selfReference = new WeakRef(this);
-    return this.selfReference;
+    if (this.#selfReference === null) this.#selfReference = new WeakRef(this);
+    return this.#selfReference;
   }
 
   #observeListener(type: string, added: boolean): void {
     if (type !== "abort") return;
-    if (added) this.abortListenerCount++;
-    else this.abortListenerCount--;
+    if (added) this.#abortListenerCount++;
+    else this.#abortListenerCount--;
     this.#updateSourceRetention();
   }
 
   #updateSourceRetention(): void {
-    const shouldRetain = !this.isAborted && this.abortListenerCount + this.abortAlgorithmCount > 0;
-    if (shouldRetain === this.retainedBySources) return;
+    const shouldRetain = !this.#isAborted && this.#abortListenerCount + this.#abortAlgorithmCount > 0;
+    if (shouldRetain === this.#retainedBySources) return;
 
-    this.retainedBySources = shouldRetain;
-    for (const reference of this.sourceSignals) {
+    this.#retainedBySources = shouldRetain;
+    for (const reference of this.#sourceSignals) {
       const source = reference.deref();
       if (source === undefined) continue;
       if (shouldRetain) source.#retainDependentSignal(this);
@@ -347,14 +351,14 @@ Object.defineProperty(AbortSignal.prototype, Symbol.toStringTag, {
 
 
 export class AbortController {
-  private readonly controllerSignal = createAbortSignal();
+  readonly #controllerSignal = createAbortSignal();
 
   get signal(): AbortSignal {
-    return this.controllerSignal;
+    return this.#controllerSignal;
   }
 
   abort(reason?: unknown): void {
-    this.controllerSignal[abortSignalTrigger](reason);
+    this.#controllerSignal[abortSignalTrigger](reason);
   }
 }
 // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
