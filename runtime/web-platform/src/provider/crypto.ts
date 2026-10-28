@@ -568,7 +568,8 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * of support. A query failure is a value, which shared code maps to false.
    * No randomness, scheduled crypto task, cryptographic probe or retained input.
    * A composed operation first queries its additional algorithm and stops on
-   * false before normalizing or querying the primary algorithm (§3.2.6).
+   * false before normalizing/querying the primary operation. KEM composition
+   * first normalizes its algorithm to obtain the shared-key length (§3.2.6).
    * https://wicg.github.io/webcrypto-modern-algos/#partial-subtlecrypto-interface-checking-support-for-algorithm
    */
   supports(query: CryptoSupportQuery): boolean | CryptoFailure;

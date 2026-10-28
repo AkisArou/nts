@@ -48,8 +48,9 @@ function hashBits(hash: CryptoDigestName): number {
 
 /**
  * Modern Algorithms §3.3. Walk the parameter-only operation steps, stopping
- * before key/data-dependent work. The native query receives scalar metadata,
- * never author objects, CryptoKeys, messages, secrets or BufferSource copies.
+ * before key/data-dependent work. The native query receives scalar metadata
+ * and borrowed public RSA exponent bytes, never author objects, CryptoKeys,
+ * messages, secrets or BufferSource copies.
  */
 function supportParameters(
   algorithm: NormalizedAlgorithm, operation: CryptoSupportOperation, length: number | null,
@@ -255,7 +256,8 @@ function acceptsSharedKey(algorithm: NormalizedAlgorithm, length: number): boole
 /**
  * Modern Algorithms §§3.2.6–3.3, after Web IDL's overload/argument conversion.
  * Each native query is metadata only. A composed check queries the target first
- * and stops on false before any primary-algorithm getter or capability query.
+ * and stops on false before the primary operation's normalization/query. KEM
+ * composition first normalizes its algorithm to obtain the shared-key length.
  * https://wicg.github.io/webcrypto-modern-algos/#SubtleCrypto-method-supports
  */
 export function cryptoSupports(
