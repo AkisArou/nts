@@ -25,6 +25,8 @@ export type CryptoOperation =
   | "digest"
   | "generateKey"
   | "deriveBits"
+  // supports() also normalizes this public name; it has no direct registration.
+  | "deriveKey"
   | "importKey"
   | "exportKey"
   | "wrapKey"

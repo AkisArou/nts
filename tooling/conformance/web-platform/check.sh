@@ -81,6 +81,7 @@ node tooling/conformance/web-platform/host-tests.ts \
   runtime/web-platform/test/crypto-rsa.test.ts \
   runtime/web-platform/test/crypto-runtime.test.ts \
   runtime/web-platform/test/crypto-sha3-kmac.test.ts \
+  runtime/web-platform/test/crypto-supports.test.ts \
   runtime/web-platform/test/wpt-harness.test.ts \
   runtime/web-platform/test/wpt-generated-tests.test.ts \
   runtime/web-platform/test/wpt-runner.test.ts \

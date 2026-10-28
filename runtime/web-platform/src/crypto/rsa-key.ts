@@ -104,7 +104,7 @@ function intersectUsages(name: string, type: "public" | "private", usages: reado
 }
 
 /** §20.5's bounds need only byte inspection, never big-integer arithmetic. */
-function generationExponent(algorithm: RsaHashedKeyGenParams): Uint8Array {
+export function rsaGenerationExponent(algorithm: RsaHashedKeyGenParams): Uint8Array {
   const exponent = minimalUnsigned(algorithm.publicExponent);
   const length = cryptoViewByteLength(exponent);
   const bits = bitLength(exponent);
@@ -140,7 +140,7 @@ export function generateRsaKey(
 ): CryptoKeyPair {
   if (!(algorithm instanceof RsaHashedKeyGenParams)) throw new DOMException("Expected RSA generation parameters", "NotSupportedError");
   validateUsages(algorithm.name, "pair", usages);
-  const publicExponent = generationExponent(algorithm);
+  const publicExponent = rsaGenerationExponent(algorithm);
   const pair = provider.generateKeyPair({ family: "RSA", modulusLength: algorithm.modulusLength, publicExponent });
   if ("failure" in pair) throw new DOMException("RSA key generation failed", "OperationError");
   rsaRecord(pair.publicKey, "public", algorithm.modulusLength, publicExponent);

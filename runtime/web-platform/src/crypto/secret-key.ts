@@ -83,7 +83,7 @@ function requireSecretLength(name: string, length: number, error: "OperationErro
   }
 }
 
-function hmacDefaultLength(hash: CryptoDigestName): number {
+export function hmacDefaultLength(hash: CryptoDigestName): number {
   // This increment follows Node 24.20's public profile: SHA-3 HMAC is
   // supported with an explicit length, but has no supported omitted default.
   if (hash === "SHA3-256" || hash === "SHA3-384" || hash === "SHA3-512") {
