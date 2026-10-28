@@ -46,6 +46,48 @@ function verified(root: URL, source: WptSource): string {
   return bytes.toString("utf8");
 }
 
+/** Execute verified classic HTML scripts in order, without emulating a DOM. */
+export function runWptHtmlScripts(
+  harness: WptHarness,
+  source: string,
+  fixture: WptFixture,
+  support: ReadonlyMap<string, string>,
+): void {
+  const harnessScripts: string[] = [];
+  const dependencies: string[] = [];
+  const scripts: { source: string; path: string; lineOffset: number }[] = [];
+  for (const match of source.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    const attributes = match[1] ?? "";
+    assert.doesNotMatch(attributes, /\b(?:type|async|defer|nomodule)\b/i);
+    const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes);
+    if (src !== null) {
+      const reference = src[1] ?? src[2] ?? src[3];
+      assert.ok(reference);
+      const url = new URL(reference, `https://wpt.invalid/${fixture.path}`);
+      assert.equal(url.origin, "https://wpt.invalid", "HTML support must be a local pinned path");
+      assert.equal(url.search, "", "HTML support cannot require server-side parameters");
+      assert.equal(url.hash, "", "HTML support fragments are not supported");
+      const path = url.pathname.slice(1);
+      if (path === "resources/testharness.js" || path === "resources/testharnessreport.js") {
+        harnessScripts.push(reference);
+      } else {
+        dependencies.push(path);
+        const script = support.get(path);
+        assert.notEqual(script, undefined, `unpinned HTML support script: ${path}`);
+        scripts.push({ source: script!, path, lineOffset: 0 });
+      }
+    } else {
+      const openingEnd = source.indexOf(">", match.index) + 1;
+      const lineOffset = source.slice(0, openingEnd).split("\n").length - 1;
+      scripts.push({ source: match[2] ?? "", path: fixture.path, lineOffset });
+    }
+  }
+  // Validate the complete dependency plan before executing any fixture code.
+  assert.deepEqual(harnessScripts, fixture.harnessScripts, "HTML harness imports must match manifest");
+  assert.deepEqual(dependencies, fixture.support, "HTML scripts must match pinned dependencies");
+  for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
+}
+
 /** Run an area manifest with only the globals supplied by its source provider. */
 export async function runWptFixtures(
   suite: TestContext,
@@ -72,32 +114,17 @@ export async function runWptFixtures(
         assert.ok(reference);
         return new URL(reference, `https://wpt.invalid/${fixture.path}`).pathname.slice(1);
       });
-      assert.deepEqual(scripts, fixture.support, "META scripts must match pinned dependencies");
-      for (const path of scripts) {
-        const script = support.get(path);
-        assert.notEqual(script, undefined, `unpinned support script: ${path}`);
-        harness.run(script!, path);
-      }
-      if (fixture.format === "javascript") harness.run(source, fixture.path);
-      else {
-        // This is extraction of the pinned HTML's script text, not a DOM emulator.
-        // These fixtures have ordinary inline scripts and harness imports only.
-        const external: string[] = [];
-        for (const match of source.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
-          const attributes = match[1] ?? "";
-          assert.doesNotMatch(attributes, /\b(?:type|async|defer|nomodule)\b/i);
-          const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes);
-          if (src !== null) {
-            const path = src[1] ?? src[2] ?? src[3];
-            assert.ok(path === "/resources/testharness.js" || path === "/resources/testharnessreport.js");
-            external.push(path);
-          } else {
-            const openingEnd = source.indexOf(">", match.index) + 1;
-            const lineOffset = source.slice(0, openingEnd).split("\n").length - 1;
-            harness.run(match[2] ?? "", fixture.path, lineOffset);
-          }
+      if (fixture.format === "javascript") {
+        assert.deepEqual(scripts, fixture.support, "META scripts must match pinned dependencies");
+        for (const path of scripts) {
+          const script = support.get(path);
+          assert.notEqual(script, undefined, `unpinned support script: ${path}`);
+          harness.run(script!, path);
         }
-        assert.deepEqual(external, fixture.harnessScripts, "HTML harness imports must match manifest");
+        harness.run(source, fixture.path);
+      } else {
+        assert.equal(scripts.length, 0, "HTML dependencies must use classic script elements");
+        runWptHtmlScripts(harness, source, fixture, support);
       }
       const results = await harness.finish();
       assert.equal(results.length, fixture.expectedTests, "WPT registration count changed");

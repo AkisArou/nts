@@ -19,6 +19,8 @@
     "../wpt-events-abort.test.ts",
     "../wpt-streams.test.ts",
     "../streams-wpt-policy.test.ts",
-    "../wpt-harness.test.ts"
+    "../wpt-harness.test.ts",
+    "../wpt-html-support.test.ts",
+    "../wpt-fetch-data.test.ts"
   ]
 }
