@@ -1,0 +1,233 @@
+{
+  "suite": "JetStream 3.0",
+  "name": "bigint-paillier",
+  "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sources": [
+    {
+      "path": "bigint/paillier-bundle.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/paillier-bundle.js",
+      "bytes": 8909,
+      "sha256": "19f2138cfd65396e33b3376603ec05cf91e7416300af00d7f9a5e227a5a6b642",
+      "gitBlob": "a377aad46edf403dd6e6a80602105f71188d5c46"
+    },
+    {
+      "path": "bigint/paillier-benchmark.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/paillier-benchmark.js",
+      "bytes": 2687,
+      "sha256": "57baec1c4341d41d84419a9bfb1b473e548b85a4da0cdebb8f2b6f324affc1e7",
+      "gitBlob": "e6fa69158c65a4166369557f1101a117b391e453"
+    },
+    {
+      "path": "bigint/web-crypto-sham.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/web-crypto-sham.js",
+      "bytes": 238104,
+      "sha256": "ad545999d81802b3ca371fea3f02f49fb07fb0fd7e0253fa5f7b29f7142489c6",
+      "gitBlob": "bc019ec097c01c74e24414dd72574d4ff8cccb8d"
+    },
+    {
+      "path": "JetStreamDriver.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/JetStreamDriver.js",
+      "bytes": 109689,
+      "sha256": "05d3e59df671e03bdb81c6896d3784d15db993447de2acb07207a1733dd8a5cd",
+      "gitBlob": "ee50fe3ee43f095acda2e14213d3af9cbb15023b"
+    }
+  ],
+  "retainedFunctions": [
+    "t",
+    "e",
+    "r",
+    "i",
+    "o",
+    "s",
+    "u",
+    "a",
+    "c",
+    "f",
+    "g",
+    "l",
+    "w",
+    "p",
+    "$",
+    "R",
+    "generateRandomKeysSync"
+  ],
+  "retainedClasses": [
+    "_",
+    "S"
+  ],
+  "omittedUncalledFunctions": [
+    "h",
+    "d",
+    "y",
+    "b",
+    "generateRandomKeys"
+  ],
+  "omittedUncalledPaths": [
+    "asynchronous prime/key generation and Worker/source-string construction",
+    "Worker availability detection",
+    "fixed global/UMD export object and __esModule descriptor",
+    "sham digest/importKey/sign and all unused bundled SHA/HMAC/Buffer/stream dependencies"
+  ],
+  "originalKeyBits": 1024,
+  "originalRandomSeed": 49734321,
+  "originalDecryptedValues": [
+    "12345678901234567890",
+    "12345678901234567895",
+    "123456789012345678900"
+  ],
+  "observedValueOrder": [
+    "public n",
+    "public g",
+    "private lambda",
+    "private mu",
+    "private p",
+    "private q",
+    "ciphertext1",
+    "ciphertext2",
+    "encrypted sum",
+    "encrypted multiple",
+    "decrypted1",
+    "decrypted sum",
+    "decrypted multiple"
+  ],
+  "licenses": [
+    {
+      "spdx": "MIT",
+      "copyright": "2018 Juan Hern\u00e1ndez Serrano",
+      "scope": "Included synchronous Paillier/BigInt algorithms and complete key classes",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/paillier-bundle.js",
+      "noticeRetained": true
+    },
+    {
+      "spdx": "BSD-2-Clause",
+      "copyright": "2022 Apple Inc.",
+      "scope": "Original benchmark and fixed messages/multiplier",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/paillier-benchmark.js",
+      "noticeRetained": true
+    },
+    {
+      "spdx": "MIT",
+      "copyright": "2013 Dominic Tarr",
+      "scope": "Called web-crypto-sham getRandomValues object method",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/web-crypto-sham.js",
+      "noticeRetained": true
+    },
+    {
+      "spdx": "BSD-2-Clause",
+      "copyright": "2018-2024 Apple Inc.",
+      "scope": "Original deterministic random generator and reset behavior",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/JetStreamDriver.js",
+      "noticeRetained": true
+    }
+  ],
+  "adaptations": [
+    "Static module bindings replace only fixed global/UMD loading and the __esModule descriptor. The complete called synchronous graph and all PublicKey/PrivateKey methods remain.",
+    "Unused async prime/key generation, Worker/source-string generation and sham digest/HMAC/Buffer dependencies are omitted; none belongs to this registered synchronous workload.",
+    "Types, overload signatures and declare fields erase; all original key-class assignments and ordering remain. Four extended-GCD temporary annotations resolve circular inference without runtime changes.",
+    "The exact driver generator uses local currentSeed and resetRandom. Its six integer-mixing steps and unsigned division are unchanged. Reset runs before every original iteration, matching driver preIterationCode.",
+    "The shim remains an object literal with its original own getRandomValues method. Local random() replaces Math.random. The potentially undefined temporary uses ?? 0 at its original bitwise conversion, preserving undefined-to-zero semantics.",
+    "After original decryption checks, serialize 13 actual key/ciphertext/plaintext fields to complete decimal strings and mix their full code units and lengths. The latest bounded observation is retained; every complete iteration contributes.",
+    "One original Benchmark instance lives outside work, and its original final validate runs after requested iterations. No key size, primality rounds, input, allocation inside key generation or original validation is reduced."
+  ],
+  "structuralAudit": {
+    "retainedFunctions": [
+      "t",
+      "e",
+      "r",
+      "i",
+      "o",
+      "s",
+      "u",
+      "a",
+      "c",
+      "f",
+      "g",
+      "l",
+      "w",
+      "p",
+      "$",
+      "R",
+      "generateRandomKeysSync"
+    ],
+    "allRetainedFunctionBodiesIdenticalAfterErasureAndLocalShamBinding": true,
+    "completePublicAndPrivateKeyClassAstsIdentical": true,
+    "completeBenchmarkAstIdenticalAfterRemovingObservation": true,
+    "originalPrimeTableAndMillerRabinArithmeticRetained": true,
+    "originalSixStepRngAstEqualAfterLocalRename": true,
+    "originalGetRandomValuesAstEqualAfterLocalBindingAndNumericUndefinedCoercion": true,
+    "allOriginalClassFieldAssignmentsAndOrderPreserved": true,
+    "omittedUncalledFunctions": [
+      "h",
+      "d",
+      "y",
+      "b",
+      "generateRandomKeys"
+    ],
+    "omittedUncalledPaths": [
+      "asynchronous prime/key generation and Worker/source-string construction",
+      "Worker availability detection",
+      "fixed global/UMD export object and __esModule descriptor",
+      "sham digest/importKey/sign and all unused bundled SHA/HMAC/Buffer/stream dependencies"
+    ]
+  },
+  "validation": {
+    "node": "v24.20.0",
+    "unchangedUpstreamCompleteIterationPassed": true,
+    "keyBits": 1024,
+    "seed": 49734321,
+    "rngDrawsPerIteration": 113410,
+    "fullKeyAndCiphertextFieldsCompared": 13,
+    "allFullKeyAndCiphertextFieldsEqual": true,
+    "fullTraceSha256": "2acbf8a6152ee4ff23bf63b1151694179de6706150fa94416ba5da0ed309f1cd",
+    "decryptedValues": [
+      "12345678901234567890",
+      "12345678901234567895",
+      "123456789012345678900"
+    ],
+    "rngArrayComparisons": 35,
+    "publicPrivateKeyApiAndErrorPathsEqual": true,
+    "checksums": {
+      "work0": 0,
+      "work1": 4044231636,
+      "work2": 2921743272
+    },
+    "timingPerformed": false,
+    "strictTypeScript": true,
+    "strictCheckerExitCode": 0
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 489.370117,
+    "processes": [
+      {
+        "nsPerOp": 489370117.0,
+        "bits": "41ee21c27a800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 586048573.0,
+        "bits": "41ee21c27a800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 565371596.0,
+        "bits": "41ee21c27a800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 586977333.0,
+        "bits": "41ee21c27a800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 491255234.0,
+        "bits": "41ee21c27a800000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "e7f75f557353cb63fe331e395f58f356aae2c593d4f304b38291464459d6548b",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": true
+  }
+}

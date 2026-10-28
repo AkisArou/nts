@@ -103,3 +103,41 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+// BEGIN BIGINT PAILLIER: complete original workload checks.
+{
+  const name = "jetstream-bigint-paillier";
+  if (modules.has(name)) {
+    checked.add(name);
+    const port = await import("./cases/jetstream-bigint-paillier/case.ts");
+    test("jetstream-bigint-paillier: original validation and full output", () => {
+
+    assert.equal(port.seed, 1);
+    assert.equal(port.work(0), 0);
+    assert.equal(port.work(1), 4044231636);
+    const result = port.observation();
+    assert.equal(result.iterations, 1);
+    assert.equal(result.valid, true);
+    assert.deepEqual(result.values.slice(-3), ["12345678901234567890", "12345678901234567895", "123456789012345678900"]);
+    assert.equal(createHash('sha256').update(JSON.stringify(result.values)).digest('hex'), '2acbf8a6152ee4ff23bf63b1151694179de6706150fa94416ba5da0ed309f1cd');
+    assert.equal(port.work(2), 2921743272);
+    assert.equal(port.observation().iterations, 2);
+
+    });
+  }
+}
+// END BIGINT PAILLIER.
+
+
+
+
+
+
