@@ -140,6 +140,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/wpt-server.test.ts \
   runtime/web-platform/test/wpt-websocket-server.test.ts \
   runtime/web-platform/test/wpt-eventsource-server.test.ts \
+  runtime/web-platform/test/wpt-fetch-server.test.ts \
   runtime/web-platform/test/wpt-eventsource.test.ts \
   runtime/web-platform/test/wpt-websocket-stream-lifetime.test.ts \
   runtime/web-platform/test/wpt-websocket-stream.test.ts \
