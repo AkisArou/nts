@@ -553,21 +553,27 @@ test("an example's nts.config.ts owes config, new or changed, interop's too", ()
   owes("tests/interop/gtk-async/nts.config.ts", ["config", "interop"]);
 });
 
-test("without cargo, a path in a crate or compiled into one owes the full gate", () => {
+test("an unavailable Cargo toolchain grants no scope for compiled inputs or documentation", () => {
   const script = `
-    const { allSteps, gateSteps, owed, WIDE } = await import(${JSON.stringify(new URL("./owed.mjs", import.meta.url).href)});
-    const n = (p) => gateSteps(owed([{ path: p, added: false }])).length;
-    console.log(JSON.stringify({ all: allSteps().filter((s) => !WIDE.has(s)).length, rs: n("compiler/core/src/lib.rs"), c: n("runtime/c/nts_runtime.c"), toml: n("compiler/codegen/c/Cargo.toml"), docs: n("docs/primitives.md") }));`;
+    const { owed } = await import(${JSON.stringify(new URL("./owed.mjs", import.meta.url).href)});
+    const { selectionInfrastructure } = await import(${JSON.stringify(new URL("./owed-range.ts", import.meta.url).href)});
+    const paths=["compiler/core/src/lib.rs","runtime/c/nts_runtime.c","compiler/codegen/c/Cargo.toml","docs/primitives.md"];
+    console.log(JSON.stringify(paths.map(path=>{
+      try { return {path, rules:owed([{path,added:false}])}; }
+      catch(error) { return {path,infrastructure:selectionInfrastructure(error),message:String(error)}; }
+    })));`;
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
     encoding: "utf8",
     env: { ...process.env, RUSTUP_TOOLCHAIN: "no-such-toolchain-for-this-test" },
   });
   assert.equal(r.status, 0, r.stderr);
   const got = JSON.parse(r.stdout);
-  assert.equal(got.rs, got.all);
-  assert.equal(got.c, got.all);
-  assert.equal(got.toml, got.all);
-  assert.ok(got.docs < got.all, "a path no crate holds is not escalated");
+  for (const row of got) {
+    assert.equal(row.infrastructure, true, JSON.stringify(row));
+    assert.match(row.message, /cargo metadata --format-version 1 --no-deps --offline/);
+    assert.match(row.message, /no-such-toolchain-for-this-test/);
+    assert.equal(row.rules, undefined, "no scope is granted without the dependency graph");
+  }
 });
 
 test("land.ts and the registry owe tooling tests; lane.ts owes the baseline; the inputs owe everything", () => {
