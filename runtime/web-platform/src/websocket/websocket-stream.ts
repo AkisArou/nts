@@ -78,7 +78,7 @@ export class WebSocketError extends DOMException {
   constructor(
     ...args: [message?: string, options?: WebSocketCloseInfo | null, internal?: InternalErrorInit]
   ) {
-    super(coerceToDOMString(args[0] ?? ""), "WebSocketError");
+    super(coerceToDOMString(args[0] === undefined ? "" : args[0]), "WebSocketError");
     const internal = args[2];
     if (internal?.key === internalErrorKey) {
       this.closeCode = internal.closeCode;
