@@ -474,9 +474,11 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * Shared code selects the permitted format and checks extractability first.
    * DER output uses the standard key's SPKI/PKCS #8 structures, never encrypted
    * PKCS #8, PEM, native structs or a provider-specific algorithm identifier.
-   * Modern Algorithms §8.4.5: ML-DSA raw export returns public-key bytes, and
-   * raw-seed returns the original private seed. Its PKCS #8 export must use
-   * RFC 9881's seed-only [0] IMPLICIT OCTET STRING, never expandedKey or both.
+   * Modern Algorithms §§6.4.6 and 8.4.5: ML-KEM/ML-DSA raw export returns
+   * public-key bytes, and raw-seed returns the original private seed. ML-KEM's
+   * 64-byte seed is the 32-byte d followed by the 32-byte z. Their PKCS #8
+   * exports must use RFC 9935/RFC 9881's seed-only [0] IMPLICIT OCTET STRING,
+   * respectively, never expandedKey or both.
    */
   exportKey(key: CryptoKeyHandle, format: "raw" | "raw-seed" | "spki" | "pkcs8"): Uint8Array | CryptoFailure;
 
