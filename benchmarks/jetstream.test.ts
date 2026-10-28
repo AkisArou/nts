@@ -103,3 +103,70 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+// BEGIN BIGINT NOBLE ED25519: complete original workload checks.
+{
+  const name = "jetstream-bigint-noble-ed25519";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { seed, work } = await import("./cases/jetstream-bigint-noble-ed25519/case.ts");
+    const { runNobleBenchmark } = await import("./cases/jetstream-bigint-noble-ed25519/benchmark.ts");
+    type BenchmarkResult = import("./cases/jetstream-bigint-noble-ed25519/benchmark.ts").BenchmarkResult;
+    const { resetRandom } = await import("./cases/jetstream-bigint-noble-ed25519/web-crypto-sham.ts");
+    // Original full-operation oracle; root retains absent-directory gating.
+
+
+
+
+
+    function edHex(bytes: Uint8Array): string { return Buffer.from(bytes).toString("hex"); }
+    function edOriginalRecord(result: BenchmarkResult): string {
+      return JSON.stringify({
+        fixedPublicKey: edHex(result.fixedPublicKey), publicKey: edHex(result.publicKey),
+        signature: edHex(result.signature), asyncVerified: result.asyncVerified,
+        instanceVerified: result.instanceVerified, parsedPoint: result.parsedPoint,
+        ristrettoPoint: result.ristrettoPoint, ristrettoHex: result.ristrettoHex,
+        montgomeryPublicKey: edHex(result.montgomeryPublicKey), sharedSecret: edHex(result.sharedSecret),
+        syncPublicKey: edHex(result.syncPublicKey), syncSignature: edHex(result.syncSignature),
+        syncVerified: result.syncVerified
+      }, (_key: string, value: unknown): unknown => typeof value === "bigint" ? value.toString() : value);
+    }
+
+    test("JetStream Noble Ed25519 retains complete original operation results", async () => {
+      assert.equal(seed, 1);
+      resetRandom();
+      const result = await runNobleBenchmark();
+      assert.equal(result.asyncVerified, false);
+      assert.equal(result.instanceVerified, false);
+      assert.equal(result.syncVerified, false);
+      assert.equal(result.signature.length, 64);
+      assert.deepEqual(result.syncSignature, result.signature);
+      assert.equal(result.encodingsOfSmallMultiples.length, 16);
+      assert.equal(createHash("sha256").update(result.encodingsOfSmallMultiples.map(edHex).join("\n")).digest("hex"),
+        "a8981c1cbd4dae299600dc7cef0b9d8f1020eb642aaa6c8bade5386d7e802531");
+      assert.equal(createHash("sha256").update(edOriginalRecord(result)).digest("hex"),
+        "2c0acef9ed5e47fb0ab28355dc373c8a06c44210b8a74ea3884fcce878f67228");
+    });
+
+    test("JetStream Noble Ed25519 awaits full seeded iterations", async () => {
+      assert.equal(await work(0), 0);
+      assert.equal(await work(1), 3200872004);
+      assert.equal(await work(2), 634518344);
+    });
+  }
+}
+// END BIGINT NOBLE ED25519.
+
+
