@@ -359,6 +359,11 @@ export class WptHarness {
         assert.equal(typeof actual, typeof expected, message);
         assert.ok(actual > (expected as number | bigint), message);
       },
+      assert_less_than: (actual: unknown, expected: unknown, message?: string) => {
+        assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
+        assert.equal(typeof actual, typeof expected, message);
+        assert.ok(actual < (expected as number | bigint), message);
+      },
       assert_greater_than_equal: (actual: unknown, expected: unknown, message?: string) => {
         assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
         assert.equal(typeof actual, typeof expected, message);

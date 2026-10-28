@@ -380,6 +380,23 @@ test("WPT greater-than assertions require ordered numbers or same-type bigints",
     ["pass", "pass", "pass", "fail", "fail", "fail", "fail", "fail", "fail"]);
 });
 
+test("WPT less-than assertions reject coercion, equality, unordered values and mixed numeric types", async () => {
+  const harness = new WptHarness({});
+  harness.run(`
+    test(() => assert_less_than(1, 2), "number");
+    test(() => assert_less_than(1n, 2n), "bigint");
+    test(() => assert_less_than(-Infinity, 0), "negative infinity");
+    test(() => assert_less_than(1, 1), "equal");
+    test(() => assert_less_than(2, 1), "greater");
+    test(() => assert_less_than(NaN, 1), "NaN");
+    test(() => assert_less_than("1", "2"), "strings");
+    test(() => assert_less_than(new Number(1), 2), "boxed number");
+    test(() => assert_less_than(1, 2n), "mixed numeric types");
+  `, "less-than-comparison.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status),
+    ["pass", "pass", "pass", "fail", "fail", "fail", "fail", "fail", "fail"]);
+});
+
 test("WPT timeout helpers preserve receivers and extra arguments across await", async () => {
   const harness = new WptHarness({}, {}, 100);
   harness.run(`
