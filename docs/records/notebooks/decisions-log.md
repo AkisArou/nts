@@ -353,6 +353,19 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   of the test tree that no compiled program links. It replaces the removed
   server code as the WebSocket peer of the WPT resource server. Asked, the
   user answered "Yes I am ok with the ws dev dependency".
+- **`runtime/node`'s C becomes TypeScript** (10-29, agreed in principle; its
+  plan is made next): the user proposed replacing the hand-written C under
+  `runtime/node` with TypeScript that nts compiles, keeping C only in
+  libraries such as OpenSSL, "this way we can dog-food our compiler, in a real
+  world project", and agreed ("I agree with what you said!!") to this shape:
+  the `node:*` glue becomes TypeScript calling the libraries built from node's
+  sources; `runtime/c`, the language core it relies on (reference counting,
+  allocation, the cycle collector, object and string representations), stays
+  C for now; C remains only for third-party libraries, that core, and a
+  primitive a benchmark proves faster in C, whose gap the compiler then closes.
+  It needs typed bindings generated from the libraries' headers, ownership of
+  their handles and callbacks from C into TypeScript first; then each module
+  moves with node's own tests and its benchmark rows, deleting its C.
 - **Brotli and Web Crypto's Modern Algorithms are scheduled.** Asked whether
   each is in its specification and whether node or Chrome supports it, the
   user answered "If so, yes we should schedule it and add it to our plan for

@@ -313,6 +313,12 @@ providers, and an app's `nts.config.ts` may override a choice. With it, also
   serves WebSockets uses a library for it. The client's conformance tests talk
   to the `ws` package, a dev dependency of the test tree that no compiled
   program links.
+- **`runtime/node` is TypeScript over native libraries** (agreed in principle;
+  its plan is made next): the `node:*` glue is TypeScript that calls the
+  libraries built from node's sources through typed bindings generated from
+  their headers, with owned handles and callbacks into TypeScript. C remains
+  only for third-party libraries, `runtime/c`'s language core, and a primitive
+  a benchmark proves faster in C, until the compiler closes that gap.
 - **Brotli and Web Crypto's Modern Algorithms:** `CompressionStream` and
   `DecompressionStream` take `"brotli"`, as the Compression Standard defines
   and node ships. Web Crypto gains the Modern Algorithms extension (ML-KEM,
