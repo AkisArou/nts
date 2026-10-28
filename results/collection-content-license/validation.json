@@ -1,0 +1,1498 @@
+{
+  "baseline": "4f1863cfc",
+  "candidate": "520fe788b",
+  "focused": [
+    {
+      "name": "fmt",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "clippy",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "core",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "native",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "cli",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "clippy",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "build",
+      "status": 0,
+      "signal": null
+    }
+  ],
+  "rust": {
+    "groups": 264,
+    "passed": 1965,
+    "failed": 0,
+    "ignored": 4
+  },
+  "comparisons": [
+    {
+      "name": "agree-c-0",
+      "summary": [
+        "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+        "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+        "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 453 s"
+      ]
+    },
+    {
+      "name": "agree-llvm-0",
+      "summary": [
+        "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+        "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+        "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 297 s"
+      ]
+    },
+    {
+      "name": "agree-jvm-0",
+      "summary": [
+        "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+        "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+        "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 302 s"
+      ]
+    },
+    {
+      "name": "agree-c-1",
+      "summary": [
+        "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+        "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+        "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 132 s"
+      ]
+    },
+    {
+      "name": "agree-llvm-1",
+      "summary": [
+        "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+        "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+        "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 125 s"
+      ]
+    }
+  ],
+  "records": [
+    {
+      "name": "language",
+      "summary": [
+        "  recorded cases: 6974 of 8367 pass -- not a conformance rate; the denominator is not the suite",
+        "         0  REGRESSED"
+      ]
+    },
+    {
+      "name": "builtins",
+      "summary": [
+        "  recorded cases: 828 of 1034 pass -- not a conformance rate; the denominator is not the suite",
+        "         0  REGRESSED"
+      ]
+    },
+    {
+      "name": "annexb",
+      "summary": [
+        "  recorded cases: 9 of 12 pass -- not a conformance rate; the denominator is not the suite",
+        "         0  REGRESSED"
+      ]
+    },
+    {
+      "name": "staging",
+      "summary": [
+        "  recorded cases: 53 of 58 pass -- not a conformance rate; the denominator is not the suite",
+        "         0  REGRESSED"
+      ]
+    },
+    {
+      "name": "harness",
+      "summary": [
+        "  recorded cases: 17 of 17 pass -- not a conformance rate; the denominator is not the suite",
+        "         0  REGRESSED"
+      ]
+    }
+  ],
+  "inventory": {
+    "state": "PASS",
+    "cases": 97,
+    "rows": [
+      {
+        "name": "absences",
+        "entry": "absences",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "accumulate",
+        "entry": "accumulate",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-copying-methods",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-from",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-methods",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-mutations",
+        "entry": "mutations",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-predicates",
+        "entry": "predicates",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "arrays",
+        "entry": "convolve",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-bounce",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-list",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-mandelbrot",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-nbody",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-permute",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-queens",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-sieve",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-towers",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "bigint",
+        "entry": "mix",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "bytes",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-cjk",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-greek",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-latin1",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-unchanged",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "checksum",
+        "entry": "checksum",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "closure-merge",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "closures",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "cyclic-churn",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "dispatch",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "elementwise",
+        "entry": "scale",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-stored-typed",
+        "entry": "erasureStoredTyped",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-stored-unknown",
+        "entry": "erasureStoredUnknown",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-typed",
+        "entry": "erasureTyped",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-unknown",
+        "entry": "erasureUnknown",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "event-state",
+        "entry": "event",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "exceptions",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "face-fields",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "fib",
+        "entry": "fib",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "generator",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "generator-dispatched",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "generic-classes",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "growth-fixed",
+        "entry": "scan",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "growth-grown",
+        "entry": "scan",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "immutable-update",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "in-narrowing",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "instanceof",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-build-append",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-build-join",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-parse",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-quote",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-scan",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-serialize",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-builtin",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-doc",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-fused",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-inline",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-typed",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "logical-assignment",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "loop",
+        "entry": "accumulate",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-and-set",
+        "entry": "table",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-entries-top-k",
+        "entry": "topWords",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-literal-keys",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-word-counts",
+        "entry": "mapWordCounts",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "module-closures",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "node-utf8",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "number-format",
+        "entry": "format",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "number-format-double",
+        "entry": "format",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "objects",
+        "entry": "simulate",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "optional-chain",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "pipeline",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "printer-erased",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "record-word-counts",
+        "entry": "wordCounts",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "release-acyclic",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "sort-objects",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-append-length",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-append-loop",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-compare",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-concat-pair",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-equal",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-index-of",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-index-read",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-join",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-map-keys",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-slice-keep",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-split",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-template",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-to-number",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "strings",
+        "entry": "scan",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "substrings",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "symbol-keyed-map",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "symbol-keys",
+        "entry": "keys",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "tree-teardown",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "uniform-callback",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "uniform-callback-arguments",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "uniform-callback-default",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "upcast",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "user-iterable",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "utf8-encode",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "/home/akisarou/Projects/nts-lanes/runtime-content/benchmarks/cases/utf8-encode/case.ts:42:19: NTS1001 a `new` of unrepresentable type (`TextEncoder`) is not supported by this lowering yet\n",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/benchmarks/cases/utf8-encode/case.ts:42:19: NTS1001 a `new` of unrepresentable type (`TextEncoder`) is not supported by this lowering yet\n"
+        ]
+      }
+    ],
+    "selected": []
+  },
+  "compile": {
+    "commands": 174,
+    "counterScope": "exec-inherited-user-instructions-v1",
+    "costs": [
+      {
+        "mode": "nogc",
+        "modules": 29,
+        "minimum": 0.9996175259540522,
+        "maximum": 1.0086317545012726,
+        "summed": 1.000364210707154,
+        "maximumRepeatDrift": 0.0005677968349946383,
+        "contentBudgetExhaustions": 0
+      },
+      {
+        "mode": "rc",
+        "modules": 29,
+        "minimum": 0.9881142745021081,
+        "maximum": 1.0012284604049355,
+        "summed": 1.0003517003864457,
+        "maximumRepeatDrift": 0.0008103503112323329,
+        "contentBudgetExhaustions": 10
+      }
+    ]
+  },
+  "coverage": {
+    "state": "PASS",
+    "groups": [
+      {
+        "family": "benchmarks",
+        "constructor": "nts_map_new",
+        "allocations": 14,
+        "candidates": 12,
+        "empty": 0,
+        "dynamic": 2
+      },
+      {
+        "family": "benchmarks",
+        "constructor": "nts_set_new",
+        "allocations": 4,
+        "candidates": 0,
+        "empty": 0,
+        "dynamic": 4
+      },
+      {
+        "family": "benchmarks",
+        "constructor": "nts_table_new",
+        "allocations": 2,
+        "candidates": 2,
+        "empty": 0,
+        "dynamic": 0
+      },
+      {
+        "family": "benchmarks",
+        "constructor": "nts_map_copy",
+        "allocations": 0,
+        "candidates": 0,
+        "empty": 0,
+        "dynamic": 0
+      },
+      {
+        "family": "programs",
+        "constructor": "nts_map_new",
+        "allocations": 215,
+        "candidates": 139,
+        "empty": 1,
+        "dynamic": 75
+      },
+      {
+        "family": "programs",
+        "constructor": "nts_set_new",
+        "allocations": 103,
+        "candidates": 0,
+        "empty": 0,
+        "dynamic": 103
+      },
+      {
+        "family": "programs",
+        "constructor": "nts_table_new",
+        "allocations": 115,
+        "candidates": 35,
+        "empty": 0,
+        "dynamic": 80
+      },
+      {
+        "family": "programs",
+        "constructor": "nts_map_copy",
+        "allocations": 10,
+        "candidates": 0,
+        "empty": 0,
+        "dynamic": 10
+      }
+    ],
+    "budget_exhaustions": 0
+  },
+  "notes": [
+    "The first CLI command used --lib on the binary-only nts-cli crate and stopped before its test; --bin nts contents_census passed in the resumed focused run. The full Rust run subsequently exercised the complete CLI suite.",
+    "The existing native cleanup guard passed C and LLVM under NoGC and RC/POISON/ASan/UBSan, including restored-cleanup and managed-release deletion controls.",
+    "All five comparisons use the unchanged 843-project corpus without new-project exemptions. Existing partial/refused/unreached cases remain explicit in the summaries.",
+    "The API exposes the existing complete-writer summaries and identity cache. Key facts remain Unknown; this checkpoint includes no Semantic/View producer or typed storage.",
+    "All 97 benchmark rows have identical C and LLVM emissions and diagnostics. No runtime timing or speedup is claimed.",
+    "The 29-module compile census uses separate RC and NoGC A/B/A brackets. Every function population matches. Ten RC function-wide content budget fallbacks keep all cleanup; none occurs in the separate 942-input coverage census.",
+    "The content record prepares 941 of 942 inputs; the invalid TypeScript fixture is the sole expected unmeasured input. Preparation diagnostics remain recorded on 121 partial modules.",
+    "Precise string tags add one eligible program Map, from 138 to 139 of 215, without adding a key licence. Records remain 35 of 115. This is selection coverage, not typed-storage execution."
+  ]
+}

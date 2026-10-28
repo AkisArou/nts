@@ -1,0 +1,1514 @@
+{
+  "counter_scope": "exec-inherited-user-instructions-v1",
+  "modules": 29,
+  "summaries": [
+    {
+      "module": "runtime/node/assert",
+      "mode": "nogc",
+      "ratio": 1.0007837146309986,
+      "repeatRatio": 1.0000017327366393,
+      "cpuRatio": 0.9207475709675851,
+      "base": 205109069619,
+      "candidate": 205269994437,
+      "repeat": 205109425019,
+      "cpuBase": 36.899392,
+      "cpuCandidate": 35.194986,
+      "cpuRepeat": 39.596903,
+      "definitions": 2154,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 83272,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/assert",
+      "mode": "rc",
+      "ratio": 1.0003300550051684,
+      "repeatRatio": 1.0000007511101086,
+      "cpuRatio": 1.0260175985390296,
+      "base": 219532393598,
+      "candidate": 219604933837,
+      "repeat": 219532558491,
+      "cpuBase": 36.758466000000006,
+      "cpuCandidate": 38.082494999999994,
+      "cpuRepeat": 37.478637,
+      "definitions": 2163,
+      "contents": {
+        "reads": 23,
+        "elisions": 0,
+        "visits": 71884,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 83272,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/async_hooks",
+      "mode": "nogc",
+      "ratio": 0.999921554294408,
+      "repeatRatio": 0.9999906648735521,
+      "cpuRatio": 0.8656855147142904,
+      "base": 2951647217,
+      "candidate": 2951401897,
+      "repeat": 2951619663,
+      "cpuBase": 0.499832,
+      "cpuCandidate": 0.44188299999999997,
+      "cpuRepeat": 0.521279,
+      "definitions": 388,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 11324,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/async_hooks",
+      "mode": "rc",
+      "ratio": 1.000586380711515,
+      "repeatRatio": 0.9999701581106192,
+      "cpuRatio": 1.1368797806572726,
+      "base": 3421767258,
+      "candidate": 3423722630,
+      "repeat": 3421665146,
+      "cpuBase": 0.524751,
+      "cpuCandidate": 0.61721,
+      "cpuRepeat": 0.561673,
+      "definitions": 396,
+      "contents": {
+        "reads": 5,
+        "elisions": 0,
+        "visits": 9052,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 11324,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/buffer",
+      "mode": "nogc",
+      "ratio": 1.0003620328491012,
+      "repeatRatio": 0.9999883173475687,
+      "cpuRatio": 1.0789491854028912,
+      "base": 12124729451,
+      "candidate": 12129048151,
+      "repeat": 12124587802,
+      "cpuBase": 1.6409989999999999,
+      "cpuCandidate": 1.785574,
+      "cpuRepeat": 1.6689580000000002,
+      "definitions": 511,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 29452,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/buffer",
+      "mode": "rc",
+      "ratio": 1.0004494078905808,
+      "repeatRatio": 1.000015838393426,
+      "cpuRatio": 0.9930000556166124,
+      "base": 13312524467,
+      "candidate": 13318612692,
+      "repeat": 13312735316,
+      "cpuBase": 2.076974,
+      "cpuCandidate": 2.031104,
+      "cpuRepeat": 2.014349,
+      "definitions": 519,
+      "contents": {
+        "reads": 3,
+        "elisions": 0,
+        "visits": 16893,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 29452,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/child_process",
+      "mode": "nogc",
+      "ratio": 1.0005977122223086,
+      "repeatRatio": 1.0000007002384566,
+      "cpuRatio": 1.1223506612580982,
+      "base": 299972099534,
+      "candidate": 300151501613,
+      "repeat": 299972309586,
+      "cpuBase": 59.193194999999996,
+      "cpuCandidate": 63.646052999999995,
+      "cpuRepeat": 54.326789000000005,
+      "definitions": 2808,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 116942,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/child_process",
+      "mode": "rc",
+      "ratio": 1.000311586930415,
+      "repeatRatio": 0.9999993245549571,
+      "cpuRatio": 0.8582287671521736,
+      "base": 321740461776,
+      "candidate": 321840603206,
+      "repeat": 321740244458,
+      "cpuBase": 68.605292,
+      "cpuCandidate": 56.030503,
+      "cpuRepeat": 62.127702,
+      "definitions": 2820,
+      "contents": {
+        "reads": 30,
+        "elisions": 0,
+        "visits": 74756,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 116942,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/cluster",
+      "mode": "nogc",
+      "ratio": 1.0002881973902031,
+      "repeatRatio": 1.0000010893181077,
+      "cpuRatio": 0.9572894882665819,
+      "base": 332489653328,
+      "candidate": 332585657124,
+      "repeat": 332490015515,
+      "cpuBase": 72.244996,
+      "cpuCandidate": 69.252313,
+      "cpuRepeat": 72.439295,
+      "definitions": 3028,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 124774,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/cluster",
+      "mode": "rc",
+      "ratio": 1.0003806027864603,
+      "repeatRatio": 0.9999932520269816,
+      "cpuRatio": 1.3513838386814812,
+      "base": 355630497260,
+      "candidate": 355764650867,
+      "repeat": 355628097475,
+      "cpuBase": 72.495755,
+      "cpuCandidate": 73.962985,
+      "cpuRepeat": 41.31986,
+      "definitions": 3040,
+      "contents": {
+        "reads": 31,
+        "elisions": 0,
+        "visits": 79516,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 124774,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/console",
+      "mode": "nogc",
+      "ratio": 1.0009597874848077,
+      "repeatRatio": 0.9997312308034869,
+      "cpuRatio": 1.0683713854523602,
+      "base": 211992894793,
+      "candidate": 212167845081,
+      "repeat": 211935917633,
+      "cpuBase": 39.148214,
+      "cpuCandidate": 41.718593,
+      "cpuRepeat": 38.949587,
+      "definitions": 2205,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 86685,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/console",
+      "mode": "rc",
+      "ratio": 1.0003485857368983,
+      "repeatRatio": 0.9999998417946765,
+      "cpuRatio": 1.196289802896022,
+      "base": 226661146419,
+      "candidate": 226740139326,
+      "repeat": 226661110560,
+      "cpuBase": 39.392863,
+      "cpuCandidate": 46.474368,
+      "cpuRepeat": 38.31216,
+      "definitions": 2214,
+      "contents": {
+        "reads": 26,
+        "elisions": 0,
+        "visits": 76797,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 86685,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/crypto",
+      "mode": "nogc",
+      "ratio": 1.000369391864365,
+      "repeatRatio": 1.0000028563963217,
+      "cpuRatio": 1.504637695745063,
+      "base": 319779854450,
+      "candidate": 319898435404,
+      "repeat": 319780767868,
+      "cpuBase": 70.96196900000001,
+      "cpuCandidate": 69.84558299999999,
+      "cpuRepeat": 30.366054,
+      "definitions": 3363,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 152913,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/crypto",
+      "mode": "rc",
+      "ratio": 0.9997424171453406,
+      "repeatRatio": 0.9999988570267568,
+      "cpuRatio": 1.0217383081938212,
+      "base": 343771826995,
+      "candidate": 343683080856,
+      "repeat": 343771434073,
+      "cpuBase": 28.611981,
+      "cpuCandidate": 29.257711,
+      "cpuRepeat": 28.658496999999997,
+      "definitions": 3372,
+      "contents": {
+        "reads": 35,
+        "elisions": 2,
+        "visits": 82164,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 152913,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/dgram",
+      "mode": "nogc",
+      "ratio": 1.0004027748667397,
+      "repeatRatio": 0.9999994069525902,
+      "cpuRatio": 1.3999240894667677,
+      "base": 297893552948,
+      "candidate": 298013448616,
+      "repeat": 297893376283,
+      "cpuBase": 59.705068,
+      "cpuCandidate": 54.801547,
+      "cpuRepeat": 25.666430000000002,
+      "definitions": 2970,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 118006,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/dgram",
+      "mode": "rc",
+      "ratio": 1.000861803970591,
+      "repeatRatio": 1.000000787322297,
+      "cpuRatio": 1.0416912513299663,
+      "base": 319289827029,
+      "candidate": 319565118070,
+      "repeat": 319290078413,
+      "cpuBase": 24.386055,
+      "cpuCandidate": 25.152022000000002,
+      "cpuRepeat": 23.907063,
+      "definitions": 2982,
+      "contents": {
+        "reads": 29,
+        "elisions": 0,
+        "visits": 75965,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 118006,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/diagnostics_channel",
+      "mode": "nogc",
+      "ratio": 0.9996175259540522,
+      "repeatRatio": 1.0002072984116994,
+      "cpuRatio": 1.141663222125722,
+      "base": 2743021499,
+      "candidate": 2742256553,
+      "repeat": 2743590123,
+      "cpuBase": 0.42271800000000004,
+      "cpuCandidate": 0.434126,
+      "cpuRepeat": 0.34206200000000003,
+      "definitions": 359,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 10196,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/diagnostics_channel",
+      "mode": "rc",
+      "ratio": 0.999704754687215,
+      "repeatRatio": 1.000158480632507,
+      "cpuRatio": 1.0045570664489853,
+      "base": 3173920952,
+      "candidate": 3173235285,
+      "repeat": 3174423957,
+      "cpuBase": 0.367023,
+      "cpuCandidate": 0.335752,
+      "cpuRepeat": 0.304365,
+      "definitions": 367,
+      "contents": {
+        "reads": 5,
+        "elisions": 0,
+        "visits": 7417,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 10196,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/dns",
+      "mode": "nogc",
+      "ratio": 1.0008169687751969,
+      "repeatRatio": 0.9999590335781755,
+      "cpuRatio": 1.2027619246821961,
+      "base": 16201048821,
+      "candidate": 16213952448,
+      "repeat": 16200385122,
+      "cpuBase": 2.171152,
+      "cpuCandidate": 2.393341,
+      "cpuRepeat": 1.823726,
+      "definitions": 605,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 23848,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/dns",
+      "mode": "rc",
+      "ratio": 0.9999076982348917,
+      "repeatRatio": 0.9999656000636797,
+      "cpuRatio": 0.7612608823316991,
+      "base": 17724509555,
+      "candidate": 17722568716,
+      "repeat": 17723899833,
+      "cpuBase": 2.1175699999999997,
+      "cpuCandidate": 1.367225,
+      "cpuRepeat": 1.5232640000000002,
+      "definitions": 613,
+      "contents": {
+        "reads": 7,
+        "elisions": 0,
+        "visits": 24667,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 23848,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/events",
+      "mode": "nogc",
+      "ratio": 1.000259223569093,
+      "repeatRatio": 1.0000000037395276,
+      "cpuRatio": 0.8609673883218011,
+      "base": 196281476576,
+      "candidate": 196332357728,
+      "repeat": 196281477310,
+      "cpuBase": 18.816445,
+      "cpuCandidate": 13.78811,
+      "cpuRepeat": 13.630082999999999,
+      "definitions": 2125,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 81055,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/events",
+      "mode": "rc",
+      "ratio": 1.0003779585270554,
+      "repeatRatio": 0.9999967075822751,
+      "cpuRatio": 1.035079318372009,
+      "base": 210216642552,
+      "candidate": 210295749533,
+      "repeat": 210215950431,
+      "cpuBase": 14.87875,
+      "cpuCandidate": 15.199499,
+      "cpuRepeat": 14.492551,
+      "definitions": 2134,
+      "contents": {
+        "reads": 23,
+        "elisions": 0,
+        "visits": 70310,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 81055,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/fs",
+      "mode": "nogc",
+      "ratio": 0.9999894355644574,
+      "repeatRatio": 1.000018412236695,
+      "cpuRatio": 0.993875921850805,
+      "base": 387774560919,
+      "candidate": 387774034144,
+      "repeat": 387781700716,
+      "cpuBase": 33.052537,
+      "cpuCandidate": 33.045598,
+      "cpuRepeat": 33.447071,
+      "definitions": 3486,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 164725,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/fs",
+      "mode": "rc",
+      "ratio": 1.000187870641905,
+      "repeatRatio": 0.9999995409277328,
+      "cpuRatio": 0.9958504927105648,
+      "base": 418060540182,
+      "candidate": 418138985506,
+      "repeat": 418060348262,
+      "cpuBase": 37.762552,
+      "cpuCandidate": 36.554162999999996,
+      "cpuRepeat": 35.679936,
+      "definitions": 3498,
+      "contents": {
+        "reads": 29,
+        "elisions": 0,
+        "visits": 89594,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 164725,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/http",
+      "mode": "nogc",
+      "ratio": 1.0003604978794602,
+      "repeatRatio": 1.0000084757069334,
+      "cpuRatio": 1.0621180247153728,
+      "base": 390635498138,
+      "candidate": 390777977456,
+      "repeat": 390638809050,
+      "cpuBase": 31.942083,
+      "cpuCandidate": 33.222262,
+      "cpuRepeat": 30.630184,
+      "definitions": 3629,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 166946,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/http",
+      "mode": "rc",
+      "ratio": 1.0005345920062678,
+      "repeatRatio": 1.0000001925280997,
+      "cpuRatio": 1.0566604487382516,
+      "base": 417637737549,
+      "candidate": 417861043570,
+      "repeat": 417637817956,
+      "cpuBase": 35.306515999999995,
+      "cpuCandidate": 37.261317,
+      "cpuRepeat": 35.220104,
+      "definitions": 3641,
+      "contents": {
+        "reads": 38,
+        "elisions": 0,
+        "visits": 90856,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 166946,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/net",
+      "mode": "nogc",
+      "ratio": 1.000440103317884,
+      "repeatRatio": 1.0000001653257762,
+      "cpuRatio": 1.046250523390066,
+      "base": 301392808566,
+      "candidate": 301525477466,
+      "repeat": 301392858394,
+      "cpuBase": 22.770655,
+      "cpuCandidate": 23.543181,
+      "cpuRepeat": 22.237368,
+      "definitions": 2938,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 118495,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/net",
+      "mode": "rc",
+      "ratio": 1.000499680535451,
+      "repeatRatio": 0.9999978738253497,
+      "cpuRatio": 0.9760144419178486,
+      "base": 323730225961,
+      "candidate": 323891643328,
+      "repeat": 323729537654,
+      "cpuBase": 24.982165,
+      "cpuCandidate": 24.89875,
+      "cpuRepeat": 26.050288,
+      "definitions": 2950,
+      "contents": {
+        "reads": 28,
+        "elisions": 0,
+        "visits": 76776,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 118495,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/os",
+      "mode": "nogc",
+      "ratio": 1.0003343669670066,
+      "repeatRatio": 1.0000329218546804,
+      "cpuRatio": 0.9661914451675133,
+      "base": 13161773667,
+      "candidate": 13166391255,
+      "repeat": 13162206977,
+      "cpuBase": 0.8718279999999999,
+      "cpuCandidate": 0.84696,
+      "cpuRepeat": 0.881391,
+      "definitions": 533,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 1,
+        "rewritten": 0,
+        "visits": 31211,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/os",
+      "mode": "rc",
+      "ratio": 1.000866699545648,
+      "repeatRatio": 0.9999981463713724,
+      "cpuRatio": 1.0296901901481688,
+      "base": 14502365576,
+      "candidate": 14514921317,
+      "repeat": 14502338694,
+      "cpuBase": 0.9554549999999999,
+      "cpuCandidate": 0.992173,
+      "cpuRepeat": 0.971743,
+      "definitions": 541,
+      "contents": {
+        "reads": 7,
+        "elisions": 5,
+        "visits": 24652,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 1,
+        "rewritten": 0,
+        "visits": 31211,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/path",
+      "mode": "nogc",
+      "ratio": 1.001472640627377,
+      "repeatRatio": 1.0000011581992772,
+      "cpuRatio": 0.9869820479781651,
+      "base": 10111386038,
+      "candidate": 10126282340,
+      "repeat": 10111397749,
+      "cpuBase": 0.666165,
+      "cpuCandidate": 0.699567,
+      "cpuRepeat": 0.7541509999999999,
+      "definitions": 355,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 14820,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/path",
+      "mode": "rc",
+      "ratio": 1.0012284604049355,
+      "repeatRatio": 0.9999544820921307,
+      "cpuRatio": 0.9876810527871409,
+      "base": 10865635596,
+      "candidate": 10878736002,
+      "repeat": 10865141015,
+      "cpuBase": 0.7219059999999999,
+      "cpuCandidate": 0.7130829999999999,
+      "cpuRepeat": 0.7220479999999999,
+      "definitions": 363,
+      "contents": {
+        "reads": 2,
+        "elisions": 0,
+        "visits": 8539,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 14820,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/perf_hooks",
+      "mode": "nogc",
+      "ratio": 1.000083392715693,
+      "repeatRatio": 0.9999992152003236,
+      "cpuRatio": 0.8746486030391936,
+      "base": 316400487246,
+      "candidate": 316426748576,
+      "repeat": 316400238935,
+      "cpuBase": 42.649727,
+      "cpuCandidate": 40.833687,
+      "cpuRepeat": 51.103862,
+      "definitions": 2345,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 87579,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/perf_hooks",
+      "mode": "rc",
+      "ratio": 1.0000509226563903,
+      "repeatRatio": 0.9999992848315993,
+      "cpuRatio": 1.0091918231391566,
+      "base": 330741682338,
+      "candidate": 330758406309,
+      "repeat": 330741445802,
+      "cpuBase": 53.008788,
+      "cpuCandidate": 67.00309,
+      "cpuRepeat": 83.15614400000001,
+      "definitions": 2354,
+      "contents": {
+        "reads": 16,
+        "elisions": 0,
+        "visits": 75568,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 87579,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/process",
+      "mode": "nogc",
+      "ratio": 1.0001440151814651,
+      "repeatRatio": 1.0000026526387416,
+      "cpuRatio": 0.8546252755022161,
+      "base": 396393592347,
+      "candidate": 396451204862,
+      "repeat": 396394643836,
+      "cpuBase": 38.112375,
+      "cpuCandidate": 37.195046999999995,
+      "cpuRepeat": 49.699583000000004,
+      "definitions": 3707,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 94,
+        "rewritten": 0,
+        "visits": 169691,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/process",
+      "mode": "rc",
+      "ratio": 1.0000893900779155,
+      "repeatRatio": 1.0000008287953923,
+      "cpuRatio": 1.1319990055439724,
+      "base": 423529140263,
+      "candidate": 423567175091,
+      "repeat": 423529491282,
+      "cpuBase": 39.089998,
+      "cpuCandidate": 61.068463,
+      "cpuRepeat": 74.451978,
+      "definitions": 3719,
+      "contents": {
+        "reads": 35,
+        "elisions": 5,
+        "visits": 96795,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 94,
+        "rewritten": 0,
+        "visits": 169691,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/punycode",
+      "mode": "nogc",
+      "ratio": 1.0012558692620974,
+      "repeatRatio": 0.999945627563287,
+      "cpuRatio": 0.902781302033882,
+      "base": 1460795300,
+      "candidate": 1462590104,
+      "repeat": 1460715873,
+      "cpuBase": 0.136942,
+      "cpuCandidate": 0.108554,
+      "cpuRepeat": 0.105582,
+      "definitions": 26,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 1687,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/punycode",
+      "mode": "rc",
+      "ratio": 1.0009594046480625,
+      "repeatRatio": 0.9999837521615413,
+      "cpuRatio": 1.0471145679321174,
+      "base": 1512878163,
+      "candidate": 1514317323,
+      "repeat": 1512853582,
+      "cpuBase": 0.106324,
+      "cpuCandidate": 0.110857,
+      "cpuRepeat": 0.105416,
+      "definitions": 26,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 867,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 1687,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/querystring",
+      "mode": "nogc",
+      "ratio": 1.0011232297526866,
+      "repeatRatio": 1.0000025861362385,
+      "cpuRatio": 1.0276841882854333,
+      "base": 17276738686,
+      "candidate": 17296166798,
+      "repeat": 17276783366,
+      "cpuBase": 1.156787,
+      "cpuCandidate": 1.336495,
+      "cpuRepeat": 1.462049,
+      "definitions": 572,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 41712,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/querystring",
+      "mode": "rc",
+      "ratio": 1.0011783654244182,
+      "repeatRatio": 1.000001367984855,
+      "cpuRatio": 0.9854282461613667,
+      "base": 19027988435,
+      "candidate": 19050423389,
+      "repeat": 19028014465,
+      "cpuBase": 1.281495,
+      "cpuCandidate": 1.2370329999999998,
+      "cpuRepeat": 1.22969,
+      "definitions": 580,
+      "contents": {
+        "reads": 7,
+        "elisions": 0,
+        "visits": 50314,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 41712,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/readline",
+      "mode": "nogc",
+      "ratio": 1.0003894223480114,
+      "repeatRatio": 1.000002026141413,
+      "cpuRatio": 0.8725853004996326,
+      "base": 241267957323,
+      "candidate": 241362156974,
+      "repeat": 241268446166,
+      "cpuBase": 19.766735999999998,
+      "cpuCandidate": 18.213337000000003,
+      "cpuRepeat": 22.040848,
+      "definitions": 2503,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 106755,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/readline",
+      "mode": "rc",
+      "ratio": 1.000389617978608,
+      "repeatRatio": 0.9999964622733026,
+      "cpuRatio": 1.0403475826820439,
+      "base": 258858888304,
+      "candidate": 258959286316,
+      "repeat": 258857972532,
+      "cpuBase": 24.372464,
+      "cpuCandidate": 23.695314,
+      "cpuRepeat": 21.284751,
+      "definitions": 2512,
+      "contents": {
+        "reads": 27,
+        "elisions": 0,
+        "visits": 89028,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 106755,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/stream",
+      "mode": "nogc",
+      "ratio": 1.000040597884757,
+      "repeatRatio": 1.000003107734662,
+      "cpuRatio": 1.306733877065912,
+      "base": 260228136545,
+      "candidate": 260239105633,
+      "repeat": 260228945265,
+      "cpuBase": 33.377624000000004,
+      "cpuCandidate": 37.977256000000004,
+      "cpuRepeat": 25.305647,
+      "definitions": 2894,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 138618,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/stream",
+      "mode": "rc",
+      "ratio": 1.0006825301341356,
+      "repeatRatio": 0.9999889770319537,
+      "cpuRatio": 1.674651948485038,
+      "base": 279156393002,
+      "candidate": 279345386032,
+      "repeat": 279153315870,
+      "cpuBase": 30.478901,
+      "cpuCandidate": 58.755611,
+      "cpuRepeat": 40.387807,
+      "definitions": 2903,
+      "contents": {
+        "reads": 26,
+        "elisions": 0,
+        "visits": 91516,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 138618,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/string_decoder",
+      "mode": "nogc",
+      "ratio": 1.0003696425080857,
+      "repeatRatio": 0.9999998869967518,
+      "cpuRatio": 0.7699805998081187,
+      "base": 12468668131,
+      "candidate": 12473276376,
+      "repeat": 12468666722,
+      "cpuBase": 1.030819,
+      "cpuCandidate": 0.8272400000000001,
+      "cpuRepeat": 1.11975,
+      "definitions": 521,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 30618,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/string_decoder",
+      "mode": "rc",
+      "ratio": 0.9998801156056865,
+      "repeatRatio": 1.000000713366627,
+      "cpuRatio": 0.8378876554065833,
+      "base": 13683006228,
+      "candidate": 13681370729,
+      "repeat": 13683015989,
+      "cpuBase": 1.435242,
+      "cpuCandidate": 1.098921,
+      "cpuRepeat": 1.198495,
+      "definitions": 529,
+      "contents": {
+        "reads": 3,
+        "elisions": 0,
+        "visits": 17410,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 30618,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/timers",
+      "mode": "nogc",
+      "ratio": 1.0006031297395979,
+      "repeatRatio": 0.999909907879951,
+      "cpuRatio": 1.017155057991239,
+      "base": 5492500340,
+      "candidate": 5495565460,
+      "repeat": 5492005509,
+      "cpuBase": 0.44749,
+      "cpuCandidate": 0.442527,
+      "cpuRepeat": 0.422982,
+      "definitions": 501,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 17202,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/timers",
+      "mode": "rc",
+      "ratio": 1.0008606659174883,
+      "repeatRatio": 1.0000297780142169,
+      "cpuRatio": 0.6421731065018085,
+      "base": 6473769493,
+      "candidate": 6479437716,
+      "repeat": 6473962269,
+      "cpuBase": 0.7403219999999999,
+      "cpuCandidate": 0.47253500000000004,
+      "cpuRepeat": 0.73138,
+      "definitions": 509,
+      "contents": {
+        "reads": 8,
+        "elisions": 0,
+        "visits": 12520,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 17202,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/tty",
+      "mode": "nogc",
+      "ratio": 1.0086317545012726,
+      "repeatRatio": 1.0005677968349946,
+      "cpuRatio": 0.9622927162355097,
+      "base": 55523381,
+      "candidate": 56018542,
+      "repeat": 55554907,
+      "cpuBase": 0.017278,
+      "cpuCandidate": 0.016238,
+      "cpuRepeat": 0.01648,
+      "definitions": 2,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 53,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/tty",
+      "mode": "rc",
+      "ratio": 0.9881142745021081,
+      "repeatRatio": 0.9991896496887677,
+      "cpuRatio": 1.0268971911619071,
+      "base": 56465703,
+      "candidate": 55771956,
+      "repeat": 56419946,
+      "cpuBase": 0.014189,
+      "cpuCandidate": 0.014254,
+      "cpuRepeat": 0.013578999999999999,
+      "definitions": 2,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 24,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 53,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/url",
+      "mode": "nogc",
+      "ratio": 1.0008762779615568,
+      "repeatRatio": 1.0000013016168254,
+      "cpuRatio": 0.9083629266208083,
+      "base": 46698074896,
+      "candidate": 46739025808,
+      "repeat": 46698135679,
+      "cpuBase": 3.357028,
+      "cpuCandidate": 3.882005,
+      "cpuRepeat": 5.440494999999999,
+      "definitions": 789,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 51684,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/url",
+      "mode": "rc",
+      "ratio": 1.0008273928023628,
+      "repeatRatio": 0.9999973260823064,
+      "cpuRatio": 0.7824994396166765,
+      "base": 50217701286,
+      "candidate": 50259183856,
+      "repeat": 50217567008,
+      "cpuBase": 3.56673,
+      "cpuCandidate": 3.6587959999999997,
+      "cpuRepeat": 6.129683999999999,
+      "definitions": 800,
+      "contents": {
+        "reads": 7,
+        "elisions": 0,
+        "visits": 39876,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 51684,
+        "exhaustions": 1
+      }
+    },
+    {
+      "module": "runtime/node/util",
+      "mode": "nogc",
+      "ratio": 1.0000150900443334,
+      "repeatRatio": 1.0000046097376305,
+      "cpuRatio": 1.2632956459028104,
+      "base": 207303555338,
+      "candidate": 207307161372,
+      "repeat": 207304510953,
+      "cpuBase": 37.401577,
+      "cpuCandidate": 36.29539,
+      "cpuRepeat": 22.070035,
+      "definitions": 2178,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 85019,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/util",
+      "mode": "rc",
+      "ratio": 1.0007027829106314,
+      "repeatRatio": 1.0000011733844882,
+      "cpuRatio": 0.9345030445381131,
+      "base": 221752547975,
+      "candidate": 221908522068,
+      "repeat": 221752808176,
+      "cpuBase": 22.355739,
+      "cpuCandidate": 19.097504,
+      "cpuRepeat": 18.681113,
+      "definitions": 2187,
+      "contents": {
+        "reads": 24,
+        "elisions": 0,
+        "visits": 75356,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 0,
+        "rewritten": 0,
+        "visits": 85019,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/zlib",
+      "mode": "nogc",
+      "ratio": 1.0004071874949285,
+      "repeatRatio": 0.9999986595739703,
+      "cpuRatio": 0.8401329410569605,
+      "base": 280067673773,
+      "candidate": 280181526046,
+      "repeat": 280067298363,
+      "cpuBase": 49.699862,
+      "cpuCandidate": 29.528295999999997,
+      "cpuRepeat": 24.855674999999998,
+      "definitions": 3393,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 144918,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/node/zlib",
+      "mode": "rc",
+      "ratio": 1.0003824990412986,
+      "repeatRatio": 0.9999979416055671,
+      "cpuRatio": 0.7234854603478298,
+      "base": 302213215330,
+      "candidate": 302328500439,
+      "repeat": 302212593256,
+      "cpuBase": 28.385046,
+      "cpuCandidate": 26.488404,
+      "cpuRepeat": 47.223956,
+      "definitions": 3402,
+      "contents": {
+        "reads": 26,
+        "elisions": 0,
+        "visits": 96919,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 93,
+        "rewritten": 0,
+        "visits": 144918,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/web-platform",
+      "mode": "nogc",
+      "ratio": 1.0009322163731136,
+      "repeatRatio": 0.9999987974371178,
+      "cpuRatio": 0.8706895273676521,
+      "base": 235882051745,
+      "candidate": 236101802892,
+      "repeat": 235881768082,
+      "cpuBase": 25.363435,
+      "cpuCandidate": 20.261854,
+      "cpuRepeat": 21.351267,
+      "definitions": 2543,
+      "contents": {
+        "reads": 0,
+        "elisions": 0,
+        "visits": 0,
+        "exhaustions": 0
+      },
+      "accumulators": {
+        "candidates": 6,
+        "rewritten": 0,
+        "visits": 121035,
+        "exhaustions": 0
+      }
+    },
+    {
+      "module": "runtime/web-platform",
+      "mode": "rc",
+      "ratio": 1.0002277493837481,
+      "repeatRatio": 1.0000111677079289,
+      "cpuRatio": 0.7992573839529966,
+      "base": 252246836855,
+      "candidate": 252305694743,
+      "repeat": 252249653874,
+      "cpuBase": 21.333879,
+      "cpuCandidate": 25.570028,
+      "cpuRepeat": 47.975473,
+      "definitions": 2550,
+      "contents": {
+        "reads": 39,
+        "elisions": 0,
+        "visits": 77017,
+        "exhaustions": 1
+      },
+      "accumulators": {
+        "candidates": 6,
+        "rewritten": 0,
+        "visits": 121035,
+        "exhaustions": 0
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "scope": "Authoritative current-provider value eligibility by prepared identity, clones included. Keys and precise managed categories unprovided. Recognized writes are diagnostic witnesses, not a closed-writer proof or hypothetical selection.",
+  "scope": "Authoritative current-provider payload eligibility by prepared identity, clones included. Unsupported slot or payload proofs remain explicit. Recognized writes are diagnostic witnesses, not a closed-writer proof or hypothetical selection.",
   "modules": 942,
   "measured": 941,
   "failures": [
@@ -4801,9 +4801,9 @@
       "family": "programs",
       "constructor": "nts_map_new",
       "allocations": 215,
-      "candidates": 138,
+      "candidates": 139,
       "empty": 1,
-      "dynamic": 76
+      "dynamic": 75
     },
     {
       "family": "programs",
@@ -4871,7 +4871,7 @@
       "family": "programs",
       "constructor": "nts_map_new",
       "reason": "precise managed payload layout unprovided",
-      "count": 19
+      "count": 18
     },
     {
       "family": "programs",
@@ -5347,7 +5347,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 17
@@ -5447,9 +5456,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 6
@@ -5464,9 +5471,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 12
@@ -5546,9 +5551,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 6
@@ -5563,9 +5566,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 12
@@ -5733,9 +5734,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 5
@@ -5750,9 +5749,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 11
@@ -6033,9 +6030,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 15
@@ -6080,9 +6075,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 15
@@ -6127,9 +6120,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 15
@@ -6174,9 +6165,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 15
@@ -7596,7 +7585,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "recordValueTag",
@@ -7619,7 +7617,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 11
@@ -7644,7 +7651,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "recordLiteralTag",
@@ -7667,7 +7683,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 9
@@ -7684,7 +7709,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 16
@@ -7709,7 +7743,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mapValueTag",
@@ -7732,7 +7775,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 11
@@ -7877,7 +7929,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "recordValueTag#whole",
@@ -7900,7 +7961,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 11
@@ -7925,7 +7995,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mapValueTag#whole",
@@ -7948,7 +8027,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 11
@@ -8721,7 +8809,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "deletedManagedValuesStayLive",
@@ -8744,7 +8841,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 16
@@ -8769,7 +8875,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "deletedManagedValuesStayLive",
@@ -8792,7 +8907,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 91
@@ -12758,7 +12882,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "like",
@@ -12781,7 +12914,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 47
@@ -12850,7 +12992,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mixed",
@@ -12873,7 +13024,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 76
@@ -12915,7 +13075,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "objects",
@@ -12938,7 +13107,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 13
@@ -12963,7 +13141,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "objectsByName",
@@ -12986,7 +13173,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 16
@@ -13072,7 +13268,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "like#whole",
@@ -13095,7 +13300,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 47
@@ -13164,7 +13378,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mixed#whole",
@@ -13187,7 +13410,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 76
@@ -13229,7 +13461,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "objects#whole",
@@ -13252,7 +13493,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 13
@@ -13332,9 +13582,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 21
@@ -13379,9 +13627,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 5
@@ -13860,7 +14106,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "recordValueTag",
@@ -13883,7 +14138,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 11
@@ -13908,7 +14172,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "recordLiteralTag",
@@ -13947,7 +14220,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 13
@@ -13972,7 +14254,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mapValueTag",
@@ -13995,7 +14286,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 11
@@ -15496,9 +15796,7 @@
           "whole": true
         },
         "tags": [
-          "null",
-          "undefined",
-          "managed"
+          "string"
         ]
       },
       "function": "noDestination",
@@ -15507,7 +15805,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3231, end: 3240 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "precise managed payload layout unprovided",
+      "reason": "closed string payload",
       "recognized_writes": [
         {
           "fact": {
@@ -15519,9 +15817,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 9
@@ -15536,9 +15832,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 15
@@ -15553,9 +15847,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 21
@@ -15563,7 +15855,7 @@
       ],
       "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "String"
     },
     {
       "family": "programs",
@@ -17160,7 +17452,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "managedThroughWide",
@@ -17183,7 +17484,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 8
@@ -17299,7 +17609,16 @@
           "number",
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mergedManaged",
@@ -17323,7 +17642,16 @@
               "number",
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 17
@@ -17360,7 +17688,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 8
@@ -17551,7 +17888,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 15
@@ -19932,7 +20278,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "referenceValues",
@@ -19955,7 +20310,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 8
@@ -19970,9 +20334,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 14
@@ -20071,7 +20433,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "walkedReferences",
@@ -20094,7 +20465,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 8
@@ -20109,9 +20489,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 14
@@ -20126,9 +20504,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 20
@@ -20833,7 +21209,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "referenceValues#whole",
@@ -20856,7 +21241,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 8
@@ -20871,9 +21265,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 14
@@ -20898,7 +21290,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "walkedReferences#whole",
@@ -20921,7 +21322,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 8
@@ -20936,9 +21346,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 14
@@ -20953,9 +21361,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 20
@@ -23634,7 +24040,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "textValues",
@@ -23655,9 +24070,7 @@
               "whole": true
             },
             "tags": [
-              "null",
-              "undefined",
-              "managed"
+              "string"
             ]
           },
           "value": 6
@@ -23674,7 +24087,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 17
@@ -24905,7 +25327,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "asAMapValue",
@@ -24928,7 +25359,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 13
@@ -24945,7 +25385,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 28
@@ -24970,7 +25419,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mapOfTuples",
@@ -24993,7 +25451,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 9
@@ -25010,7 +25477,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 20
@@ -25035,7 +25511,16 @@
         "tags": [
           "null",
           "undefined",
-          "managed"
+          "string",
+          "function",
+          "symbol",
+          "object",
+          "bigint",
+          "gobject",
+          "objc",
+          "com",
+          "host",
+          "other-foreign"
         ]
       },
       "function": "mapOfTuples#whole",
@@ -25058,7 +25543,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 9
@@ -25075,7 +25569,16 @@
             "tags": [
               "null",
               "undefined",
-              "managed"
+              "string",
+              "function",
+              "symbol",
+              "object",
+              "bigint",
+              "gobject",
+              "objc",
+              "com",
+              "host",
+              "other-foreign"
             ]
           },
           "value": 20

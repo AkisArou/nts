@@ -1,6 +1,6 @@
 # Container content-provider coverage
 
-Authoritative current-provider value eligibility by prepared identity, clones included. Keys and precise managed categories unprovided. Recognized writes are diagnostic witnesses, not a closed-writer proof or hypothetical selection.
+Authoritative current-provider payload eligibility by prepared identity, clones included. Unsupported slot or payload proofs remain explicit. Recognized writes are diagnostic witnesses, not a closed-writer proof or hypothetical selection.
 
 941/942 modules prepared; 1 unmeasured inputs; 0 function budget exhaustions.
 
@@ -8,11 +8,11 @@ Authoritative current-provider value eligibility by prepared identity, clones in
 
 | Corpus / constructor | Allocations | Value candidates | Dynamic | Empty | Candidate delta |
 |---|---:|---:|---:|---:|---:|
-| benchmarks / nts_map_new | 14 | 12 | 2 | 0 | 4 |
+| benchmarks / nts_map_new | 14 | 12 | 2 | 0 | 0 |
 | benchmarks / nts_set_new | 4 | 0 | 4 | 0 | 0 |
 | benchmarks / nts_table_new | 2 | 2 | 0 | 0 | 0 |
 | benchmarks / nts_map_copy | 0 | 0 | 0 | 0 | 0 |
-| programs / nts_map_new | 215 | 138 | 76 | 1 | 56 |
+| programs / nts_map_new | 215 | 139 | 75 | 1 | 1 |
 | programs / nts_set_new | 103 | 0 | 103 | 0 | 0 |
 | programs / nts_table_new | 115 | 35 | 80 | 0 | 0 |
 | programs / nts_map_copy | 10 | 0 | 10 | 0 | 0 |
@@ -27,7 +27,7 @@ Authoritative current-provider value eligibility by prepared identity, clones in
 | programs / nts_map_new | identity escapes the closed writer scope | 10 |
 | programs / nts_map_new | not every writer is known | 39 |
 | programs / nts_map_new | not one closed fresh identity | 6 |
-| programs / nts_map_new | precise managed payload layout unprovided | 19 |
+| programs / nts_map_new | precise managed payload layout unprovided | 18 |
 | programs / nts_set_new | allocation kind unsupported by current provider | 103 |
 | programs / nts_table_new | identity escapes the closed writer scope | 8 |
 | programs / nts_table_new | not every writer is known | 64 |
