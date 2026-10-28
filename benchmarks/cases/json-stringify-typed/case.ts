@@ -32,7 +32,7 @@
 // `json-stringify-doc`'s, which is checked rather than assumed -- see `native.mjs` beside the
 // other case. A faster serializer that produced different text would be a bug reported as a
 // benchmark win.
-import { numberText, quoteJSONString } from "../../../runtime/web-platform/src/json/text.ts";
+import { numberText, quoteJSONString } from "../../../runtime/ecmascript/src/json/text.ts";
 
 const ROWS = 2000;
 

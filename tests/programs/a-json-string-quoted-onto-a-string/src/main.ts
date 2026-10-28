@@ -4,7 +4,7 @@
 // quoted string made, copied and freed per member. `keeps` reads its quoted
 // key again after appending it, so its quote is made and kept. Both agree
 // with node, which runs text.ts's TypeScript.
-import { quoteJSONString } from "../../../../runtime/web-platform/src/json/text.ts";
+import { quoteJSONString } from "../../../../runtime/ecmascript/src/json/text.ts";
 
 // The lone surrogate is made, not written: a literal holding one does not
 // reach the compiler as written (tests/agreements/a-lone-surrogate-in-a-string).

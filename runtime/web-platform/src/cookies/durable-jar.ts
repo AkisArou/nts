@@ -10,9 +10,9 @@
 // The part that needed a decision is what to do with bytes that come back wrong.
 import type { AbortSignal } from "../core/abort.ts";
 import { decodeUTF8, TextEncoder } from "../core/encoding.ts";
-import { jsonStringify } from "../json/json.ts";
-import { parseJsonText } from "../json/parse.ts";
-import { JsonValue } from "../json/value.ts";
+import { jsonStringify } from "../../../ecmascript/src/json/json.ts";
+import { parseJsonText } from "../../../ecmascript/src/json/parse.ts";
+import { JsonValue } from "../../../ecmascript/src/json/value.ts";
 import type { DurableByteStore } from "../storage/durable.ts";
 
 import type { CookieJarStore, StoredCookie } from "./jar.ts";

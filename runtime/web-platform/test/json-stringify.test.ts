@@ -11,12 +11,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseJsonText } from "../src/json/parse.ts";
+import { parseJsonText } from "../../ecmascript/src/json/parse.ts";
 import {
   quoteJSONString,
   resolveGap,
   stringifyJsonValue,
-} from "../src/json/stringify.ts";
+} from "../../ecmascript/src/json/stringify.ts";
 import { VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {

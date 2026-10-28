@@ -16,9 +16,9 @@
 // Methodology: a warmup that is discarded, then repeated timed rounds, reported by **median**
 // rather than mean. A mean over a run that includes one GC pause reports the pause; the median
 // reports the common case, and the spread between fastest and median says whether to trust it.
-import { parseJsonText } from "../../../runtime/web-platform/src/json/parse.ts";
-import { stringifyJsonValue } from "../../../runtime/web-platform/src/json/stringify.ts";
-import { stringifyPlain, toPlainValue } from "../../../runtime/web-platform/src/json/plain.ts";
+import { parseJsonText } from "../../../runtime/ecmascript/src/json/parse.ts";
+import { stringifyJsonValue } from "../../../runtime/ecmascript/src/json/stringify.ts";
+import { stringifyPlain, toPlainValue } from "../../../runtime/ecmascript/src/json/plain.ts";
 
 interface Corpus {
   readonly name: string;

@@ -8,9 +8,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseJsonText } from "../src/json/parse.ts";
-import { stringifyPlain, toPlainValue } from "../src/json/plain.ts";
-import { jsonRawJSON } from "../src/json/json.ts";
+import { parseJsonText } from "../../ecmascript/src/json/parse.ts";
+import { stringifyPlain, toPlainValue } from "../../ecmascript/src/json/plain.ts";
+import { jsonRawJSON } from "../../ecmascript/src/json/json.ts";
 import { VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {

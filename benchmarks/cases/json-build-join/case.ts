@@ -16,7 +16,7 @@ import {
   member,
   numberText,
   quoteJSONString,
-} from "../../../runtime/web-platform/src/json/text.ts";
+} from "../../../runtime/ecmascript/src/json/text.ts";
 
 const KEYS = ["id", "name", "email", "created", "score", "active", "tags", "note"];
 const VALUES = [

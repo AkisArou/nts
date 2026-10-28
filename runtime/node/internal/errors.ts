@@ -32,7 +32,7 @@
 // UTF-16 code unit including lone surrogates, astral pairs, and pairs of
 // escape-adjacent units -- agree with node's `JSON.stringify`, on a harness
 // that reports 2,161 differences when handed a quoter that does no escaping.
-import { quoteJSONString } from "../../web-platform/src/json/text.ts";
+import { quoteJSONString } from "../../ecmascript/src/json/text.ts";
 
 export function determineSpecificType(value: unknown): string {
   if (value === null) {

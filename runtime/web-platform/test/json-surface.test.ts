@@ -12,9 +12,9 @@ import {
   jsonParse,
   jsonRawJSON,
   jsonStringify,
-} from "../src/json/json.ts";
-import { parseJsonText } from "../src/json/parse.ts";
-import { JsonValue } from "../src/json/value.ts";
+} from "../../ecmascript/src/json/json.ts";
+import { parseJsonText } from "../../ecmascript/src/json/parse.ts";
+import { JsonValue } from "../../ecmascript/src/json/value.ts";
 import { must, plain } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {

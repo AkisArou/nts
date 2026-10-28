@@ -39,9 +39,9 @@ import {
   numberText,
   quoteJSONString,
   resolveGap,
-} from "../../../../../runtime/web-platform/src/json/text.ts";
-import { arrayIndexOf, JsonValue } from "../../../../../runtime/web-platform/src/json/value.ts";
-import { scanNumber } from "../../../../../runtime/web-platform/src/json/parse.ts";
+} from "../../../../../runtime/ecmascript/src/json/text.ts";
+import { arrayIndexOf, JsonValue } from "../../../../../runtime/ecmascript/src/json/value.ts";
+import { scanNumber } from "../../../../../runtime/ecmascript/src/json/parse.ts";
 
 /** dNSName matching, including the wildcard rules HTTP/2 coalescing depends on. */
 export function covers(presented: string, host: string): boolean {

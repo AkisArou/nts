@@ -17,7 +17,7 @@
 // `ref.cpp`'s byte escaper writes exactly Table 78's text. The corpus is drawn
 // at module load from a linear congruential generator, so nothing folds, and
 // `ref.cpp` draws the identical one. Every unit of the output is hashed.
-import { quoteJSONString } from "../../../runtime/web-platform/src/json/text.ts";
+import { quoteJSONString } from "../../../runtime/ecmascript/src/json/text.ts";
 
 function next(x: number): number {
   return (Math.imul(x, 1664525) + 1013904223) | 0;

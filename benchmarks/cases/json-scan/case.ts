@@ -30,7 +30,7 @@
 // not -- the grammar is small and unambiguous -- but it would be answering "how fast is a
 // hand-written scanner" rather than "what does this compiler do with the one we ship", and the
 // `nts f64` column already answers the question a reference would be for.
-import { scanNumber } from "../../../runtime/web-platform/src/json/parse.ts";
+import { scanNumber } from "../../../runtime/ecmascript/src/json/parse.ts";
 
 // The representation this row measures (`nts expect-ir`): the input below is
 // one constant, not four literals joined on every call -- which the Wasm backend

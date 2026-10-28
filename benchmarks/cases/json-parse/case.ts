@@ -30,7 +30,7 @@
 // `json-stringify-doc` answers the other question for the other direction, and the equivalent
 // for this one is `JSON.parse` on the host, which the `V8` and `Bun` columns do not measure
 // because they run our TypeScript. That gap is stated rather than closed here.
-import { parseJsonText } from "../../../runtime/web-platform/src/json/parse.ts";
+import { parseJsonText } from "../../../runtime/ecmascript/src/json/parse.ts";
 
 function source(): string {
   const rows: string[] = [];

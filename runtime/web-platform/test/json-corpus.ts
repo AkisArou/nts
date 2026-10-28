@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import type { JsonValue } from "../src/json/value.ts";
+import type { JsonValue } from "../../ecmascript/src/json/value.ts";
 
 // The shared JSON corpora, and the helpers that read a graph.
 //

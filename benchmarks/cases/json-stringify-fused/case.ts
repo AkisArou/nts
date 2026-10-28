@@ -61,7 +61,7 @@ import {
   firstEscapeIndex,
   numberText,
   quoteFromIndex,
-} from "../../../runtime/web-platform/src/json/text.ts";
+} from "../../../runtime/ecmascript/src/json/text.ts";
 
 const ROWS = 2000;
 

@@ -387,6 +387,25 @@ export const RULES = [
     ],
   },
   {
+    // The two program controls and the JSON benchmark cases import these
+    // sources outside their tsconfig directories. The generic corpus map
+    // intentionally does not follow those external imports.
+    name: "the ECMAScript JSON provider",
+    wide: true,
+    when: (p) => /^runtime\/(ecmascript|web-platform)\/src\/json\/.*\.ts$/.test(p),
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "benches", "bench-agree", "definitions", "integrity-runtime", "integrity", "profile", "c-compiles", "addons", "assembles", "tooling", "types"],
+    arms: [{ kind: "answers", asks: "do the JSON host tests and the compiled web suite still pass", run: "sh tooling/conformance/web-platform/check.sh" }],
+  },
+  {
+    // all.sh discovers tooling .test.ts files dynamically. The static script
+    // input scanner cannot expand that discovery, so name this reader exactly.
+    name: "the provider family identity guard",
+    when: (p) => p === "tooling/conformance/provider-family-paths.test.ts",
+    settled: true,
+    steps: ["tooling", "types"],
+    arms: [],
+  },
+  {
     name: "a runtime module",
     wide: true,
     when: (p) => /^runtime\/(node|web-platform)\//.test(p),

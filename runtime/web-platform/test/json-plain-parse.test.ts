@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseJsonText } from "../src/json/parse.ts";
-import { parsePlainText, toPlainValue } from "../src/json/plain.ts";
+import { parseJsonText } from "../../ecmascript/src/json/parse.ts";
+import { parsePlainText, toPlainValue } from "../../ecmascript/src/json/plain.ts";
 import { INVALID, VALID } from "./json-corpus.ts";
 
 // `parsePlainText` is a second route through the same grammar: it builds ordinary objects

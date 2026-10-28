@@ -28,8 +28,8 @@
 //
 // The document is built once at module scope rather than per iteration. Construction is not the
 // thing being measured and an allocation-heavy build inside the loop would bury the serializer.
-import { stringifyJsonValue } from "../../../runtime/web-platform/src/json/stringify.ts";
-import { JsonValue } from "../../../runtime/web-platform/src/json/value.ts";
+import { stringifyJsonValue } from "../../../runtime/ecmascript/src/json/stringify.ts";
+import { JsonValue } from "../../../runtime/ecmascript/src/json/value.ts";
 
 const ROWS = 2000;
 

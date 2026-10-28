@@ -20,9 +20,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseJsonText } from "../src/json/parse.ts";
-import type { JsonValue } from "../src/json/value.ts";
-import { stringifyJsonValue } from "../src/json/stringify.ts";
+import { parseJsonText } from "../../ecmascript/src/json/parse.ts";
+import type { JsonValue } from "../../ecmascript/src/json/value.ts";
+import { stringifyJsonValue } from "../../ecmascript/src/json/stringify.ts";
 import { INVALID, keyOrder, must, plain, VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {

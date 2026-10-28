@@ -42,6 +42,27 @@ test("an earlier data path cannot erase a source script's wide obligations", () 
   }
 });
 
+test("JSON providers have explicit reach without an unmatched-path full gate", () => {
+  const json = ["runtime/ecmascript/src/json/json.ts", "runtime/ecmascript/src/json/parse.ts", "runtime/ecmascript/src/json/plain.ts", "runtime/ecmascript/src/json/stringify.ts", "runtime/ecmascript/src/json/text.ts", "runtime/ecmascript/src/json/value.ts"];
+  for (const path of [...json, "tooling/conformance/provider-family-paths.test.ts"]) {
+    for (const added of [false, true]) {
+      const rules = owed([{ path, added }]);
+      assert.ok(!rules.some(rule => rule.full), `${path} should have a precise rule`);
+      superset(gateSteps(rules), ["tooling", "types"], path);
+      for (const step of ["interop", "test262", "test262-cases", "test262-jvm"]) {
+        assert.ok(!gateSteps(rules).includes(step), `${path} does not reach ${step}`);
+      }
+    }
+  }
+  for (const path of json) {
+    superset(stepsFor(path), ["examples", "llvm", "llvm-rc", "jvm", "rc", "benches"], path);
+    superset(reach(path), ["definitions", "integrity-runtime", "profile", "c-compiles", "addons", "bench-agree"], path);
+    assert.ok(owed([{ path, added: false }]).flatMap(rule => rule.arms).some(arm => arm.kind === "answers" && arm.run === "sh tooling/conformance/web-platform/check.sh"), path);
+  }
+  assert.ok(owed([{path:"runtime/ecmascript/unplaced-provider.ts",added:true}]).some(rule=>rule.full));
+  assert.ok(owed([{path:"tooling/conformance/unplaced-provider-guard.ts",added:true}]).some(rule=>rule.full));
+});
+
 test("the native counter control owes tooling without an unmatched-path full gate", () => {
   const rules = owed([{ path: "tooling/gate/fixtures/counter-thread.c", added: true }]);
   assert.ok(!rules.some(rule => rule.full));
