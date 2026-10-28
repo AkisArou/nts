@@ -5,6 +5,7 @@ import type { RandomSource, Scheduler } from "../provider/primitives.ts";
 import { CShakeParams, normalizeAlgorithm, supportsCryptoOperation, toAlgorithmIdentifier } from "./algorithms.ts";
 import type { AlgorithmIdentifier, NormalizedAlgorithm } from "./algorithms.ts";
 import { decryptAes, encryptAes } from "./aes.ts";
+import { decryptAead, encryptAead } from "./aead.ts";
 import { cryptoBytes, isCryptoBufferSource, toCryptoBufferSource } from "./buffer-source.ts";
 import { getCryptoKeySlots } from "./crypto-key.ts";
 import type { CryptoKey, CryptoKeyPair, CryptoKeySlots, KeyUsage } from "./crypto-key.ts";
@@ -91,12 +92,14 @@ function isKdfAlgorithm(name: string): boolean {
 }
 
 function encryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
+  if (algorithm.name === "AES-OCB" || algorithm.name === "ChaCha20-Poly1305") return encryptAead(provider, algorithm, key, bytes);
   return algorithm.name === "RSA-OAEP"
     ? encryptRsa(provider, algorithm, key, bytes)
     : encryptAes(provider, algorithm, key, bytes);
 }
 
 function decryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
+  if (algorithm.name === "AES-OCB" || algorithm.name === "ChaCha20-Poly1305") return decryptAead(provider, algorithm, key, bytes);
   return algorithm.name === "RSA-OAEP"
     ? decryptRsa(provider, algorithm, key, bytes)
     : decryptAes(provider, algorithm, key, bytes);

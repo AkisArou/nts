@@ -75,6 +75,14 @@ function requireAesLength(length: number, error: "OperationError" | "DataError")
   }
 }
 
+function requireSecretLength(name: string, length: number, error: "OperationError" | "DataError"): void {
+  if (name === "ChaCha20-Poly1305") {
+    if (length !== 256) throw new DOMException("A ChaCha20-Poly1305 key must contain 256 bits", error);
+  } else {
+    requireAesLength(length, error);
+  }
+}
+
 function hmacDefaultLength(hash: CryptoDigestName): number {
   // This increment follows Node 24.20's public profile: SHA-3 HMAC is
   // supported with an explicit length, but has no supported omitted default.
@@ -86,6 +94,7 @@ function hmacDefaultLength(hash: CryptoDigestName): number {
 
 /** §§27–31 get-key-length operations, used before deriveKey derives any material. */
 export function getSecretKeyLength(algorithm: NormalizedAlgorithm): number {
+  if (algorithm.name === "ChaCha20-Poly1305") return 256;
   if (algorithm instanceof AesDerivedKeyParams) {
     requireAesLength(algorithm.length, "OperationError");
     return algorithm.length;
@@ -132,6 +141,9 @@ export function generateSecretKey(
     length = algorithm.length ?? hmacDefaultLength(algorithm.hash.name);
     if (length === 0) throw new DOMException("An HMAC key cannot have zero length", "OperationError");
     keyAlgorithm = new HmacKeyAlgorithm(algorithm.hash.name, length);
+  } else if (algorithm.name === "ChaCha20-Poly1305") {
+    length = 256;
+    keyAlgorithm = new KeyAlgorithm(algorithm.name);
   } else if (algorithm instanceof AesKeyGenParams) {
     length = algorithm.length;
     requireAesLength(length, "OperationError");
@@ -163,6 +175,8 @@ function jwkAlgorithm(name: string, length: number, hash: CryptoDigestName | und
     case "AES-CBC": return "A" + length + "CBC";
     case "AES-GCM": return "A" + length + "GCM";
     case "AES-KW": return "A" + length + "KW";
+    case "AES-OCB": return "A" + length + "OCB";
+    case "ChaCha20-Poly1305": return "C20P";
   }
   switch (hash) {
     case "SHA-1": return "HS1";
@@ -186,7 +200,7 @@ export function importSecretKey(
   if (hmac?.length === 0) throw new DOMException("An HMAC key cannot have zero length", "DataError");
   validateUsages(algorithm.name, usages);
   let bytes: Uint8Array;
-  if (format === "raw" || format === "raw-secret") {
+  if (format === "raw-secret" || (format === "raw" && algorithm.name !== "AES-OCB" && algorithm.name !== "ChaCha20-Poly1305")) {
     if (data instanceof JsonWebKey) throw new DOMException("Expected raw key bytes", "DataError");
     bytes = data;
   } else if (format === "jwk") {
@@ -195,7 +209,7 @@ export function importSecretKey(
     }
     bytes = decodeBase64Url(data.k);
     const bits = cryptoViewByteLength(bytes) * 8;
-    if (hmac === undefined) requireAesLength(bits, "DataError");
+    if (hmac === undefined) requireSecretLength(algorithm.name, bits, "DataError");
     if (data.alg !== undefined && data.alg !== jwkAlgorithm(algorithm.name, bits, hmac?.hash.name)) {
       throw new DOMException("The JWK algorithm does not match the requested key", "DataError");
     }
@@ -217,8 +231,8 @@ export function importSecretKey(
     }
     keyAlgorithm = new HmacKeyAlgorithm(hmac.hash.name, length);
   } else {
-    requireAesLength(length, "DataError");
-    keyAlgorithm = new AesKeyAlgorithm(algorithm.name, length);
+    requireSecretLength(algorithm.name, length, "DataError");
+    keyAlgorithm = algorithm.name === "ChaCha20-Poly1305" ? new KeyAlgorithm(algorithm.name) : new AesKeyAlgorithm(algorithm.name, length);
   }
   const record = provider.importKey(format === "jwk"
     ? { format: "components", components: { family: "secret", k: bytes } }
@@ -244,7 +258,7 @@ export function exportSecretKey(provider: CryptoProvider, format: KeyFormat, key
     if ("failure" in result) throw new DOMException("The secret key cannot be exported", "OperationError");
     bytes = result;
   }
-  if (format === "raw" || format === "raw-secret") return bytes;
+  if (format === "raw-secret" || (format === "raw" && key.algorithm.name !== "AES-OCB" && key.algorithm.name !== "ChaCha20-Poly1305")) return bytes;
   if (format !== "jwk") throw new DOMException("This secret-key format is not supported", "NotSupportedError");
   const algorithm = key.algorithm;
   const hmac = algorithm instanceof HmacKeyAlgorithm ? algorithm : undefined;

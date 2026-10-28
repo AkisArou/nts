@@ -47,10 +47,10 @@ export class DigestAlgorithm extends Algorithm<CryptoDigestName> {
   }
 }
 
-export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW";
+export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW" | "AES-OCB";
 export type KmacAlgorithmName = "KMAC128" | "KMAC256";
 export type CshakeAlgorithmName = "cSHAKE128" | "cSHAKE256";
-export type SecretAlgorithmName = AesAlgorithmName | "HMAC" | KmacAlgorithmName;
+export type SecretAlgorithmName = AesAlgorithmName | "HMAC" | KmacAlgorithmName | "ChaCha20-Poly1305";
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
 export type EcAlgorithmName = "ECDSA" | "ECDH";
 export type OkpAlgorithmName = "Ed25519" | "X25519" | "Ed448" | "X448";
@@ -156,6 +156,21 @@ export class AesGcmParams extends Algorithm<"AES-GCM"> {
     additionalData: Uint8Array | undefined,
     tagLength: number | undefined,
   ) {
+    super(name);
+    this.iv = iv;
+    this.additionalData = additionalData;
+    this.tagLength = tagLength;
+  }
+}
+
+/** Modern Algorithms §10.3, used by AES-OCB and ChaCha20-Poly1305. */
+export class AeadParams extends Algorithm<"AES-OCB" | "ChaCha20-Poly1305"> {
+  readonly iv: Uint8Array;
+  readonly additionalData: Uint8Array | undefined;
+  readonly tagLength: number | undefined;
+
+  constructor(name: "AES-OCB" | "ChaCha20-Poly1305", iv: Uint8Array,
+    additionalData: Uint8Array | undefined, tagLength: number | undefined) {
     super(name);
     this.iv = iv;
     this.additionalData = additionalData;
@@ -321,6 +336,7 @@ export type NormalizedAlgorithm =
   | AesCtrParams
   | AesCbcParams
   | AesGcmParams
+  | AeadParams
   | HmacKeyGenParams
   | HmacImportParams
   | RsaHashedKeyGenParams
@@ -387,6 +403,18 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("AES-GCM", "importKey"),
   new AlgorithmRegistration("AES-GCM", "exportKey"),
   new AlgorithmRegistration("AES-GCM", "get key length"),
+  new AlgorithmRegistration("AES-OCB", "encrypt"),
+  new AlgorithmRegistration("AES-OCB", "decrypt"),
+  new AlgorithmRegistration("AES-OCB", "generateKey"),
+  new AlgorithmRegistration("AES-OCB", "importKey"),
+  new AlgorithmRegistration("AES-OCB", "exportKey"),
+  new AlgorithmRegistration("AES-OCB", "get key length"),
+  new AlgorithmRegistration("ChaCha20-Poly1305", "encrypt"),
+  new AlgorithmRegistration("ChaCha20-Poly1305", "decrypt"),
+  new AlgorithmRegistration("ChaCha20-Poly1305", "generateKey"),
+  new AlgorithmRegistration("ChaCha20-Poly1305", "importKey"),
+  new AlgorithmRegistration("ChaCha20-Poly1305", "exportKey"),
+  new AlgorithmRegistration("ChaCha20-Poly1305", "get key length"),
   new AlgorithmRegistration("AES-KW", "wrapKey"),
   new AlgorithmRegistration("AES-KW", "unwrapKey"),
   new AlgorithmRegistration("AES-KW", "generateKey"),
@@ -510,6 +538,19 @@ function agreementParameters(algorithm: object, name: "ECDH" | "X25519" | "X448"
   return new EcdhKeyDeriveParams(name, publicKey as CryptoKey);
 }
 
+function aeadParameters(algorithm: object, name: "AES-OCB" | "ChaCha20-Poly1305", copyBuffers: boolean): AeadParams {
+  const input = algorithm as { readonly additionalData?: unknown; readonly iv?: unknown; readonly tagLength?: unknown };
+  // Web IDL converts dictionary members lexicographically; normalization then
+  // snapshots BufferSources in their declared order, after all getters finish.
+  const additionalDataValue = input.additionalData;
+  const additionalData = additionalDataValue === undefined ? undefined : toCryptoBufferSource(additionalDataValue);
+  const iv = toCryptoBufferSource(requiredMember(input.iv, name + ".iv"));
+  const tagLengthValue = input.tagLength;
+  const tagLength = tagLengthValue === undefined ? undefined : toCryptoUnsignedInteger(tagLengthValue, 8);
+  return new AeadParams(name, normalizedBytes(iv, copyBuffers),
+    additionalData === undefined ? undefined : normalizedBytes(additionalData, copyBuffers), tagLength);
+}
+
 function normalizeRegisteredAlgorithm(
   algorithm: object,
   name: RegisteredAlgorithmName,
@@ -553,6 +594,10 @@ function normalizeRegisteredAlgorithm(
     return new KmacParams(name, outputLength, customization === undefined ? undefined : normalizedBytes(customization, copyBuffers));
   }
 
+  if (name === "ChaCha20-Poly1305") {
+    return operation === "encrypt" || operation === "decrypt"
+      ? aeadParameters(algorithm, name, copyBuffers) : new Algorithm(name);
+  }
   if (name === "Ed25519") return new Algorithm(name);
   if (name === "X25519" || name === "X448") {
     return operation === "deriveBits" ? agreementParameters(algorithm, name) : new Algorithm(name);
@@ -663,6 +708,8 @@ function normalizeRegisteredAlgorithm(
   if (operation === "importKey" || operation === "exportKey" || name === "AES-KW") {
     return new Algorithm(name);
   }
+
+  if (name === "AES-OCB") return aeadParameters(algorithm, name, copyBuffers);
 
   if (name === "AES-CTR") {
     const input = algorithm as { readonly counter?: unknown; readonly length?: unknown };
