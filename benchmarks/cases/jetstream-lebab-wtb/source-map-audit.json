@@ -1,0 +1,583 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sourceScope": "web-tooling-benchmark/dist/lebab.bundle.js: ./node_modules/recast/node_modules/source-map/",
+  "validation": {
+    "node": "v24.20.0",
+    "typescript": "7.0.2",
+    "strict": {
+      "diagnostics": 0,
+      "command": "node node_modules/typescript/bin/tsc --strict --noEmit --target esnext --module esnext --moduleResolution bundler --skipLibCheck --allowImportingTsExtensions --ignoreConfig benchmarks/cases/jetstream-lebab-wtb/vendor/recast--source-map/source-map.ts"
+    },
+    "semanticAny": {
+      "diagnostics": 0,
+      "scan": "Declarations, this expressions, function return types, union/intersection members and generic reference arguments."
+    },
+    "syntaxCounts": {
+      "explicitAny": 0,
+      "asExpressions": 0,
+      "typeAssertions": 0,
+      "nonNullAssertions": 30,
+      "declaredFields": 135,
+      "classes": 8
+    },
+    "runtime": {
+      "node": "v24.20.0",
+      "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+      "sourceModule": "web-tooling-benchmark/dist/lebab.bundle.js: ./node_modules/recast/node_modules/source-map/",
+      "tests": 181,
+      "passed": 181,
+      "failed": 0,
+      "serializedCharacters": 169204,
+      "sha256": "59d8abd7060d8aa5f2fedabd0bc82101bb891e199816a8f18a55ffb1030b3768",
+      "failures": [],
+      "constructorPackaging": {
+        "SourceMapGenerator": {
+          "original": {
+            "writable": true,
+            "configurable": false,
+            "enumerable": false
+          },
+          "port": {
+            "writable": false,
+            "configurable": false,
+            "enumerable": false
+          }
+        },
+        "SourceMapConsumer": {
+          "original": {
+            "writable": true,
+            "configurable": false,
+            "enumerable": false
+          },
+          "port": {
+            "writable": false,
+            "configurable": false,
+            "enumerable": false
+          }
+        },
+        "SourceNode": {
+          "original": {
+            "writable": true,
+            "configurable": false,
+            "enumerable": false
+          },
+          "port": {
+            "writable": false,
+            "configurable": false,
+            "enumerable": false
+          }
+        },
+        "BasicSourceMapConsumer": {
+          "original": {
+            "writable": true,
+            "configurable": false,
+            "enumerable": false
+          },
+          "port": {
+            "writable": false,
+            "configurable": false,
+            "enumerable": false
+          }
+        },
+        "IndexedSourceMapConsumer": {
+          "original": {
+            "writable": true,
+            "configurable": false,
+            "enumerable": false
+          },
+          "port": {
+            "writable": false,
+            "configurable": false,
+            "enumerable": false
+          }
+        }
+      }
+    },
+    "support": {
+      "node": "v24.20.0",
+      "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+      "tests": 128,
+      "passed": 128,
+      "failed": 0,
+      "serializedCharacters": 13874,
+      "sha256": "2e69166704dac66087b6f190ddb90201fad782813b1a6fc82e5f5f0c2200f4bf",
+      "failures": [],
+      "adaptations": [
+        "ArraySet and MappingList are native classes with declared original fields and the original enumerable prototype function assignments. Native class constructor prototype properties are non-writable; instances, method descriptors, and collection behavior are compared."
+      ]
+    }
+  },
+  "sourceAudit": {
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "originalModules": 11,
+    "newTypedBoundaryModule": {
+      "file": "lib/sourceMapTypes.ts",
+      "sha256": "1cd5a4befbdfb4b78f4d27e7fe8d731829ff42c5a97fa17c0d6c1916dbe2606e"
+    },
+    "originalFunctions": 113,
+    "classes": [
+      "ArraySet",
+      "MappingList",
+      "SourceMapGenerator",
+      "SourceMapConsumer",
+      "BasicSourceMapConsumer",
+      "Mapping",
+      "IndexedSourceMapConsumer",
+      "SourceNode"
+    ],
+    "sourceFiles": [
+      {
+        "file": "source-map.ts",
+        "originalSha256": "17d531dfa1c130b9d707d78a3a34424953861758491dbb83ef2e2a2d2f1dc0fe",
+        "portSha256": "656de6e95c54d63f76c17d44542e53f8e392e28cdc200869c16e42163008b383",
+        "originalFunctions": 0,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {},
+        "portControls": {
+          "IfStatement": 1,
+          "ThrowStatement": 1,
+          "ReturnStatement": 1
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/source-map-generator.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/source-map-consumer.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/source-node.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "lib/base64.ts",
+        "originalSha256": "1249a6780b3eba774d4f91ef0ff7b62e9b52e2b120d269e7f2dfd12be0adf773",
+        "portSha256": "ff4354e2a5353d92b96274c93b0059c38cdcd78c57f96fd3dd2606de6fa347aa",
+        "originalFunctions": 2,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "IfStatement": 6,
+          "ReturnStatement": 7,
+          "ThrowStatement": 1
+        },
+        "portControls": {
+          "IfStatement": 7,
+          "ReturnStatement": 8,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": []
+      },
+      {
+        "file": "lib/base64-vlq.ts",
+        "originalSha256": "4ccca2312bc03f3dc48729b19e0f42f7669ae23052f59ba204dd1f5d04e982ce",
+        "portSha256": "9bc0469d802068ec49bf8cb0ac2fb09dd0e55b21e71c7f1d0fcdb20d68f173e5",
+        "originalFunctions": 4,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 3,
+          "DoStatement": 2,
+          "IfStatement": 3,
+          "ThrowStatement": 2
+        },
+        "portControls": {
+          "ReturnStatement": 4,
+          "DoStatement": 2,
+          "IfStatement": 4,
+          "ThrowStatement": 3
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/base64.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "lib/binary-search.ts",
+        "originalSha256": "2071a69b3f8d98ffa39dbaa784bf88507794b872a360ead8ca15b3266829ccee",
+        "portSha256": "cdb9a91748e575018d82a919f0b9609066af8bac58d942d4677c4297e8037b1d",
+        "originalFunctions": 2,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "IfStatement": 9,
+          "ReturnStatement": 10,
+          "WhileStatement": 1,
+          "BreakStatement": 1
+        },
+        "portControls": {
+          "IfStatement": 10,
+          "ReturnStatement": 11,
+          "WhileStatement": 1,
+          "BreakStatement": 1,
+          "ThrowStatement": 1
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": []
+      },
+      {
+        "file": "lib/quick-sort.ts",
+        "originalSha256": "cf2f418dfd24b839fbf5570d3271d5a022a63511f83fdc8c7463edb144204b38",
+        "portSha256": "56f828e317ebf222c8b0de5d5ce64720a83912e7a78290776f7dce0221e71a09",
+        "originalFunctions": 4,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 1,
+          "IfStatement": 2,
+          "ForStatement": 1
+        },
+        "portControls": {
+          "ReturnStatement": 2,
+          "IfStatement": 3,
+          "ForStatement": 1,
+          "ThrowStatement": 1
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": []
+      },
+      {
+        "file": "lib/util.ts",
+        "originalSha256": "7afb0f05d34cddd0ab241b205618b70de8bae47ca9e38a513ce55f98073947de",
+        "portSha256": "97aa6277be254efb3faf2b6cc68ee24cd87f3157c6a7eddbb464f24b3af6a36e",
+        "originalFunctions": 18,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "IfStatement": 58,
+          "ReturnStatement": 53,
+          "ThrowStatement": 2,
+          "ForStatement": 2,
+          "WhileStatement": 1
+        },
+        "portControls": {
+          "IfStatement": 59,
+          "ReturnStatement": 54,
+          "ThrowStatement": 3,
+          "ForStatement": 2,
+          "WhileStatement": 1
+        },
+        "originalOperations": [
+          "Object.create"
+        ],
+        "portOperations": [
+          "Object.create"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": []
+      },
+      {
+        "file": "lib/array-set.ts",
+        "originalSha256": "c020fc000c97260b2383c166a84d1672d9b7ce267575bde97f3c7ee1da12c9d2",
+        "portSha256": "8c056afa75aa7450b8b6b853f550d29684053513e50e702cd30077611dcf012c",
+        "originalFunctions": 8,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ForStatement": 1,
+          "ReturnStatement": 8,
+          "IfStatement": 8,
+          "ThrowStatement": 2
+        },
+        "portControls": {
+          "ForStatement": 1,
+          "ReturnStatement": 9,
+          "IfStatement": 9,
+          "ThrowStatement": 3
+        },
+        "originalOperations": [
+          "Object.create"
+        ],
+        "portOperations": [
+          "Object.create"
+        ],
+        "classes": [
+          "ArraySet"
+        ],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/util.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "lib/mapping-list.ts",
+        "originalSha256": "df81fe623bfd5126c10e11a85e5aad48c8fc67837df1cbdd7e2fc005bf16c3b6",
+        "portSha256": "30be63136832f990a1059a007c0d580246510d6a8e043f7bd02b2dfcf13e3850",
+        "originalFunctions": 5,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 2,
+          "IfStatement": 2
+        },
+        "portControls": {
+          "ReturnStatement": 3,
+          "IfStatement": 3,
+          "ThrowStatement": 1
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [
+          "MappingList"
+        ],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/util.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "lib/source-map-generator.ts",
+        "originalSha256": "145bce01143712d6a32a0318fbae56a72e601b416d2b643f7e586cb6e408b070",
+        "portSha256": "94a505e86b10da40c7907ea539a57b64e4315769c52ebf33c7cccea609c46c57",
+        "originalFunctions": 15,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "IfStatement": 43,
+          "ReturnStatement": 9,
+          "ThrowStatement": 3,
+          "ForStatement": 1,
+          "WhileStatement": 1,
+          "ContinueStatement": 1
+        },
+        "portControls": {
+          "IfStatement": 44,
+          "ReturnStatement": 10,
+          "ThrowStatement": 4,
+          "ForStatement": 1,
+          "WhileStatement": 1,
+          "ContinueStatement": 1
+        },
+        "originalOperations": [
+          "Object.create"
+        ],
+        "portOperations": [
+          "Object.create"
+        ],
+        "classes": [
+          "SourceMapGenerator"
+        ],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/base64-vlq.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/util.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/array-set.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/mapping-list.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "lib/source-map-consumer.ts",
+        "originalSha256": "330d33fb0b7fa39c611599019be9f7f04202dce585ad9b9697586da37ffd87f7",
+        "portSha256": "eaf580247e6125ade469e6932babc354049046e94de864b32cc0471598b6abf6",
+        "originalFunctions": 35,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [
+          {
+            "name": "allocatedBasicConsumer",
+            "parameters": [
+              "value"
+            ]
+          }
+        ],
+        "cases": 2,
+        "originalControls": {
+          "IfStatement": 54,
+          "ReturnStatement": 42,
+          "ThrowStatement": 12,
+          "SwitchStatement": 1,
+          "CaseClause": 2,
+          "BreakStatement": 3,
+          "DefaultClause": 1,
+          "WhileStatement": 4,
+          "ForStatement": 10,
+          "ContinueStatement": 2
+        },
+        "portControls": {
+          "IfStatement": 56,
+          "ThrowStatement": 14,
+          "ReturnStatement": 44,
+          "SwitchStatement": 1,
+          "CaseClause": 2,
+          "BreakStatement": 3,
+          "DefaultClause": 1,
+          "WhileStatement": 4,
+          "ForStatement": 10,
+          "ContinueStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty",
+          "Object.defineProperty",
+          "Object.create",
+          "Object.create",
+          "Object.defineProperty",
+          "Object.create",
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty",
+          "Object.defineProperty",
+          "Object.setPrototypeOf",
+          "Object.create",
+          "Object.defineProperty",
+          "Object.setPrototypeOf",
+          "Object.defineProperty"
+        ],
+        "classes": [
+          "SourceMapConsumer",
+          "BasicSourceMapConsumer",
+          "Mapping",
+          "IndexedSourceMapConsumer"
+        ],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/util.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/binary-search.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/array-set.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/base64-vlq.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/quick-sort.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "lib/source-node.ts",
+        "originalSha256": "de53d6703400d51fcf6973f1fcd50883aab21e2b7c887e0ae156aa6cc4c811da",
+        "portSha256": "d0a541f8dad2d18ddd91cdcb756b42891e41b84a10bf9161bbb5733368ea0882",
+        "originalFunctions": 20,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [
+          {
+            "name": "isSourceNodeChunk",
+            "parameters": [
+              "value"
+            ]
+          }
+        ],
+        "cases": 0,
+        "originalControls": {
+          "IfStatement": 26,
+          "ReturnStatement": 10,
+          "WhileStatement": 1,
+          "ThrowStatement": 2,
+          "ForStatement": 6
+        },
+        "portControls": {
+          "ReturnStatement": 12,
+          "IfStatement": 27,
+          "WhileStatement": 1,
+          "ThrowStatement": 3,
+          "ForStatement": 6
+        },
+        "originalOperations": [],
+        "portOperations": [],
+        "classes": [
+          "SourceNode"
+        ],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/source-map-generator.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/recast/node_modules/source-map/lib/util.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      }
+    ]
+  },
+  "adaptations": [
+    "Eight historical constructor functions become native classes with declared original fields, as required by cloud-agents.md. All 113 original function/constructor names, parameter bindings, arities and source order are retained. The original named enumerable prototype method assignments remain; no methods were moved into class syntax.",
+    "The SourceMapConsumer constructor still dispatches to BasicSourceMapConsumer or IndexedSourceMapConsumer and returns that exact new instance. The two original module-initialization allocations `Subclass.prototype = Object.create(SourceMapConsumer.prototype)` become Object.setPrototypeOf on native class prototypes because native class .prototype properties are non-writable. Both class-created own constructor properties are deleted; Basic retains the inherited constructor and Indexed then executes the original constructor assignment. Every instance key sequence, inheritance relationship and prototype-member descriptor in the runtime audit matches the original.",
+    "Native class constructor .prototype descriptors are non-writable, unlike the original functions; the actual original/port descriptors are included above. Classes also require new, as mandated by the port rules. The benchmark and retained original module calls construct these instances with new. Neither difference is hidden or substituted with constructor forwarding.",
+    "The four original Object.defineProperty accessor operations, their descriptors, lazy mapping parsing, and all runtime copying/prototype operations are retained. Prototype initialization changes are limited to the two class-forced static inheritance sites described above.",
+    "The original consumer sources variable is split into raw sourcesInput and normalized sources phase bindings. The original getArg reads, three map passes and their order remain, with no extra array map pass or copied input.",
+    "Raw JSON file/sourceRoot/sourcesContent/mappings metadata remains unknown until the original read/call points. Checked property and callable boundaries preserve property keys, receivers, arguments, array/object identity and native rejection text exercised by the malformed-input fixtures. Numeric coercions occur only where the original arithmetic/comparison performs them; mapping fields retain false/null/undefined values from original construction and skipValidation paths.",
+    "The two indexed-section offset +1 expressions need a typed dynamic addition boundary. sourceMapAddNumber keeps the original left operand and literal 1 arguments, performs the default primitive conversion in the original order, then preserves string concatenation, numeric addition and BigInt/Symbol errors. Raw offset objects are stored unchanged. Fourteen original/port fixtures cover primitive values, arrays/objects, valueOf/toString, @@toPrimitive hints, Date and errors.",
+    "Only type annotations, typed boundary helpers and cached module export checks are added outside these forced adaptations. The 11 original module bodies retain every runtime string, numeric and regular-expression literal; only Webpack dependency identifier strings move into statically named lazy package imports. No input, benchmark transform, validation condition or work unit is reduced."
+  ]
+}

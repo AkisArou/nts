@@ -1,0 +1,70 @@
+{
+  "node": "24.20.0",
+  "pnpm": "10.15.0",
+  "typescript": "7.0.2",
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "commands": [
+    {
+      "command": "pnpm install",
+      "status": "pass"
+    },
+    {
+      "command": "pnpm exec tsc --ignoreConfig --strict --noEmit --skipLibCheck --target es2024 --lib esnext,dom --module nodenext --allowImportingTsExtensions benchmarks/cases/jetstream-lebab-wtb/case.ts",
+      "diagnostics": 0
+    },
+    {
+      "command": "node --test benchmarks/jetstream.test.ts",
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "syntax": {
+    "files": 298,
+    "anyKeywords": 0,
+    "asExpressions": 0,
+    "typeAssertions": 0,
+    "suppressions": 0,
+    "nonNullAssertions": 614,
+    "classes": 217,
+    "declaredProperties": 1498
+  },
+  "inferredAny": {
+    "declarations": 0,
+    "returns": 0
+  },
+  "checksum": {
+    "seed": 1,
+    "work0": 0,
+    "work1": 1344693304,
+    "work2": 2689386608,
+    "float64Bits": "41d409990e000000"
+  },
+  "output": {
+    "characters": 23935,
+    "codeCharacters": 21316,
+    "warnings": 35,
+    "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+  },
+  "upstreamTransformCases": {
+    "tests": 545,
+    "passed": 545,
+    "originalSkipped": 2
+  },
+  "timingEvidence": "timing.json",
+  "maintainerWork": [
+    "nts compilation and refusal recording",
+    "input domains",
+    "Node oracle counts",
+    "gate",
+    "measurement",
+    "landing"
+  ],
+  "sourceWhitespace": {
+    "gitDiffCheck": "preserved vendored/source formatting",
+    "trailingWhitespaceLines": 298,
+    "otherFindings": 0,
+    "note": "Original bundle marker comments, authored source formatting and blanked emitted scaffolding retain trailing whitespace; source hashes and behavioral checks refer to this retained formatting."
+  }
+}

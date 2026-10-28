@@ -1,0 +1,40 @@
+{
+  "node": "v24.20.0",
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "scope": "Unmodified class, inheritance, default-parameter, destructuring-parameter, for-each and for-of upstream test bodies; only the import and test-runner bindings are supplied. Both original bundle and typed port must match upstream code and warnings.",
+  "sources": [
+    {
+      "file": "classTest.js",
+      "sha256": "ab5a883418886c5c1fb89877c9f755060a5dd83b230d4a9ac2ae35ee7cb2dff8"
+    },
+    {
+      "file": "classInheritanceTest.js",
+      "sha256": "b9f3c5ba873edf7dd8e194e8b3802d8c7c3e6620cb9cdb938170d94cf00c3aff"
+    },
+    {
+      "file": "defaultParamTest.js",
+      "sha256": "fa8cd65f1ee69e15eb0fca27af57659b29e1ea47665880a12511660da3048154"
+    },
+    {
+      "file": "destructParamTest.js",
+      "sha256": "6849f91fde2dadca8758d87ce727ee67207173ccf08a86ac7e57d2c38c47e4c2"
+    },
+    {
+      "file": "forEachTest.js",
+      "sha256": "85dfc049b9ca9f19f6abc03cd3772cdd82b12062f538250c652926aa3357c613"
+    },
+    {
+      "file": "forOfTest.js",
+      "sha256": "3f992930f070d88e39ad030df02372a5051d47a0cbef9bd8036089a8a7308706"
+    }
+  ],
+  "skipped": [
+    "destructParamTest.js / Destruct function param / should not transform second param when this results in conflict",
+    "destructParamTest.js / Destruct function param / should not perform second transform when it results in conflict"
+  ],
+  "tests": 189,
+  "passed": 189,
+  "failures": [],
+  "serializedCharacters": 103799,
+  "sha256": "911bc6289777e8d8433c9f975e1c87973999fa2770d665b0bdda686159796c1e"
+}

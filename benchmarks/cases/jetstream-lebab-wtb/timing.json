@@ -1,0 +1,41 @@
+{
+  "node": "24.20.0",
+  "seed": 1,
+  "command": "/workspace/scratch/6fb71dc29368/toolchains/node-v24.20.0-linux-x64/bin/node time-lebab.mjs 1",
+  "harness": "benchmarks/common/bench.mjs",
+  "harnessSha256": "4de8a24ae405c878ed62183e39312bba11f7d5db5dd3755d946dd4747b43d74b",
+  "method": "Five sequential fresh processes; unchanged common measure helper; all other agent checks paused.",
+  "observations": [
+    {
+      "process": 1,
+      "nsPerOp": 151542991.0,
+      "msPerOp": 151.542991,
+      "checksumBits": "41d409990e000000"
+    },
+    {
+      "process": 2,
+      "nsPerOp": 164263194.0,
+      "msPerOp": 164.263194,
+      "checksumBits": "41d409990e000000"
+    },
+    {
+      "process": 3,
+      "nsPerOp": 200842804.0,
+      "msPerOp": 200.842804,
+      "checksumBits": "41d409990e000000"
+    },
+    {
+      "process": 4,
+      "nsPerOp": 147895118.0,
+      "msPerOp": 147.895118,
+      "checksumBits": "41d409990e000000"
+    },
+    {
+      "process": 5,
+      "nsPerOp": 155675951.0,
+      "msPerOp": 155.675951,
+      "checksumBits": "41d409990e000000"
+    }
+  ],
+  "bestMs": 147.895118
+}

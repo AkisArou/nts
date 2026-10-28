@@ -1,0 +1,2418 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "node": "v24.20.0",
+  "strictTypeScript": "0 diagnostics for the utility, type-detection, process, native-intrinsic, bind, property, OS, and numeric/object compatibility modules under the required strict flags.",
+  "inferredAny": {
+    "declarations": [],
+    "returns": []
+  },
+  "sourceSummary": {
+    "modules": 73,
+    "originalFunctions": 223,
+    "portFunctions": 223,
+    "functionIssues": [],
+    "controlDifferences": [],
+    "missingNonModuleLiterals": []
+  },
+  "sourceModules": [
+    {
+      "module": "./node_modules/available-typed-arrays/index.js",
+      "file": "available-typed-arrays/index.js",
+      "originalSha256": "77096c3143c1c0248f00d9d3aebbfa8d6593e10898ba3e32d7978d459b7c4546",
+      "portSha256": "d520c770f8e4d176d0f379aeb0b4bd409ce22c7ca0d9d371a7fa471f79fc0881",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ForStatement": 1,
+        "IfStatement": 1,
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ForStatement": 1,
+        "IfStatement": 1,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/possible-typed-array-names/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind-apply-helpers/actualApply.js",
+      "file": "call-bind-apply-helpers/actualApply.js",
+      "originalSha256": "3393dea6eb08120e4a505f90be0d54ded710e267fc0303bc40184ac554b0773a",
+      "portSha256": "8680d44de7e0d89ec33ec592efd275e36bc423f7184707394b5046be3c868269",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/function-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/functionApply.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/functionCall.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/reflectApply.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind-apply-helpers/applyBind.js",
+      "file": "call-bind-apply-helpers/applyBind.js",
+      "originalSha256": "88d9971cb0c15eb5e3e55708d14d2ee914286d271df247ef389aef47882937bd",
+      "portSha256": "a703f0166f8947c47d55f8cb28b259aebe2cce7d7b6938bc5b299e85894ecc53",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/function-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/functionApply.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/actualApply.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind-apply-helpers/functionApply.js",
+      "file": "call-bind-apply-helpers/functionApply.js",
+      "originalSha256": "131b04c4f4a5f27d2f7626a0d34eff2b28148839db95b8cd87697fa2d4482e70",
+      "portSha256": "deabffc50f6edce8887e41a39d0b41457a0e8bfcb906f2cfca0cd879ff390019",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind-apply-helpers/functionCall.js",
+      "file": "call-bind-apply-helpers/functionCall.js",
+      "originalSha256": "882d39d16533b36a7158a8fdea77ebc1f05a121af4f9e14c6fd3d5f2e7db6962",
+      "portSha256": "b62ce3020cc43eab6c6daa92765c2fe1905b16080650277481659def6f27a50b",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind-apply-helpers/index.js",
+      "file": "call-bind-apply-helpers/index.js",
+      "originalSha256": "127a531e770a9525ee1a607ce3341a064675a2fdbb3d038acdbae65450a01a23",
+      "portSha256": "70afd7eacbded18f460c113c79b5594e4212255b3fe51d337271963267387763",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/function-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/type.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/functionCall.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/actualApply.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind-apply-helpers/reflectApply.js",
+      "file": "call-bind-apply-helpers/reflectApply.js",
+      "originalSha256": "f796503b534556bee7af12f9630e738edeff23b3c6fede86e79b8f15c71532c9",
+      "portSha256": "be3af5304d55769b8a0c9ae879fbbb67f678da5e67970747e67c049911acdab9",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind/callBound.js",
+      "file": "call-bind/callBound.js",
+      "originalSha256": "fed9d85959462b5781b2a72a72770fb9de6518a5817487cae19effbf0301ea75",
+      "portSha256": "c369093f305a1a9ba3762cc141803c34370c3dbba6c044106ccbbb85e35ef7a7",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/get-intrinsic/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bind/index.js",
+      "file": "call-bind/index.js",
+      "originalSha256": "09ddeb07ed59fc46285a81cc2c037870458dfd753e8a9fdf5dcac17d56a07ae8",
+      "portSha256": "531bc1de6a4b25b3cf0e183a40b0a7bc11804d923255387a2a57789a031c410e",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1,
+        "IfStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1,
+        "IfStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/set-function-length/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-define-property/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/applyBind.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/call-bound/index.js",
+      "file": "call-bound/index.js",
+      "originalSha256": "f1ace080add86aff452245742d69e2c3e102bb15a5868df5ddf6356fea18a4b0",
+      "portSha256": "8f09656ccdea288d9c89d52f9427c8f36a149462f33d836e09ab9e4a10834653",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/get-intrinsic/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/define-data-property/index.js",
+      "file": "define-data-property/index.js",
+      "originalSha256": "9f12a64d7a03c908bdb37dd916502c4b44be5aedd53f4ae379c62e93f5ccde88",
+      "portSha256": "96104b0857b8524cffea02b5d5cd3a8c6b52fe084e51714e07ed77460167ee5e",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 8,
+        "ThrowStatement": 7
+      },
+      "portControls": {
+        "IfStatement": 8,
+        "ThrowStatement": 7
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/es-define-property/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/syntax.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/type.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/gopd/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/define-properties/index.js",
+      "file": "define-properties/index.js",
+      "originalSha256": "a8b62d53ecf7705435d526115f2ac660d73a363c44c5227b26370e2b1dffb1c6",
+      "portSha256": "9a582780277f52f6b373031f5659e49f7f406492143523cc57d5782ef404be4a",
+      "originalFunctions": 3,
+      "portFunctions": 3,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 3,
+        "IfStatement": 6,
+        "ForStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 3,
+        "IfStatement": 6,
+        "ForStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object-keys/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/define-data-property/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-property-descriptors/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/dunder-proto/get.js",
+      "file": "dunder-proto/get.js",
+      "originalSha256": "080aceac763c49ce36ab81004f34c2a4cb22f081d4f93761bca272d461634c79",
+      "portSha256": "ead8b235c282dad3c1f32f2ad992bca665508208f5285a484905d8e9208677bd",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "TryStatement": 1,
+        "CatchClause": 1,
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "TryStatement": 1,
+        "CatchClause": 1,
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/gopd/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-define-property/index.js",
+      "file": "es-define-property/index.js",
+      "originalSha256": "a659d67a0752342a99de2e47c7aee0e162b1fc12509c9f245a52b0169ff0a945",
+      "portSha256": "25320a0b126d27114696b6ad7efdfc37a696a23f3eeb44f12d783a1c0406fea2",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/eval.js",
+      "file": "es-errors/eval.js",
+      "originalSha256": "082b720a5ba7dd7cfb2bfd9e4e10941e3a35c24c4e6d402c4eb94d58db815918",
+      "portSha256": "09c5c37ea4581896b5716fe800d53beac2af994034ae414e185afb54ce926247",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/index.js",
+      "file": "es-errors/index.js",
+      "originalSha256": "c1cc2de26b418a229a871c1f4c2ba326f81a4f537ad7ea5c4c75e64e68699f83",
+      "portSha256": "9d902898b8ab16bff193dccf80da15584302a77f4c2350e1070ccfed02435859",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/range.js",
+      "file": "es-errors/range.js",
+      "originalSha256": "8036b8398feca155777de03c8a800d11b4f9247c94915aa99e0b1ed94a6fb755",
+      "portSha256": "e6aab4ac333fbc73b4129769016cbdc51731acc21388889d312fa05e5db6d333",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/ref.js",
+      "file": "es-errors/ref.js",
+      "originalSha256": "813f2728d4be9a1f13b0e7540134afe345a518a8b1721df090b3a7404d5d0813",
+      "portSha256": "ccdea273b10764305ad10140dd2ccc3e83a49abd4be9dda38f06b83281de8165",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/syntax.js",
+      "file": "es-errors/syntax.js",
+      "originalSha256": "94d53d2da4d1b58751033ea97f2456c76312ab274baa35bbde441c11ad2ef86c",
+      "portSha256": "9a0fab10ce761156a0101ae5de8c05c536020f3a761a1ec521f25e99fba533af",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/type.js",
+      "file": "es-errors/type.js",
+      "originalSha256": "bea53d84d7fef7fa0fc5cb5623250f8b79600dd04d53c3cd4e23094576741532",
+      "portSha256": "388f208bb316c4d92ef3d47f8936bbbdc8141f9549f0ee39151bd626c4c78382",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-errors/uri.js",
+      "file": "es-errors/uri.js",
+      "originalSha256": "a414e9c7e15f1346f5394490899e7a668194e7b1243704143d91f340777df9b4",
+      "portSha256": "03fe823bb38aa13a5889ebfa7455cf538e4c1cd237e899842b307c7ff72ad348",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/es-object-atoms/index.js",
+      "file": "es-object-atoms/index.js",
+      "originalSha256": "d634f0bf1c32adee11676cf9c420db0267e87da72c85c9a49a5f015a602d8282",
+      "portSha256": "a017cfb786b23c25dbeb36137aae43fdf388c96e8044ddef56f17f134e7d236d",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/for-each/index.js",
+      "file": "for-each/index.js",
+      "originalSha256": "2be856526d963b83672ec74ca41440a1283ae5ce6c8055a69a3da3fc130e2206",
+      "portSha256": "881367349d1c1305f233cad8e93fb91e24481df1dbf38840c64233a52acc2c49",
+      "originalFunctions": 5,
+      "portFunctions": 5,
+      "functionIssues": [],
+      "originalControls": {
+        "ForStatement": 2,
+        "IfStatement": 9,
+        "ForInStatement": 1,
+        "ReturnStatement": 1,
+        "ThrowStatement": 1
+      },
+      "portControls": {
+        "ForStatement": 2,
+        "IfStatement": 9,
+        "ForInStatement": 1,
+        "ReturnStatement": 1,
+        "ThrowStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/is-callable/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/function-bind/implementation.js",
+      "file": "function-bind/implementation.js",
+      "originalSha256": "40ee5b81a8298b8bf1445efe628f9974b1ce1086f8cd9a7eadd72c64370bb3a2",
+      "portSha256": "567cdc013ea88cbd4de6a6ee75d786fafd5f5475d9f7b12e54b4d41e668acc45",
+      "originalFunctions": 6,
+      "portFunctions": 6,
+      "functionIssues": [],
+      "originalControls": {
+        "ForStatement": 5,
+        "ReturnStatement": 7,
+        "IfStatement": 5,
+        "ThrowStatement": 1
+      },
+      "portControls": {
+        "ForStatement": 5,
+        "ReturnStatement": 7,
+        "IfStatement": 5,
+        "ThrowStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [
+        "Function"
+      ],
+      "portDirectRuntimeOperations": [
+        "Function"
+      ]
+    },
+    {
+      "module": "./node_modules/function-bind/index.js",
+      "file": "function-bind/index.js",
+      "originalSha256": "1ba8d400b2f6069c93116eee6e40c0597af7e7619251b0b2c27106a826135309",
+      "portSha256": "913a7f1a7ccea13b8ca2eb0f97b2ae30aa9a60eaa3a473d244475388001f6b76",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/function-bind/implementation.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/get-intrinsic/index.js",
+      "file": "get-intrinsic/index.js",
+      "originalSha256": "fa5aa1052399e7ac84483db3350734b214e8145b42febbfeca8005dd16975669",
+      "portSha256": "b781c3744ed441853489f1c3a461164eb84d93f4c889bab7caa7e18ec7c683b6",
+      "originalFunctions": 8,
+      "portFunctions": 8,
+      "functionIssues": [],
+      "originalControls": {
+        "TryStatement": 4,
+        "ReturnStatement": 9,
+        "CatchClause": 4,
+        "ThrowStatement": 10,
+        "IfStatement": 27,
+        "ForStatement": 1
+      },
+      "portControls": {
+        "TryStatement": 4,
+        "ReturnStatement": 9,
+        "CatchClause": 4,
+        "ThrowStatement": 10,
+        "IfStatement": 27,
+        "ForStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/es-object-atoms/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/eval.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/range.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/ref.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/syntax.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/type.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/uri.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/abs.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/floor.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/max.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/min.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/pow.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/round.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/sign.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/gopd/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-define-property/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-symbols/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/get-proto/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/get-proto/Object.getPrototypeOf.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/get-proto/Reflect.getPrototypeOf.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/functionApply.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind-apply-helpers/functionCall.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/function-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/hasown/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/get-proto/Object.getPrototypeOf.js",
+      "file": "get-proto/Object.getPrototypeOf.js",
+      "originalSha256": "92a8d5238e5a313a8fb25bab3fd205a03241cf679a0fcbb47498fe39e57313f3",
+      "portSha256": "8bd01fa060278ef1023c6f2265120b403ebfbe4676b0aa459a8e3fd7c2c19468",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/es-object-atoms/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/get-proto/Reflect.getPrototypeOf.js",
+      "file": "get-proto/Reflect.getPrototypeOf.js",
+      "originalSha256": "d92e0cde25537bf8a896e42cafdcb55970055886e6f668b40363b94eba41c4ea",
+      "portSha256": "094fd0660d59a08b845e4f90563728c5c9cd0c14869c3709cb42337cca67d287",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/get-proto/index.js",
+      "file": "get-proto/index.js",
+      "originalSha256": "b782504cc44233a6fe5017068894ea089174c796df8bd996d7cb82bdbf804ac6",
+      "portSha256": "3e9ed01f9595462be3ae454aa4d1131a101034156c63f98bcde6508a12af93a9",
+      "originalFunctions": 3,
+      "portFunctions": 3,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 3,
+        "IfStatement": 1,
+        "ThrowStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 3,
+        "IfStatement": 1,
+        "ThrowStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/get-proto/Reflect.getPrototypeOf.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/get-proto/Object.getPrototypeOf.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/dunder-proto/get.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/gopd/gOPD.js",
+      "file": "gopd/gOPD.js",
+      "originalSha256": "4f3aebce5f264b2026f01e2ff7b369dd10334717b1743ecf32cb9a31e12e37ac",
+      "portSha256": "b70dc6eadbd64159a1be027a9a53dbb3533815e30ef1b1257fc202ccd720958b",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/gopd/index.js",
+      "file": "gopd/index.js",
+      "originalSha256": "0e9d7476a858192b19f42b75a0f4482ca7127e71705554e6173d37acd9d2b3d5",
+      "portSha256": "f8647d4f683b5000170dd31135f4d1ad7cfabf5d33dc195787f759926d4504f7",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/gopd/gOPD.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/has-property-descriptors/index.js",
+      "file": "has-property-descriptors/index.js",
+      "originalSha256": "c7c7baf89f85699e6cc117dd83b02de20e831f499b086ce812ef21c4af6253fb",
+      "portSha256": "7b16a7154c0b7dc6cbe0230a2e0a20973bad67156b21a7c86d609667093c9448",
+      "originalFunctions": 2,
+      "portFunctions": 2,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "portControls": {
+        "ReturnStatement": 4,
+        "IfStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/es-define-property/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/has-symbols/index.js",
+      "file": "has-symbols/index.js",
+      "originalSha256": "6bc8848631717ac8f04c7c03b68b812b1cf074987b3fd2951d0d4ab951aef611",
+      "portSha256": "d81edc57b2adb1909252f4c38fa1fd02f46327346efbb1fd9e51a5c3f6af5880",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 4,
+        "ReturnStatement": 5
+      },
+      "portControls": {
+        "IfStatement": 4,
+        "ReturnStatement": 5
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/has-symbols/shams.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/has-symbols/shams.js",
+      "file": "has-symbols/shams.js",
+      "originalSha256": "90353a3885d5bc61879068ce5baaf74908ea719b74eb57d1ec3d4ea0c3206470",
+      "portSha256": "09e3d5ecbe6294d0710b3e11843291fa914303029da0568b2c8dc336034953bd",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 11,
+        "ReturnStatement": 12,
+        "ForInStatement": 1
+      },
+      "portControls": {
+        "IfStatement": 11,
+        "ReturnStatement": 12,
+        "ForInStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [
+        "Object.getOwnPropertyDescriptor"
+      ],
+      "portDirectRuntimeOperations": [
+        "Object.getOwnPropertyDescriptor"
+      ]
+    },
+    {
+      "module": "./node_modules/has-tostringtag/shams.js",
+      "file": "has-tostringtag/shams.js",
+      "originalSha256": "e2d790581ed3328a1eae6c9254dedc1dc6b5861f28fd8439863f76f21ff67ba4",
+      "portSha256": "360d2b556f563bb349ef722f226ae4d26d0cff7df25a7c67eafd900f5bf54fd4",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/has-symbols/shams.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/hasown/index.js",
+      "file": "hasown/index.js",
+      "originalSha256": "a2c30640a75556e519ec9c9304e07b1a0dc12ef627a410ffdac6abc492a69c26",
+      "portSha256": "eb75788e5660da4725089d7feb3d9b54986dc7e65e1aae5a37f28718802beebf",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/function-bind/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/inherits/inherits_browser.js",
+      "file": "inherits/inherits_browser.js",
+      "originalSha256": "e63cf6748217fe9336f6ceec4d8551d122a205938c493180212f9039b8f0e227",
+      "portSha256": "a6f4dd3bdba02ba4de4de4f0261c69462c892ede123119da5fe8e86c6eed8090",
+      "originalFunctions": 3,
+      "portFunctions": 3,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 3
+      },
+      "portControls": {
+        "IfStatement": 3
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [
+        "Object.create"
+      ],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-arguments/index.js",
+      "file": "is-arguments/index.js",
+      "originalSha256": "d7e60ff4ab1e7829ab23a33b70eaa00412ca2caab3edaaafa8394eaec1ae6453",
+      "portSha256": "b2cef1abb8f973b4de4469866f907c74e14d88b32baf912c94fe66a6c0737b26",
+      "originalFunctions": 3,
+      "portFunctions": 3,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 2,
+        "ReturnStatement": 5
+      },
+      "portControls": {
+        "IfStatement": 2,
+        "ReturnStatement": 5
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/has-tostringtag/shams.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bound/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-callable/index.js",
+      "file": "is-callable/index.js",
+      "originalSha256": "c440b3f3a6cb9f11c3baab2524bf7c2ab7fa9b2f9a348aab12fae6969ffbc4d5",
+      "portSha256": "86e4bdb55ad30f07d70988402e69db5c85e2d795132f106b007471a0a7d570a5",
+      "originalFunctions": 8,
+      "portFunctions": 8,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 16,
+        "TryStatement": 5,
+        "ThrowStatement": 2,
+        "CatchClause": 5,
+        "ReturnStatement": 20
+      },
+      "portControls": {
+        "IfStatement": 16,
+        "TryStatement": 5,
+        "ThrowStatement": 2,
+        "CatchClause": 5,
+        "ReturnStatement": 20
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [
+        "Object.defineProperty"
+      ],
+      "portDirectRuntimeOperations": [
+        "Object.defineProperty"
+      ]
+    },
+    {
+      "module": "./node_modules/is-generator-function/index.js",
+      "file": "is-generator-function/index.js",
+      "originalSha256": "dbbe8cc79bee66c596c723c22af8ddaee798328cf3bf8b7ec873cbafd04f89c5",
+      "portSha256": "22fe1a8ff94ec4a936e2a773f23c5ffcd55c4d9e2017f76fd49ed8d07786f20d",
+      "originalFunctions": 2,
+      "portFunctions": 2,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 6,
+        "ReturnStatement": 7,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "portControls": {
+        "IfStatement": 6,
+        "ReturnStatement": 7,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/call-bound/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/safe-regex-test/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-tostringtag/shams.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/get-proto/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [
+        "Function"
+      ],
+      "portDirectRuntimeOperations": [
+        "Function"
+      ]
+    },
+    {
+      "module": "./node_modules/is-nan/implementation.js",
+      "file": "is-nan/implementation.js",
+      "originalSha256": "df1452ee62ac3c6de2ba481076ac096171ca4222838b0f67be5240e10a5864bd",
+      "portSha256": "253a3edd2691a1c9f5390704e0f1c810755b32068148bc43e5a61856a7bdb339",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-nan/index.js",
+      "file": "is-nan/index.js",
+      "originalSha256": "e627d58d96a33a1d1719c78dcfbbf8a91d01a44b63bdb47b33d70496d263b34a",
+      "portSha256": "f5a96dbc1f522d251b1df5317853fbf6270d1aab099c5676ab5611a1dea0a62e",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/call-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/define-properties/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-nan/implementation.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-nan/polyfill.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-nan/shim.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-nan/polyfill.js",
+      "file": "is-nan/polyfill.js",
+      "originalSha256": "c8f289e903b615cc74c8b6a0a4d1a7992a3768e5cd27cbd2e45b50c43a2b7155",
+      "portSha256": "a1f99b1d4abb8fddcc53c6907f34828585db67bcd2d903a48d7d3bfe81e5482f",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/is-nan/implementation.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-nan/shim.js",
+      "file": "is-nan/shim.js",
+      "originalSha256": "bdf76ad10518039ee4a0c9048bcc1cb9e3971602aa40bf32a87ba11febdde94d",
+      "portSha256": "0f92b00b85184b147481700ffdbd3f65ab0b905ef76cc20baf4627d1e0ab98ac",
+      "originalFunctions": 2,
+      "portFunctions": 2,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/define-properties/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-nan/polyfill.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-regex/index.js",
+      "file": "is-regex/index.js",
+      "originalSha256": "42b5da062b35b3fc9a9f671d78af08caec0abb6fee37740b59a47b411afa19b8",
+      "portSha256": "e454588147f243105bdbd4b0c915208334864df4d655f3fc418ef0aeb32a5792",
+      "originalFunctions": 3,
+      "portFunctions": 3,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 5,
+        "ThrowStatement": 1,
+        "ReturnStatement": 5,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "portControls": {
+        "IfStatement": 5,
+        "ThrowStatement": 1,
+        "ReturnStatement": 5,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/call-bound/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-tostringtag/shams.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/hasown/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/gopd/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/is-typed-array/index.js",
+      "file": "is-typed-array/index.js",
+      "originalSha256": "9c1860f1842eee568cefc9c8b3b91f5b0ee123d58680f20486ed2110d53d4d20",
+      "portSha256": "3f2dd1b3b32ae1a4c1b4ec675860ea676f7f826dd200750c61f4f4fe44338cea",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/which-typed-array/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/abs.js",
+      "file": "math-intrinsics/abs.js",
+      "originalSha256": "028346e99cf65a8b96fd657752e6fc70323a38f7f2faff8a3fc3f2af79a668cb",
+      "portSha256": "11402ee9bd561b71c194d0c0972cb00516f497f67963cf8018106bf3bbcacf64",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/floor.js",
+      "file": "math-intrinsics/floor.js",
+      "originalSha256": "417f3fdf18b9583ac49f2f6123bb97a19baae412813b500b1390a67dd5b65179",
+      "portSha256": "c4cb2842ed0a05e9df3f14895d0212660728d4f82d45b2f815c40334a3456c61",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/isNaN.js",
+      "file": "math-intrinsics/isNaN.js",
+      "originalSha256": "456621014aef52d94902d243bc11600834148d10d081960cbd9dac6859bba7fa",
+      "portSha256": "c85e9c4d41f53cc1cc190ef365acb4cd8ddc9a46aa25358d2ebb88875a9affc0",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/max.js",
+      "file": "math-intrinsics/max.js",
+      "originalSha256": "ad98ec1088524f4e8c3e95f6d2755b29b9a56afabdff96ad60d5059dde190661",
+      "portSha256": "7e7757dc7475563ce7929c0104a22d3b56b71f22894e5b6a8e5ee6f63e5fa4ab",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/min.js",
+      "file": "math-intrinsics/min.js",
+      "originalSha256": "9fd31a341333180c5e9ea585a8860b3774bcf5c1459c9bd71a9bac387f53b0de",
+      "portSha256": "a9e599a49aa52b18d0bb6cb2896972ce2922ae91f638295e932d0aa935ae2581",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/pow.js",
+      "file": "math-intrinsics/pow.js",
+      "originalSha256": "9a34ae18183fae936c84509c6dbdbfefae9ef5779ce6fb77b333295e73f9bce8",
+      "portSha256": "840414f755232e20e492e9c25bc4f9898800a5886706004e8a388d5e748df103",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/round.js",
+      "file": "math-intrinsics/round.js",
+      "originalSha256": "dff309d505e4fe5dcea6b0df8828d3759e0ad8ffa451de50a26a0e13f07ea049",
+      "portSha256": "729f00bda352df8273c0a6f40d45420e0ac0587b19ee68c6aa660d0639833fb5",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/math-intrinsics/sign.js",
+      "file": "math-intrinsics/sign.js",
+      "originalSha256": "cf1614c83570a94baee26488a591195088666d91d23fb14994c59556504ce43b",
+      "portSha256": "0673c9652e6f849f8494d9ebd1dcd388487a9cee0d83da7efc13907d2fd93aa7",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/math-intrinsics/isNaN.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-is/implementation.js",
+      "file": "object-is/implementation.js",
+      "originalSha256": "13e3936f1f217268b742673b94e6b868b0b9a19484beaa2468621e1c1f9b3d5a",
+      "portSha256": "fbe2bb36bb4dcc1f34fab4470ba6f1d23ac226fb0c0c17c5f0d7b3c3b076579c",
+      "originalFunctions": 2,
+      "portFunctions": 2,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 5,
+        "IfStatement": 3
+      },
+      "portControls": {
+        "ReturnStatement": 5,
+        "IfStatement": 3
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-is/index.js",
+      "file": "object-is/index.js",
+      "originalSha256": "8b1501a0114bbf7e403506af832bef0ec4d6abc6033aabf00f5305c9d7eca97d",
+      "portSha256": "2f3fb81fad0c4ab1e02de93f2097c1b4457e464ba12d68d071b87ab0ec14b4e6",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/define-properties/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/object-is/implementation.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/object-is/polyfill.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/object-is/shim.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-is/polyfill.js",
+      "file": "object-is/polyfill.js",
+      "originalSha256": "b5acbbb36429916eb644a5f80ac2435bdc559fd1a0f768f16edf37a15257c050",
+      "portSha256": "0e66b428b11e750e6642ae5d73fdc91badda4c4c544c11a451f431a428fd6979",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object-is/implementation.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-is/shim.js",
+      "file": "object-is/shim.js",
+      "originalSha256": "98ca908a021af4b21c31a5f14f4812e3155df744608b98bb73287c655ce99bc4",
+      "portSha256": "94ec2025e892d323b378daaed60e0667c758b71a6583d8d763c085905138cdb7",
+      "originalFunctions": 2,
+      "portFunctions": 2,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object-is/polyfill.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/define-properties/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-keys/implementation.js",
+      "file": "object-keys/implementation.js",
+      "originalSha256": "708e086a959188cb237adae93fca650017617bff06fb169d6ddd49624ec72103",
+      "portSha256": "f56f7d7559b5a6962f7385978218c1b96b9b9568b02486499f78d2ecea97e2fb",
+      "originalFunctions": 5,
+      "portFunctions": 5,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 10,
+        "ReturnStatement": 9,
+        "ForInStatement": 2,
+        "TryStatement": 3,
+        "CatchClause": 3,
+        "ThrowStatement": 1,
+        "ForStatement": 3
+      },
+      "portControls": {
+        "IfStatement": 10,
+        "ReturnStatement": 9,
+        "ForInStatement": 2,
+        "TryStatement": 3,
+        "CatchClause": 3,
+        "ThrowStatement": 1,
+        "ForStatement": 3
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object-keys/isArguments.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-keys/index.js",
+      "file": "object-keys/index.js",
+      "originalSha256": "5f602b7674adced5cca38ba5a2ea48458c273b363941429cb82ae0b57f6e6483",
+      "portSha256": "ad35c4799db7a8ba456125e1b7ecabbee3e71da9b40bc11b1478e505c13fa9ea",
+      "originalFunctions": 4,
+      "portFunctions": 4,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 5,
+        "IfStatement": 3
+      },
+      "portControls": {
+        "ReturnStatement": 5,
+        "IfStatement": 3
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object-keys/isArguments.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/object-keys/implementation.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object-keys/isArguments.js",
+      "file": "object-keys/isArguments.js",
+      "originalSha256": "6cd624c5a11daf2c9a7687f4ed0db16e813ba9ea122ab64b652f8acb0709df9f",
+      "portSha256": "3e8edf9baba60c1ba4ae7be3c617795336289257269ec5ea53b75f064e2e4669",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object.assign/implementation.js",
+      "file": "object.assign/implementation.js",
+      "originalSha256": "adb68438d57ed45d68081326504cbd36572f3106b74fed451ee9817fb00b01ac",
+      "portSha256": "8cbc1b20eb796dbfe96e112ead13a4a0abb21c6f4f9ff5cb4639deb3ae26bf1f",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 5,
+        "ThrowStatement": 1,
+        "ReturnStatement": 2,
+        "ForStatement": 3
+      },
+      "portControls": {
+        "IfStatement": 5,
+        "ThrowStatement": 1,
+        "ReturnStatement": 2,
+        "ForStatement": 3
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object-keys/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-symbols/shams.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bound/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-object-atoms/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/object.assign/polyfill.js",
+      "file": "object.assign/polyfill.js",
+      "originalSha256": "dc88bea669671ab8ad731417db39e3742f652e5fa7d50e266cf5c6c3b93ee726",
+      "portSha256": "7454464ac5e0f1992ec9e2876aff5f213683ea66da0dd3d7bcc7894e043679c6",
+      "originalFunctions": 3,
+      "portFunctions": 3,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 5,
+        "ReturnStatement": 9,
+        "ForStatement": 1,
+        "ForInStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "portControls": {
+        "IfStatement": 5,
+        "ReturnStatement": 9,
+        "ForStatement": 1,
+        "ForInStatement": 1,
+        "TryStatement": 1,
+        "CatchClause": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/object.assign/implementation.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/os-browserify/browser.js",
+      "file": "os-browserify/browser.js",
+      "originalSha256": "e92e3e7d74790d96219cdb229fe73a142f3f74ad41f02fe625d728754dcce8ba",
+      "portSha256": "73ef257fce31e6666cb012e48395827e2ff82e9f1d6019ec56876707234fcf2e",
+      "originalFunctions": 14,
+      "portFunctions": 14,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 16,
+        "IfStatement": 2
+      },
+      "portControls": {
+        "ReturnStatement": 16,
+        "IfStatement": 2
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/possible-typed-array-names/index.js",
+      "file": "possible-typed-array-names/index.js",
+      "originalSha256": "a8980e85965cd75945b2cc82d17409b98f65d2c663a6f6de1be689c51142cf2b",
+      "portSha256": "fe5cdc49ac7b9b6a3b240bba992f28c8a7d73b31165b7254de2dc63f79cbeb53",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/process/browser.js",
+      "file": "process/browser.js",
+      "originalSha256": "7a80477c3bc55b8fcc6f13dbdd0fc55d50260ae36343833e1434dcface649c9c",
+      "portSha256": "ebca381f16ab4ce97995a39117f1305461d5d43211f12bea42361a52c479fa79",
+      "originalFunctions": 16,
+      "portFunctions": 16,
+      "functionIssues": [],
+      "originalControls": {
+        "ThrowStatement": 4,
+        "TryStatement": 6,
+        "IfStatement": 13,
+        "CatchClause": 6,
+        "ReturnStatement": 15,
+        "WhileStatement": 2,
+        "ForStatement": 1
+      },
+      "portControls": {
+        "ThrowStatement": 4,
+        "TryStatement": 6,
+        "IfStatement": 13,
+        "CatchClause": 6,
+        "ReturnStatement": 15,
+        "WhileStatement": 2,
+        "ForStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/safe-regex-test/index.js",
+      "file": "safe-regex-test/index.js",
+      "originalSha256": "c4f21cbe1354f169df064e5fcaf16194fa5599292021f419f8a026331394b035",
+      "portSha256": "203830035ef8fdd247bf532cf5c160e3f94953bde8635707c009fa4e3133c27b",
+      "originalFunctions": 2,
+      "portFunctions": 2,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 2
+      },
+      "portControls": {
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/call-bound/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-regex/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/type.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/set-function-length/index.js",
+      "file": "set-function-length/index.js",
+      "originalSha256": "b73a6a5322cd423c43c10ebc42baf7367f30e40cb1de374836edc796d254376b",
+      "portSha256": "574e5c0c112510d4d33cd0bec55365a53451d3f329349561d0e770ff3e7a335e",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "IfStatement": 7,
+        "ThrowStatement": 2,
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "IfStatement": 7,
+        "ThrowStatement": 2,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/get-intrinsic/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/define-data-property/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-property-descriptors/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/gopd/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/es-errors/type.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/util/support/isBufferBrowser.js",
+      "file": "util/support/isBufferBrowser.js",
+      "originalSha256": "52687e4964a404f39be1bf8e7b9e942b217dfae34d2314893a806238707bd809",
+      "portSha256": "10b207a5c7ed635a3bb1529f78318399e07964992ce3fa26480f7d5395758d74",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "./node_modules/util/support/types.js",
+      "file": "util/support/types.js",
+      "originalSha256": "5ef22666d14b19b3b9e043dccb083bbf906e2c31c2ffab8b0d4651e55bebc54e",
+      "portSha256": "44c76ca7796cdd715ebcde3e3c5d136b86ce6478611bbeccdc186ea8bf519d1c",
+      "originalFunctions": 43,
+      "portFunctions": 43,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 50,
+        "IfStatement": 11,
+        "TryStatement": 1,
+        "CatchClause": 1,
+        "ThrowStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 50,
+        "IfStatement": 11,
+        "TryStatement": 1,
+        "CatchClause": 1,
+        "ThrowStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/is-arguments/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-generator-function/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/which-typed-array/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/is-typed-array/index.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [
+        "Object.defineProperty"
+      ],
+      "portDirectRuntimeOperations": [
+        "Object.defineProperty"
+      ]
+    },
+    {
+      "module": "./node_modules/util/util.js",
+      "file": "util/util.js",
+      "originalSha256": "ef26b8e9f84c85386b368bff43190ff5cf67d0a8fb9d6f8f548af5ff70a9df1d",
+      "portSha256": "01f49b56048fd9cda0ca689f5d282c3870d52a88b5d11f60f610b94516e3e170",
+      "originalFunctions": 55,
+      "portFunctions": 55,
+      "functionIssues": [],
+      "originalControls": {
+        "ForStatement": 6,
+        "ReturnStatement": 73,
+        "IfStatement": 71,
+        "SwitchStatement": 1,
+        "CaseClause": 3,
+        "TryStatement": 2,
+        "CatchClause": 2,
+        "DefaultClause": 1,
+        "ThrowStatement": 5,
+        "WhileStatement": 1
+      },
+      "portControls": {
+        "ForStatement": 6,
+        "ReturnStatement": 73,
+        "IfStatement": 71,
+        "SwitchStatement": 1,
+        "CaseClause": 3,
+        "TryStatement": 2,
+        "CatchClause": 2,
+        "DefaultClause": 1,
+        "ThrowStatement": 5,
+        "WhileStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/process/browser.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/util/support/types.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/util/support/isBufferBrowser.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/inherits/inherits_browser.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [
+        "Object.getOwnPropertyDescriptor",
+        "Object.getOwnPropertyDescriptor",
+        "Object.defineProperty",
+        "Object.setPrototypeOf",
+        "Object.getPrototypeOf",
+        "Object.defineProperty",
+        "Object.defineProperties",
+        "Object.setPrototypeOf",
+        "Object.getPrototypeOf",
+        "Object.defineProperties"
+      ],
+      "portDirectRuntimeOperations": [
+        "Object.getOwnPropertyDescriptor",
+        "Object.getOwnPropertyDescriptor",
+        "Object.defineProperty",
+        "Object.setPrototypeOf",
+        "Object.getPrototypeOf",
+        "Object.defineProperty",
+        "Object.defineProperties",
+        "Object.setPrototypeOf",
+        "Object.getPrototypeOf",
+        "Object.defineProperties"
+      ]
+    },
+    {
+      "module": "./node_modules/which-typed-array/index.js",
+      "file": "which-typed-array/index.js",
+      "originalSha256": "21cc795dbbf2a4401a5b723a9117fc4df09c0a8c3656785e1f032becfdb97184",
+      "portSha256": "a1fd9294a563cbd48a56f0610721b484c39c52986c62abfc61935fc2077eefee",
+      "originalFunctions": 8,
+      "portFunctions": 8,
+      "functionIssues": [],
+      "originalControls": {
+        "ForStatement": 1,
+        "IfStatement": 13,
+        "ReturnStatement": 10,
+        "TryStatement": 2,
+        "CatchClause": 2
+      },
+      "portControls": {
+        "ForStatement": 1,
+        "IfStatement": 13,
+        "ReturnStatement": 10,
+        "TryStatement": 2,
+        "CatchClause": 2
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/for-each/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/available-typed-arrays/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bind/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/call-bound/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/gopd/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/get-proto/index.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/has-tostringtag/shams.js",
+          "original": 1,
+          "port": 0
+        }
+      ],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    },
+    {
+      "module": "?5042",
+      "file": "_5042.js",
+      "originalSha256": "bdc07a26ef07b6a91a834f7e3da83a009071f71d6a812965e801b4501d0123c6",
+      "portSha256": "4270b606507b7d43dfb15a40196da139dab550c61f14e08665e916072bb26553",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {},
+      "missingLiterals": [],
+      "originalDirectRuntimeOperations": [],
+      "portDirectRuntimeOperations": []
+    }
+  ],
+  "sharedBoundarySha256": "5a1a7ae659a91cd35fb1bb2e7ce1faeda9b574a6109074683e32dd82513d82b8",
+  "runtimeDifferential": {
+    "node": "v24.20.0",
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "tests": 324,
+    "passed": 324,
+    "failed": 0,
+    "serializedCharacters": 932440,
+    "sha256": "73bcde0b62d1730933c69c41486643ccb6ad877505114ffc00a329e128fd33d4",
+    "failures": []
+  },
+  "fallbackDifferential": {
+    "tests": 10,
+    "passed": 10,
+    "failed": 0,
+    "serializedCharacters": 1384,
+    "sha256": "16c0310d2d7d7ac8f3ce1ae242b2026ed8659105f1782620f2757dc43d48c4c6",
+    "failures": []
+  },
+  "fallbackOutcomes": [
+    {
+      "name": "typed-array-method-fallback-without-symbols",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "property-assignment-fallback-without-descriptors",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "util-load-without-Object-keys",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "native-disabled-bind-create-Reflect",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "native-disabled-object-polyfills",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "native-disabled-symbol-descriptors",
+      "outcome": "same original rejection"
+    },
+    {
+      "name": "missing-symbol-native-Reflect",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "debug-options-and-plain-call-receivers",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "timer-fallback-global-receiver",
+      "outcome": "same successful result"
+    },
+    {
+      "name": "get-intrinsic-lazy-source-constructors",
+      "outcome": "same successful result"
+    }
+  ],
+  "siteAudit": {
+    "node": "v24.20.0",
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "bundleSha256": "5f58ee28553a14af685b475a20a65a1dd66e6086e72886ac4d1e9da4f557421d",
+    "originalCodeGenerationStrings": false,
+    "sourceSites": [
+      {
+        "module": "get-intrinsic/index",
+        "name": "intrinsicSourceConstruction",
+        "anchor": "return $Function('\"use strict\"; return (' + expressionSyntax + ').constructor;')();",
+        "mode": "statement",
+        "bundleLine": 25725,
+        "bundleColumn": 3
+      },
+      {
+        "module": "is-generator-function/index",
+        "name": "generatorSourceConstruction",
+        "anchor": "return Function('return function*() {}')();",
+        "mode": "statement",
+        "bundleLine": 26570,
+        "bundleColumn": 3
+      },
+      {
+        "module": "function-bind/implementation",
+        "name": "bindSourceConstruction",
+        "anchor": "bound = Function('binder', 'return function (' + joiny(boundArgs, ',') + '){ return binder.apply(this,arguments); }')(binder);",
+        "portAnchor": "bound = callableValue(callableValue(Function('binder', 'return function (' + joiny(boundArgs, ',') + '){ return binder.apply(this,arguments); }'))(binder));",
+        "mode": "statement",
+        "bundleLine": 25660,
+        "bundleColumn": 5
+      },
+      {
+        "module": "function-bind/implementation",
+        "name": "bindMutableAllocation",
+        "anchor": "bound.prototype = new Empty();",
+        "portAnchor": "bound.prototype = new (shimPrototypeAllocator(Empty))();",
+        "mode": "statement",
+        "bundleLine": 25665,
+        "bundleColumn": 9
+      },
+      {
+        "module": "inherits/inherits_browser",
+        "name": "inheritsMutableAllocation",
+        "anchor": "ctor.prototype = new TempCtor()",
+        "portAnchor": "record(ctor).prototype = new (shimPrototypeAllocator(TempCtor))()",
+        "mode": "statement",
+        "bundleLine": 26371,
+        "bundleColumn": 7
+      },
+      {
+        "module": "util/util",
+        "name": "promisifyEntry",
+        "anchor": "exports.promisify = function promisify(original) {",
+        "portAnchor": "exports.promisify = function promisify(original: unknown) {",
+        "mode": "entry",
+        "bundleLine": 46943,
+        "bundleColumn": 1
+      },
+      {
+        "module": "util/util",
+        "name": "callbackifyEntry",
+        "anchor": "function callbackify(original) {",
+        "portAnchor": "function callbackify(original: unknown) {",
+        "mode": "entry",
+        "bundleLine": 47012,
+        "bundleColumn": 1
+      },
+      {
+        "module": "util/support/types",
+        "name": "unsupportedTypeDescriptors",
+        "anchor": "Object.defineProperty(exports, method, {",
+        "mode": "statement",
+        "bundleLine": 46314,
+        "bundleColumn": 3
+      },
+      {
+        "module": "which-typed-array/index",
+        "name": "typedArrayTagProbes",
+        "anchor": "var arr = new g[typedArray]();",
+        "portAnchor": "var arr = new (runtimeConstructor(g[typedArray]))();",
+        "mode": "statement",
+        "occurrences": 2,
+        "bundleLine": 47090,
+        "bundleColumn": 3
+      },
+      {
+        "module": "recast/lib/parser",
+        "name": "treePrototypeCopyPairs",
+        "anchor": "var copy = Object.create(Object.getPrototypeOf(node), {",
+        "portAnchor": "var copy = record(Object.create(Object.getPrototypeOf(node), {",
+        "mode": "statement",
+        "bundleLine": 38797,
+        "bundleColumn": 5
+      }
+    ],
+    "originalPhases": [
+      {
+        "phase": "initialization",
+        "counters": {
+          "intrinsicSourceConstruction": 0,
+          "generatorSourceConstruction": 0,
+          "bindSourceConstruction": 0,
+          "bindMutableAllocation": 0,
+          "inheritsMutableAllocation": 0,
+          "promisifyEntry": 0,
+          "callbackifyEntry": 0,
+          "unsupportedTypeDescriptors": 3,
+          "typedArrayTagProbes": 12,
+          "treePrototypeCopyPairs": 0
+        }
+      },
+      {
+        "phase": "firstWork",
+        "counters": {
+          "intrinsicSourceConstruction": 0,
+          "generatorSourceConstruction": 0,
+          "bindSourceConstruction": 0,
+          "bindMutableAllocation": 0,
+          "inheritsMutableAllocation": 0,
+          "promisifyEntry": 0,
+          "callbackifyEntry": 0,
+          "unsupportedTypeDescriptors": 3,
+          "typedArrayTagProbes": 12,
+          "treePrototypeCopyPairs": 3310
+        },
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1",
+        "codeLength": 21316,
+        "warnings": 35
+      },
+      {
+        "phase": "repeatedWork",
+        "counters": {
+          "intrinsicSourceConstruction": 0,
+          "generatorSourceConstruction": 0,
+          "bindSourceConstruction": 0,
+          "bindMutableAllocation": 0,
+          "inheritsMutableAllocation": 0,
+          "promisifyEntry": 0,
+          "callbackifyEntry": 0,
+          "unsupportedTypeDescriptors": 3,
+          "typedArrayTagProbes": 12,
+          "treePrototypeCopyPairs": 6620
+        },
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1",
+        "codeLength": 21316,
+        "warnings": 35
+      }
+    ],
+    "portPhases": [
+      {
+        "phase": "initialization",
+        "counters": {
+          "intrinsicSourceConstruction": 0,
+          "generatorSourceConstruction": 0,
+          "bindSourceConstruction": 0,
+          "bindMutableAllocation": 0,
+          "inheritsMutableAllocation": 0,
+          "promisifyEntry": 0,
+          "callbackifyEntry": 0,
+          "unsupportedTypeDescriptors": 3,
+          "typedArrayTagProbes": 12,
+          "treePrototypeCopyPairs": 0
+        }
+      },
+      {
+        "phase": "firstWork",
+        "counters": {
+          "intrinsicSourceConstruction": 0,
+          "generatorSourceConstruction": 0,
+          "bindSourceConstruction": 0,
+          "bindMutableAllocation": 0,
+          "inheritsMutableAllocation": 0,
+          "promisifyEntry": 0,
+          "callbackifyEntry": 0,
+          "unsupportedTypeDescriptors": 3,
+          "typedArrayTagProbes": 12,
+          "treePrototypeCopyPairs": 3310
+        },
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1",
+        "codeLength": 21316,
+        "warnings": 35
+      },
+      {
+        "phase": "repeatedWork",
+        "counters": {
+          "intrinsicSourceConstruction": 0,
+          "generatorSourceConstruction": 0,
+          "bindSourceConstruction": 0,
+          "bindMutableAllocation": 0,
+          "inheritsMutableAllocation": 0,
+          "promisifyEntry": 0,
+          "callbackifyEntry": 0,
+          "unsupportedTypeDescriptors": 3,
+          "typedArrayTagProbes": 12,
+          "treePrototypeCopyPairs": 6620
+        },
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1",
+        "codeLength": 21316,
+        "warnings": 35
+      }
+    ],
+    "positiveControls": {
+      "intrinsicSourceConstruction": 3,
+      "generatorSourceConstruction": 1,
+      "bindSourceConstruction": 1,
+      "bindMutableAllocation": 1,
+      "inheritsMutableAllocation": 0,
+      "promisifyEntry": 0,
+      "callbackifyEntry": 0,
+      "unsupportedTypeDescriptors": 3,
+      "typedArrayTagProbes": 12,
+      "treePrototypeCopyPairs": 6620
+    },
+    "findings": [
+      "The three dynamic Function construction sites remain dormant during initialization and both complete original operations; positive controls enter all three kinds.",
+      "Both raw mutable-prototype allocators remain dormant during the complete operations. The bind positive control and the separate no-Object.create inheritance differential exercise the original sequences.",
+      "TreeCopier retains one Object.getPrototypeOf call and one Object.create call per copy; the first and repeated operations each add exactly 3310 pairs."
+    ]
+  },
+  "adaptations": [
+    "Every module retains its original body, source function names, source parameter order and arity, loops, branches, and literals. Added imports expose statically named lazy module loaders; the module export completion checks are separate from source-body counts.",
+    "Original unknown values acquire concrete checked property/call/constructor views. The views retain identity; numeric and string boundaries keep original primitive-conversion order. Native callable result and descriptor shapes are explicit. No any type, escaping cast, source branch deletion, or fallback replacement is used.",
+    "The browser process Item constructor becomes a native class with declared fields and the original assignments and prototype run method. Its own constructor .prototype metadata is nonwritable, as required by native class syntax; the original function had writable .prototype metadata. The workload never rewrites that constructor property.",
+    "The function-bind Empty allocator and inherits TempCtor allocator remain their original empty functions. Their original prototype assignment/new/reset or prototype assignment/new protocol needs a writable function .prototype. A checked construct view returns the same original allocator. Both are dormant in full work; fallback differentials exercise both.",
+    "TypeScript modules are strict. The original non-strict util wrappers and process timeout/clear-timeout wrappers explicitly perform their original call-entry receiver conversion once, preserving the global receiver for plain/null calls and boxing primitive receivers once. Isolated differentials cover the cached browser timer third fallback and strict target/callback functions observing wrapper receivers.",
+    "The util.promisify custom-function temporary is locally named customFn. In the original, a var fn shares the hoisted wrapper function binding; that branch always returns or throws. The distinct local name avoids TypeScript function reassignment rejection without changing the returned function, its name, descriptor writes, validation, or evaluation order.",
+    "The wrapper module cache for which-typed-array uses a distinct moduleCache binding, leaving the original typed-array getter cache unchanged. Initialization matches the original exactly: twelve typed-array probes, with no repeated probes during full operations.",
+    "get-intrinsic retains its deliberate null property error through the checked null-property reader, and observes the same TypeError prototype chain. All original runtime Function construction expressions and aliases remain present.",
+    "All descriptor installation/copying and prototype operations remain. The full original operation still executes 3310 TreeCopier Object.getPrototypeOf/Object.create pairs, emits 21316 code characters and 35 warnings, and has serialized SHA256 7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1."
+  ]
+}

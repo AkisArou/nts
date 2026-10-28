@@ -1,0 +1,34 @@
+{
+  "scope": "Complete case module graph, including declarations, bindings, this expressions, function returns, union/reference generic arguments and default iterator types.",
+  "inferredAny": {
+    "declarations": [],
+    "returns": []
+  },
+  "parserAnnotationErasure": [
+    {
+      "file": "acorn/dist/acorn.ts",
+      "beforeSha256": "7c1584d3c2273a01af1c21550a56e0addd693a36a008bb28d86aaf5fa340b251",
+      "afterSha256": "27bec94a4233b4aa7e391af2a075e73588f47871a8a1d20c1043b18bf666961a",
+      "erasedBeforeSha256": "d24cf69215fe0e7a5caaba7b5c04d6e7d086b6e688cc542cfdd0615f7446923d",
+      "erasedAfterSha256": "d24cf69215fe0e7a5caaba7b5c04d6e7d086b6e688cc542cfdd0615f7446923d",
+      "identicalErasedCode": true
+    },
+    {
+      "file": "acorn-jsx/index.ts",
+      "beforeSha256": "f318216028204819be27715d25c9831e703a896dca1d091d51d8109f0be6d8dc",
+      "afterSha256": "bc809d560de4724993367a59a70487a6001dc49c5f4f90a2928d0929765f7b27",
+      "erasedBeforeSha256": "2e3f0c75d56db955faa2cbb432169485296c729b695537136fee0e047410074b",
+      "erasedAfterSha256": "2e3f0c75d56db955faa2cbb432169485296c729b695537136fee0e047410074b",
+      "identicalErasedCode": true
+    },
+    {
+      "file": "lebab--espree/dist/espree.cjs.ts",
+      "beforeSha256": "e91fd0a8bee08a4d24b2b7478520a42abb70a57f7de6410b93bc0dfdca4a4dfb",
+      "afterSha256": "09bfd169b987c65701c763b02f06e2f7d0d08015c221b1a7ebc5cdfaba3d0f21",
+      "erasedBeforeSha256": "93be9516618ef92151817ecd74e8a759b81233706ecbef3323a64c3d3e6faec7",
+      "erasedAfterSha256": "93be9516618ef92151817ecd74e8a759b81233706ecbef3323a64c3d3e6faec7",
+      "identicalErasedCode": true
+    }
+  ],
+  "nativeStrictResult": "The repository TypeScript 7 checker passes with --strict --noEmit; the maintainers own nts compilation and measurement."
+}

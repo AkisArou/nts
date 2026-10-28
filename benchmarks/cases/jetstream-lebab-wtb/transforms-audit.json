@@ -1,0 +1,112 @@
+{
+  "node": "v24.20.0",
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "scope": "All 24 unmodified upstream transformation test files, including CommonJS, JSX, ECMAScript syntax and whitespace cases; only the import and test-runner bindings are supplied. Both original bundle and typed port must match upstream code and warnings.",
+  "sources": [
+    {
+      "file": "argRestTest.js",
+      "sha256": "b56310f4600de1cae7934f73f66ba107798e892f41e1b29b397ad25a2668f4c6"
+    },
+    {
+      "file": "argSpreadTest.js",
+      "sha256": "c08451e6cc2e1fa89a67df73c7aaa7181c750a500bf3e9129766932d10c253e4"
+    },
+    {
+      "file": "arrowReturnTest.js",
+      "sha256": "7b7946da6012662bf90b39b125a56ba28de75a0a1fd45a21a8cfff30fbcf630e"
+    },
+    {
+      "file": "arrowTest.js",
+      "sha256": "4a0859b0e4a42ab13d0ac6a7ad7a07f2c8d3f70c487caca90c0ce5dd82d7c3a2"
+    },
+    {
+      "file": "classInheritanceTest.js",
+      "sha256": "b9f3c5ba873edf7dd8e194e8b3802d8c7c3e6620cb9cdb938170d94cf00c3aff"
+    },
+    {
+      "file": "classTest.js",
+      "sha256": "ab5a883418886c5c1fb89877c9f755060a5dd83b230d4a9ac2ae35ee7cb2dff8"
+    },
+    {
+      "file": "commonjs/exportCommonjsTest.js",
+      "sha256": "d59699b6a79cd77b7c5f7546da74a8a8fd1bc6ebf1c608bc677e547cf527fe04"
+    },
+    {
+      "file": "commonjs/importCommonjsTest.js",
+      "sha256": "ba4932fff9fdc93980ea90be7fbf864fecf172ea29324c4a8b6619cb293a5bfd"
+    },
+    {
+      "file": "defaultParamTest.js",
+      "sha256": "fa8cd65f1ee69e15eb0fca27af57659b29e1ea47665880a12511660da3048154"
+    },
+    {
+      "file": "destructParamTest.js",
+      "sha256": "6849f91fde2dadca8758d87ce727ee67207173ccf08a86ac7e57d2c38c47e4c2"
+    },
+    {
+      "file": "ecmaVersionTest.js",
+      "sha256": "15d3497c10a2ef989cf52802a1366675ba19cb81100a44b082829c4e81bc51d1"
+    },
+    {
+      "file": "exponentTest.js",
+      "sha256": "eca4d8312db3c01c949b798fcddaf09e720e5d4fca349037bc1c56cfceb47339"
+    },
+    {
+      "file": "forEachTest.js",
+      "sha256": "85dfc049b9ca9f19f6abc03cd3772cdd82b12062f538250c652926aa3357c613"
+    },
+    {
+      "file": "forOfTest.js",
+      "sha256": "3f992930f070d88e39ad030df02372a5051d47a0cbef9bd8036089a8a7308706"
+    },
+    {
+      "file": "includesTest.js",
+      "sha256": "d2448d65140f1c51c5a4e3f07ab0eec263d72261eabb760e3c16777df36b988b"
+    },
+    {
+      "file": "jsxTest.js",
+      "sha256": "6f353d413766c7c1dfacaab7512ae9f8f1924ea4f0fcbe2a24c3c54986acf2de"
+    },
+    {
+      "file": "letTest.js",
+      "sha256": "76fae37e520973e2ea94e44790e931c3939f05dcc516098c876c8453600c0922"
+    },
+    {
+      "file": "multiVarTest.js",
+      "sha256": "c04f98349ee8e4f0f2bb888744e92dd68e850c8892e8cb0f87e1974bea9a8bc5"
+    },
+    {
+      "file": "noStrictTest.js",
+      "sha256": "ce0fd20635d2a1bc7e957ce52a7748d5fe4fa1d196481f5002f9e0cb12954490"
+    },
+    {
+      "file": "objMethodTest.js",
+      "sha256": "6f8e19673a440705a774efc14f5e7a3e7bd7c516dac5ab648cffe774a35ac4ef"
+    },
+    {
+      "file": "objShorthandTest.js",
+      "sha256": "7a09be025f5cee95600d81f9db0b0afdbbc8b72fb9ffe8befa05dd55af1f137b"
+    },
+    {
+      "file": "restSpreadTest.js",
+      "sha256": "75e1995ba2ba6bbaa19402e56c82bbc62c740e484349b6c947d176504193d96b"
+    },
+    {
+      "file": "templateTest.js",
+      "sha256": "332c53117dc1efbc84b441dbc50ec87a066eabca3d9575da4f75a6c2926adaa0"
+    },
+    {
+      "file": "whitespaceTest.js",
+      "sha256": "078195b9cffda4974e269db4aff0a630337b22df2d397671c1c271e7844ea95c"
+    }
+  ],
+  "skipped": [
+    "destructParamTest.js / Destruct function param / should not transform second param when this results in conflict",
+    "destructParamTest.js / Destruct function param / should not perform second transform when it results in conflict"
+  ],
+  "tests": 545,
+  "passed": 545,
+  "failures": [],
+  "serializedCharacters": 222944,
+  "sha256": "e6e614769117c6c05e11ab12db89c7313387fb79a504d8535b1e910748a6ad64"
+}

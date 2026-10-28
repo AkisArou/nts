@@ -1,0 +1,281 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "node": "v24.20.0",
+  "strictTypeScript": "0 diagnostics; --strict --noEmit --target esnext --module esnext --moduleResolution bundler --skipLibCheck --allowImportingTsExtensions --ignoreConfig vendor/lodash/fp.ts",
+  "inferredAnyDeclarations": [],
+  "inferredAnyReturns": [],
+  "sourceAudit": [
+    {
+      "file": "lodash.min",
+      "originalSha256": "7d489f513ea1f2789ee5fc1aa6e356da7f7da422a33174f67de8133ff01f07d7",
+      "portSha256": "4dd4d4ade489838397ec2f8a9e8baa8ab2902093331ce2bee23ef43f6f39f7e3",
+      "originalFunctions": 691,
+      "portFunctions": 691,
+      "functionIssues": [],
+      "originalControls": {
+        "SwitchStatement": 7,
+        "CaseClause": 55,
+        "ReturnStatement": 797,
+        "ForStatement": 106,
+        "IfStatement": 218,
+        "TryStatement": 6,
+        "CatchClause": 6,
+        "ContinueStatement": 5,
+        "BreakStatement": 10,
+        "ForInStatement": 6,
+        "ThrowStatement": 15,
+        "DoStatement": 1
+      },
+      "portControls": {
+        "SwitchStatement": 7,
+        "CaseClause": 55,
+        "ReturnStatement": 797,
+        "ForStatement": 106,
+        "IfStatement": 218,
+        "TryStatement": 6,
+        "CatchClause": 6,
+        "ContinueStatement": 5,
+        "BreakStatement": 10,
+        "ForInStatement": 6,
+        "ThrowStatement": 15,
+        "DoStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:",
+          "original": 53,
+          "port": 47
+        }
+      ]
+    },
+    {
+      "file": "fp",
+      "originalSha256": "0ab51644f9d8f552f438099b640e80512e72ecd1105f8988eec8e674c5a8d902",
+      "portSha256": "cb69ccba77522279e8e2bcb46f0bdf5ccdea62ba1dc15ddddd2b74a024c20938",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/lodash/lodash.min.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/lodash/fp/_baseConvert.js",
+          "original": 1,
+          "port": 0
+        }
+      ]
+    },
+    {
+      "file": "fp/_baseConvert",
+      "originalSha256": "a20d66f43df88b45d382ae1a90b4862561aae371c10e7f4a6e705b654809f163",
+      "portSha256": "1b1ef56fe1eec4c757e2b5802b2c17184d8b9ca505f2bdfc69952e83f39eca2c",
+      "originalFunctions": 52,
+      "portFunctions": 52,
+      "functionIssues": [],
+      "originalControls": {
+        "ReturnStatement": 53,
+        "WhileStatement": 6,
+        "IfStatement": 26,
+        "ThrowStatement": 1
+      },
+      "portControls": {
+        "ReturnStatement": 54,
+        "WhileStatement": 6,
+        "IfStatement": 28,
+        "ThrowStatement": 3
+      },
+      "missingLiterals": [
+        {
+          "value": "StringLiteral:./node_modules/lodash/fp/_mapping.js",
+          "original": 1,
+          "port": 0
+        },
+        {
+          "value": "StringLiteral:./node_modules/lodash/fp/placeholder.js",
+          "original": 1,
+          "port": 0
+        }
+      ]
+    },
+    {
+      "file": "fp/_mapping",
+      "originalSha256": "0ed780d59e992fccc24ea0721c4e88423a99c715d07f20a59009d7635e0ed2d4",
+      "portSha256": "2a85aae1da509797eded17e74c621898b1c522f7a7220b3dcc1e2167889ec619",
+      "originalFunctions": 1,
+      "portFunctions": 1,
+      "functionIssues": [],
+      "originalControls": {
+        "ForInStatement": 1,
+        "IfStatement": 1,
+        "ReturnStatement": 1
+      },
+      "portControls": {
+        "ForInStatement": 1,
+        "IfStatement": 2,
+        "ReturnStatement": 2,
+        "ThrowStatement": 1
+      },
+      "missingLiterals": []
+    },
+    {
+      "file": "fp/placeholder",
+      "originalSha256": "6fcebfe6dcafdfab3fa458337b06fdc9e55b2cd7af4c813f3b29a4f14e4c15e0",
+      "portSha256": "98c7f006170d51f5de5df2016ed3a17ef3f35ce8c9cf625f01b0289d90f42da2",
+      "originalFunctions": 0,
+      "portFunctions": 0,
+      "functionIssues": [],
+      "originalControls": {},
+      "portControls": {
+        "IfStatement": 1,
+        "ThrowStatement": 1,
+        "ReturnStatement": 1
+      },
+      "missingLiterals": []
+    }
+  ],
+  "sourceAuditNotes": [
+    "All 691 Lodash function/constructor bodies and all 52 baseConvert functions retain their original parameter binding names and arities in source traversal order. Native class constructors account for eight of those bodies.",
+    "All original Lodash control-flow counts are identical: 7 switches, 55 cases, 797 returns, 106 for loops, 218 if statements, 6 try/catch pairs, 5 continues, 10 breaks, 6 for-in loops, 15 throws, and 1 do loop. Two new local checked-reader arrows are excluded from this comparison.",
+    "The six missing empty-string literals are the six value+empty-string conversions now expressed by concatenatedString(value), which preserves ToPrimitive(default), Symbol errors, and hook receiver/order. All other source literals are retained. The four missing FP module-id strings are now the statically named lazy import calls.",
+    "FP source-body controls are retained. Added controls are checked CommonJS export validation plus the baseConvert options object guard; each preserves the original object identity.",
+    "The four original re._ global/noConflict packaging reads and writes use the module-local bundleRoot._, as required by the prohibition on globalThis assignment. The original noConflict method remains present.",
+    "Callable/new wrappers remain functions with the original names and lengths because the original protocol uses both ordinary calls and construction. All ordinary stateful constructor functions become classes. The empty gs fallback allocator remains a function under the explicit unchanged-prototype-operation exception."
+  ],
+  "runtimeDifferential": {
+    "node": "v24.20.0",
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "source": "web-tooling-benchmark/dist/lebab.bundle.js: full Lodash 4.17.21 and fp module factories",
+    "tests": 696,
+    "passed": 696,
+    "failed": 0,
+    "serializedCharacters": 46555,
+    "sha256": "5517fc72644f981ec776f0a7dfd9cafb9fc1fce8e0e63a7d80034bd96107b83d",
+    "failures": []
+  },
+  "runtimeSiteAudit": {
+    "node": "v24.20.0",
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "originalPhases": [
+      {
+        "phase": "initialization",
+        "counters": {
+          "templateEntries": 0,
+          "dynamicFunctionCalls": 0,
+          "literalFunctionCalls": 0,
+          "mutableAllocatorCalls": 0,
+          "staticPrototypeInstallations": 6
+        }
+      },
+      {
+        "phase": "firstWork",
+        "counters": {
+          "templateEntries": 0,
+          "dynamicFunctionCalls": 0,
+          "literalFunctionCalls": 0,
+          "mutableAllocatorCalls": 0,
+          "staticPrototypeInstallations": 6
+        },
+        "codeLength": 21316,
+        "warnings": 35,
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+      },
+      {
+        "phase": "repeatedWork",
+        "counters": {
+          "templateEntries": 0,
+          "dynamicFunctionCalls": 0,
+          "literalFunctionCalls": 0,
+          "mutableAllocatorCalls": 0,
+          "staticPrototypeInstallations": 6
+        },
+        "codeLength": 21316,
+        "warnings": 35,
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+      }
+    ],
+    "portPhases": [
+      {
+        "phase": "initialization",
+        "counters": {
+          "templateEntries": 0,
+          "dynamicFunctionCalls": 0,
+          "literalFunctionCalls": 0,
+          "mutableAllocatorCalls": 0,
+          "staticPrototypeInstallations": 6
+        }
+      },
+      {
+        "phase": "firstWork",
+        "counters": {
+          "templateEntries": 0,
+          "dynamicFunctionCalls": 0,
+          "literalFunctionCalls": 0,
+          "mutableAllocatorCalls": 0,
+          "staticPrototypeInstallations": 6
+        },
+        "codeLength": 21316,
+        "warnings": 35,
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+      },
+      {
+        "phase": "repeatedWork",
+        "counters": {
+          "templateEntries": 0,
+          "dynamicFunctionCalls": 0,
+          "literalFunctionCalls": 0,
+          "mutableAllocatorCalls": 0,
+          "staticPrototypeInstallations": 6
+        },
+        "codeLength": 21316,
+        "warnings": 35,
+        "characters": 23935,
+        "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+      }
+    ],
+    "positiveControls": {
+      "afterTemplateAndObjectCreateFallback": {
+        "templateEntries": 1,
+        "dynamicFunctionCalls": 1,
+        "literalFunctionCalls": 0,
+        "mutableAllocatorCalls": 2,
+        "staticPrototypeInstallations": 8
+      },
+      "templateOutput": "hello world",
+      "fallbackMap": [
+        2,
+        3
+      ]
+    },
+    "classAdaptation": {
+      "classes": [
+        "J",
+        "Y",
+        "Ct",
+        "Xt",
+        "ir",
+        "sr",
+        "yr",
+        "wr"
+      ],
+      "staticPrototypeSites": [
+        "Y.prototype=gs(J.prototype)",
+        "Ct.prototype=gs(J.prototype)"
+      ],
+      "adaptation": "The original gs allocation is kept. Its prototype chain and complete own descriptors are installed on each native class prototype; original following constructor writes are kept. The static replacement count is unchanged (two per runInContext) but replaces an assignment to the function prototype property with Object.setPrototypeOf on the class prototype.",
+      "unavoidableMetadata": "Native class own .prototype descriptors are nonwritable; original constructor functions had writable .prototype descriptors. Active workload never inspects or assigns those constructor .prototype properties beyond the two adapted static sites.",
+      "mutableAllocatorException": "Original empty gs helper remains a constructor function because its exact prototype assignment/new/reset sequence requires a writable .prototype. The checked construct view returns that same original function. Full operations never enter it; positive control enters it twice."
+    }
+  }
+}

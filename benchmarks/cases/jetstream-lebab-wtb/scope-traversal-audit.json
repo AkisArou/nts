@@ -1,0 +1,258 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "estraverseVersions": [
+    "4.3.0",
+    "5.3.0"
+  ],
+  "traversalFixtures": {
+    "node": "v24.20.0",
+    "cases": 108,
+    "characters": 36967562,
+    "allEqual": true,
+    "failures": []
+  },
+  "scopeAndRecursiveVisitorFixtures": {
+    "node": "v24.20.0",
+    "cases": 52,
+    "characters": 5699305,
+    "allEqual": true,
+    "failures": []
+  },
+  "escopeNativeClassTranscriptions": [
+    {
+      "file": "definition.ts",
+      "name": "Definition",
+      "base": null,
+      "fields": [
+        "type",
+        "name",
+        "node",
+        "parent",
+        "index",
+        "kind"
+      ],
+      "methods": 0,
+      "superAdaptations": 0
+    },
+    {
+      "file": "definition.ts",
+      "name": "ParameterDefinition",
+      "base": "Definition",
+      "fields": [
+        "rest"
+      ],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "pattern-visitor.ts",
+      "name": "PatternVisitor",
+      "base": "_esrecurse2.default.Visitor",
+      "fields": [
+        "rootPattern",
+        "callback",
+        "assignments",
+        "rightHandNodes",
+        "restElements"
+      ],
+      "methods": 11,
+      "superAdaptations": 2
+    },
+    {
+      "file": "reference.ts",
+      "name": "Reference",
+      "base": null,
+      "fields": [
+        "identifier",
+        "from",
+        "tainted",
+        "resolved",
+        "flag",
+        "writeExpr",
+        "partial",
+        "init",
+        "__maybeImplicitGlobal"
+      ],
+      "methods": 6,
+      "superAdaptations": 0
+    },
+    {
+      "file": "referencer.ts",
+      "name": "Importer",
+      "base": "_esrecurse2.default.Visitor",
+      "fields": [
+        "declaration",
+        "referencer"
+      ],
+      "methods": 4,
+      "superAdaptations": 2
+    },
+    {
+      "file": "referencer.ts",
+      "name": "Referencer",
+      "base": "_esrecurse2.default.Visitor",
+      "fields": [
+        "options",
+        "scopeManager",
+        "parent",
+        "isInnerMethodDefinition"
+      ],
+      "methods": 44,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope-manager.ts",
+      "name": "ScopeManager",
+      "base": null,
+      "fields": [
+        "scopes",
+        "globalScope",
+        "__nodeToScope",
+        "__currentScope",
+        "__options",
+        "__declaredVariables"
+      ],
+      "methods": 27,
+      "superAdaptations": 0
+    },
+    {
+      "file": "scope.ts",
+      "name": "Scope",
+      "base": null,
+      "fields": [
+        "type",
+        "set",
+        "taints",
+        "dynamic",
+        "block",
+        "through",
+        "variables",
+        "references",
+        "variableScope",
+        "functionExpressionScope",
+        "directCallToEvalScope",
+        "thisFound",
+        "__left",
+        "upper",
+        "isStrict",
+        "childScopes",
+        "__declaredVariables"
+      ],
+      "methods": 20,
+      "superAdaptations": 0
+    },
+    {
+      "file": "scope.ts",
+      "name": "GlobalScope",
+      "base": "Scope",
+      "fields": [
+        "implicit"
+      ],
+      "methods": 2,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "ModuleScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "FunctionExpressionNameScope",
+      "base": "Scope",
+      "fields": [
+        "functionExpressionScope"
+      ],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "CatchScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "WithScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 1,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "TDZScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "BlockScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "SwitchScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "FunctionScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 3,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "ForScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "scope.ts",
+      "name": "ClassScope",
+      "base": "Scope",
+      "fields": [],
+      "methods": 0,
+      "superAdaptations": 2
+    },
+    {
+      "file": "variable.ts",
+      "name": "Variable",
+      "base": null,
+      "fields": [
+        "name",
+        "identifiers",
+        "references",
+        "defs",
+        "tainted",
+        "stack",
+        "scope"
+      ],
+      "methods": 0,
+      "superAdaptations": 0
+    }
+  ],
+  "inferredAny": {
+    "declarations": [],
+    "returns": []
+  },
+  "scopeStorage": "Lebab Scope.register retains the original nested variable-array entry for function declarations. The storage types include those entries; no flattening, allocation, registration, or iteration operation is replaced."
+}
