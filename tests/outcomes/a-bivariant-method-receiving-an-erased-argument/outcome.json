@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: CallArgumentType { func: \"inject@0obj4\", callee: \"Type4#put\", at: 1, expected: Float { bits: 64 }, found: Erased }",
+  "node": null,
+  "measured_with": "02319c12bee82f09",
+  "source": "measured"
+}

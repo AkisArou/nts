@@ -29,7 +29,7 @@
 generic-classes-unsupported 1 the constructs the name promises
 a-refused-printer-keeps-unrelated-conversions 1 Picker#pick returns T and deliberately refuses, keeping Unavailable#toString unavailable while all four unrelated conversion and control exports compile
 generator-unsupported 3 the constructs the name promises
-dates-unsupported 6 the constructs the name promises
+dates-unsupported 5 the constructs the name promises
 async-unsupported 3 the constructs the name promises
 # Was 2 until `86994fb4` landed the mapped-callback arm, which is one of the
 # two constructs this example's name promises. The remaining one is a
@@ -47,7 +47,6 @@ async-unsupported 3 the constructs the name promises
 # at 2 lets a regression back to 2 pass silently -- a blind spot exactly the
 # size of the progress, over the code that just changed.
 array-from-unsupported 1 the constructs the name promises
-mathops-unsupported 4 the constructs the name promises
 # **`a-throw-that-stays-in-its-function` carries no row any more**, and that is the whole
 # raising row closed: a method's raising copy is reached by name, an overridden member's
 # and an interface member's through a slot, an accessor's either way, a `sort` comparator's
@@ -87,6 +86,7 @@ a-member-read-through-a-bracket 1 a variable key, which is a member decided at r
 # 2026-09-11 is that the compiler says so instead of emitting nothing and
 # leaving the napi wrapper to report the effect with the cause unsaid.
 advanced 2 an exported generic function this program never instantiates
+a-method-accepting-the-erased-argument 1 the unused structural `put` method declaration refuses; the unknown-parameter control's exported work still compares all 29 calls
 module-evaluation 1 a regular expression literal
 calls 1 an erased value where a concrete representation is wanted
 # Its `try` returns `handler(await failing(...))`, and `handler` is a function

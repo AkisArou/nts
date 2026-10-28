@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":2,"backend":"jvm","commit":"866b98124722a2ac086d910855bd4023333aa87a","compiler":"9666c8eb28cf96f8","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":2,"backend":"jvm","commit":"b23045299eabccee52fc6662c6cf044d8bc885f1","compiler":"f2cc41d24873193c","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/ambient/declare-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
@@ -379,6 +379,543 @@ tests/typescript/resource-management/reverse-order.ts	{"kind":"refused","diagnos
 tests/typescript/resource-management/suppressed-error.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/resource-management/using-disposes-at-block-end.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/resource-management/using-in-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness-controls/array-backing-assertion-control.ts	{"kind":"pass"}
+tests/typescript/soundness-controls/array-backing-assertion-finding.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness-controls/array-to-tuple-assertion-control.ts	{"kind":"pass"}
+tests/typescript/soundness-controls/array-to-tuple-assertion-finding.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness-controls/base-to-sub-map-callback-control.ts	{"kind":"pass"}
+tests/typescript/soundness-controls/base-to-sub-map-callback-finding.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Base cannot be cast to class nts.gen.Sub (nts.gen.Base and nts.gen.Sub are in unnamed module of loader 'app')"}}
+tests/typescript/soundness-controls/generic-cell-assertion-control.ts	{"kind":"pass"}
+tests/typescript/soundness-controls/generic-cell-assertion-finding.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness-controls/object-layout-assertion-control.ts	{"kind":"pass"}
+tests/typescript/soundness-controls/object-layout-assertion-finding.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/arity-parameter-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/arity-parameter-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/arity-parameter-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-array-element-array-from-map.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-array-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-concat.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-direct.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-array-element-filter.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-array-element-for-each.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-array-element-for-of.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-array-element-map.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-reduce.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-slice.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-sort.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-array-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/assertion-array-element-values.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-class-field-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-class-field-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-class-field-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-class-field-getter.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-class-field-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-class-field-spread.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-closure-capture-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-closure-capture-direct.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-closure-capture-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-map-key-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-get-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/assertion-map-key-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-map-value-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-get.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-map-value-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-map-value-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-map-value-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-object-property-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-object-property-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-object-property-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-object-property-getter.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-object-property-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-object-property-spread.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-parameter-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-parameter-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-parameter-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-set-element-array-from-map.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/assertion-set-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/assertion-set-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-for-of.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/assertion-set-element-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/assertion-set-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/assertion-set-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/assertion-set-element-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/assertion-tuple-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-tuple-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-tuple-element-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/assertion-tuple-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/assertion-tuple-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assertion-tuple-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/assign-object-property-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-array-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-class-field-call.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-class-field-destructuring.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-class-field-direct.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-class-field-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-class-field-return.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-class-field-spread.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-closure-capture-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/bivariant-closure-capture-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/bivariant-closure-capture-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-get-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/bivariant-map-key-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-map-key-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-for-each-base-in-sub.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Base cannot be cast to class nts.gen.Sub (nts.gen.Base and nts.gen.Sub are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/bivariant-map-value-for-each-null.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-for-each-number-in-boolean.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-for-each-number-in-string.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-for-each-same-shape-class.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-for-each-undefined.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-get.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/bivariant-map-value-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-map-value-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/bivariant-object-property-call.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-object-property-destructuring.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-object-property-direct.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-object-property-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-object-property-return.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-object-property-spread.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj31\", callee: \"Type31#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-parameter-call.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj32\", callee: \"Type32#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-parameter-direct.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"inject@0obj28\", callee: \"Type28#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-parameter-return.ts	{"kind":"invalid-hir","validator":"CallArgumentType { func: \"invoke@0obj28\", callee: \"Type28#put\", at: 1, expected: Float { bits: 64 }, found: Erased }"}
+tests/typescript/soundness/bivariant-promise-value-await.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
+tests/typescript/soundness/bivariant-promise-value-for-await.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
+tests/typescript/soundness/bivariant-promise-value-promise-all.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
+tests/typescript/soundness/bivariant-promise-value-then.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
+tests/typescript/soundness/bivariant-set-element-array-from-map.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/bivariant-set-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/bivariant-set-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-for-of.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/bivariant-set-element-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/bivariant-set-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-set-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/bivariant-set-element-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/bivariant-tuple-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/bivariant-tuple-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct-base-in-sub.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct-null.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct-number-in-boolean.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct-number-in-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct-same-shape-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-array-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/covariant-tuple-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-array-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-class-field-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-class-field-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-class-field-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-class-field-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-class-field-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-class-field-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-closure-capture-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-closure-capture-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-closure-capture-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-map-key-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-get-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-key-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/generic-map-key-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-map-key-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/generic-map-value-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-get.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/generic-map-value-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/generic-map-value-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-map-value-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/generic-object-property-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-spread-intersection.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-object-property-union-key.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-parameter-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-parameter-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-parameter-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-set-element-array-from-map.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/generic-set-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/generic-set-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-set-element-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-set-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-set-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-set-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-set-element-for-of.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/generic-set-element-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-set-element-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/generic-set-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/generic-set-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/generic-set-element-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/generic-tuple-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/generic-tuple-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/overload-return-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/override-parameter-dispatch-base-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/override-parameter-dispatch-base-reference.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/override-parameter-dispatch-callback.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/override-parameter-dispatch-generic.ts	{"kind":"refused","diagnostics":[{"code":"NTS4001","where":"none"}]}
+tests/typescript/soundness/override-parameter-dispatch-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/override-parameter-field-base-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/override-parameter-field-base-reference.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/override-parameter-field-callback.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/override-parameter-field-generic.ts	{"kind":"refused","diagnostics":[{"code":"NTS4001","where":"none"}]}
+tests/typescript/soundness/override-parameter-field-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"},{"code":"NTS4001","where":"none"}]}
+tests/typescript/soundness/override-parameter-typeof-base-array.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/override-parameter-typeof-base-reference.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/soundness/override-parameter-typeof-callback.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/override-parameter-typeof-generic.ts	{"kind":"refused","diagnostics":[{"code":"NTS4001","where":"none"}]}
+tests/typescript/soundness/override-parameter-typeof-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/predicate-array-element-array-from-map.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-array-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-concat.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-direct.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-array-element-filter.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-array-element-for-each.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-array-element-for-of.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-array-element-map.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-reduce.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-slice.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-sort.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-array-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class [D ([Lnts.rt.NtsValue; is in unnamed module of loader 'app'; [D is in module java.base of loader 'bootstrap')"}}
+tests/typescript/soundness/predicate-array-element-values.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.rt.NtsArrayL cannot be cast to class nts.rt.NtsArrayD (nts.rt.NtsArrayL and nts.rt.NtsArrayD are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-class-field-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-class-field-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-class-field-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-class-field-getter.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-class-field-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-class-field-spread.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.Cell$N$ (nts.gen.Cell$N$ and nts.gen.Cell$N$ are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-closure-capture-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-closure-capture-direct.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-closure-capture-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-map-key-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-get-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/predicate-map-key-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-map-value-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-get.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-map-value-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-map-value-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-map-value-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-object-property-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-object-property-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-object-property-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-object-property-getter.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-object-property-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-object-property-spread.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-parameter-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-parameter-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-parameter-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-set-element-array-from-map.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/predicate-set-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/predicate-set-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-for-of.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/predicate-set-element-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/predicate-set-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/predicate-set-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/predicate-set-element-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/predicate-tuple-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-call.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-tuple-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-destructuring.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-tuple-element-direct.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/predicate-tuple-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-return.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class [Lnts.rt.NtsValue; cannot be cast to class nts.gen.TupleN ([Lnts.rt.NtsValue; and nts.gen.TupleN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/predicate-tuple-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-sort.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/predicate-tuple-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/private-class-field-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/private-class-field-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/private-class-field-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/private-class-field-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/private-class-field-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/refinement-array-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/refinement-class-field-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/refinement-closure-capture-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/refinement-object-property-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/refinement-object-property-discriminant.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.ClassCastException: class nts.gen.TypeN cannot be cast to class nts.gen.TypeN (nts.gen.TypeN and nts.gen.TypeN are in unnamed module of loader 'app')"}}
+tests/typescript/soundness/refinement-parameter-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/refinement-tuple-element-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/view-array-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-array-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-class-field-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-class-field-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-class-field-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-class-field-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-class-field-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-class-field-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-get-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-key-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/view-map-key-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-map-key-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-call.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/view-map-value-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-get.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/view-map-value-return.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/soundness/view-map-value-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-map-value-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/view-object-property-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-object-property-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct-base-in-sub.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct-null.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct-number-in-boolean.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct-number-in-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct-same-shape-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-object-property-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-object-property-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-object-property-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-object-property-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-array-from-map.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/view-set-element-array-from.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/view-set-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-for-of.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/view-set-element-has.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-set-element-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/view-set-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/soundness/view-set-element-spread.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a bulk numeric read over a collection holding an entry of tag 3"}}
+tests/typescript/soundness/view-set-element-values.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
+tests/typescript/soundness/view-tuple-element-array-from-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-array-from.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-concat.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-destructuring.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-direct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-entries.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-filter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-reduce.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-slice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-spread.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/soundness/view-tuple-element-values.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/symbols/description-and-strings.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: throws: nothing was thrown"}}
 tests/typescript/symbols/identity-and-registry.ts	{"kind":"pass"}
 tests/typescript/symbols/spread-copies-symbols.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
