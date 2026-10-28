@@ -95,7 +95,7 @@ times cache-busted evaluation before rendering.
 
 ## Additional implementation findings
 
-The initial inventory selected **43 of 90 JavaScript workloads**. Full original executions have now confirmed three further constraints under the repository's [fixed-layout and no prototype/descriptor reflection rules](https://github.com/AkisArou/nts/blob/main/docs/contributing/cloud-agents.md). **40 selected workloads remain unaffected; WSL, Babel WTB and Lebab WTB are blocked.** The original inventory is retained with explicit `portStatus` and evidence fields, rather than silently changing the selection.
+The initial inventory selected **43 of 90 JavaScript workloads**. Full original executions identified active prototype and descriptor operations in three workloads. **The maintainer handoff authorizes WSL, Babel WTB and Lebab WTB unchanged**, preserving the operations below as nts compiler targets. The original selection and evidence remain in `inventory.json`; an nts refusal is a compiler finding and does not authorize replacing an operation.
 
 | Workload | Active operation in the complete original run | Evidence |
 | --- | --- | --- |
@@ -103,4 +103,17 @@ The initial inventory selected **43 of 90 JavaScript workloads**. Full original 
 | Babel WTB | `gensync` reads and rewrites dynamic callable wrappers' `name` and `length` descriptors during the complete Redux transformation: **126 descriptor reads and 126 writes**. The unchanged original successfully emits **21,248 characters**. | [Original source](https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js); `babel-wtb-model-audit.json`. |
 | Lebab WTB | Recast's `TreeCopier.copy` preserves each node's runtime prototype and adds a non-enumerable `original` backlink with `Object.create(Object.getPrototypeOf(node), descriptors)`: **3,310 calls** during all ten original Preact transforms. The unchanged original emits **21,316 characters and 35 warnings**. | [Original source](https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/lebab.bundle.js); `lebab-wtb-model-audit.json`. |
 
-These operations execute inside the original compiler or transformation, beyond static module registration or constructor syntax. Replacing WSL's object reclassification with tags or forwarding, removing Babel's callable metadata, or replacing Lebab's prototype-preserving copies would change the original representation or behavior. No such rewrite has been made. The compact evidence records exact input/output digests and the original execution method. These three need an explicit scope decision before a row can be proposed; all unaffected ports continue. This is distinct from an nts compile refusal on an otherwise permitted transcription.
+These operations execute inside the original compiler or transformation, beyond static module registration or constructor syntax. Replacing WSL's object reclassification with tags or forwarding, removing Babel's callable metadata, or replacing Lebab's prototype-preserving copies would change the original representation or behavior. No such rewrite has been made. The compact evidence records exact input/output digests and the original execution method. The earlier scope hold is resolved by the maintainer handoff. These three remain in the port queue with their operations unchanged. They await implementation and then maintainer compilation, not another scope decision.
+
+## Port status
+
+The inventory records every selected workload's status and PR link. Currently
+**31 of the 43 selected programs have open PRs**: 25 ready for maintainer
+compilation, and six drafts waiting for awaited harness support. The remaining
+12 are queued in the handoff order:
+
+`threejs`, `FlightPlanner`, `OfflineAssembler`, `acorn-wtb`, `babylon-wtb`, `espree-wtb`, `esprima-next-wtb`, `typescript-octane`, `typescript-lib`, `WSL`, `babel-wtb`, `lebab-wtb`.
+
+All completed ports await the maintainer workflow: nts compilation, input-domain
+integration where needed, Node oracle counts, the gate, measurement and landing.
+The source-loading `web-ssr` exclusion remains unchanged.

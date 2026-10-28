@@ -189,14 +189,14 @@
         "FlightPlanner",
         "OfflineAssembler",
         "acorn-wtb",
-        "babel-wtb",
         "babylon-wtb",
         "espree-wtb",
         "esprima-next-wtb",
-        "lebab-wtb",
-        "WSL",
         "typescript-octane",
-        "typescript-lib"
+        "typescript-lib",
+        "WSL",
+        "babel-wtb",
+        "lebab-wtb"
       ]
     }
   ],
@@ -1641,7 +1641,12 @@
         "sourceCriterion": "Each run sums all12 blocks five times and requires1666156; module setup also invokes the original run."
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 9
+      "portOrder": 9,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 58,
+        "url": "https://github.com/AkisArou/nts/pull/58"
+      }
     },
     {
       "name": "richards",
@@ -1850,7 +1855,8 @@
         "outfile cumulative checksum must be -412589664 and outerr checksum must be 0."
       ],
       "category": "Large real programs",
-      "portOrder": 42
+      "portOrder": 42,
+      "portStatus": "pending-port"
     },
     {
       "name": "FlightPlanner",
@@ -2048,7 +2054,8 @@
         }
       },
       "category": "Large real programs",
-      "portOrder": 33
+      "portOrder": 33,
+      "portStatus": "pending-port"
     },
     {
       "name": "OfflineAssembler",
@@ -2344,7 +2351,8 @@
         }
       },
       "category": "Large real programs",
-      "portOrder": 34
+      "portOrder": 34,
+      "portStatus": "pending-port"
     },
     {
       "name": "UniPoker",
@@ -2492,11 +2500,11 @@
           "players": [
             {
               "_cards": [
-                "🃋",
-                "🃙",
-                "🂨",
-                "🃖",
-                "🂳"
+                "\ud83c\udccb",
+                "\ud83c\udcd9",
+                "\ud83c\udca8",
+                "\ud83c\udcd6",
+                "\ud83c\udcb3"
               ],
               "_rank": 759907,
               "_name": "Player 1",
@@ -2516,11 +2524,11 @@
             },
             {
               "_cards": [
-                "🂱",
-                "🃝",
-                "🃈",
-                "🃆",
-                "🃓"
+                "\ud83c\udcb1",
+                "\ud83c\udcdd",
+                "\ud83c\udcc8",
+                "\ud83c\udcc6",
+                "\ud83c\udcd3"
               ],
               "_rank": 1038435,
               "_name": "Player 2",
@@ -2540,11 +2548,11 @@
             },
             {
               "_cards": [
-                "🃞",
-                "🂪",
-                "🂦",
-                "🂥",
-                "🃂"
+                "\ud83c\udcde",
+                "\ud83c\udcaa",
+                "\ud83c\udca6",
+                "\ud83c\udca5",
+                "\ud83c\udcc2"
               ],
               "_rank": 960082,
               "_name": "Player 3",
@@ -2564,11 +2572,11 @@
             },
             {
               "_cards": [
-                "🂽",
-                "🃍",
-                "🃉",
-                "🂸",
-                "🂤"
+                "\ud83c\udcbd",
+                "\ud83c\udccd",
+                "\ud83c\udcc9",
+                "\ud83c\udcb8",
+                "\ud83c\udca4"
               ],
               "_rank": 1956228,
               "_name": "Player 4",
@@ -2590,7 +2598,12 @@
         }
       },
       "category": "Numeric and 3D work",
-      "portOrder": 31
+      "portOrder": 31,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 80,
+        "url": "https://github.com/AkisArou/nts/pull/80"
+      }
     },
     {
       "name": "validatorjs",
@@ -2877,7 +2890,12 @@
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 10
+      "portOrder": 10,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 59,
+        "url": "https://github.com/AkisArou/nts/pull/59"
+      }
     },
     {
       "name": "hash-map",
@@ -2973,7 +2991,12 @@
         "observation": {}
       },
       "category": "Map, Set and hashing",
-      "portOrder": 3
+      "portOrder": 3,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 53,
+        "url": "https://github.com/AkisArou/nts/pull/53"
+      }
     },
     {
       "name": "doxbee-promise",
@@ -3094,6 +3117,11 @@
         "draft": true,
         "workSignature": "work(n: number): Promise<number>",
         "reason": "Awaited harness support is maintained separately."
+      },
+      "portStatus": "draft-awaiting-awaited-harness",
+      "pullRequest": {
+        "number": 69,
+        "url": "https://github.com/AkisArou/nts/pull/69"
       }
     },
     {
@@ -3215,6 +3243,11 @@
         "draft": true,
         "workSignature": "work(n: number): Promise<number>",
         "reason": "Awaited harness support is maintained separately."
+      },
+      "portStatus": "draft-awaiting-awaited-harness",
+      "pullRequest": {
+        "number": 70,
+        "url": "https://github.com/AkisArou/nts/pull/70"
       }
     },
     {
@@ -3268,7 +3301,7 @@
           "paths": [
             "SeaMonster/ai-astar.js"
           ],
-          "description": "Complete literal500×500 grid; start[0][0], end[123][321].",
+          "description": "Complete literal500\u00d7500 grid; start[0][0], end[123][321].",
           "replaced": false,
           "truncated": false
         }
@@ -3340,7 +3373,12 @@
         "sourceCriterion": "Original only requires successful search; independent observation found route length446. No validation was invented for the source audit."
       },
       "category": "Numeric and 3D work",
-      "portOrder": 26
+      "portOrder": 26,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 75,
+        "url": "https://github.com/AkisArou/nts/pull/75"
+      }
     },
     {
       "name": "gaussian-blur",
@@ -3392,7 +3430,7 @@
           "paths": [
             "SeaMonster/gaussian-blur.js"
           ],
-          "description": "Original800×450 Uint32Array, radius15; local Jenkins generator seed49734321 fills every pixel.",
+          "description": "Original800\u00d7450 Uint32Array, radius15; local Jenkins generator seed49734321 fills every pixel.",
           "replaced": false,
           "truncated": false
         }
@@ -3415,7 +3453,7 @@
         }
       ],
       "requiredAdaptations": [
-        "Declare fields/types; retain800×450 pixels, radius15, original generator and Float32 intermediate rounding."
+        "Declare fields/types; retain800\u00d7450 pixels, radius15, original generator and Float32 intermediate rounding."
       ],
       "originalValidation": {
         "original": {
@@ -3452,7 +3490,12 @@
         "sourceCriterion": "Original has no result assertion. Both full convolve passes complete; Float32 intermediate storage is part of the program."
       },
       "category": "Numeric and 3D work",
-      "portOrder": 27
+      "portOrder": 27,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 76,
+        "url": "https://github.com/AkisArou/nts/pull/76"
+      }
     },
     {
       "name": "stanford-crypto-aes",
@@ -3606,7 +3649,12 @@
         "sourceCriterion": "Every vector encrypt and decrypt is checked with sjcl.bitArray.equal."
       },
       "category": "Numeric and 3D work",
-      "portOrder": 28
+      "portOrder": 28,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 77,
+        "url": "https://github.com/AkisArou/nts/pull/77"
+      }
     },
     {
       "name": "stanford-crypto-pbkdf2",
@@ -3744,7 +3792,12 @@
         "sourceCriterion": "Original expected hex5436c4c0d73e425a521f4a5a13e0fffe5cd957a823f435385fa0a75068a26803."
       },
       "category": "Map, Set and hashing",
-      "portOrder": 8
+      "portOrder": 8,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 57,
+        "url": "https://github.com/AkisArou/nts/pull/57"
+      }
     },
     {
       "name": "stanford-crypto-sha256",
@@ -3883,7 +3936,12 @@
         "sourceCriterion": "Original expected hex719043495be84b97fe4f5d7e61c99d6d1ba0cd6974a6b10c684c25a44ddd0c03."
       },
       "category": "Map, Set and hashing",
-      "portOrder": 7
+      "portOrder": 7,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 49,
+        "url": "https://github.com/AkisArou/nts/pull/49"
+      }
     },
     {
       "name": "json-stringify-inspector",
@@ -3972,7 +4030,12 @@
         "newTest": "Compare complete serialization/object against untouched upstream, including exact full-output SHA-256."
       },
       "category": "JSON",
-      "portOrder": 1
+      "portOrder": 1,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 44,
+        "url": "https://github.com/AkisArou/nts/pull/44"
+      }
     },
     {
       "name": "json-parse-inspector",
@@ -4061,7 +4124,12 @@
         "newTest": "Compare complete serialization/object against untouched upstream, including exact full-output SHA-256."
       },
       "category": "JSON",
-      "portOrder": 2
+      "portOrder": 2,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 46,
+        "url": "https://github.com/AkisArou/nts/pull/46"
+      }
     },
     {
       "name": "bigint-noble-bls12-381",
@@ -4388,6 +4456,11 @@
         "draft": true,
         "workSignature": "work(n: number): Promise<number>",
         "reason": "Awaited harness support is maintained separately."
+      },
+      "portStatus": "draft-awaiting-awaited-harness",
+      "pullRequest": {
+        "number": 72,
+        "url": "https://github.com/AkisArou/nts/pull/72"
       }
     },
     {
@@ -4720,6 +4793,11 @@
         "draft": true,
         "workSignature": "work(n: number): Promise<number>",
         "reason": "Awaited harness support is maintained separately."
+      },
+      "portStatus": "draft-awaiting-awaited-harness",
+      "pullRequest": {
+        "number": 73,
+        "url": "https://github.com/AkisArou/nts/pull/73"
       }
     },
     {
@@ -5052,6 +5130,11 @@
         "draft": true,
         "workSignature": "work(n: number): Promise<number>",
         "reason": "Awaited harness support is maintained separately."
+      },
+      "portStatus": "draft-awaiting-awaited-harness",
+      "pullRequest": {
+        "number": 74,
+        "url": "https://github.com/AkisArou/nts/pull/74"
       }
     },
     {
@@ -5097,7 +5180,7 @@
           "spdx": "MIT",
           "scope": "Complete algorithm bundle and embedded fixed inputs",
           "copyrightHolders": [
-            "Juan Hernández Serrano 2018"
+            "Juan Hern\u00e1ndez Serrano 2018"
           ],
           "evidence": [
             {
@@ -5371,7 +5454,12 @@
         "sourceCriterion": "Original validate checks decrypted values12345678901234567890n,12345678901234567895n,123456789012345678900n; all pass."
       },
       "category": "Numeric and 3D work",
-      "portOrder": 29
+      "portOrder": 29,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 78,
+        "url": "https://github.com/AkisArou/nts/pull/78"
+      }
     },
     {
       "name": "bigint-bigdenary",
@@ -5506,7 +5594,12 @@
         "sourceCriterion": "Original first/last equality checks and final validate pass."
       },
       "category": "Numeric and 3D work",
-      "portOrder": 30
+      "portOrder": 30,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 79,
+        "url": "https://github.com/AkisArou/nts/pull/79"
+      }
     },
     {
       "name": "proxy-mobx",
@@ -7805,7 +7898,12 @@
         "observation": {}
       },
       "category": "Classes and class fields",
-      "portOrder": 17
+      "portOrder": 17,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 67,
+        "url": "https://github.com/AkisArou/nts/pull/67"
+      }
     },
     {
       "name": "raytrace-private-class-fields",
@@ -7907,7 +8005,12 @@
         "observation": {}
       },
       "category": "Classes and class fields",
-      "portOrder": 18
+      "portOrder": 18,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 68,
+        "url": "https://github.com/AkisArou/nts/pull/68"
+      }
     },
     {
       "name": "typescript-lib",
@@ -8086,7 +8189,8 @@
         "compileTest returns the original diagnostics string and resultFilesCount from the in-memory emitted file map."
       ],
       "category": "Large real programs",
-      "portOrder": 43
+      "portOrder": 43,
+      "portStatus": "pending-port"
     },
     {
       "name": "async-fs",
@@ -8229,6 +8333,11 @@
         "draft": true,
         "workSignature": "work(n: number): Promise<number>",
         "reason": "Awaited harness support is maintained separately."
+      },
+      "portStatus": "draft-awaiting-awaited-harness",
+      "pullRequest": {
+        "number": 71,
+        "url": "https://github.com/AkisArou/nts/pull/71"
       }
     },
     {
@@ -8364,7 +8473,12 @@
         }
       },
       "category": "Classes and class fields",
-      "portOrder": 19
+      "portOrder": 19,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 50,
+        "url": "https://github.com/AkisArou/nts/pull/50"
+      }
     },
     {
       "name": "lazy-collections",
@@ -8455,7 +8569,12 @@
         }
       },
       "category": "Map, Set and hashing",
-      "portOrder": 4
+      "portOrder": 4,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 48,
+        "url": "https://github.com/AkisArou/nts/pull/48"
+      }
     },
     {
       "name": "js-tokens",
@@ -8678,7 +8797,8 @@
         "Original runIteration initializes the scene once then calls animate; animation updates every particle and renderer.render(scene,camera)."
       ],
       "category": "Numeric and 3D work",
-      "portOrder": 32
+      "portOrder": 32,
+      "portStatus": "pending-port"
     },
     {
       "name": "babylonjs-startup-es5",
@@ -11358,8 +11478,9 @@
       ],
       "category": "Large real programs",
       "portOrder": 41,
-      "portStatus": "blocked-active-prototype-replacement",
-      "portStatusEvidence": "wsl-prototype-audit.json"
+      "portStatus": "pending-approved-unchanged-port",
+      "portStatusEvidence": "wsl-prototype-audit.json",
+      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
     },
     {
       "name": "prismjs-startup-es6",
@@ -11886,7 +12007,7 @@
           "path": "intl/src/DateTimeFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales×4dateStyles×4timeStyles;100dates from local1800-12-05T13:06 with1234569ms increments;17format+formatToParts pairs and7formatRange attempts per option."
+          "description": "25locales\u00d74dateStyles\u00d74timeStyles;100dates from local1800-12-05T13:06 with1234569ms increments;17format+formatToParts pairs and7formatRange attempts per option."
         }
       ],
       "dependencies": [
@@ -11940,11 +12061,16 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 445369,
-          "lastResult": "суббота, 6 декабря 1800 г. в 22:42:27sexta-feira, 5 de dezembro de 1800 às 13:06:00 – sábado, 6 de dezembro de 1800 às 11:44:01"
+          "lastResult": "\u0441\u0443\u0431\u0431\u043e\u0442\u0430, 6 \u0434\u0435\u043a\u0430\u0431\u0440\u044f 1800 \u0433. \u0432 22:42:27sexta-feira, 5 de dezembro de 1800 \u00e0s 13:06:00\u2009\u2013\u2009s\u00e1bado, 6 de dezembro de 1800 \u00e0s 11:44:01"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 12
+      "portOrder": 12,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 62,
+        "url": "https://github.com/AkisArou/nts/pull/62"
+      }
     },
     {
       "name": "ListFormat-intl",
@@ -12055,7 +12181,7 @@
           "path": "intl/src/ListFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales×3styles×3types;10iterations per option over original5lists including all25locales and100generated numeric strings."
+          "description": "25locales\u00d73styles\u00d73types;10iterations per option over original5lists including all25locales and100generated numeric strings."
         }
       ],
       "dependencies": [
@@ -12109,11 +12235,16 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 508496,
-          "lastResult": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98 или 99"
+          "lastResult": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98 \u0438\u043b\u0438 99"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 13
+      "portOrder": 13,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 63,
+        "url": "https://github.com/AkisArou/nts/pull/63"
+      }
     },
     {
       "name": "RelativeTimeFormat-intl",
@@ -12224,7 +12355,7 @@
           "path": "intl/src/RelativeTimeFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales×3styles×2numeric modes;100values per option,8original units, randomvalue=Math.random()*100-50; format and formatToParts."
+          "description": "25locales\u00d73styles\u00d72numeric modes;100values per option,8original units, randomvalue=Math.random()*100-50; format and formatToParts."
         }
       ],
       "dependencies": [
@@ -12278,11 +12409,16 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 434328,
-          "lastResult": "2,665 секунды назад"
+          "lastResult": "2,665 \u0441\u0435\u043a\u0443\u043d\u0434\u044b \u043d\u0430\u0437\u0430\u0434"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 14
+      "portOrder": 14,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 64,
+        "url": "https://github.com/AkisArou/nts/pull/64"
+      }
     },
     {
       "name": "NumberFormat-intl",
@@ -12393,7 +12529,7 @@
           "path": "intl/src/NumberFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "Full2050-option generator (25locales,5currencies×4display styles,first20units×3styles,decimal/percent); original shuffled first200options,10values each from counter+=599 and modulo10000."
+          "description": "Full2050-option generator (25locales,5currencies\u00d74display styles,first20units\u00d73styles,decimal/percent); original shuffled first200options,10values each from counter+=599 and modulo10000."
         }
       ],
       "dependencies": [
@@ -12447,11 +12583,16 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 40860,
-          "lastResult": "8.001°"
+          "lastResult": "8.001\u00b0"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 15
+      "portOrder": 15,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 65,
+        "url": "https://github.com/AkisArou/nts/pull/65"
+      }
     },
     {
       "name": "PluralRules-intl",
@@ -12562,7 +12703,7 @@
           "path": "intl/src/PluralRules.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales×2types;1000values per option:0..3 then996original random integers below1000."
+          "description": "25locales\u00d72types;1000values per option:0..3 then996original random integers below1000."
         }
       ],
       "dependencies": [
@@ -12620,7 +12761,12 @@
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 16
+      "portOrder": 16,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 66,
+        "url": "https://github.com/AkisArou/nts/pull/66"
+      }
     },
     {
       "name": "3d-cube-SP",
@@ -12805,7 +12951,7 @@
           "paths": [
             "SunSpider/3d-raytrace.js"
           ],
-          "description": "Original30×30 scene/pixels and canvas-command text generation, eight complete runs.",
+          "description": "Original30\u00d730 scene/pixels and canvas-command text generation, eight complete runs.",
           "replaced": false,
           "truncated": false
         }
@@ -13226,7 +13372,12 @@
         "sourceCriterion": "Original MD5 expected a831e91e0f70eddcb70dc61c6f82f6cd passes."
       },
       "category": "Map, Set and hashing",
-      "portOrder": 5
+      "portOrder": 5,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 55,
+        "url": "https://github.com/AkisArou/nts/pull/55"
+      }
     },
     {
       "name": "crypto-sha1-SP",
@@ -13353,7 +13504,12 @@
         "sourceCriterion": "Original SHA1 expected2524d264def74cce2498bf112bedf00e6c0b796d passes."
       },
       "category": "Map, Set and hashing",
-      "portOrder": 6
+      "portOrder": 6,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 56,
+        "url": "https://github.com/AkisArou/nts/pull/56"
+      }
     },
     {
       "name": "date-format-tofte-SP",
@@ -14087,7 +14243,12 @@
         "sourceCriterion": "Original decompressed length sum511508 passes. Independent decompressed lengths/hashes are recorded; none of the decoded code is executed."
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
-      "portOrder": 11
+      "portOrder": 11,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 61,
+        "url": "https://github.com/AkisArou/nts/pull/61"
+      }
     },
     {
       "name": "tagcloud-SP",
@@ -14592,7 +14753,8 @@
         "Return original per-input tokenizer count plus full AST walker callback count, preserving locations/ranges options."
       ],
       "category": "Large real programs",
-      "portOrder": 35
+      "portOrder": 35,
+      "portStatus": "pending-port"
     },
     {
       "name": "babel-wtb",
@@ -15036,8 +15198,9 @@
       "originalValidation": [],
       "category": "Large real programs",
       "portOrder": 36,
-      "portStatus": "blocked-active-function-descriptor-operations",
-      "portStatusEvidence": "babel-wtb-model-audit.json"
+      "portStatus": "pending-approved-unchanged-port",
+      "portStatusEvidence": "babel-wtb-model-audit.json",
+      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
     },
     {
       "name": "babel-minify-wtb",
@@ -17188,7 +17351,8 @@
       ],
       "originalValidation": [],
       "category": "Large real programs",
-      "portOrder": 37
+      "portOrder": 37,
+      "portStatus": "pending-port"
     },
     {
       "name": "chai-wtb",
@@ -18015,7 +18179,8 @@
         "For each original input return tokenize(payload,{loc:true,range:true}).length + parse(payload,{loc:true,range:true}).body.length."
       ],
       "category": "Large real programs",
-      "portOrder": 38
+      "portOrder": 38,
+      "portStatus": "pending-port"
     },
     {
       "name": "esprima-next-wtb",
@@ -18381,7 +18546,8 @@
         "For each original input return tokenize(payload,{loc:true,range:true}).length + parse(payload,{loc:true,range:true}).body.length."
       ],
       "category": "Large real programs",
-      "portOrder": 39
+      "portOrder": 39,
+      "portStatus": "pending-port"
     },
     {
       "name": "lebab-wtb",
@@ -19484,8 +19650,9 @@
       ],
       "category": "Large real programs",
       "portOrder": 40,
-      "portStatus": "blocked-active-prototype-preserving-copy",
-      "portStatusEvidence": "lebab-wtb-model-audit.json"
+      "portStatus": "pending-approved-unchanged-port",
+      "portStatusEvidence": "lebab-wtb-model-audit.json",
+      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
     },
     {
       "name": "postcss-wtb",
@@ -21201,23 +21368,53 @@
   "portabilityFindings": {
     "selectedByInitialInventory": 43,
     "unaffectedSelectedWorkloads": 40,
-    "blockedWorkloads": [
+    "note": "The 43-workload selection is unchanged. WSL, Babel WTB and Lebab WTB are authorized for unchanged transcription, including their audited runtime prototype/descriptor operations. The evidence files retain the exact original operation counts; these rows are no longer waiting for a scope decision.",
+    "unchangedOperationTargets": [
       {
         "name": "WSL",
-        "reason": "Blocked by the current fixed-layout/no-prototype rule. Replacing the active object reclassification with tags, replacement objects or forwarding changes representation/dispatch and needs an explicit scope decision. The static Proxy-registration adaptation alone is insufficient.",
-        "evidence": "wsl-prototype-audit.json"
+        "evidence": "wsl-prototype-audit.json",
+        "priorHoldReason": "Blocked by the current fixed-layout/no-prototype rule. Replacing the active object reclassification with tags, replacement objects or forwarding changes representation/dispatch and needs an explicit scope decision. The static Proxy-registration adaptation alone is insufficient.",
+        "decision": "Port unchanged, retaining the audited operation as an nts compiler target. The maintainer handoff resolves the earlier scope hold."
       },
       {
         "name": "babel-wtb",
-        "reason": "The current docs/contributing/cloud-agents.md forbids runtime property descriptor reflection and mutation. The executed gensync implementation reads and rewrites descriptors of dynamic callable wrappers. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
-        "evidence": "babel-wtb-model-audit.json"
+        "evidence": "babel-wtb-model-audit.json",
+        "priorHoldReason": "The current docs/contributing/cloud-agents.md forbids runtime property descriptor reflection and mutation. The executed gensync implementation reads and rewrites descriptors of dynamic callable wrappers. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
+        "decision": "Port unchanged, retaining the audited operation as an nts compiler target. The maintainer handoff resolves the earlier scope hold."
       },
       {
         "name": "lebab-wtb",
-        "reason": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
-        "evidence": "lebab-wtb-model-audit.json"
+        "evidence": "lebab-wtb-model-audit.json",
+        "priorHoldReason": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
+        "decision": "Port unchanged, retaining the audited operation as an nts compiler target. The maintainer handoff resolves the earlier scope hold."
       }
+    ]
+  },
+  "portSummary": {
+    "selected": 43,
+    "openPullRequests": 31,
+    "readyForMaintainerCompilation": 25,
+    "draftsAwaitingAwaitedHarness": 6,
+    "pendingPorts": [
+      "threejs",
+      "FlightPlanner",
+      "OfflineAssembler",
+      "acorn-wtb",
+      "babylon-wtb",
+      "espree-wtb",
+      "esprima-next-wtb",
+      "typescript-octane",
+      "typescript-lib",
+      "WSL",
+      "babel-wtb",
+      "lebab-wtb"
     ],
-    "note": "The accepted 90-workload selection remains the initial inventory. Full original executions revealed three further constraints under the repository fixed-layout/no-prototype/descriptor rule. These ports are explicitly blocked rather than silently omitted or rewritten; all 40 unaffected selected workloads continue."
+    "maintainerResponsibilities": [
+      "nts compilation and refusal recording",
+      "input domains",
+      "Node oracle counts",
+      "gate execution",
+      "measurement and landing"
+    ]
   }
 }
