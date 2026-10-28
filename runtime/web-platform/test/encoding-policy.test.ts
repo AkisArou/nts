@@ -140,3 +140,18 @@ test("fixed shared buffers remain valid at both encoding boundaries", () => {
   assert.deepEqual(new TextEncoder().encodeInto("\ud83d\udc99", bytes), { read: 2, written: 4 });
   assert.equal(new TextDecoder().decode(new DataView(buffer)), "\ud83d\udc99");
 });
+
+test("ordinary decoder properties cannot reset a pending UTF-8 sequence", () => {
+  const decoder = new TextDecoder();
+  assert.equal(decoder.decode(Uint8Array.of(0xc2), { stream: true }), "");
+  Object.assign(decoder, { needed: 0, seen: 0, code: 0, doNotFlush: false });
+  assert.equal(decoder.decode(Uint8Array.of(0xa2)), "\u00a2");
+});
+
+test("ordinary decoder properties cannot change UTF-16 or BOM state", () => {
+  const decoder = new TextDecoder("utf-16le");
+  assert.equal(decoder.decode(Uint8Array.of(0xff), { stream: true }), "");
+  Object.assign(decoder, { pendingByte: 0x61, pendingLead: 0xd800, bomSeen: true });
+  assert.equal(decoder.decode(Uint8Array.of(0xfe, 0x61, 0)), "a");
+});
+
