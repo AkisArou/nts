@@ -8,11 +8,11 @@
   ],
   "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
   "isolatedBase": "58e563fb44037a3eae58261ba425467cd150f67e",
-  "scope": "ML-DSA-44/65/87 and getPublicKey for implemented asymmetric algorithms; ML-KEM follows separately",
+  "scope": "Ordered SHA-3/cSHAKE/KMAC, AEAD, Argon2 and ML-DSA/getPublicKey stack. Every imported original remains unedited. Isolated baseline totals and raw discrepancy evidence are retained separately.",
   "totals": {
-    "pass": 31525,
     "fail": 0,
-    "blocked": 4805
+    "blocked": 2668,
+    "pass": 33780
   },
   "files": [
     {
@@ -29,9 +29,9 @@
     },
     {
       "path": "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
-      "pass": 0,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
@@ -89,9 +89,9 @@
     },
     {
       "path": "WebCryptoAPI/digest/cshake.tentative.https.any.js",
-      "pass": 0,
+      "pass": 72,
       "fail": 0,
-      "blocked": 88
+      "blocked": 16
     },
     {
       "path": "WebCryptoAPI/digest/digest.https.any.js",
@@ -107,9 +107,9 @@
     },
     {
       "path": "WebCryptoAPI/digest/sha3.tentative.https.any.js",
-      "pass": 0,
+      "pass": 39,
       "fail": 0,
-      "blocked": 48
+      "blocked": 9
     },
     {
       "path": "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
@@ -155,15 +155,15 @@
     },
     {
       "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
-      "pass": 1,
+      "pass": 241,
       "fail": 0,
-      "blocked": 276
+      "blocked": 36
     },
     {
       "path": "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
-      "pass": 0,
+      "pass": 28,
       "fail": 0,
-      "blocked": 28
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
@@ -197,9 +197,9 @@
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
-      "pass": 360,
+      "pass": 774,
       "fail": 0,
-      "blocked": 414
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
@@ -275,15 +275,15 @@
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
-      "pass": 360,
+      "pass": 500,
       "fail": 0,
-      "blocked": 140
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
-      "pass": 360,
+      "pass": 552,
       "fail": 0,
-      "blocked": 192
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
@@ -311,9 +311,9 @@
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
-      "pass": 0,
+      "pass": 288,
       "fail": 0,
-      "blocked": 288
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
@@ -389,15 +389,15 @@
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
-      "pass": 0,
+      "pass": 192,
       "fail": 0,
-      "blocked": 192
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
-      "pass": 0,
+      "pass": 144,
       "fail": 0,
-      "blocked": 144
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/getPublicKey.tentative.https.any.js",
@@ -419,27 +419,27 @@
     },
     {
       "path": "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
-      "pass": 0,
+      "pass": 72,
       "fail": 0,
-      "blocked": 72
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
-      "pass": 0,
+      "pass": 45,
       "fail": 0,
-      "blocked": 45
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
-      "pass": 0,
+      "pass": 24,
       "fail": 0,
-      "blocked": 24
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
-      "pass": 0,
+      "pass": 144,
       "fail": 0,
-      "blocked": 144
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
@@ -527,9 +527,9 @@
     },
     {
       "path": "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
-      "pass": 8,
+      "pass": 20,
       "fail": 0,
-      "blocked": 12
+      "blocked": 0
     },
     {
       "path": "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
@@ -707,9 +707,9 @@
     },
     {
       "path": "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
-      "pass": 1,
+      "pass": 91,
       "fail": 0,
-      "blocked": 102
+      "blocked": 12
     },
     {
       "path": "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
@@ -743,7 +743,7 @@
     },
     {
       "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
-      "pass": 357,
+      "pass": 472,
       "fail": 0,
       "blocked": 0
     },
@@ -752,21 +752,24 @@
       "pass": null,
       "fail": null,
       "blocked": null,
-      "status": "not-run"
+      "status": "not-run",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope."
     },
     {
       "path": "WebCryptoAPI/idlharness.tentative.https.any.js",
       "pass": null,
       "fail": null,
       "blocked": null,
-      "status": "not-run"
+      "status": "not-run",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope."
     },
     {
       "path": "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.https.any.js",
       "pass": null,
       "fail": null,
       "blocked": null,
-      "status": "not-run"
+      "status": "not-run",
+      "reason": "Unedited define_tests starts importKeys().then(register tests) but returns a separate resolved promise; registrations arrive after its setup test completes. Initial execution reports late registration. No timer delay or fixture rewrite is used to hide the missing await."
     }
   ],
   "newSpecificationDiscrepancies": [
@@ -808,10 +811,52 @@
     }
   ],
   "focused": {
-    "tests": 28,
-    "pass": 28,
+    "command": "node --expose-gc --test runtime/web-platform/test/crypto-ml-dsa.test.ts",
+    "tests": 31,
+    "pass": 31,
     "fail": 0,
-    "skipped": 0
+    "skipped": 0,
+    "fourFamilies": {
+      "tests": 129,
+      "pass": 129,
+      "fail": 0,
+      "skipped": 0
+    }
   },
-  "fullPackageGate": "Run again after ordered stack integration; this record is focused and scoped WPT evidence."
+  "isolatedTotals": {
+    "pass": 31525,
+    "fail": 0,
+    "blocked": 4805
+  },
+  "executedFiles": 122,
+  "notRunFiles": 3,
+  "harnessFailures": 0,
+  "reportSha256": "63a64d7fb6ae42e31ce73373280ffcbd508dd04b1db19b22bbac7b3aa5529150",
+  "baseBranch": "chatgpt/webcrypto-argon2",
+  "testedHead": "762c501cd070db4e6ffbc1ab3d01a4ed7976d498",
+  "testedTree": "5e4cf796f09e919aed7d4599b0073173db3e1429",
+  "packageGate": {
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 0,
+    "tests": 40359,
+    "pass": 37623,
+    "fail": 0,
+    "skipped": 2736,
+    "upstream": {
+      "upstreamTests": 2817,
+      "applicableTests": 2771,
+      "passed": 2771,
+      "failed": 0,
+      "notApplicable": 46
+    },
+    "compiled": "skipped: nts unavailable",
+    "originalsVerified": 355,
+    "logSha256": "c125f23049e132f6049696f6ea44e836679ddec52019b8aab144eaa930cab60e"
+  },
+  "evidence": {
+    "modern-ml-dsa-ordered-install.log": "fe146a834da3819a2577bb66545df1a86d587452951a9f332ea90967938bda44",
+    "modern-ml-dsa-ordered-wpt-tsc.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modern-ml-dsa-ordered-full-check.log": "c125f23049e132f6049696f6ea44e836679ddec52019b8aab144eaa930cab60e",
+    "modern-ml-dsa-ordered-scoped.jsonl": "63a64d7fb6ae42e31ce73373280ffcbd508dd04b1db19b22bbac7b3aa5529150"
+  }
 }
