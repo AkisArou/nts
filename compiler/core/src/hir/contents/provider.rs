@@ -331,8 +331,14 @@ fn effects(
         for &id in &block.ops {
             identities.spend()?;
             let op = func.value(id);
+            // Length is an intrinsic header/size read. It neither publishes
+            // the receiver nor calls user code; a property getter is a Call,
+            // not this operation. Reading size cannot open the writer set.
             if hir::carried_source(&op.kind).is_some()
-                || matches!(op.kind, OpKind::Retain(_) | OpKind::Release(_))
+                || matches!(
+                    op.kind,
+                    OpKind::Retain(_) | OpKind::Release(_) | OpKind::Length(_)
+                )
             {
                 continue;
             }
@@ -791,7 +797,8 @@ mod tests {
     fn inspection_reports_the_actual_rejection_without_licensing_its_writes() {
         let mut body = fixture(op(OpKind::ConstFloat(4.0), number()));
         let id = ValueId(u32::try_from(body.values.len()).expect("small fixture"));
-        body.values.push(op(OpKind::Length(ValueId(1)), number()));
+        body.values
+            .push(call("unknown_writer", &[1], HirType::Void));
         body.blocks[0].ops.push(id);
         let plain = FunctionFacts::of(&body);
         let inspection = FunctionFacts::inspect(&body);
@@ -818,6 +825,34 @@ mod tests {
             inspection.facts.value(ValueId(5)).numeric().is_some(),
             "a recognized scalar writer does not close the rejected writer set"
         );
+    }
+
+    #[test]
+    fn size_reads_preserve_contents_without_licensing_managed_payload_cleanup() {
+        for stored in [
+            op(OpKind::ConstFloat(4.0), number()),
+            op(
+                OpKind::ConstString(JsText::Utf8("owned".to_owned())),
+                string(),
+            ),
+        ] {
+            let mut body = fixture(stored);
+            let before = FunctionFacts::of(&body);
+            let id = ValueId(u32::try_from(body.values.len()).expect("small fixture"));
+            body.values.push(op(OpKind::Length(ValueId(1)), number()));
+            body.blocks[0].ops.push(id);
+            let after = FunctionFacts::inspect(&body);
+            assert_eq!(
+                before.containers[0].contents,
+                after.facts.containers[0].contents
+            );
+            assert_eq!(before.value(ValueId(9)), after.facts.value(ValueId(9)));
+            assert_eq!(after.rejected.len(), 0);
+            assert_eq!(
+                after.facts.value(ValueId(9)).is_inert(),
+                matches!(body.value(ValueId(4)).kind, OpKind::ConstFloat(_))
+            );
+        }
     }
 
     #[test]

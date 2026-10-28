@@ -13,6 +13,46 @@ mod scratch;
 use scratch::ScratchDir;
 
 const SOURCE: &str = include_str!("../../../../tests/programs/container-content-facts/src/main.ts");
+// One difference in the scalar pair: an intrinsic size read versus its known
+// value. The read used to open the writer set and block cleanup and arithmetic.
+const SIZE_SOURCE: &str = r#"
+export function sizeScalar(n: number): number {
+  const values = new Map<string, number>();
+  values.set("key", n | 0);
+  const size = values.size;
+  let total = 0;
+  for (let i = 0; i < 8; i++) total = (total + (values.get("key") ?? 0)) | 0;
+  values.clear();
+  return size === 1 ? total : 0;
+}
+export function sizeScalarControl(n: number): number {
+  const values = new Map<string, number>();
+  values.set("key", n | 0);
+  const size = 1;
+  let total = 0;
+  for (let i = 0; i < 8; i++) total = (total + (values.get("key") ?? 0)) | 0;
+  values.clear();
+  return size === 1 ? total : 0;
+}
+export function sizeManaged(n: number): string {
+  const narrow = new Map<string, number>();
+  const wide: Map<string, unknown> = narrow;
+  wide.set("key", "sized:" + String(n));
+  const size = narrow.size;
+  const held = wide.get("key");
+  wide.clear();
+  return size === 1 ? String(held) : "bad size";
+}
+export function sizeUnknownWriter(n: number): string {
+  const values = new Map<string, unknown>();
+  values.set("key", n);
+  callWriter(values, n);
+  const size = values.size;
+  const held = values.get("key");
+  values.clear();
+  return size === 1 ? String(held) : "bad size";
+}
+"#;
 const DRIVER: &str = r#"
 #include "nts_runtime.h"
 #include <stdio.h>
@@ -22,6 +62,8 @@ extern NtsString *scalarThroughWide(double), *managedThroughWide(double), *absen
 extern NtsString *mergedScalar(double), *mergedManaged(double), *returned(double);
 extern NtsString *otherWriter(double), *closureWriter(double), *mergedIdentity(double);
 extern NtsString *arrayControl(double), *exceptionControl(double), *numericEdges(double);
+extern double sizeScalar(double), sizeScalarControl(double);
+extern NtsString *sizeManaged(double), *sizeUnknownWriter(double);
 static size_t caller_releases;
 void nts_test_value_release(NtsValue value) {
   caller_releases++;
@@ -44,6 +86,8 @@ int main(int argc, char **argv) {
     string(mergedScalar(n)); string(mergedManaged(n)); string(returned(n));
     string(otherWriter(n)); string(closureWriter(n)); string(mergedIdentity(n));
     string(arrayControl(n)); string(exceptionControl(n)); string(numericEdges(n));
+    number(sizeScalar(n)); number(sizeScalarControl(n));
+    string(sizeManaged(n)); string(sizeUnknownWriter(n));
     nts_collect_cycles();
 #ifdef NTS_PROVIDER_RC
     /* Keep this failure distinct from LeakSanitizer's exit-time override in
@@ -61,6 +105,8 @@ function number(v){if(Number.isNaN(v)){process.stdout.write('nan\n');return;}con
 for(let repeat=0;repeat<8;repeat++)for(const n of [-3,0,1,2,7,NaN,-0]){
   number(m.closedNumber(n));
   for(const name of ['scalarThroughWide','managedThroughWide','absent','mergedScalar','mergedManaged','returned','otherWriter','closureWriter','mergedIdentity','arrayControl','exceptionControl','numericEdges'])process.stdout.write(m[name](n)+'\n');
+  number(m.sizeScalar(n)); number(m.sizeScalarControl(n));
+  process.stdout.write(m.sizeManaged(n)+'\n'); process.stdout.write(m.sizeUnknownWriter(n)+'\n');
 }
 ";
 
@@ -202,6 +248,37 @@ fn execute(binary: &Utf8Path, maximum: Option<usize>, expected: &[u8], status: i
     count.trim().parse().unwrap()
 }
 
+fn assert_size_facts(prepared: &hir::Prepared) {
+    for name in ["sizeScalar", "sizeScalarControl"] {
+        assert!(
+            prepared
+                .contents
+                .reads
+                .iter()
+                .any(|r| r.function == name && r.fact.is_inert()),
+            "size reads must preserve the scalar content proof in {name}"
+        );
+        assert!(
+            prepared
+                .accumulators
+                .sites
+                .iter()
+                .any(|r| r.function == name && r.decision == hir::accumulators::Decision::Wrapping),
+            "the same int32 proof must reach arithmetic in {name}"
+        );
+    }
+    for name in ["sizeManaged", "sizeUnknownWriter"] {
+        assert!(
+            prepared
+                .contents
+                .reads
+                .iter()
+                .any(|r| r.function == name && !r.fact.is_inert()),
+            "size reads must not license managed or open-writer cleanup in {name}"
+        );
+    }
+}
+
 #[test]
 fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -209,7 +286,7 @@ fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
         .canonicalize_utf8()
         .unwrap();
     let dir = ScratchDir::new(&root.join("target/content-fact-tests"), "native");
-    std::fs::write(dir.join("main.ts"), SOURCE).unwrap();
+    std::fs::write(dir.join("main.ts"), format!("{SOURCE}\n{SIZE_SOURCE}")).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
@@ -267,6 +344,7 @@ fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
                 .iter()
                 .any(|r| r.function.starts_with("managedThroughWide") && !r.fact.is_inert())
         );
+        assert_size_facts(&prepared);
         let mut disabled = prepared.program.clone();
         restore_cleanup(&mut disabled, &prepared.contents);
         let mut unsafe_program = prepared.program.clone();
