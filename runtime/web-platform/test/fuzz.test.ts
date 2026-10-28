@@ -24,7 +24,7 @@ import { readHeaderFields } from "../src/http1/parser.ts";
 import type { ByteConnection } from "../src/provider/primitives.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 30_000 }, fn);
+  test(name, fn);
 };
 const CRLF = String.fromCharCode(13, 10);
 

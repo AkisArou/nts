@@ -17,7 +17,7 @@ import type { ByteConnection } from "../src/provider/primitives.ts";
 import type { HeadLimits, RequestHead } from "../src/http1/parser.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const CRLF = String.fromCharCode(13, 10);
 const encoder = new TextEncoder();

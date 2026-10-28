@@ -126,7 +126,7 @@ function recording(store: DurableByteStore): {
 
 for (const backend of BACKENDS) {
   const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-    test(`${name} [${backend.name}]`, { timeout: 8000 }, fn);
+    test(`${name} [${backend.name}]`, fn);
   };
 
   suite("a body under the threshold never reaches the store", async (t) => {

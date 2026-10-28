@@ -16,7 +16,7 @@ import { createWptRuntime } from "./wpt/server/runtime.ts";
 import { AbortController as PlatformAbortController, WebSocket } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 60_000 }, fn);
+  test(name, fn);
 };
 
 interface Result {

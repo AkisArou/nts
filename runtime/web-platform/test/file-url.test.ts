@@ -20,7 +20,7 @@ import type { WebPlatformRuntime } from "../src/provider.ts";
 import { causeText } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
 // Fetch reports every failure as an opaque `TypeError: Network request failed`, so the

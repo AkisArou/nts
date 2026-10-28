@@ -25,7 +25,7 @@ import { must } from "./harness.ts";
 import type { HeaderEntry } from "../src/fetch/headers.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const CRLF = String.fromCharCode(13, 10);
 

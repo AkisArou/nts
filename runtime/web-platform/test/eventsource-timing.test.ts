@@ -31,7 +31,7 @@ import type {
 import type { WebPlatformOptions } from "../src/provider.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const encoder = new TextEncoder();
 const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));

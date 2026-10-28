@@ -14,7 +14,7 @@ import type { WptServer } from "./wpt/server/server.ts";
 import { createWptRuntime } from "./wpt/server/runtime.ts";
 
 const suite = (name: string, body: (t: TestContext) => Promise<void>): void => {
-  test(name, { timeout: 120000 }, body);
+  test(name, body);
 };
 
 async function hosted(t: TestContext): Promise<WptServer> {

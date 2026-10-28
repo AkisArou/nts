@@ -17,7 +17,7 @@ import { DOMException } from "../src/core/errors.ts";
 import { memberNamed } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
 /**

@@ -10,7 +10,7 @@ import { Event, EventTarget } from "../src/core/events.ts";
 import { WptHarness } from "./wpt/harness.ts";
 
 function eventHarness(t: TestContext, globals: Record<string, unknown> = {}): WptHarness {
-  const harness = new WptHarness({ Event, EventTarget, ...globals }, {}, 1000);
+  const harness = new WptHarness({ Event, EventTarget, ...globals });
   const runtime = createHostNodeWebPlatform({}, {}, (error) => harness.reportError(error));
   t.after(() => runtime.close());
   return harness;
@@ -100,7 +100,7 @@ test("WPT assert_class_string uses the intrinsic tag and cannot be fooled by an 
 });
 
 test("WPT optional title names count only unnamed registrations and preserve the old fallback", async () => {
-  const harness = new WptHarness({}, {}, 1000, { defaultTestName: "FileAPI Test: example" });
+  const harness = new WptHarness({}, {}, undefined, { defaultTestName: "FileAPI Test: example" });
   harness.run(`
     test(() => {}, "explicit");
     test(() => {});

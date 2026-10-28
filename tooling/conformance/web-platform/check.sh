@@ -26,7 +26,11 @@ done
 # The environment intrinsics are preloaded, which is what a real environment does with
 # them: they exist before the first module runs. Defining them on first import instead
 # made them arrive after any suite that reached the platform barrel first.
-node --expose-gc \
+# One generous hang bound covers this host invocation. Individual assertions
+# wait for their own completion; load cannot turn an eight-second pause into
+# an assertion failure. A hang remains a distinct timeout result (exit 124).
+host=0
+timeout --kill-after=10s 900s node --expose-gc \
   --import ./runtime/web-platform/host/environment-shim.ts \
   --test \
   runtime/web-platform/test/accept-loop.test.ts \
@@ -128,7 +132,14 @@ node --expose-gc \
   runtime/web-platform/test/wpt-websocket-stream-lifetime.test.ts \
   runtime/web-platform/test/wpt-websocket-stream.test.ts \
   runtime/web-platform/test/wpt-websocket.test.ts \
-  runtime/web-platform/test/weak-listener.test.ts
+  runtime/web-platform/test/weak-listener.test.ts || host=$?
+if [ "$host" -eq 124 ] || [ "$host" -eq 137 ]; then
+  echo "check.sh: TIMED OUT -- host suite exceeded its outer hang bound." >&2
+  exit 124
+fi
+if [ "$host" -ne 0 ]; then
+  exit "$host"
+fi
 # The upstream corpus exits nonzero while the eight named structural failures stand,
 # and `set -e` made every step after it unreachable -- including the compiled axis,
 # which was added precisely so it could not disappear quietly. Its status is held

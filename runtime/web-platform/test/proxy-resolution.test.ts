@@ -24,7 +24,7 @@ import type {
 } from "../src/dispatch/proxy-resolution.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const kinds = (result: ProxyResolution): ProxyRouteKind[] =>
   result.routes.map((route) => route.kind);

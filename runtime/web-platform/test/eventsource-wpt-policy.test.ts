@@ -16,7 +16,7 @@ import type { BlobExternalSource } from "../src/file/blob.ts";
 const encoder = new TextEncoder();
 const checkpoint = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 60_000 }, fn);
+  test(name, fn);
 };
 
 async function until(clock: VirtualScheduler, condition: () => boolean, description: string): Promise<void> {

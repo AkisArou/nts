@@ -33,7 +33,7 @@ import type {
 import type { ReadableStream } from "../src/streams/readable.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const CRLF = String.fromCharCode(13, 10);
 const encoder = new TextEncoder();

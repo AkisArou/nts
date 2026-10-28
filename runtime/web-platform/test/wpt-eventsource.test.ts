@@ -32,7 +32,7 @@ const titleOnlyFiles = new Set(original.fixtures
   .filter((fixture) => fixture.requiresDocumentTitleMetadata)
   .map((fixture) => fixture.path));
 
-test("WPT EventSource — pinned ordinary-host corpus", { timeout: 3_600_000 }, async (suite) => {
+test("WPT EventSource — pinned ordinary-host corpus", async (suite) => {
   assert.ok(manifest.fixtures.length > 0, "the WPT selection must not be empty");
   if (filter !== undefined) suite.diagnostic("Explicit targeted WPT filter: " + filter);
   suite.diagnostic("Selected WPT file runs: " + manifest.fixtures.length);

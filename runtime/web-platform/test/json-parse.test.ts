@@ -26,7 +26,7 @@ import { stringifyJsonValue } from "../../ecmascript/src/json/stringify.ts";
 import { INVALID, keyOrder, must, plain, VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {
-  test(name, { timeout: 15000 }, fn);
+  test(name, fn);
 };
 
 suite("valid JSON agrees with node on value and on key order", () => {

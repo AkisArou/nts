@@ -33,7 +33,7 @@ const selected = prefix === undefined ? manifest : {
 };
 assert.ok(selected.fixtures.length > 0, "The Streams fixture filter must select at least one file");
 
-test("WPT Streams — Node 24.20 directory revision", { timeout: 600000 }, async (suite) => {
+test("WPT Streams — Node 24.20 directory revision", async (suite) => {
   await runWptFixtures(suite, root, selected, (reportError) => {
     const runtime = createHostNodeWebPlatform({}, {}, reportError);
     return {

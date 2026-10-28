@@ -67,8 +67,10 @@ import type {
 import type { CloseEvent, MessageEvent } from "../src/core/events.ts";
 import type { WebSocketData } from "../src/websocket/websocket.ts";
 import { jsonObject, must, portOf } from "./harness.ts";
-import type { WebPlatformRuntime } from "../src/provider.ts";
+import { WebPlatformRuntime, installWebPlatformRuntime } from "../src/provider.ts";
 import type { WebPlatformOptions } from "../src/provider.ts";
+import type { Scheduler } from "../src/provider/primitives.ts";
+import { ControlledDeadlines } from "./controlled-deadlines.ts";
 
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
@@ -83,10 +85,8 @@ globalThis.WebSocket = class {
 } as unknown as typeof globalThis.WebSocket;
 const encoder = new TextEncoder();
 const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
-const delay = (ms: number): Promise<void> =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 /**
  * The handler a server is built around.
@@ -143,8 +143,12 @@ function runtime(
   t: TestContext,
   options: WebPlatformOptions = {},
   sockets: Record<string, unknown> = {},
+  scheduler?: Scheduler,
 ): WebPlatformRuntime {
-  const api = createHostNodeWebPlatform(options, sockets);
+  const api = scheduler === undefined ? createHostNodeWebPlatform(options, sockets) : new WebPlatformRuntime({
+    ...createHostNodePrimitives(sockets), scheduler,
+  }, options);
+  if (scheduler !== undefined) installWebPlatformRuntime(api);
   t.after(() => api.close());
   return api;
 }
@@ -656,24 +660,32 @@ suite("Content-Length mismatch and header injection rejected before connecting",
   assert.equal(api.http1.pool.stats.connections, 0);
 });
 suite("HTTP timeouts, queued acquisition cancellation and pool shutdown", async (t) => {
+  const deadlines = new ControlledDeadlines(createHostNodePrimitives().scheduler);
   const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(200, { "content-length": "5" });
     res.flushHeaders();
   });
   const api = runtime(t, {
     http1: { maxConnections: 1, maxConnectionsPerOrigin: 1, bodyReadTimeoutMs: 30 },
-  });
+  }, {}, deadlines);
   const r = await api.fetch(s.url);
   const c = new AbortController();
   const pending = api.fetch(s.url, { signal: c.signal });
   await tick();
   c.abort("queued");
   await assert.rejects(pending, (e) => e === "queued");
-  await assert.rejects(r.text(), (e) => /timed out/.test(errorChain(e)));
+  const bodyTimedOut = assert.rejects(r.text(), (e) => /timed out/.test(errorChain(e)));
+  await deadlines.scheduled(30);
+  deadlines.advance(30);
+  await bodyTimedOut;
   assert.equal(api.http1.pool.stats.connections, 0);
   const never = await server(t, () => {}, true);
-  const headers = runtime(t, { http1: { headersTimeoutMs: 30 } });
-  await assert.rejects(headers.fetch(never.url));
+  const headerDeadlines = new ControlledDeadlines(createHostNodePrimitives().scheduler);
+  const headers = runtime(t, { http1: { headersTimeoutMs: 30 } }, {}, headerDeadlines);
+  const headerTimedOut = assert.rejects(headers.fetch(never.url));
+  await headerDeadlines.scheduled(30);
+  headerDeadlines.advance(30);
+  await headerTimedOut;
 });
 suite("ConnectionPool.close interrupts an outstanding connector", async () => {
   let entered: (() => void) | undefined;
@@ -1810,11 +1822,14 @@ for (const [name, wire, expected, limits] of [
   });
 suite("WebSocket close timeout, close during connect, runtime shutdown", async (t) => {
   const s = await websocketServer(t, () => {});
-  const api = runtime(t, { websocket: { closeTimeoutMs: 30 } });
+  const deadlines = new ControlledDeadlines(createHostNodePrimitives().scheduler);
+  const api = runtime(t, { websocket: { closeTimeoutMs: 30 } }, {}, deadlines);
   const ws = api.createWebSocket(s.url);
   const e = wsEvents(ws);
   await e.opened;
   ws.close(1000);
+  await deadlines.scheduled(30);
+  deadlines.advance(30);
   assert.equal((await e.closed).wasClean, false);
   const connecting = api.createWebSocket(s.url);
   const ce = wsEvents(connecting);

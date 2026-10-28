@@ -16,7 +16,7 @@ import type { TestContext } from "node:test";
 import { TextDecoder } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 30000 }, fn);
+  test(name, fn);
 };
 const NativeTextDecoder = globalThis.TextDecoder;
 

@@ -14,7 +14,7 @@ import { jsonRawJSON } from "../../ecmascript/src/json/json.ts";
 import { VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {
-  test(name, { timeout: 15000 }, fn);
+  test(name, fn);
 };
 
 suite("serializing a parsed document matches node for the whole corpus", () => {

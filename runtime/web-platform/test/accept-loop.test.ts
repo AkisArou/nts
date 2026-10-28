@@ -30,7 +30,7 @@ import type { Event } from "../src/index.ts";
 import { MessageEvent } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const none = () => new AbortController().signal;
 
@@ -203,8 +203,9 @@ suite("a connection that is not an upgrade is refused without stopping the loop"
   const server = serverOf(t);
   const controller = new AbortController();
   const errors = [];
+  const malformed = Promise.withResolvers<void>();
   const loop = serveWebSocketUpgrades(listener, server, controller.signal, {
-    onError: (error: unknown) => errors.push(error),
+    onError: (error: unknown) => { errors.push(error); malformed.resolve(); },
   });
   t.after(async () => {
     controller.abort();
@@ -235,11 +236,7 @@ suite("a connection that is not an upgrade is refused without stopping the loop"
     garbage.write(`not a request line at all${CRLF}${CRLF}`);
   });
   t.after(() => garbage.destroy());
-  await new Promise((resolve) => {
-    garbage.on("close", resolve);
-    garbage.on("error", resolve);
-    setTimeout(resolve, 300);
-  });
+  await malformed.promise;
   assert.ok(errors.length >= 1, "the malformed connection was reported");
 
   // And the loop is still serving: a real client connects afterwards.

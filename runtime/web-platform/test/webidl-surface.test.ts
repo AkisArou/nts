@@ -19,7 +19,7 @@ import * as api from "../src/index.ts";
 import { memberNamed, must, prototypeNamed } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
 /**

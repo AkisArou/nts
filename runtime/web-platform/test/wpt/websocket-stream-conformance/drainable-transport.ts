@@ -8,11 +8,6 @@ export interface DrainableTransport {
   drain(): Promise<void>;
 }
 
-export interface DrainableTransportOptions {
-  /** A failure bound, never an assertion about how quickly writes complete. */
-  timeoutMs?: number;
-}
-
 const checkpoint = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 /**
@@ -28,12 +23,7 @@ const checkpoint = (): Promise<void> => new Promise((resolve) => setImmediate(re
  */
 export function createDrainableTransport(
   provider: WebSocketTransport,
-  options: DrainableTransportOptions = {},
 ): DrainableTransport {
-  const timeoutMs = options.timeoutMs ?? 120_000;
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 0x7fffffff) {
-    throw new RangeError("The WPT transport drain deadline must be positive integer milliseconds");
-  }
   const pending = new Set<Promise<unknown>>();
   let generation = 0;
 
@@ -65,29 +55,21 @@ export function createDrainableTransport(
       },
     },
     async drain() {
-      const deadline = Promise.withResolvers<never>();
-      const timer = setTimeout(() => {
-        deadline.reject(new Error("WPT transport did not drain: " + pending.size + " provider operations remain"));
-      }, timeoutMs);
-      try {
-        while (true) {
-          if (pending.size !== 0) {
-            // Rejections remain observable by API callers. A provider rejection
-            // already asserted by WPT is completion, not a second test failure.
-            await Promise.race([Promise.allSettled([...pending]), deadline.promise]);
-          }
-          const observed = generation;
-          await Promise.race([checkpoint(), deadline.promise]);
-          if (pending.size !== 0 || generation !== observed) continue;
-          // A successful send queues one scheduler task before its stream write
-          // settles. That task may have been queued after the first checkpoint;
-          // its promise continuations can start the next queued provider write.
-          // Require the same generation across both explicit task boundaries.
-          await Promise.race([checkpoint(), deadline.promise]);
-          if (pending.size === 0 && generation === observed) return;
+      while (true) {
+        if (pending.size !== 0) {
+          // Rejections remain observable by API callers. A provider rejection
+          // already asserted by WPT is completion, not a second test failure.
+          await Promise.allSettled([...pending]);
         }
-      } finally {
-        clearTimeout(timer);
+        const observed = generation;
+        await checkpoint();
+        if (pending.size !== 0 || generation !== observed) continue;
+        // A successful send queues one scheduler task before its stream write
+        // settles. That task may have been queued after the first checkpoint;
+        // its promise continuations can start the next queued provider write.
+        // Require the same generation across both explicit task boundaries.
+        await checkpoint();
+        if (pending.size === 0 && generation === observed) return;
       }
     },
   };

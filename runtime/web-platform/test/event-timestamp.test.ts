@@ -12,16 +12,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 
-import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
-import type { WebPlatformRuntime } from "../src/provider.ts";
+import { createHostNodePrimitives, createHostNodeWebPlatform } from "../host/node-runtime.ts";
+import { WebPlatformRuntime, installWebPlatformRuntime } from "../src/provider.ts";
 import { Event } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
-function runtime(t: TestContext): WebPlatformRuntime {
-  const api = createHostNodeWebPlatform();
+function runtime(t: TestContext, now?: () => number): WebPlatformRuntime {
+  const api = now === undefined ? createHostNodeWebPlatform() : new WebPlatformRuntime({
+    ...createHostNodePrimitives(), monotonicMilliseconds: now,
+  });
+  if (now !== undefined) installWebPlatformRuntime(api);
   t.after(() => api.close());
   return api;
 }
@@ -44,25 +47,22 @@ suite("timeStamp is time since an origin, not a wall clock", (t) => {
 });
 
 suite("timeStamp is captured once, at construction", (t) => {
-  runtime(t);
+  let now = 1;
+  runtime(t, () => now);
   const event = new Event("x");
   const first = event.timeStamp;
-  // Burn a little time so a lazily-captured value would differ.
-  const until = Date.now() + 3;
-  while (Date.now() < until) {
-    /* spin */
-  }
+  assert.equal(first, 1);
+  now = 9;
   assert.equal(event.timeStamp, first, "reading it twice must give the same value");
 });
 
 suite("a later event is not stamped earlier than an earlier one", (t) => {
-  runtime(t);
+  let now = 1;
+  runtime(t, () => now);
   const first = new Event("a");
-  const until = Date.now() + 2;
-  while (Date.now() < until) {
-    /* spin */
-  }
+  now = 9;
   const second = new Event("b");
+  assert.deepEqual([first.timeStamp, second.timeStamp], [1, 9]);
   // Non-decreasing is the whole contract: the clock may stall, and must not reverse.
   assert.ok(
     second.timeStamp >= first.timeStamp,

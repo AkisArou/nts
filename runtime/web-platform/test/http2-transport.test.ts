@@ -32,6 +32,7 @@ import {
   abortSignalSubscribe,
 } from "../src/core/abort-brand.ts";
 import { must, portOf } from "./harness.ts";
+import { ControlledDeadlines } from "./controlled-deadlines.ts";
 import type {
   TransportInformationalResponse,
   TransportRequest,
@@ -46,7 +47,7 @@ import type { AbortSignal } from "../src/index.ts";
 import type { URLRecord } from "../src/provider/primitives.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
 async function consume(stream: ReadableStream<Uint8Array> | null): Promise<Buffer> {
@@ -344,20 +345,28 @@ suite(
     // Recorded into an array, because the only assignment is inside the server handler and
     // control-flow analysis cannot see that it ran.
     const peerStream: http2.ServerHttp2Stream[] = [];
+    const received = Promise.withResolvers<void>();
     const port = await h2Server(t, (stream) => {
       peerStream.push(stream);
+      received.resolve();
       stream.on("error", () => {});
     });
     const primitives = createHostNodePrimitives();
-    const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler, {
+    const deadlines = new ControlledDeadlines(primitives.scheduler);
+    const transport = new Http2Transport(new HostNodeSocketConnector(), deadlines, {
       headersTimeoutMs: 30,
     });
     t.after(() => transport.close());
     const url = primitives.urls.parse(`http://127.0.0.1:${port}/timeout`);
-    await assert.rejects(
-      transport.dispatch(transportRequest(url)),
+    const response = transport.dispatch(transportRequest(url));
+    const rejected = assert.rejects(
+      response,
       (error: unknown) => error instanceof Error && error.name === "TimeoutError",
     );
+    await received.promise;
+    await deadlines.scheduled(30);
+    deadlines.advance(30);
+    await rejected;
     const cancelled = must(peerStream[0], "the server saw the stream");
     if (!cancelled.closed) await once(cancelled, "close");
     assert.equal(cancelled.rstCode, 8);
@@ -374,13 +383,17 @@ suite("HTTP/2 Fetch transport applies an idle deadline to each response-body rea
     stream.respond({ ":status": 200 });
   });
   const primitives = createHostNodePrimitives();
-  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler, {
+  const deadlines = new ControlledDeadlines(primitives.scheduler);
+  const transport = new Http2Transport(new HostNodeSocketConnector(), deadlines, {
     bodyReadTimeoutMs: 30,
   });
   t.after(() => transport.close());
   const url = primitives.urls.parse(`http://127.0.0.1:${port}/body-timeout`);
   const response = await transport.dispatch(transportRequest(url));
-  await assert.rejects(consume(response.body), (error: unknown) => error instanceof Error && error.name === "TimeoutError");
+  const rejected = assert.rejects(consume(response.body), (error: unknown) => error instanceof Error && error.name === "TimeoutError");
+  await deadlines.scheduled(30);
+  deadlines.advance(30);
+  await rejected;
   const cancelled = must(peerStream[0], "the server saw the stream");
   if (!cancelled.closed) await once(cancelled, "close");
   assert.equal(cancelled.rstCode, 8);

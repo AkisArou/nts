@@ -9,7 +9,7 @@ import type { WptManifest } from "./wpt/runner.ts";
 const root = new URL("./wpt/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("events-abort/manifest.json", root), "utf8")) as WptManifest;
 
-test("WPT events and abort — Node 24.20 directory revisions", { timeout: 30000 }, async (suite) => {
+test("WPT events and abort — Node 24.20 directory revisions", async (suite) => {
   await runWptFixtures(suite, root, manifest, (reportError) => {
     const runtime = createHostNodeWebPlatform({}, {}, reportError);
     return {

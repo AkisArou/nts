@@ -22,7 +22,7 @@ const selected = prefix === undefined ? manifest : {
 assert.ok(selected.fixtures.length > 0, "The Files/FormData fixture filter must select at least one file");
 assert.equal(typeof globalThis.gc, "function", "Run FileAPI WPT with --expose-gc");
 
-test("WPT FileAPI, FormData and URL-encoded parsing — pinned local-only cases", { timeout: 600000 }, async (suite) => {
+test("WPT FileAPI, FormData and URL-encoded parsing — pinned local-only cases", async (suite) => {
   await runWptFixtures(suite, root, selected, (reportError) => {
     let transportAttempts = 0;
     const runtime = createHostNodeWebPlatform({

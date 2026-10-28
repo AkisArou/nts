@@ -108,7 +108,7 @@ async function blobText(blob: Blob | null): Promise<string | null> {
 
 for (const backend of BACKENDS) {
   const only = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-    test(`${name} [${backend.name}]`, { timeout: 8000 }, fn);
+    test(`${name} [${backend.name}]`, fn);
   };
 
   only("a cache list round-trips every field of both records", async (t) => {

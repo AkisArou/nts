@@ -196,7 +196,7 @@ class ControlledTransport {
 }
 
 for (const kind of ["raw", "dispatched"] as const) {
-  test(kind + " serializes the normalized destination until its handshake is validated", { timeout: 60_000 }, async (t) => {
+  test(kind + " serializes the normalized destination until its handshake is validated", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const firstResult = controlled.connect("ws://EXAMPLE.test:80/first");
     const secondResult = controlled.connect("ws://example.test/second");
@@ -213,7 +213,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     await secondResult;
   });
 
-  test(kind + " connects different hosts and effective ports concurrently", { timeout: 60_000 }, async (t) => {
+  test(kind + " connects different hosts and effective ports concurrently", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const pending = [
       controlled.connect("ws://a.test/"),
@@ -227,7 +227,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     await Promise.all(pending);
   });
 
-  test(kind + " aborts a middle waiter without letting its successors overtake the active attempt", { timeout: 60_000 }, async (t) => {
+  test(kind + " aborts a middle waiter without letting its successors overtake the active attempt", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const firstResult = controlled.connect("ws://queue.test/first");
     const middle = new AbortController();
@@ -255,7 +255,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     await fourthResult;
   });
 
-  test(kind + " releases the next attempt after a provider connection failure", { timeout: 60_000 }, async (t) => {
+  test(kind + " releases the next attempt after a provider connection failure", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const firstResult = controlled.connect("ws://failure.test/first");
     const secondResult = controlled.connect("ws://failure.test/second");
@@ -268,7 +268,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     await secondResult;
   });
 
-  test(kind + " releases the next attempt after rejecting the handshake and closes the refused connection", { timeout: 60_000 }, async (t) => {
+  test(kind + " releases the next attempt after rejecting the handshake and closes the refused connection", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const firstResult = controlled.connect("ws://failure.test/first");
     const secondResult = controlled.connect("ws://failure.test/second");
@@ -281,7 +281,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     await secondResult;
   });
 
-  test(kind + " transport shutdown aborts its active and queued attempts", { timeout: 60_000 }, async (t) => {
+  test(kind + " transport shutdown aborts its active and queued attempts", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const firstResult = controlled.connect("ws://closing.test/first");
     const secondResult = controlled.connect("ws://closing.test/second");
@@ -315,7 +315,7 @@ const basicChallenge: readonly HeaderEntry[] = [["www-authenticate", 'Basic real
 
 for (const kind of ["raw", "dispatched"] as const) {
   for (const credential of credentials) {
-    test(kind + " answers a Basic challenge with " + credential.name + " credentials and preserves the upgrade", { timeout: 60_000 }, async (t) => {
+    test(kind + " answers a Basic challenge with " + credential.name + " credentials and preserves the upgrade", async (t) => {
       const deflate: WebSocketDeflateProvider = {
         createDeflater: () => assert.fail("the server did not negotiate compression"),
         createInflater: () => assert.fail("the server did not negotiate compression"),
@@ -369,7 +369,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     });
   }
 
-  test(kind + " answers a repeated Basic challenge only once", { timeout: 60_000 }, async (t) => {
+  test(kind + " answers a repeated Basic challenge only once", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const result = controlled.connect("ws://foo:wrong@auth.test/");
     const first = await controlled.next();
@@ -395,7 +395,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     { name: "a Basic challenge without URL credentials", status: 401, headers: basicChallenge, userinfo: "" },
   ];
   for (const refusal of refusals) {
-    test(kind + " does not retry " + refusal.name, { timeout: 60_000 }, async (t) => {
+    test(kind + " does not retry " + refusal.name, async (t) => {
       const controlled = new ControlledTransport(t, kind);
       const result = controlled.connect("ws://" + refusal.userinfo + "auth.test/");
       const first = await controlled.next();
@@ -409,7 +409,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     });
   }
 
-  test(kind + " rejects invalid UTF-8 credentials without changing or sending them", { timeout: 60_000 }, async (t) => {
+  test(kind + " rejects invalid UTF-8 credentials without changing or sending them", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const result = controlled.connect("ws://%FF:password@auth.test/");
     const first = await controlled.next();
@@ -421,7 +421,7 @@ for (const kind of ["raw", "dispatched"] as const) {
     else assert.equal(canceled, true);
   });
 
-  test(kind + " cancellation interrupts the authentication retry and releases the queued connection", { timeout: 60_000 }, async (t) => {
+  test(kind + " cancellation interrupts the authentication retry and releases the queued connection", async (t) => {
     const controlled = new ControlledTransport(t, kind);
     const controller = new AbortController();
     const result = controlled.connect("ws://foo:bar@auth.test/auth", controller.signal);
@@ -442,7 +442,7 @@ for (const kind of ["raw", "dispatched"] as const) {
   });
 }
 
-test("dispatched authentication waits for body cancellation and remains abortable", { timeout: 60_000 }, async (t) => {
+test("dispatched authentication waits for body cancellation and remains abortable", async (t) => {
   const controlled = new ControlledTransport(t, "dispatched");
   const controller = new AbortController();
   const result = controlled.connect("ws://foo:bar@auth.test/auth", controller.signal);
@@ -468,7 +468,7 @@ test("dispatched authentication waits for body cancellation and remains abortabl
   assert.equal(controlled.attempts.length, 1, "settling disposal cannot restart an aborted handshake");
 });
 
-test("a dispatched challenge-body cancellation error does not mask a valid Basic retry", { timeout: 60_000 }, async (t) => {
+test("a dispatched challenge-body cancellation error does not mask a valid Basic retry", async (t) => {
   const controlled = new ControlledTransport(t, "dispatched");
   const result = controlled.connect("ws://foo:bar@auth.test/");
   const first = await controlled.next();

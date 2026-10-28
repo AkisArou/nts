@@ -62,7 +62,7 @@ function byteStream(): ReadableStream<Uint8Array> {
 }
 
 const suite = (name: string, fn: () => Promise<void>): void => {
-  void test(name, { timeout: 10000 }, fn);
+  void test(name, fn);
 };
 
 async function pipeUnobserved<T>(source: ReadableStream<T>): Promise<unknown[]> {

@@ -29,7 +29,7 @@ import { must } from "./harness.ts";
 import type { RetryOptions } from "../src/dispatch/retry.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
 class ImmediateScheduler implements Scheduler {

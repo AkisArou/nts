@@ -41,7 +41,7 @@ import type { WebSocketHandshake } from "../src/websocket/transport.ts";
 import type { Event } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

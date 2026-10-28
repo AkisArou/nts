@@ -21,7 +21,7 @@ interface ResourceResponse {
 }
 
 const suite = (name: string, run: (t: TestContext) => Promise<void>): void => {
-  test(name, { timeout: 60_000 }, run);
+  test(name, run);
 };
 
 async function serverFor(t: TestContext): Promise<WptServer> {
@@ -229,7 +229,7 @@ suite("the package EventSource class consumes the local WPT HTTP resource", asyn
   assert.equal(source.readyState, EventSource.CLOSED);
 });
 
-test("the package EventSource reconnects with cookies and stops on the resource's 204", { timeout: 120_000 }, async (t) => {
+test("the package EventSource reconnects with cookies and stops on the resource's 204", async (t) => {
   const server = await serverFor(t);
   // Cookie state is opt-in for this server/mobile runtime. The resource selects
   // its next response from the cookie that the previous response set.
@@ -262,7 +262,7 @@ test("the package EventSource reconnects with cookies and stops on the resource'
   assert.equal(source.readyState, EventSource.CLOSED);
 });
 
-test("the package EventSource carries the UTF-8 Last-Event-ID through a redirect", { timeout: 120_000 }, async (t) => {
+test("the package EventSource carries the UTF-8 Last-Event-ID through a redirect", async (t) => {
   const server = await serverFor(t);
   runtimeFor(t, server);
   const source = new EventSource("/common/redirect.py?location=/eventsource/resources/last-event-id.py");

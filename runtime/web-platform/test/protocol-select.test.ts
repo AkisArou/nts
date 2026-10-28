@@ -36,7 +36,7 @@ import type { TransportRequest } from "../src/fetch/transport.ts";
 import type { ReadableStream } from "../src/streams/readable.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 
 async function consume(stream: ReadableStream<Uint8Array> | null) {
@@ -162,8 +162,7 @@ suite(
     const firstOpen = must(connector.opened[0], "the connector opened one connection");
     assert.equal(firstOpen.negotiated, true);
     assert.deepEqual(firstOpen.alpn, ["h2", "http/1.1"]);
-    // The server agrees, once it has had the chance to record its side.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // The server records the connection before serving the consumed response.
     assert.deepEqual(connections, ["h2"]);
   },
 );
@@ -186,8 +185,7 @@ suite("a server without h2 selects the HTTP/1.1 engine over the same connection"
   assert.equal(await consume(response.body), "served over HTTP/1.1");
   assert.equal(transport.protocolFor(origin), "http/1.1");
   assert.equal(connector.opened.length, 1, "one connection decided and served this origin");
-  // The server agrees, once it has had the chance to record its side.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The server records the connection before serving the consumed response.
   assert.deepEqual(connections, ["http/1.1"]);
 });
 
@@ -218,8 +216,7 @@ suite("concurrent first requests to one origin negotiate once, not once each", a
   // h2 multiplexes: three concurrent requests are one connection and one
   // negotiation, not three racing selections.
   assert.equal(connector.opened.length, 1);
-  // The server agrees, once it has had the chance to record its side.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The server records the connection before serving the consumed responses.
   assert.deepEqual(connections, ["h2"]);
   assert.equal(transport.protocolFor(origin), "h2");
 });
@@ -377,7 +374,6 @@ suite("selection works through an HTTP CONNECT tunnel", async (t) => {
   assert.equal(transport.protocolFor(origin), "h2");
   // One tunnel, named by the logical target rather than the proxy or an address.
   assert.deepEqual(proxy.tunnels, [`CONNECT target.test:${port} HTTP/1.1`]);
-  await new Promise((resolve) => setTimeout(resolve, 50));
   assert.deepEqual(connections, ["h2"]);
 });
 
@@ -406,7 +402,6 @@ suite("selection works through a SOCKS5 tunnel", async (t) => {
   assert.equal(transport.protocolFor(origin), "h2");
   // Proxy-side DNS: the target name crosses the wire and is never resolved locally.
   assert.deepEqual(proxy.targets, [`target.test:${port}`]);
-  await new Promise((resolve) => setTimeout(resolve, 50));
   assert.deepEqual(connections, ["h2"]);
 });
 
@@ -438,7 +433,6 @@ suite("a tunnel whose TLS cannot report is not offered a choice", async (t) => {
   assert.equal(transport.protocolFor(origin), "http/1.1");
   // The contract holds through a proxy: this server prefers h2 and would have
   // selected it, so being unable to report must mean it was never asked.
-  await new Promise((resolve) => setTimeout(resolve, 50));
   assert.deepEqual(connections, ["http/1.1"]);
   assert.equal(connector.reportsNegotiatedProtocol, false);
 });

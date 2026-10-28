@@ -25,7 +25,7 @@ const selected = prefix === undefined ? manifest : {
 };
 assert.ok(selected.fixtures.length > 0, "The Fetch fixture filter must select at least one file");
 
-test("WPT Fetch data types — pinned local-only cases", { timeout: 600000 }, async (suite) => {
+test("WPT Fetch data types — pinned local-only cases", async (suite) => {
   await runWptFixtures(suite, root, selected, (reportError) => {
     let transportAttempts = 0;
     const runtime = createHostNodeWebPlatform({

@@ -43,7 +43,7 @@ import type { Http2ResponseHeaders } from "../src/http2/headers.ts";
 import type { ByteConnection } from "../src/provider/primitives.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -199,14 +199,15 @@ suite(
   "real h2c multiplexes responses and preserves informational headers and trailers",
   async (t) => {
     const seen: string[] = [];
+    const releaseSlow = Promise.withResolvers<void>();
     const pair = await h2Pair(t, (stream, headers) => {
       const path = must(headers[":path"], "an HTTP/2 request carries :path");
       seen.push(path);
       if (path === "/slow") {
-        setTimeout(() => {
+        void releaseSlow.promise.then(() => {
           stream.respond({ ":status": 200, "set-cookie": ["a=1", "b=2"] });
           stream.end("slow");
-        }, 20);
+        });
         return;
       }
       stream.additionalHeaders({ ":status": 103, link: "</style.css>; rel=preload" });
@@ -227,8 +228,10 @@ suite(
       signal,
       onInformational: (headers) => informational.push(headers),
     });
-    const [slow, fast] = await Promise.all([slowPromise, fastPromise]);
+    const fast = await fastPromise;
     assert.equal((await consume(fast.body)).toString(), "fast");
+    releaseSlow.resolve();
+    const slow = await slowPromise;
     assert.equal((await consume(slow.body)).toString(), "slow");
     assert.deepEqual(
       slow.headers.filter((field) => field.name === "set-cookie").map((field) => field.value),

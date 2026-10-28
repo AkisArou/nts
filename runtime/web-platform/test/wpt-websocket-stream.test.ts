@@ -26,7 +26,7 @@ const manifest: WptManifest = filter === undefined ? original : {
   fixtures: original.fixtures.filter((fixture) => (fixture.path + (fixture.variant ?? "")).includes(filter)),
 };
 
-test("WPT WebSocketStream — pinned tentative ordinary-host corpus", { timeout: 1_800_000 }, async (suite) => {
+test("WPT WebSocketStream — pinned tentative ordinary-host corpus", async (suite) => {
   assert.ok(manifest.fixtures.length > 0, "the WPT selection must not be empty");
   assert.equal(typeof globalThis.gc, "function", "run this corpus with --expose-gc");
   if (filter !== undefined) suite.diagnostic("Explicit targeted WPT filter: " + filter);

@@ -60,7 +60,7 @@ const manifest: WptManifest = filter === undefined ? original : {
   fixtures: original.fixtures.filter((fixture) => (fixture.path + (fixture.variant ?? "")).includes(filter)),
 };
 
-test("WPT WebSocket — pinned ordinary-host corpus", { timeout: 1_800_000 }, async (suite) => {
+test("WPT WebSocket — pinned ordinary-host corpus", async (suite) => {
   assert.ok(manifest.fixtures.length > 0, "the WPT selection must not be empty");
   if (filter !== undefined) suite.diagnostic("Explicit targeted WPT filter: " + filter);
   suite.diagnostic("Selected WPT file/variant runs: " + manifest.fixtures.length);

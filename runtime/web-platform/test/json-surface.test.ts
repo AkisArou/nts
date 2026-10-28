@@ -18,7 +18,7 @@ import { JsonValue } from "../../ecmascript/src/json/value.ts";
 import { must, plain } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {
-  test(name, { timeout: 15000 }, fn);
+  test(name, fn);
 };
 
 const SHAPES = [

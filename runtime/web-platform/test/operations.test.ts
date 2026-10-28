@@ -31,7 +31,7 @@ import type {
 } from "../src/fetch/transport.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -373,6 +373,7 @@ suite("cancelling the pipeline cancels what the handler was reading", async () =
 
 suite("a cancel that arrives before the dispatch settles is not lost", async () => {
   const released = Promise.withResolvers<void>();
+  const handlerCompleted = Promise.withResolvers<void>();
   const transport = transportOf(["a", "b"]);
   const slow = {
     state: transport.state,
@@ -395,6 +396,7 @@ suite("a cancel that arrives before the dispatch settles is not lost", async () 
       async cancel(reason) {
         handlerCancelled = reason;
         await reader.cancel(reason);
+        handlerCompleted.resolve();
       },
     });
   });
@@ -405,7 +407,7 @@ suite("a cancel that arrives before the dispatch settles is not lost", async () 
   const cancelling = out.cancel(reason);
   released.resolve();
   await cancelling;
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await handlerCompleted.promise;
 
   assert.equal(handlerCancelled, reason);
   assert.equal(transport.state.cancelled, reason);

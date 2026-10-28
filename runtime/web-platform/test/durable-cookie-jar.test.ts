@@ -57,7 +57,7 @@ function suite(
   fn: (t: TestContext, store: DurableByteStore) => void | Promise<void>,
 ): void {
   for (const backend of BACKENDS) {
-    test(`${name} [${backend.name}]`, { timeout: 15000 }, async (t) => {
+    test(`${name} [${backend.name}]`, async (t) => {
       const api = createHostNodeWebPlatform();
       t.after(() => api.close());
       await fn(t, backend.make(t));

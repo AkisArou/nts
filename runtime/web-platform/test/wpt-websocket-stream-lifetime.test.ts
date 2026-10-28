@@ -52,7 +52,7 @@ class ControlledSession implements WebSocketSession {
   abort(): void { this.abortCalls++; }
 }
 
-test("WPT drain waits for provider connection without changing its inputs or errors", { timeout: 60_000 }, async () => {
+test("WPT drain waits for provider connection without changing its inputs or errors", async () => {
   const session = new ControlledSession();
   const connected = Promise.withResolvers<WebSocketSession>();
   const controller = new AbortController();
@@ -83,7 +83,7 @@ test("WPT drain waits for provider connection without changing its inputs or err
   await failed.drain();
 });
 
-test("WPT drain waits for whole send and close operations while an idle read stays pending", { timeout: 60_000 }, async () => {
+test("WPT drain waits for whole send and close operations while an idle read stays pending", async () => {
   const session = new ControlledSession();
   const accepted = Promise.withResolvers<void>();
   session.sendGates.push(accepted);
@@ -107,7 +107,7 @@ test("WPT drain waits for whole send and close operations while an idle read sta
   assert.equal(session.abortCalls, 0, "draining does not abort the provider");
 });
 
-test("WPT drain includes queued stream writes after a provider completion task", { timeout: 60_000 }, async () => {
+test("WPT drain includes queued stream writes after a provider completion task", async () => {
   const session = new ControlledSession();
   const first = Promise.withResolvers<void>();
   const second = Promise.withResolvers<void>();
@@ -136,7 +136,7 @@ test("WPT drain includes queued stream writes after a provider completion task",
   assert.deepEqual(session.sends, [{ kind: "text", data: "first" }, { kind: "text", data: "second" }]);
 });
 
-test("WPT drain observes a provider handoff queued after its first checkpoint", { timeout: 60_000 }, async () => {
+test("WPT drain observes a provider handoff queued after its first checkpoint", async () => {
   const session = new ControlledSession();
   const accepted = Promise.withResolvers<void>();
   session.sendGates.push(accepted);
@@ -155,7 +155,7 @@ test("WPT drain observes a provider handoff queued after its first checkpoint", 
   await drained;
 });
 
-test("WPT drain preserves provider send rejections for the stream's caller", { timeout: 60_000 }, async () => {
+test("WPT drain preserves provider send rejections for the stream's caller", async () => {
   const session = new ControlledSession();
   const accepted = Promise.withResolvers<void>();
   session.sendGates.push(accepted);

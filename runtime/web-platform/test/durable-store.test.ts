@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
-import { mkdtempSync, rmSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,7 +22,7 @@ import type { DurableByteStore } from "../src/provider.ts";
 import type { AbortSignal } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -184,8 +184,7 @@ suite("a crashed write is invisible rather than half-present", async (t) => {
 });
 
 suite("records carry size and modification time, and namespaces are separate", async (t) => {
-  const { store: target } = store(t);
-  const before = Date.now() - 1000;
+  const { store: target, root } = store(t);
   await put(target, "cache", "a", "one");
   await put(target, "cache", "b", "twotwo");
   await put(target, "cookies", "a", "elsewhere");
@@ -201,7 +200,8 @@ suite("records carry size and modification time, and namespaces are separate", a
     ],
   );
   for (const record of records) {
-    assert.ok(record.modifiedMilliseconds >= before, "a record knows when it was committed");
+    const path = join(root, Buffer.from("cache").toString("base64url"), Buffer.from(record.key).toString("base64url"));
+    assert.equal(record.modifiedMilliseconds, statSync(path).mtimeMs, "the record reports its committed file's timestamp");
   }
   assert.equal(await target.size("cache", none()), 9);
   // One namespace cannot see or count another's keys.

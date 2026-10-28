@@ -347,7 +347,7 @@ test("WPT exposes self only on request as the fixture's actual global object", a
   ordinary.run('test(() => assert_equals(typeof self, "undefined"), "no implicit self");', "no-self.js");
   assert.equal((await ordinary.finish())[0]?.status, "pass");
 
-  const harness = new WptHarness({}, {}, 100, { exposeSelf: true });
+  const harness = new WptHarness({}, {}, undefined, { exposeSelf: true });
   harness.run(`
     test(() => {
       assert_equals(self, globalThis);
@@ -381,7 +381,7 @@ test("WPT greater-than assertions require ordered numbers or same-type bigints",
 });
 
 test("WPT timeout helpers preserve receivers and extra arguments across await", async () => {
-  const harness = new WptHarness({}, {}, 100);
+  const harness = new WptHarness({});
   harness.run(`
     async_test(t => {
       const receiver = { step_timeout };
@@ -413,7 +413,7 @@ test("WPT timeout helpers preserve receivers and extra arguments across await", 
 
 test("WPT global timer exceptions fail their owner or the harness", async () => {
   const failure = new Error("timer callback assertion");
-  const harness = new WptHarness({ failure }, {}, 100);
+  const harness = new WptHarness({ failure });
   harness.run(`
     promise_test(async () => {
       await Promise.resolve();
@@ -425,7 +425,7 @@ test("WPT global timer exceptions fail their owner or the harness", async () => 
   assert.deepEqual(results.map((result) => result.status), ["fail", "pass"]);
   assert.equal(results[0]?.error, failure);
 
-  const unowned = new WptHarness({ failure }, {}, 100);
+  const unowned = new WptHarness({ failure });
   unowned.run(`
     setup({ explicit_done: true });
     step_timeout(() => { done(); throw failure; }, 0);
@@ -434,9 +434,10 @@ test("WPT global timer exceptions fail their owner or the harness", async () => 
     error instanceof AggregateError && error.errors.includes(failure));
 });
 
-test("WPT clears abandoned global timers when a fixture finishes", async () => {
+test("WPT clears abandoned global timers when a fixture finishes", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   let calls = 0;
-  const harness = new WptHarness({ record: () => { calls++; } }, {}, 100);
+  const harness = new WptHarness({ record: () => { calls++; } });
   harness.run(`
     promise_test(() => {
       step_timeout(record, 10);
@@ -444,6 +445,6 @@ test("WPT clears abandoned global timers when a fixture finishes", async () => {
     }, "abandoned timer");
   `, "timer-cleanup.js");
   assert.equal((await harness.finish())[0]?.status, "pass");
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  t.mock.timers.tick(10000);
   assert.equal(calls, 0);
 });

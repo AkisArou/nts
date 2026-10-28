@@ -29,7 +29,7 @@ import type { Event } from "../src/index.ts";
 import { CloseEvent } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 8000 }, fn);
+  test(name, fn);
 };
 const decoder = new TextDecoder();
 
@@ -106,6 +106,7 @@ async function hosted(t: TestContext, serverOptions: Partial<WebSocketServerOpti
     ...serverOptions,
   });
   const refusals: number[] = [];
+  const sessionEnded = Promise.withResolvers<void>();
   const sockets = new Set<Socket>();
   const listener = createServer((socket) => {
     sockets.add(socket);
@@ -128,6 +129,8 @@ async function hosted(t: TestContext, serverOptions: Partial<WebSocketServerOpti
         }
       } catch {
         // A server closing under a live session is an ordinary ending here.
+      } finally {
+        sessionEnded.resolve();
       }
     })();
   });
@@ -138,7 +141,7 @@ async function hosted(t: TestContext, serverOptions: Partial<WebSocketServerOpti
     for (const socket of sockets) socket.destroy();
     return new Promise<void>((resolve) => listener.close(() => resolve()));
   });
-  return { server, port: portOf(listener), refusals };
+  return { server, port: portOf(listener), refusals, sessionEnded: sessionEnded.promise };
 }
 
 function clientFor(t: TestContext): WebPlatformRuntime {
@@ -161,7 +164,7 @@ async function connected(
 }
 
 suite("the server counts the sessions it is holding", async (t) => {
-  const { server, port } = await hosted(t, { protocols: ["chat"] });
+  const { server, port, sessionEnded } = await hosted(t, { protocols: ["chat"] });
   const api = clientFor(t);
   assert.equal(server.connections, 0);
 
@@ -179,9 +182,7 @@ suite("the server counts the sessions it is holding", async (t) => {
   second.close();
   await closed;
   // The session removes itself when it ends, without the server being told.
-  for (let turn = 0; turn < 40 && server.connections !== 1; turn++) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
+  await sessionEnded;
   assert.equal(server.connections, 1, "a session that ends stops being held");
   first.close();
 });

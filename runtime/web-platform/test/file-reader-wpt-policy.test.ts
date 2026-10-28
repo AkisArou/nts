@@ -134,7 +134,7 @@ test("FileReader starts empty with null result, error, and event handlers", () =
   ], [null, null, null, null, null, null]);
 });
 
-test("FileReader reads asynchronously and exposes trusted progress events in state order", { timeout: 2000 }, async () => {
+test("FileReader reads asynchronously and exposes trusted progress events in state order", async () => {
   const reader = new FileReader();
   const records = recordEvents(reader);
   const completion = completeRead(reader, () => reader.readAsText(new Blob(["hello"])));
@@ -163,7 +163,7 @@ test("FileReader reads asynchronously and exposes trusted progress events in sta
   }
 });
 
-test("FileReader completes an empty Blob without a spurious progress event", { timeout: 2000 }, async () => {
+test("FileReader completes an empty Blob without a spurious progress event", async () => {
   const reader = new FileReader();
   const records = recordEvents(reader);
   await completeRead(reader, () => reader.readAsText(new Blob()));
@@ -178,7 +178,7 @@ test("FileReader completes an empty Blob without a spurious progress event", { t
 });
 
 // This is the read/event interface required by the WebSocket Blob-isolation WPT.
-test("FileReader onload returns independent ArrayBuffers over immutable Blob storage", { timeout: 2000 }, async () => {
+test("FileReader onload returns independent ArrayBuffers over immutable Blob storage", async () => {
   let publicCalls = 0;
   class DerivedBlob extends Blob {
     override get size(): never { publicCalls++; throw new Error("public size"); }
@@ -213,7 +213,7 @@ test("FileReader onload returns independent ArrayBuffers over immutable Blob sto
   assert.equal(publicCalls, 0);
 });
 
-test("FileReader BinaryString keeps every byte's code-unit value", { timeout: 2000 }, async () => {
+test("FileReader BinaryString keeps every byte's code-unit value", async () => {
   const reader = new FileReader();
   await completeRead(reader, () => reader.readAsBinaryString(new Blob([new Uint8Array([0, 65, 127, 128, 255])])));
   assert.equal(reader.result, "\0A\x7f\x80\xff");
@@ -221,7 +221,7 @@ test("FileReader BinaryString keeps every byte's code-unit value", { timeout: 20
 });
 
 // Web IDL interface conversion precedes the File API busy-state algorithm.
-test("FileReader converts arguments before rejecting overlapping reads", { timeout: 2000 }, async () => {
+test("FileReader converts arguments before rejecting overlapping reads", async () => {
   const reader = new FileReader();
   const blob = new Blob(["one"]);
   const completion = completeRead(reader, () => reader.readAsText(blob));
@@ -255,7 +255,7 @@ test("FileReader abort before a read preserves EMPTY and fires no events", () =>
   assert.throws(() => reader.abort.call({} as FileReader), TypeError);
 });
 
-test("FileReader abort synchronously retires pending events and permits a fresh read", { timeout: 2000 }, async (t) => {
+test("FileReader abort synchronously retires pending events and permits a fresh read", async (t) => {
   const scheduler = virtualRuntime(t);
   const reader = new FileReader();
   const records = recordEvents(reader);
@@ -278,7 +278,7 @@ test("FileReader abort synchronously retires pending events and permits a fresh 
   assert.deepEqual(scheduler.errors, []);
 });
 
-test("FileReader abort after success only clears the result", { timeout: 2000 }, async () => {
+test("FileReader abort after success only clears the result", async () => {
   const reader = new FileReader();
   const records = recordEvents(reader);
   await completeRead(reader, () => reader.readAsText(new Blob(["done"])));
@@ -290,7 +290,7 @@ test("FileReader abort after success only clears the result", { timeout: 2000 },
   assert.equal(records.length, count);
 });
 
-test("FileReader abort in loadstart suppresses queued progress and completion", { timeout: 2000 }, async () => {
+test("FileReader abort in loadstart suppresses queued progress and completion", async () => {
   const reader = new FileReader();
   const records = recordEvents(reader);
   reader.onloadstart = () => reader.abort();
@@ -300,7 +300,7 @@ test("FileReader abort in loadstart suppresses queued progress and completion", 
   assert.equal(reader.result, null);
 });
 
-test("FileReader suppresses the old loadend when a load handler starts another read", { timeout: 2000 }, async () => {
+test("FileReader suppresses the old loadend when a load handler starts another read", async () => {
   const reader = new FileReader();
   const records = recordEvents(reader);
   const results: (string | ArrayBuffer | null)[] = [];
@@ -316,7 +316,7 @@ test("FileReader suppresses the old loadend when a load handler starts another r
   assert.equal(reader.result, "second");
 });
 
-test("FileReader suppresses the old loadend when an abort handler starts another read", { timeout: 2000 }, async () => {
+test("FileReader suppresses the old loadend when an abort handler starts another read", async () => {
   const reader = new FileReader();
   const records = recordEvents(reader);
   reader.onabort = () => reader.readAsText(new Blob(["replacement"]));
@@ -328,7 +328,7 @@ test("FileReader suppresses the old loadend when an abort handler starts another
   assert.equal(reader.result, "replacement");
 });
 
-test("FileReader closes external storage on abort and ignores its late completion", { timeout: 2000 }, async () => {
+test("FileReader closes external storage on abort and ignores its late completion", async () => {
   let opens = 0;
   let closes = 0;
   const pending = Promise.withResolvers<Uint8Array<ArrayBuffer> | undefined>();
@@ -361,7 +361,7 @@ test("FileReader closes external storage on abort and ignores its late completio
   assert.deepEqual(records.map((record) => record.type), ["abort", "loadend", "loadstart", "progress", "load", "loadend"]);
 });
 
-test("FileReader reports storage failure, retains its error on abort, and clears it on the next read", { timeout: 2000 }, async () => {
+test("FileReader reports storage failure, retains its error on abort, and clears it on the next read", async () => {
   let closes = 0;
   const source: BlobExternalSource = {
     size: 1,
@@ -390,7 +390,7 @@ test("FileReader reports storage failure, retains its error on abort, and clears
   assert.equal(reader.result, "recovered");
 });
 
-test("FileReader suppresses the old loadend when an error handler starts another read", { timeout: 2000 }, async () => {
+test("FileReader suppresses the old loadend when an error handler starts another read", async () => {
   const source: BlobExternalSource = {
     size: 1,
     open() { return { async read() { throw new Error("unreadable"); }, async close() {} }; },
@@ -404,7 +404,7 @@ test("FileReader suppresses the old loadend when an error handler starts another
   assert.equal(reader.error, null);
 });
 
-test("FileReader progress uses provider time and includes the final byte count", { timeout: 2000 }, async (t) => {
+test("FileReader progress uses provider time and includes the final byte count", async (t) => {
   const scheduler = virtualRuntime(t);
   const chunks = [
     Promise.withResolvers<Uint8Array<ArrayBuffer> | undefined>(),
@@ -452,7 +452,7 @@ test("FileReader progress uses provider time and includes the final byte count",
 });
 
 // https://w3c.github.io/FileAPI/#package-data
-test("FileReader text uses its explicit encoding before the private MIME charset", { timeout: 2000 }, async () => {
+test("FileReader text uses its explicit encoding before the private MIME charset", async () => {
   const reader = new FileReader();
   const be = new Blob([new Uint8Array([0, 65, 0, 233])], { type: "text/plain;charset=utf-16be" });
   await completeRead(reader, () => reader.readAsText(be));
@@ -470,7 +470,7 @@ test("FileReader text uses its explicit encoding before the private MIME charset
   assert.equal(publicReads, 0);
 });
 
-test("FileReader invalid encoding labels fall back through MIME and UTF-8", { timeout: 2000 }, async () => {
+test("FileReader invalid encoding labels fall back through MIME and UTF-8", async () => {
   const reader = new FileReader();
   const be = new Blob([new Uint8Array([0, 65])], { type: "text/plain;charset=utf-16be" });
   for (const label of ["not-an-encoding", "", "\vutf-16le", "Koi8-r"]) {
@@ -484,7 +484,7 @@ test("FileReader invalid encoding labels fall back through MIME and UTF-8", { ti
   assert.equal(reader.result, "é");
 });
 
-test("FileReader BOM decoding overrides the explicit or MIME fallback encoding", { timeout: 2000 }, async () => {
+test("FileReader BOM decoding overrides the explicit or MIME fallback encoding", async () => {
   const reader = new FileReader();
   for (const bytes of [
     new Uint8Array([0xef, 0xbb, 0xbf, 0x41]),
@@ -497,7 +497,7 @@ test("FileReader BOM decoding overrides the explicit or MIME fallback encoding",
   }
 });
 
-test("FileReader converts an encoding object once when the read starts", { timeout: 2000 }, async () => {
+test("FileReader converts an encoding object once when the read starts", async () => {
   let calls = 0;
   const label = { toString() { calls++; return "utf-16be"; } } as unknown as string;
   const reader = new FileReader();
@@ -508,7 +508,7 @@ test("FileReader converts an encoding object once when the read starts", { timeo
   assert.equal(calls, 1);
 });
 
-test("FileReader exposes the missing legacy-codec capability without a false UTF-8 success", { timeout: 2000 }, async () => {
+test("FileReader exposes the missing legacy-codec capability without a false UTF-8 success", async () => {
   const reader = new FileReader();
   for (const label of ["latin1", "  WINDOWS-1252\t", "Shift_JIS", "replacement"]) {
     const records = recordEvents(reader);
