@@ -1,0 +1,66 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "node": "v24.20.0",
+  "originalBundleSHA256": "4a38ddca263aa899b2a0140e82d94bcb9c45efe76d26201f495fc5b91ad32f00",
+  "counts": [
+    11317,
+    44606,
+    38429,
+    10687
+  ],
+  "work1": 381213099,
+  "work2": 214361558,
+  "entries": [
+    {
+      "name": "backbone-1.6.1.js",
+      "inputBytes": 80436,
+      "inputCharacters": 80436,
+      "inputSHA256": "843bd01aa3944ef9e3f426f35cf6fa46f4a55985bf9af23a2d01b3d447ed4121",
+      "astJSONSHA256": "1499ed2db99747a9480c674cf03b1b5eef40d32c4bd84f1c258ca7beeacb6f7f",
+      "tokensJSONSHA256": "2abbd1b44ec1a07cebb0a7297b73accf15e23ad9a8ebe448c4c4fb2d3362d02b",
+      "tokens": 11316,
+      "tokenAndTopLevelStatementCount": 11317
+    },
+    {
+      "name": "jquery-3.7.1.js",
+      "inputBytes": 285314,
+      "inputCharacters": 285314,
+      "inputSHA256": "78a85aca2f0b110c29e0d2b137e09f0a1fb7a8e554b499f740d6744dc8962cfe",
+      "astJSONSHA256": "cd08ad8bd7c8122a656ddbcd3def388080eaa300133f6b2166eb2f2fa576dcd8",
+      "tokensJSONSHA256": "641d7ad7fd4501f146ca6fee8aa83273889dfc59fca05d5d3c1fe733e9e94411",
+      "tokens": 44605,
+      "tokenAndTopLevelStatementCount": 44606
+    },
+    {
+      "name": "mootools-core-1.6.0.js",
+      "inputBytes": 162032,
+      "inputCharacters": 162032,
+      "inputSHA256": "176024679735c15d3fb08fc093237149adc39e86766db0dc597c31d44fd0a5ac",
+      "astJSONSHA256": "1062276e2a1af8bdd1ba15a347142219e9c4067367774548952d41bef097d2fa",
+      "tokensJSONSHA256": "292fee2e79681cfe77acfa8ce9bad324ade703c314fe15edc2fe341b0f29095f",
+      "tokens": 38365,
+      "tokenAndTopLevelStatementCount": 38429
+    },
+    {
+      "name": "underscore-1.13.7.js",
+      "inputBytes": 68778,
+      "inputCharacters": 68766,
+      "inputSHA256": "24f3a110916c46a4d7fb762a7b8994a6c2daad7efd62604b1ba2a9e8c2bf4e03",
+      "astJSONSHA256": "0074f7c6b7f8514766fb2c30393110792abece24f0e2ec2c995eb7b8214a6da3",
+      "tokensJSONSHA256": "afe43025d9752ce4e22cb7fa900994f4299ae9a1f41d1d86588c5093e440af0c",
+      "tokens": 10686,
+      "tokenAndTopLevelStatementCount": 10687
+    }
+  ],
+  "fixture": {
+    "source": "// complete JSX, template and regexp paths\nconst x = <section attr=\"hello\">{`world${1+2}`}&amp;</section>; const r = /a+/g;",
+    "astJSONSHA256": "a172bc94aac08a5201c0cc9b17db3480c40db0fc62f1cf8f24612090cff076cf"
+  },
+  "operationAudit": {
+    "Object.freeze": {
+      "moduleInitialization": 91,
+      "completeOriginalWork": 0,
+      "retained": true
+    }
+  }
+}
