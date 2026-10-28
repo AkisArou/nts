@@ -15,7 +15,7 @@ import test from "node:test";
 
 interface JetStreamCase {
   seed: number;
-  work(n: number): number;
+  work(n: number): number | Promise<number>;
 }
 
 interface RenderCase extends JetStreamCase {
@@ -50,13 +50,13 @@ for (const name of names) {
   const module: unknown = await import(new URL(`${name}/case.ts`, root).href);
   assert.ok(isCase(module), `${name}: missing work/seed exports`);
   modules.set(name, module);
-  test(`${name}: repeated complete calls have a stable finite checksum`, () => {
+  test(`${name}: repeated complete calls have a stable finite checksum`, async () => {
     assert.ok(Number.isSafeInteger(module.seed) && module.seed > 0);
-    const expected = module.work(module.seed);
+    const expected = await module.work(module.seed);
     assert.ok(Number.isFinite(expected));
-    module.work(module.seed + 1);
-    assert.equal(module.work(module.seed), expected);
-    assert.equal(module.work(module.seed), expected);
+    await module.work(module.seed + 1);
+    assert.equal(await module.work(module.seed), expected);
+    assert.equal(await module.work(module.seed), expected);
   });
 }
 
