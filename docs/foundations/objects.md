@@ -156,8 +156,10 @@ proved to hold integers, when it is `int32_t` or `int64_t` (`hir::elements`).
 - **Tuples** of mixed element types are laid out as structs, and
   `Array.isArray` is true of them.
 
-Storing through a covariant array alias (a `Sub[]` seen as a `Base[]`) is an
-open question (L5).
+Storing through a covariant array alias (a `Sub[]` seen as a `Base[]`) is
+decided: an array's narrow storage will need a proof that every writer stores
+the narrow type, as a `Map`'s and a `Set`'s contents do
+([types](../language/types.md#decisions)).
 
 ### Typed arrays
 

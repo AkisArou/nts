@@ -168,7 +168,8 @@ claim reads the wrong bytes. Today's behaviour, case by case:
 | a hole in a `number[]` or `boolean[]` (`new Array(n)`, a slot never written) | `undefined` | reads as `0` or `false` on C (`tests/outcomes/a-hole-in-an-array-of-numbers-reads-as-zero`) | L4 |
 | a field declared `x!: T` and never written | `undefined` | reads as a zero value (`tests/outcomes/a-required-field-with-no-initializer-starts-as-undefined`) | L4 |
 | a `var` read before its assignment | `undefined` | at module scope a wrong answer (`tests/outcomes/a-var-read-before-its-declaration`); through a closure, a stop by name | L4 |
-| a `Sub[]` widened to `Base[]`, then given a `Base` | the `Base` behaves as a `Base` | widening between different element layouts is refused (NTS1001) on every backend; between equal layouts, C and LLVM call the `Base` as a `Sub` (`tests/outcomes/a-base-pushed-through-a-covariant-array-dispatches-as-the-subclass`), and the JVM declines (NTS4001) | [L5](../open-questions.md#1-language-and-compiler) |
+| a `Sub[]` widened to `Base[]`, then given a `Base` | the `Base` behaves as a `Base` | widening between different element layouts is refused (NTS1001) on every backend; between equal layouts, C and LLVM call the `Base` as a `Sub` (`tests/outcomes/a-base-pushed-through-a-covariant-array-dispatches-as-the-subclass`), and the JVM declines (NTS4001) | L5, [decided](#decisions) |
+| a `Map<K, number>` passed as a `Map<K, unknown>`, which stores a string | the string reads back as a string | read back through the narrow type as a number, on every backend and in every way a Map or Set is read (`tests/outcomes/a-string-stored-through-a-widened-number-map-reads-as-a-number`) | [decided](#decisions) |
 | an erased value asserted to the wrong type | reads on | `TypeError` or a stop by name (casts, above) | L6, [decided](#decisions) |
 | a `this` that is not the declared `this:` type | reads on | stops by name ([functions.md](functions.md#this)) | L14, [decided](errors.md#decisions) |
 
@@ -193,6 +194,14 @@ Until each case meets the policy, a wrong answer that runs is recorded under
   one exception:** an erased value (from `any`, `unknown`, JSON or foreign
   code) asserted to a type it does not have throws a catchable `TypeError`
   (10-27, [log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- **A container's narrow representation is licensed by proof, never by its
+  static type:** a value read out of a `Map` or `Set` keeps its run-time type
+  unless the compiler proves that every writer of that collection stores the
+  narrow type, and only then are its reads and storage narrowed. Arrays follow
+  once the `Map` and `Set` version has landed and its cost is measured: a
+  `number[]` widened to `unknown[]` is then accepted, its storage chosen after
+  every alias is seen, and the NTS1001 refusal goes (10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.
 - **A member read on `any` or `unknown` by a key known only at run time** goes
   through a table of member names per type, found through the value's
   run-time descriptor, while typed code stays direct; it is what untyped JSON

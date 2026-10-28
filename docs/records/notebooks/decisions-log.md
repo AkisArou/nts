@@ -455,6 +455,15 @@ the entry says otherwise.
 - **A diagnostic registry, now** (register L21): every code with its meaning,
   whether it is permanent or "not yet", and its message. The missing early
   errors are completed in phase 3.
+- **A container's narrow representation needs a proof, and arrays follow
+  `Map` and `Set`** (later that day, not from the audit). A `Map<K, number>`
+  that a wider alias filled with strings read those strings back as numbers in
+  12 ways of reading a `Map` or `Set` (29 of 58 cases each), on every backend.
+  The fix keeps a read value's run-time type unless the compiler proves that
+  every writer stores the narrow type. Asked whether arrays should get the same
+  design, accepting a `number[]` widened to `unknown[]` instead of refusing it
+  (NTS1001, L5), the user answered "Yes on arrays, after the Map version lands
+  and is measured".
 
 ## Builtins and globals (10-28)
 
