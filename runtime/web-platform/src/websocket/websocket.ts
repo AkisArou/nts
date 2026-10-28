@@ -20,6 +20,7 @@ import type {
   WebSocketTransport,
 } from "./transport.ts";
 import {
+  eventTargetDispatchTrusted,
   eventTargetSetErrorReporter,
   eventTargetSetHandler,
 } from "../core/events.ts";
@@ -258,7 +259,7 @@ export class WebSocket extends EventTarget {
       this.chosenProtocol = session.protocol;
       this.negotiatedExtensions = session.extensions;
       const event = new Event("open");
-      this.dispatchEvent(event);
+      this[eventTargetDispatchTrusted](event);
       this.#readLoop(session).catch((error) => this.#fail(error));
     });
   }
@@ -286,7 +287,7 @@ export class WebSocket extends EventTarget {
               data,
               origin: this.context.urls.parse(this.url).origin,
             });
-            this.dispatchEvent(event);
+            this[eventTargetDispatchTrusted](event);
           } finally {
             resolve();
           }
@@ -377,14 +378,14 @@ export class WebSocket extends EventTarget {
       this.#unregister();
       if (info.failed) {
         const error = new Event("error");
-        this.dispatchEvent(error);
+        this[eventTargetDispatchTrusted](error);
       }
       const close = new CloseEvent("close", {
         code: info.code,
         reason: info.reason,
         wasClean: info.wasClean,
       });
-      this.dispatchEvent(close);
+      this[eventTargetDispatchTrusted](close);
     });
   }
 
