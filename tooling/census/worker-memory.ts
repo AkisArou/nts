@@ -4,10 +4,12 @@
 // aggregate slice, then one persistent counter-holding slice per worker.
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
+import { toolingSlicePrefix } from "../gate/tooling-slice.ts";
 
 const CGROUP = "/sys/fs/cgroup";
 const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -69,6 +71,25 @@ export function memoryCause(before: MemoryCounters, after: MemoryCounters, aggre
   return aggregateAfter > aggregateBefore ? "aggregate-pressure" : "system-pressure";
 }
 
+export type CaseConcurrency = "parallel" | "exclusive";
+export function memoryDisposition(cause: MemoryCause | undefined, concurrency: CaseConcurrency): "budget" | "pressure" | undefined {
+  if (cause === "own-limit" || (cause === "aggregate-pressure" && concurrency === "exclusive")) return "budget";
+  return cause ? "pressure" : undefined;
+}
+export function caseBudgetMessage(caseName: string, bytes: number, step = process.env.NTS_GATE_STEP ?? "resident"): string {
+  const gib = bytes / 2 ** 30;
+  const budget = Number.isInteger(gib) ? `${gib} GiB` : `${bytes} byte`;
+  return `${caseName} exceeds the ${step} step's ${budget} budget`;
+}
+function compileMemoryResult(cause: MemoryCause | undefined, exclusive: boolean, command: string, args: readonly string[], bytes: number, workerBytes = bytes) {
+  const disposition = memoryDisposition(cause, exclusive ? "exclusive" : "parallel");
+  if (disposition === "pressure") throw new PressureError(`resident ${cause}: ${[command, ...args].join(" ")} was killed without exceeding its own case budget`);
+  // The aggregate includes the driver as well as its one case. Its ceiling
+  // is the step budget, even when the compiler's nominal worker cap is larger.
+  if (disposition === "budget" && (cause === "aggregate-pressure" || (exclusive && workerBytes >= bytes))) throw new CaseBudgetError(caseBudgetMessage(`${[command, ...args].join(" ")}`, bytes));
+  return disposition === "budget";
+}
+
 // The shell execs the actual worker, so the guard costs no resident process.
 // All values are argv, never interpolated shell source. A setup failure never
 // runs the command and never falls back to an uncapped process.
@@ -102,7 +123,7 @@ export class MemoryRun {
   constructor({ budgetBytes = Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 8 * 2 ** 30), id = basename(process.env.NTS_GATE_RUN_DIR ?? String(Date.now())) } = {}) {
     this.budgetBytes = integer(budgetBytes, "resident run budget");
     this.#recordPeak = Boolean(process.env.NTS_GATE_RUN_DIR) && id === basename(process.env.NTS_GATE_RUN_DIR!);
-    this.prefix = `ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`;
+    this.prefix = toolingSlicePrefix(`ntscensus${id.replace(/[^a-zA-Z0-9]/g, "").slice(-32)}p${process.pid}x${randomUUID().slice(0, 8)}`);
     this.slice = `${this.prefix}.slice`;
     this.directory = join(homedir(), ".cache/nts/worker-memory", this.prefix);
     mkdirSync(this.directory, { recursive: true });
@@ -246,12 +267,21 @@ export function serialRun(tools): void {
   const run = memoryRun();
   const worker = run.worker("serial", Number(tools.memoryCapKb ?? 6_000_000) * 1024);
   const scope = worker.scope(process.execPath, [...process.execArgv, ...process.argv.slice(1)]);
+  scope.env.NTS_CENSUS_CASE_CONCURRENCY = "exclusive";
+  const activeCase = join(run.directory, "serial-case.txt");
+  scope.env.NTS_CENSUS_ACTIVE_CASE = activeCase;
+  const before = worker.counters(), aggregateBefore = run.aggregateOoms();
   let result;
   try {
     result = spawnSync("systemd-run", scope.argv, { stdio: "inherit", env: scope.env });
     if (!worker.ready(scope)) throw new Error("resident cap: serial runner failed before bounded entry");
     const ooms = run.aggregateOoms();
     if (ooms) console.error(`resident aggregate cap fired ${ooms} time(s)`);
+    const cause = memoryCause(before, worker.counters(), aggregateBefore, ooms);
+    if (cause === "aggregate-pressure" || cause === "system-pressure" || (cause === "own-limit" && result.status !== 0)) {
+      const caseName = existsSync(activeCase) ? readFileSync(activeCase, "utf8") : process.argv.slice(1).join(" ");
+      compileMemoryResult(cause, true, caseName, [], run.budgetBytes, worker.bytes);
+    }
   } finally {
     worker.stop(scope);
     run.close();
@@ -267,10 +297,11 @@ export function compileSync(tools, command: string, args: readonly string[], opt
     const aggregate = process.env.NTS_CENSUS_RUN_GROUP!;
     const before = events(boundary);
     const aggregateBefore = events(aggregate, true).oom;
+    if (process.env.NTS_CENSUS_ACTIVE_CASE) writeFileSync(process.env.NTS_CENSUS_ACTIVE_CASE, `${[command, ...args].join(" ")}`);
     const result = spawnSync("sh", noAddressLimit, options);
     const cause = memoryCause(before, events(boundary), aggregateBefore, events(aggregate, true).oom);
-    if (cause === "aggregate-pressure" || cause === "system-pressure") throw new Error(`resident ${cause}: compiler OOM kill is not a case verdict`);
-    return { ...result, memoryKilled: cause === "own-limit", residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
+    const memoryKilled = compileMemoryResult(cause, process.env.NTS_CENSUS_CASE_CONCURRENCY === "exclusive", command, args, Number(process.env.NTS_CENSUS_RUN_MAX_BYTES), Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES));
+    return { ...result, memoryKilled, residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
   }
   // Standalone callers are bounded too. Serial runners and parallel census
   // workers enter a scope once, then compile without a per-case bus round trip.
@@ -292,6 +323,6 @@ export function compileSync(tools, command: string, args: readonly string[], opt
     worker.stop(scope);
   }
   const cause = memoryCause(before, worker.counters(), aggregateBefore, worker.run.aggregateOoms());
-  if (cause === "aggregate-pressure" || cause === "system-pressure") throw new Error(`resident ${cause}: compiler OOM kill is not a case verdict`);
-  return { ...result, memoryKilled: cause === "own-limit", residentLimitBytes: worker.bytes, residentRunBytes: worker.run.budgetBytes };
+  const memoryKilled = compileMemoryResult(cause, true, command, args, worker.run.budgetBytes, worker.bytes);
+  return { ...result, memoryKilled, residentLimitBytes: worker.bytes, residentRunBytes: worker.run.budgetBytes };
 }

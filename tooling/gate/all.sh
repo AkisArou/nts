@@ -2571,7 +2571,7 @@ tooling_tests() {
   else
     tooling_log=$(mktemp "${TMPDIR:-/tmp}/nts-gate-tooling.XXXXXX")
   fi
-  node --test tooling/gate/*.test.mjs tooling/gate/*.test.ts tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "$tooling_log" 2>&1
+  node tooling/gate/tooling-runner.ts tooling/gate/*.test.mjs tooling/gate/*.test.ts tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "$tooling_log" 2>&1
   status=$?
   echo "  log: $tooling_log"
   # Node also puts expected TODO failures under this heading on exit 0.
@@ -2582,7 +2582,7 @@ tooling_tests() {
     details || plain ~ /^[[:space:]]*(✖|⚠|﹣)/ || plain ~ /# SKIP/ ||
       plain ~ /^ℹ (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)/ { print "  " $0 }
   ' "$tooling_log"
-  node tooling/gate/owed.mjs --self-test || status=1
+  node --import ./tooling/gate/step-result.ts tooling/gate/owed.mjs --self-test || status=1
   return $status
 }
 step "tooling" tooling_tests

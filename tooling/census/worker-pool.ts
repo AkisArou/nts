@@ -1,10 +1,11 @@
 // One in-flight case per kernel-bounded worker, preserving survivor verdicts.
 // A dead worker's persistent slice retains its oom_kill count until this run
 // closes. A restart starts a fresh scope and takes a new baseline per case.
+import { PressureError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { Admission, createFeed } from "../gate/admission.ts";
-import { MemoryRun, memoryCause, type MemoryCounters } from "./worker-memory.ts";
+import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
 
 export type ResidentPoolOptions = {
   paths: string[];
@@ -23,9 +24,11 @@ type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pre
 
 async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission = new Admission({ report }) }: ResidentPoolOptions,
   work: Dispatch[], isolated: boolean, indexOffset = 0): Promise<Pressure[]> {
+  const exclusive = isolated || Math.min(jobs, work.length) === 1;
   const queue = createFeed(work.map((_, index) => String(index)), admission);
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
+  let idleRestarts = 0;
   const worker = async (index: number) => {
     const bound = memory.worker(index, workerBytes);
     let again = true;
@@ -36,6 +39,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         let before: MemoryCounters = bound.counters();
         let aggregateBefore = memory.aggregateOoms();
         const scope = bound.scope(command, args(index + indexOffset));
+        scope.env.NTS_CENSUS_POOL_WORKER = "1";
+        scope.env.NTS_CENSUS_CASE_CONCURRENCY = exclusive ? "exclusive" : "parallel";
         const child = spawn("systemd-run", scope.argv, { stdio: ["pipe", "pipe", "inherit"], env: scope.env });
         let exited = false;
         let restarting = false;
@@ -50,13 +55,13 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           active = undefined;
           before = after;
           aggregateBefore = aggregateAfter;
-          if (cause === "own-limit") {
-            onRow({ path: dispatch.path, bucket: "memory-cap", why: "worker's own resident limit fired",
+          if (memoryDisposition(cause, exclusive ? "exclusive" : "parallel") === "budget") {
+            onRow({ path: dispatch.path, bucket: "memory-cap", why: cause === "own-limit" ? "worker's own resident limit fired" : caseBudgetMessage(dispatch.path, memory.budgetBytes),
               residentWorkerBytes: bound.bytes, residentRunBytes: memory.budgetBytes, residentPressureRetries: Number(isolated) });
             return true;
           }
           if (cause) {
-            if (isolated) throw new Error(`resident instrument failure: isolated replay of ${dispatch.path} was killed by ${cause}, without an own-limit OOM`);
+            if (isolated) throw new PressureError(`resident instrument failure: isolated replay of ${dispatch.path} was killed by ${cause}, without an own-limit OOM`);
             pressure.push({ dispatch, cause, kills: after.kills - dispatchedBefore.kills });
             report(`resident pressure: requeued ${dispatch.path} after ${cause}; no verdict recorded`);
             return true;
@@ -114,7 +119,8 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
               const cause = memoryCause(before, after, aggregateBefore, memory.aggregateOoms());
               if (cause === "own-limit") throw new Error(`resident instrument failure: idle worker ${index} reached its own limit without an in-flight case`);
               if (cause) {
-                if (isolated) throw new Error(`resident instrument failure: idle worker ${index} was killed by ${cause} in isolated replay`);
+                if (isolated) throw new PressureError(`resident instrument failure: idle worker ${index} was killed by ${cause} in isolated replay`);
+                if (++idleRestarts > work.length + jobs) throw new PressureError(`resident pressure prevented worker startup or idle admission after ${idleRestarts} restarts`);
                 pressure.push({ cause, kills: after.kills - before.kills });
                 report(`resident pressure: idle worker ${index} killed by ${cause}; restarting without a case replay`);
                 restarting = true;
@@ -174,7 +180,7 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   };
   for (const { dispatch } of replays.sort((a, b) => a.dispatch.ordinal - b.dispatch.ordinal)) {
     const isolated = new MemoryRun({ budgetBytes });
-    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, jobs + summary.isolatedReplays);
+    await round({ ...options, memory: isolated, jobs: 1, admission: options.admission ?? new Admission({ report }) }, [dispatch], true, jobs + summary.isolatedReplays);
     summary.isolatedReplays++;
   }
   report(`resident pressure requeues: ${summary.pressureRequeues}; idle restarts ${summary.idlePressureRestarts}; aggregate kills ${summary.aggregatePressureKills}; system-wide kills ${summary.systemPressureKills}; isolated replays ${summary.isolatedReplays}`);

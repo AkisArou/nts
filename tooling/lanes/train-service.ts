@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
 import { systemdEnvironment } from "../gate/environment.ts";
 import { gateCommand } from "../gate/affinity.ts";
+import { toolingSliceArgs } from "../gate/tooling-slice.ts";
 import { GateResource } from "./gate-resource.ts";
 export type TrainOwner = { version: 1; id: string; unit: string; root: string; directory: string; tree: string; sha: string; bootstrap?: string; phase: "starting" | "running" | "retiring"; archive?: string; log: string; trace: string };
 function checked(command: string, args: string[], cwd?: string): string {
@@ -86,10 +87,10 @@ done
     const home = dirname(dirname(state));
     const launch = gateCommand("sh", [supervisor, join(home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"), join(home,".cache/nts-land.lock"), process.execPath, tree]);
     try {
-      checked("systemd-run", ["--user", "--collect", "--quiet", `--unit=${owner.unit}`, `--working-directory=${tree}`,
+      checked("systemd-run", ["--user", "--collect", "--quiet", ...toolingSliceArgs(), `--unit=${owner.unit}`, `--working-directory=${tree}`,
         "--property=LimitCORE=0", "--property=Restart=on-failure", "--property=RestartSec=2", `--property=StandardOutput=append:${owner.log}`, `--property=StandardError=append:${owner.log}`,
         `--property=ExecStopPost=${[cleanup.command, ...cleanup.args].map(quote).join(" ")}`,
-        ...systemdEnvironment(), `--setenv=NTS_LAND_HOME=${dirname(dirname(state))}`,
+        ...systemdEnvironment(), ...(process.env.NTS_TOOLING_SLICE?[`--setenv=NTS_TOOLING_SLICE=${process.env.NTS_TOOLING_SLICE}`]:[]), `--setenv=NTS_LAND_HOME=${dirname(dirname(state))}`,
         `--setenv=NTS_LAND_TRAIN_UNIT=${owner.unit}`, `--setenv=NTS_LAND_TRAIN_DIRECTORY=${directory}`,
         `--setenv=NTS_LAND_TRAIN_TRACE=${owner.trace}`, launch.command, ...launch.args], root);
     } catch (error) { owner.phase = "retiring"; save(join(state, "train-owner.json"), owner); throw error; }

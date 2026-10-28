@@ -345,6 +345,13 @@ export const RULES = [
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
+    name: "native addon code generation",
+    when: (p) => /^compiler\/codegen\/(c|napi|common)\//.test(p),
+    wide: true,
+    steps: ["addons"],
+    arms: [],
+  },
+  {
     name: "the LLVM backend",
     when: (p) => /^compiler\/codegen\/llvm\//.test(p),
     // Every step that selects it through the CLI (see SELECTED_BY_THE_CLI):

@@ -25,6 +25,7 @@
 //     for) is an error, so the two lists cannot drift apart silently.
 //   - Every requested step ends as exactly one of
 //       PASS     it ran and exited 0
+//       INSTRUMENT  the measuring command failed; no program verdict
 //       FAIL     it ran and exited non-zero (other than 77)
 //       SKIPPED  it exited 77: it could not run here (its last line says why)
 //       NOT RUN  it never started: a step it needs failed, the run was
@@ -68,6 +69,7 @@
 //   NTS_GATE_TOKEN_HELD=1 a fixed step: its tools must not ask for tokens
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
+import { readStepInstrument } from "./step-result.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -441,6 +443,8 @@ function stepEnv(step, slots) {
   delete e.NTS_GATE_TOKENS;
   delete e.NTS_GATE_TOKEN_HELD;
   e.NTS_GATE_STEP = step.name;
+  e.NTS_GATE_STEP_ATTEMPT = RUN_DIR;
+  e.NTS_GATE_STEP_RESULT = join(RUN_DIR, `${step.name}.instrument.json`);
   // Resident worker scopes are siblings of the land unit, so their run slice
   // needs this step's own reserved budget as an enforced aggregate ceiling.
   e.NTS_GATE_STEP_MEMORY_BYTES = String(Math.floor(step.mem * 2 ** 30));
@@ -723,6 +727,7 @@ function schedule() {
 function start(step, slots, rider = false) {
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.time`);
+  rmSync(join(RUN_DIR, `${step.name}.instrument.json`), { force: true });
   const fd = openSync(log, "w");
   let cmd = ["sh", join(HERE, "all.sh"), "--call", step.name];
   if (existsSync("/usr/bin/time")) cmd = ["/usr/bin/time", "-f", "%e %U %S %M", "-o", timeFile, ...cmd];
@@ -763,9 +768,12 @@ function start(step, slots, rider = false) {
     } else if (code === 77) {
       finish(step.name, "SKIPPED", lastLine(text) || "exited 77 without a reason", extra);
     } else {
+      let instrument;
+      try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
+      catch (error) { instrument = { kind: "invalid-instrument", reason: error.message }; }
       const status = signal ? `killed by ${signal}` : `exit ${code}`;
       const heap = nodeHeapOomReason(text);
-      finish(step.name, "FAIL", heap ? `${heap}; ${status}` : status, extra);
+      finish(step.name, instrument?.verdict ?? (instrument ? "INSTRUMENT" : "FAIL"), instrument?.reason ?? (heap ? `${heap}; ${status}` : status), { ...extra, ...(instrument ? { instrument } : {}) });
     }
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
@@ -873,7 +881,7 @@ function done() {
       if (r.verdict === "PASS") { r.verdict = "FAIL"; r.reason = `${s.ratio.toFixed(1)}x its baseline ${s.kind} time`; }
     }
   }
-  const counts = { PASS: 0, FAIL: 0, SKIPPED: 0, "NOT RUN": 0 };
+  const counts = { PASS: 0, FAIL: 0, INSTRUMENT: 0, SKIPPED: 0, "NOT RUN": 0 };
   const red = [];
   for (const name of plan) {
     const r = results.get(name);
@@ -894,7 +902,7 @@ function done() {
   lines.push(color(1, "gate summary") + `  ${identities.commit ?? "?"}${identities.dirty ? ` +${identities.dirty} uncommitted` : ""}  nts ${identities.nts?.sha256?.slice(0, 12) ?? "missing"}`);
   for (const name of plan) {
     const r = results.get(name);
-    const tag = { PASS: color(32, "PASS    "), FAIL: color(31, "FAIL    "), SKIPPED: color(33, "SKIPPED "), "NOT RUN": color(33, "NOT RUN ") }[r.verdict];
+    const tag = { PASS: color(32, "PASS    "), FAIL: color(31, "FAIL    "), INSTRUMENT: color(33, "INSTRUMENT"), SKIPPED: color(33, "SKIPPED "), "NOT RUN": color(33, "NOT RUN ") }[r.verdict];
     const t = r.wall !== undefined ? `${String(Math.round(r.wall)).padStart(6)}s` : "       ";
     const c = r.cpu !== undefined ? ` cpu ${String(Math.round(r.cpu)).padStart(6)}s` : "";
     const host = r.verdict === "SKIPPED" && BY_NAME.get(name).host ? ` (needs ${BY_NAME.get(name).host})` : "";
@@ -907,7 +915,7 @@ function done() {
   for (const s of slow) {
     lines.push(color(31, `  SLOWER   ${s.name.padEnd(24)} ${s.kind} ${Math.round(s.now)}s, ${s.ratio.toFixed(1)}x its baseline of ${Math.round(s.was)}s (tooling/gate/times.tsv)`));
   }
-  lines.push(`  ${plan.length} requested: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.SKIPPED} SKIPPED, ${counts["NOT RUN"]} NOT RUN in ${Math.round(wall)}s  (slots ${SLOTS}, mem ${MEM}G, frontends ${FRONTENDS})`);
+  lines.push(`  ${plan.length} requested: ${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.INSTRUMENT} INSTRUMENT, ${counts.SKIPPED} SKIPPED, ${counts["NOT RUN"]} NOT RUN in ${Math.round(wall)}s  (slots ${SLOTS}, mem ${MEM}G, frontends ${FRONTENDS})`);
   if (FAIL_FAST) lines.push(color(33, "  NTS_GATE_FAIL_FAST: an inner-loop run, not landing evidence"));
   lines.push(`  logs: ${RUN_DIR}`);
   for (const name of red) {

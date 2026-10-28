@@ -211,7 +211,7 @@ console.log(JSON.stringify({error,reads}));`;
   const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   const actual = JSON.parse(result.stdout);
-  assert.match(actual.error, /aggregate-pressure: compiler OOM kill is not a case verdict/);
+  assert.match(actual.error, /aggregate-pressure: unused was killed without exceeding its own case budget/);
   assert.equal(actual.reads.filter(path => path === "/sys/fs/cgroup/test-run.slice/memory.events.local").length, 2);
   assert.ok(!actual.reads.some(path => path.endsWith("intermediate.slice/memory.events.local")));
 });
@@ -351,3 +351,21 @@ for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanu
     }
   });
 }
+
+
+test("an exclusive case exceeding its step aggregate is a named failure, never pressure", t => {
+  const directory = scratch(); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const script = join(directory, "exclusive.ts");
+  writeFileSync(script, `import {serialRun,compileSync} from ${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)};
+serialRun({memoryCapKb:1024*1024});
+compileSync({memoryCapKb:1024*1024}, "python3", ["-c", "held=bytearray(256*1024**2); print(len(held))", "named-budget-case"], {encoding:"utf8"});
+`);
+  const result = spawnTest(process.execPath, [script], { encoding: "utf8", env: { ...process.env,
+    NTS_GATE_STEP: "outcomes", NTS_GATE_STEP_MEMORY_BYTES: String(128 * 2 ** 20),
+    NTS_GATE_STEP_RESULT: join(directory, "instrument.json"), NTS_GATE_STEP_ATTEMPT: directory,
+    NTS_CENSUS_POOL_WORKER: "0", NTS_CENSUS_WORKER_GROUP: "", NTS_CENSUS_RUN_GROUP: "" } });
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  const record = JSON.parse(readFileSync(join(directory, "instrument.json"), "utf8"));
+  assert.equal(record.verdict, "FAIL"); assert.equal(record.kind, "case-budget");
+  assert.match(record.reason, /named-budget-case.*exceeds the outcomes step's 134217728 byte budget/);
+});

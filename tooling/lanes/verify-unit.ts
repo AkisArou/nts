@@ -1,3 +1,4 @@
+import {toolingSliceArgs} from "../gate/tooling-slice.ts";
 // Explicitly start ONE idle-only shadow batch using immutable, landed tooling.
 import {spawnSync} from "node:child_process";
 import {mkdirSync,mkdtempSync} from "node:fs";
@@ -19,9 +20,10 @@ try {
   const submission=mkdtempSync(join(directory,"shadow-")),tree=join(submission,"tree"),log=join(submission,"verify.log");
   checked("git",["worktree","add","--detach",tree,sha],root);
   checked("sh",[join(tree,"tooling/lanes/inputs.sh"),"lane",root,tree],root);
-  checked("systemd-run",["--user","--collect","--quiet","--unit=nts-verify-shadow",`--working-directory=${tree}`,
+  checked("systemd-run",["--user","--collect","--quiet",...toolingSliceArgs(),"--unit=nts-verify-shadow",`--working-directory=${tree}`,
     `--property=StandardOutput=file:${log}`,`--property=StandardError=file:${log}`,"--property=Nice=19",
     `--property=LimitCORE=${process.env.NTS_COREDUMPS === "1" ? "infinity" : "0"}`,
+    ...(process.env.NTS_TOOLING_SLICE?[`--setenv=NTS_TOOLING_SLICE=${process.env.NTS_TOOLING_SLICE}`]:[]),
     ...systemdEnvironment(),process.execPath,join(tree,"tooling/lanes/verify.ts")],root);
   console.log(`one shadow batch requested as nts-verify-shadow\nlog: ${log}`);
 } catch (error) {console.error(`verify-unit: ${String(error)}`);process.exitCode=1;}

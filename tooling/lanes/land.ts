@@ -1,6 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {durableRecord} from "./durable-record.ts";
 import {abandonFrozen} from "./train-abandon.ts";
-import {ensureTrain,markTrainRunning,retireTrainOwner,refreshController,trainOwner} from "./train-service.ts";
+import {ensureTrain,markTrainRunning,retireTrainOwner,refreshController,trainOwner,withTrainLaunchLock} from "./train-service.ts";
+import { needsOperatorHold, retryInstruments } from "./instrument-retry.ts";
+import { heldBatches, heldForEntry, heldActions, heldLandings, holdLandings, wasHeldGeneration, prepareHeldResolution, pendingHeldResolutions, appliedHeldResolution } from "./held-landings.ts";
+import { Admission } from "../gate/admission.ts";
 import {pruneRunTemporaries} from "../gate/run-temporary.ts";
 import {selectRange,selectionInfrastructure} from "../gate/owed-range.ts";
 import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
@@ -11,6 +15,8 @@ import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "
 //   node tooling/lanes/land.ts <commit> --dry-run  say what it owes, change nothing
 //   node tooling/lanes/land.ts --withdraw <commit|entry>  request boundary withdrawal
 //   node tooling/lanes/land.ts --abandon-frozen <id> --because=<reason> --run=<path>
+//   node tooling/lanes/land.ts --retry-held <entry|commit> --because=<note>
+//   node tooling/lanes/land.ts --refuse-held <entry|commit> --because=<note>
 //
 // A gate takes half an hour, longer than an agent's command limit: run it in
 // the background and read the outcome with `lane status`, or the log it names.
@@ -49,7 +55,7 @@ import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, fstatSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, fstatSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -98,6 +104,7 @@ const dryRun = argv.includes("--dry-run");
 const trainWorker = argv.includes("--train-worker");
 const withdrawing = argv.includes("--withdraw");
 const abandoning = argv.includes("--abandon-frozen");
+const retryHeld = argv.includes("--retry-held"), refuseHeld = argv.includes("--refuse-held");
 // `--accept-unrun=apple,windows --because=<why>`: land a range that touches a
 // platform whose programs did not run, once, on purpose. The user's call, never
 // a lane's (2026-10-14, the corpora move: its Apple and Windows projects change
@@ -493,6 +500,7 @@ function alreadyInMain(root:string,base:string,sha:string):boolean {
  * their old process-lifetime withdrawal rule until the migration drains them.
  */
 function waiting(): Entry[] {
+  const held=new Set(heldLandings(STATE).map(row=>row.entry.id));
   // Answers are read within moments of being written; a week-old one was
   // read long ago, or by no one.
   if (existsSync(RESULTS)) {
@@ -515,6 +523,7 @@ function waiting(): Entry[] {
     const result=resultOf(entry.id);
     if (result) { say(`${entry.sha.slice(0,12)} (${entry.id}) already answered: ${result.state}; preserving its original result`);reconcileAnswer(entry,result);continue; }
     if (withdrawRequested(entry)) { answer(entry, { state: "withdrawn", message: `${entry.sha.slice(0,12)} withdrawn before the next train` }); continue; }
+    if(held.has(entry.id))continue;
     if (!entry.durable && !alive(entry.pid)) {
       answer(entry,{state:"withdrawn",message:`${entry.sha.slice(0,12)} legacy submitter exited before composition`});
     }
@@ -526,7 +535,7 @@ function waiting(): Entry[] {
 function withdrawRequested(entry: Entry): boolean {
   return existsSync(join(WITHDRAWALS, `${entry.id}.json`));
 }
-function requestWithdrawal(root: string, asked: string): void {
+async function requestWithdrawal(root: string, asked: string): Promise<void> {
   const entries: Entry[] = [QUEUE,LEGACY_QUEUE].flatMap(directory=>existsSync(directory)?readdirSync(directory).filter(name=>name.endsWith(".json")).flatMap(name=>{try{return [JSON.parse(readFileSync(join(directory,name),"utf8"))];}catch{return [];}}):[]);
   const direct = entries.filter(entry => entry.id === asked);
   const sha = direct.length ? null : git(["rev-parse", "--verify", `${asked}^{commit}`], root);
@@ -538,6 +547,46 @@ function requestWithdrawal(root: string, asked: string): void {
     durableRecord(file,{version:1,id:entry.id,sha:entry.sha,at:new Date().toISOString()});
     say(`withdrawal requested for ${entry.sha.slice(0,12)} (${entry.id}); a frozen train finishes its current run`);
   }
+  await withTrainLaunchLock(STATE,()=>recoverHeldDecisions());
+  await ensureTrain(root,STATE,process.cwd(),git(["rev-parse","HEAD"]));
+}
+
+/** Replay a prepared operator decision after a crash, before composing work. */
+function recoverHeldDecisions():void {
+  const prepared=new Set(pendingHeldResolutions(STATE).map(row=>`${row.batch.id}:${row.entry.id}`));
+  for(const row of heldLandings(STATE))if(withdrawRequested(row.entry as Entry)&&!prepared.has(`${row.batch.id}:${row.entry.id}`)) {
+    prepareHeldResolution(STATE,row.batch.id,row.entry.id,"refuse","explicit withdrawal requested");
+  }
+  for(const {resolution,batch,entry:stored} of pendingHeldResolutions(STATE)) {
+    const entry=stored as Entry,previous=resultOf(entry.id);
+    if(previous)reconcileAnswer(entry,previous);
+    else if(withdrawRequested(entry))answer(entry,{state:"withdrawn",run:batch.run,message:`${entry.sha.slice(0,12)} withdrawn while held; ${batch.reason}`});
+    else if(resolution.action==="retry") {
+      if(typeof entry.tree!=="string"||!Number.isInteger(entry.pid)||!Number.isFinite(entry.at))throw new Error("held entry lost its complete queue snapshot");
+      durableRecord(join(QUEUE,`${entry.id}.json`),{...entry,durable:true});
+      rmSync(join(LEGACY_QUEUE,`${entry.id}.json`),{force:true});
+      say(`operator requeued held ${entry.sha.slice(0,12)} (${entry.id}): ${resolution.note}`);
+    } else answer(entry,{state:"abandoned",run:batch.run,message:`operator refused held ${entry.sha.slice(0,12)} (${entry.id}): ${resolution.note}; original measurement: ${batch.reason}`});
+    appliedHeldResolution(STATE,resolution);
+  }
+}
+
+async function resolveHeld(root:string,asked:string,action:"retry"|"refuse",note:string):Promise<void> {
+  await withTrainLaunchLock(STATE,()=>{
+    recoverHeldDecisions();
+    let selected=heldLandings(STATE);
+    const qualified=asked.split(":");
+    if(qualified.length===2)selected=heldBatches(STATE).filter(batch=>batch.id===qualified[0]).flatMap(batch=>batch.entries.filter(entry=>entry.id===qualified[1]).map(entry=>({batch,entry})));
+    else {
+      const direct=selected.filter(row=>row.entry.id===asked);
+      const sha=direct.length?null:git(["rev-parse","--verify",`${asked}^{commit}`],root);
+      selected=direct.length?direct:selected.filter(row=>row.entry.sha===sha);
+    }
+    if(!selected.length)fail(`no held submission matches ${asked}; use the qualified hold:entry identity from lane status for an idempotent replay`);
+    for(const {batch,entry} of selected)prepareHeldResolution(STATE,batch.id,entry.id,action,note);
+    recoverHeldDecisions();
+  });
+  await ensureTrain(root,STATE,process.cwd(),git(["rev-parse","HEAD"]));
 }
 
 /**
@@ -603,6 +652,14 @@ async function underTheLock(sha: string, tree: string): Promise<void> {
   let result: Result | null = null;
   let announced = "", lastFailure = "", lastFailureAt = 0;
   while (!(result = resultOf(id))) {
+    const holds=heldLandings(STATE);
+    const held=heldForEntry(STATE,id,holds);
+    if(held) {
+      const actions=heldActions(held);
+      const message=`held${held.entry.id===id?"":` for prerequisite ${held.entry.sha.slice(0,12)}`}: ${held.batch.reason}; run ${held.batch.run}; operator: ${actions.retry} or ${actions.refuse}`;
+      if(announced!==message){say(message);announced=message;}
+      await sleep(250);continue;
+    }
     try {
       const owner = await ensureTrain(sharedCheckout(), STATE, tree, sha);
       if (owner.unit !== announced) { say(`waiting for disposition; train owner ${owner.unit}; log ${owner.trace}`); announced = owner.unit; }
@@ -668,7 +725,7 @@ function status(fields: Record<string, unknown>): void {
 }
 
 /** How a gate of one commit ended: green, or why not. */
-type Gated = { ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun"; message: string; required?: RequiredChecks };
+type Gated = { ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun" | "held"; message: string; required?: RequiredChecks };
 
 /**
  * tests.mjs prunes obsolete test executables after PASS. Keep its current set:
@@ -748,19 +805,51 @@ function gate(root: string, base: string, landing: string, members: string[], re
       CARGO_PROFILE_DEV_OPT_LEVEL: TEST_BUILD_OPT_LEVEL,
       ...(resource ? {NTS_GATE_LOCK_FD:"8"} : {}),
     });
-    const env=gateEnvironment(process.env,{run,owned}).env;
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);
     const affinity = launch.cpus === null ? launch.mechanism : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded; ${launch.mechanism}`;
     say(`gate affinity: ${affinity}`);
     say(`gating; log ${join(run, "gate.log")}`);
-    const gated = spawnSync(launch.command, launch.args, { cwd: root, env, stdio: resource ? resource.stdio("pipe") : ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
-    writeFileSync(join(run,"process.json"),JSON.stringify({status:gated.status,signal:gated.signal,error:gated.error?.message??null},null,2)+"\n");
-    writeFileSync(join(run, "gate.log"), `land: gate affinity: ${affinity}\n${gated.stdout ?? ""}${gated.stderr ?? ""}`);
-
-    const summaryPath = join(run, "summary.json");
-    if (!existsSync(summaryPath)) return { ok: false, run, state: "red", message: `the gate wrote no summary (exit ${gated.status}); see ${join(run, "gate.log")}` };
-    const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
-    if (summary.environment?.canonical !== true) return {ok:false,run,state:"red",message:"non-canonical or unrecorded environment is not landing evidence"};
+    const invoke = (attemptRun: string, retry?: string[]) => {
+      mkdirSync(attemptRun, { recursive: true });
+      if (!shadow) status({ state: "gating", commit: landing, base, owed, run: attemptRun, train: members });
+      const attemptEnv = gateEnvironment(process.env, { run: attemptRun, owned: { ...owned,
+        NTS_GATE_RUN_DIR: attemptRun, ...(retry ? { NTS_GATE_STEPS: retry.join(" ") } : {}) } }).env;
+      const processResult = spawnSync(launch.command, launch.args, { cwd: root, env: attemptEnv, stdio: resource ? resource.stdio("pipe") : ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+      writeFileSync(join(attemptRun,"process.json"),JSON.stringify({status:processResult.status,signal:processResult.signal,error:processResult.error?.message??null},null,2)+"\n");
+      writeFileSync(join(attemptRun, "gate.log"), `land: gate affinity: ${affinity}\n${processResult.stdout ?? ""}${processResult.stderr ?? ""}`);
+      const summaryPath = join(attemptRun, "summary.json");
+      let summary=null,summaryError:string|undefined;
+      try{summary=JSON.parse(readFileSync(summaryPath,"utf8"));}catch(error){summaryError=String(error);}
+      return { ...processResult, run: attemptRun, summary, summaryError };
+    };
+    const first = invoke(run);
+    if (!first.summary || !Array.isArray(first.summary.steps)) return { ok: false, run, state: "held", message: `gate measurement has no complete readable summary (exit ${first.status}): ${first.summaryError??"missing step results"}; see ${join(run, "gate.log")}` };
+    const observedCommit=String(first.summary.identities?.commit??"");
+    if(observedCommit.length<7||!landing.startsWith(observedCommit))return {ok:false,run,state:"held",message:`gate measurement names ${observedCommit||"no commit"}, not frozen ${short}`};
+    if (first.summary && !first.summary.requested) first.summary.requested = owed.steps === "all" ? first.summary.steps.map(row => row.name) : owed.steps;
+    if (first.summary.environment?.canonical !== true) return {ok:false,run,state:"red",message:"non-canonical or unrecorded environment is not landing evidence"};
+    const retried = retryInstruments(first, (retry, attempt) => invoke(join(run, `attempt-${attempt}`), retry), rows => {
+      const reason = rows.map(row => `${row.name}: ${row.reason ?? "instrument failure"}`).join("; ");
+      const admission = new Admission({ report: say });
+      let observed = false;
+      admitted("instrument", () => {
+        if (!observed) { observed = true; return { hold: reason }; }
+        return admission.open() ? { value: undefined } : { hold: reason + "; waiting for memory admission" };
+      }, held => {
+        status({ ...held, commit: landing, base, run, train: members });
+        say(`instrument hold ${held.age_s} s: ${held.reason}; same frozen train, no baseline check or halving`);
+      });
+    });
+    const gated = retried;
+    const summary = retried.summary;
+    if (summary.attempts) {
+      // Keep the original runner evidence verbatim; this document only joins
+      // rows from explicit attempts of this exact frozen train.
+      copyFileSync(join(run, "summary.json"), join(run, "summary.attempt-1.json"));
+      writeFileSync(join(run, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
+    }
+    const held=(summary.steps??[]).filter(needsOperatorHold);
+    if(held.length)return {ok:false,run,state:"held",message:held.map(row=>`${row.name}: ${row.reason??"measurement did not complete"}`).join("; ")};
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
     const acceptedSkips = new Set<string>((summary.steps ?? [])
       .filter((s: { accepted?: boolean }) => s.accepted === true)
@@ -796,8 +885,6 @@ function gate(root: string, base: string, landing: string, members: string[], re
         message: `green, but a platform this range touches never ran it:\n  ${notRun.slice(0, 5).join("\n  ")}\nbring its VM or toolchain up (the lane's vm.md) and land again`,
       };
     }
-    const named = String(summary.identities?.commit ?? "");
-    if (named.length < 7 || !landing.startsWith(named)) return { ok: false, run, state: "red", message: `the summary names ${named || "no commit"}, not ${short}` };
     const accepted = acceptUnrun.length > 0 ? `; accepted unrun: ${acceptUnrun.join(", ")} -- ${because}` : "";
     const byPolicy = [...new Set(platformLines.map(line => line.slice(0, line.indexOf(":"))).filter(name => policyUnrun.includes(name)))];
     const policyNote = byPolicy.length ? `; unrun accepted by ${laneConfig.platforms_unrun_ok_policy ?? "lanes.json policy"}: ${byPolicy.join(", ")}` : "";
@@ -818,17 +905,35 @@ export function runShadowGate(root: string, base: string, tip: string, checks: O
  * of more than one was red: the culprit is found by gating its first half
  * next, and nothing is answered yet.
  */
-type FrozenComposition = {base:string;tip:string;members:{entry:Entry;landing:string}[]};
+type FrozenComposition = {base:string;tip:string;generation?:string;members:{entry:Entry;landing:string}[]};
 type TrainCycle = {state:"done"|"halve";size:number};
+function durableTrainEntry(entry:Entry):Entry {
+  return admitted("queued submission",()=>{
+    try {
+      const path=join(QUEUE,`${entry.id}.json`),prior:Entry=existsSync(path)?JSON.parse(readFileSync(path,"utf8")):entry;
+      if(prior.id!==entry.id||prior.sha!==entry.sha)throw new Error("queued entry changed identity before gating");
+      const next:Entry={...prior,...entry,durable:true,required:unionRequired(prior.required??{steps:[],interop:null},entry.required??{steps:[],interop:null})};
+      durableRecord(path,next);rmSync(join(LEGACY_QUEUE,`${entry.id}.json`),{force:true});
+      return {value:next};
+    } catch(error) {return {hold:String(error)};}
+  },held=>{status(held);say(`queued submission held ${held.age_s} s: ${held.reason}`);});
+}
 function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maximum = TRAIN_MAX): TrainCycle {
   const base = git(["rev-parse", "main"], root);
   let tip = base;
   const members: { entry: Entry; landing: string }[] = [];
   const unavailable=existsSync(DISPOSITIONS)?readdirSync(DISPOSITIONS).filter(n=>n.endsWith(".json")).map(n=>JSON.parse(readFileSync(join(DISPOSITIONS,n),"utf8"))).filter(r=>r.state!=="landed"):[];
   const inTrain=new Set(train.map(e=>e.sha));
+  const held=heldLandings(STATE);
   if (resume?.base === base) { members.push(...resume.members); tip=resume.tip; }
   else for (const {entry,prerequisites,from} of compose(train,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0)) {
     const short = entry.sha.slice(0, 12);
+    const heldParent=held.find(row=>spawnSync("git",["merge-base","--is-ancestor",row.entry.sha,entry.sha],{cwd:root}).status===0&&!alreadyInMain(root,base,row.entry.sha));
+    if(heldParent){
+      durableRecord(join(STATE,"held-dependencies",`${entry.id}.json`),{hold:heldParent.batch.id,prerequisite:heldParent.entry.id});
+      say(`${short} (${entry.id}) deferred: prerequisite ${heldParent.entry.sha.slice(0,12)} is held; ${heldParent.batch.reason}`);continue;
+    }
+    rmSync(join(STATE,"held-dependencies",`${entry.id}.json`),{force:true});
     if(members.length>=maximum){say(`${short} (${entry.id}) deferred: train capacity ${maximum} compatible members`);continue;}
     const failed=prerequisites.find(p=>resultOf(p.id)&&resultOf(p.id)!.state!=="landed");
     const missing=unavailable.find(r=>r.entry.sha!==entry.sha&&!inTrain.has(r.entry.sha)&&spawnSync("git",["merge-base","--is-ancestor",r.entry.sha,entry.sha],{cwd:root}).status===0&&!alreadyInMain(root,base,r.entry.sha));
@@ -855,10 +960,13 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     tip = landing;
   }
   if (members.length === 0) return {state:"done",size:members.length};
+  // Before gating, move legacy members to the store old waiters never read.
+  // A later instrument hold cannot be picked up again by an old lander.
+  for(const member of members)member.entry=durableTrainEntry(member.entry);
   const shas = members.map((m) => m.entry.sha.slice(0, 12));
   if (members.length > 1) say(`a train of ${members.length}: ${shas.join(" ")}`);
 
-  const frozen = {base,tip,members};
+  const frozen = {base,tip,members,generation:resume?.generation??randomUUID()};
   if (process.env.NTS_LAND_TRAIN_UNIT) {
     durableRecord(FROZEN,{version:1,phase:"running",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum});
     const ref=`refs/archive/land-trains/${process.env.NTS_LAND_TRAIN_UNIT}/frozen-${tip}`;
@@ -873,8 +981,18 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     mkdirSync(STATE, { recursive: true });
     appendFileSync(join(STATE, "trains.tsv"), `${new Date(started).toISOString()}\t${members.length}\t${verdict}\t${Math.round((Date.now() - started) / 1000)}\t${tip.slice(0, 12)}\t${shas.join(",")}\n`);
   };
+  const holdBatch=(measurement:{run:string;message:string}):TrainCycle=>{
+    admitted("held-batch journal",()=>{
+      try{return {value:holdLandings(STATE,{tip,generation:frozen.generation,run:measurement.run,reason:measurement.message,entries:members.map(member=>member.entry)})};}
+      catch(error){return {hold:String(error)};}
+    },held=>{status(held);say(`held-batch journal held ${held.age_s} s: ${held.reason}`);});
+    status({state:"held",commit:tip,base,run:measurement.run,train:shas,reason:measurement.message});
+    say(`held only this train's ${members.length} member(s): ${measurement.message}; no attribution or halving`);
+    return {state:"done",size:members.length};
+  };
   if (!gated.ok) {
     record(gated.state);
+    if(gated.state==="held")return holdBatch(gated);
     status({ state: gated.state, commit: tip, base, run: gated.run, train: shas });
     let inherited = gated.required;
     let redOnMain: string[] = [];
@@ -895,6 +1013,7 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
       };
       say(`checking failed steps on main (${base.slice(0, 12)}): ${suspect.steps.join(" ")}`);
       const baseline = gate(root, base, base, [], { steps: [], interop: null }, suspect);
+      if(!baseline.ok&&baseline.state==="held")return holdBatch({...baseline,message:`baseline not measured: ${baseline.message}`});
       redOnMain = baseline.ok ? [] : baseline.required?.steps ?? suspect.steps;
       inherited = {
         steps: suspect.steps.filter(step => !redOnMain.includes(step)),
@@ -1005,15 +1124,20 @@ async function runController(root: string): Promise<void> {
     }
   },held=>{status(held);say(`verification journal held ${held.age_s} s: ${held.reason}; queued submissions are kept`);});
   drainReady(root);
-  const saved = existsSync(FROZEN) ? JSON.parse(readFileSync(FROZEN,"utf8")) : null;
+  await withTrainLaunchLock(STATE,()=>recoverHeldDecisions());
+  let saved = existsSync(FROZEN) ? JSON.parse(readFileSync(FROZEN,"utf8")) : null;
+  if(saved?.phase==="running"&&saved.composition&&wasHeldGeneration(STATE,saved.composition.generation)) {
+    durableRecord(FROZEN,{version:1,phase:"boundary",nextLimit:TRAIN_MAX});saved=null;
+  }
   const limit = saved?.nextLimit ?? TRAIN_MAX;
   const owner=trainOwner(STATE)!;
   const bootstrap=owner.bootstrap&&spawnSync("git",["cat-file","-e","main:tooling/lanes/train-service.ts"],{cwd:root}).status!==0?owner.bootstrap:null;
   // Interrupted members are immutable evidence. Requests made during their
   // run are honored only after that frozen run has completed.
+  const candidates=saved?.phase === "running"?[]:waiting().map(durableTrainEntry);
   let train: Entry[] = saved?.phase === "running"
     ? saved.entries.filter((entry:Entry)=>!resultOf(entry.id))
-    : compose(waiting(),(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0).map(p=>p.entry);
+    : compose(candidates,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0).map(p=>p.entry);
   if(bootstrap){
     if(saved?.composition?.members.some(member=>member.entry.sha!==bootstrap))fail("bootstrap cannot resume unrelated frozen members");
     for(const entry of train)if(entry.sha!==bootstrap)say(`${entry.sha.slice(0,12)} (${entry.id}) deferred: service bootstrap gates only ${bootstrap.slice(0,12)}`);
@@ -1024,13 +1148,15 @@ async function runController(root: string): Promise<void> {
   record({version:1,phase:"running",entries:train,nextLimit:limit,base:git(["rev-parse","main"],root),composition:saved?.phase==="running"?saved.composition:undefined});
   const result = runTrain(root,train,saved?.phase==="running"?saved.composition:undefined,limit);
   record({version:1,phase:"boundary",nextLimit:result.state === "halve"?Math.max(1,Math.floor(result.size/2)):TRAIN_MAX});
+  if(result.size===0){await retireTrainOwner(STATE);return;}
   refreshController(STATE);
   process.exitCode = 76;
 }
 
 async function main(): Promise<void> {
+  if(retryHeld||refuseHeld){if(retryHeld&&refuseHeld||!target||!because.trim())fail("use one of --retry-held or --refuse-held with an entry/commit and --because=<note>");await resolveHeld(sharedCheckout(),target,retryHeld?"retry":"refuse",because);return;}
   if(abandoning){if(!target)fail("--abandon-frozen needs the owner id");const run=argv.find(arg=>arg.startsWith("--run="))?.slice(6)??"";say(`operator abandonment recorded: ${await abandonFrozen(STATE,target,because,run)}`);return;}
-  if (withdrawing) { if (!target) fail("usage: land.ts --withdraw <commit|entry>"); requestWithdrawal(sharedCheckout(),target); return; }
+  if (withdrawing) { if (!target) fail("usage: land.ts --withdraw <commit|entry>"); await requestWithdrawal(sharedCheckout(),target); return; }
   if (process.env.NTS_LAND_LOCKED !== "1") {
     try {assertLandingEnvironment();reportLauncherDrops(process.env);} catch(error) {fail((error as Error).message);}
   }

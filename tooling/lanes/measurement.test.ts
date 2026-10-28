@@ -36,6 +36,7 @@ test("counted.sh's default perf child inherits the restriction, with an explicit
     const counted = join(dir, "tooling/bench/counted.sh");
     copyFileSync(new URL("../bench/counted.sh", import.meta.url), counted);
     copyFileSync(new URL("../gate/affinity.ts", import.meta.url), join(dir, "tooling/gate/affinity.ts"));
+    for(const file of ["tooling-slice.ts","step-result.ts"])copyFileSync(new URL("../gate/"+file,import.meta.url),join(dir,"tooling/gate",file));
     writeFileSync(join(dir, "target/bench/probe.jvm/Case.java"), "return nts.gen.Program.work(in0);\nprivate static volatile double in0 = 1;\n");
     writeFileSync(join(dir, "bin/javac"), "#!/bin/sh\nexit 0\n");
     writeFileSync(join(dir, "bin/perf"), `#!/bin/sh

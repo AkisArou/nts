@@ -1,4 +1,7 @@
+import {heldLandings,prepareHeldResolution} from "./held-landings.ts";
+import {queuedLandings} from "./landing-state.ts";
 import { hostEnvironment, launcherPolicyNames } from "../gate/canonical-environment.ts";
+import { toolingSliceArgs } from "../gate/tooling-slice.ts";
 import { spawnTest as processTest, waitFor } from "../gate/test-wait.ts";
 // land.ts against a scratch repository and a stand-in gate: the train.
 //
@@ -137,6 +140,7 @@ function scratch(): Scratch {
     CARGO_HOME: hostEnvironment(process.env).CARGO_HOME,
     RUSTUP_HOME: hostEnvironment(process.env).RUSTUP_HOME,
     NTS_LAND_HOME: home,
+    NTS_TOOLING_SLICE: process.env.NTS_TOOLING_SLICE,
     LAND_TEST_GATES: join(dir, "gates.log"),
     LAND_TEST_CONTROLS: join(dir,"controls.sh"),
     GIT_AUTHOR_NAME: "t",
@@ -190,7 +194,7 @@ function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; d
   const command=cpus?"taskset":process.execPath,args=cpus?["-c",cpus,process.execPath,LAND,"HEAD"]:[LAND,"HEAD"];
   const client=gateCommand(command,args);
   const controls=Object.entries(s.env).filter(([key,value])=>value!==undefined&&(/^(?:NTS_|LAND_TEST_|GIT_|NODE_OPTIONS$)/.test(key)||launcherPolicyNames({[key]:value}).length>0)).map(([key,value])=>`--setenv=${key}=${value}`);
-  const child=spawn("systemd-run",["--user","--wait","--pipe","--quiet","--collect",`--unit=${unit}`,`--working-directory=${tree}`,"--property=LimitCORE=0","--property=Nice=19",...systemdEnvironment(s.env),...controls,`--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,client.command,...client.args]);
+  const child=spawn("systemd-run",["--user","--wait","--pipe","--quiet","--collect",...toolingSliceArgs(s.env),`--unit=${unit}`,`--working-directory=${tree}`,"--property=LimitCORE=0","--property=Nice=19",...systemdEnvironment(s.env),...controls,`--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,client.command,...client.args]);
   let out = "";
   child.stdout?.on("data", (d) => (out += d));
   child.stderr?.on("data", (d) => (out += d));
@@ -1082,7 +1086,7 @@ function serviceSubmission(s: Scratch, tree: string): string {
   saveControls(s.env);
   const unit=`nts-test-land-submit-${randomUUID().slice(0,8)}`;ownUnits.push(unit);
   const client=gateCommand(process.execPath,[LAND,"HEAD"]);
-  const result=spawnTest("systemd-run",["--user","--collect",`--unit=${unit}`,`--working-directory=${tree}`,"--property=LimitCORE=0",...systemdEnvironment(s.env),`--setenv=NTS_LAND_HOME=${s.home}`,`--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,client.command,...client.args],{encoding:"utf8"});
+  const result=spawnTest("systemd-run",["--user","--collect",...toolingSliceArgs(s.env),`--unit=${unit}`,`--working-directory=${tree}`,"--property=LimitCORE=0",...systemdEnvironment(s.env),...(s.env.NTS_TOOLING_SLICE?[`--setenv=NTS_TOOLING_SLICE=${s.env.NTS_TOOLING_SLICE}`]:[]),`--setenv=NTS_LAND_HOME=${s.home}`,`--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,client.command,...client.args],{encoding:"utf8"});
   assert.equal(result.status,0,result.stderr);return unit;
 }
 function frozenBarrier(s: Scratch): {entered:string;release:string} {
@@ -1236,4 +1240,134 @@ test("a lander change refreshes the controller from main before the next train",
   await until("both upgraded dispositions",()=>states(s).length===2);
   const lines=readFileSync(versions,"utf8").trim().split("\n");assert.equal(lines[0],"version-one");assert.ok(lines.includes("version-two"),lines.join(" "));assert.equal(gates(s),2);
   const owner=JSON.parse(readFileSync(join(s.home,".cache/nts-land/train-owner.json"),"utf8"));assert.equal(run(s,s.root,["show",`${owner.sha}:tooling/lanes/land.ts`]).includes("version-two"),true);
+});
+
+test("a pressure-only train holds its members and retries the frozen step without baseline or halving", async () => {
+  const s = scratch();
+  const once = join(s.home, "pressure-once");
+  writeFileSync(join(s.root, "tooling/gate/pinned.sh"), controls(s, STAND_IN_GATE + reportContext + `
+node - "$NTS_GATE_RUN_DIR/summary.json" <<'PRESSURE'
+const fs=require("node:fs"),file=process.argv[2],once=${JSON.stringify(once)},summary=JSON.parse(fs.readFileSync(file));
+if(!fs.existsSync(once)) {
+ fs.writeFileSync(once,"first attempt");
+ summary.verdict="red";
+ summary.steps[0]={...summary.steps[0],verdict:"INSTRUMENT",reason:"system memory pressure; not a case verdict",instrument:{kind:"memory-pressure"}};
+ fs.writeFileSync(file,JSON.stringify(summary));
+ fs.writeFileSync(once+".summary",fs.readFileSync(file));
+ process.exitCode=1;
+}
+PRESSURE
+`));
+  run(s, s.root, ["add", "tooling/gate/pinned.sh"]); run(s, s.root, ["commit", "-q", "-m", "pressure stand-in"]);
+  const a = lane(s, "pressure-a", { "a.txt": "a\n" }), b = lane(s, "pressure-b", { "b.txt": "b\n" });
+  const results = await landTogether(s, [a, b]);
+  for (const result of results) assert.equal(result.status, 0, result.out);
+  const output = results.map(result => result.out).join("\n");
+  assert.match(output, /instrument hold .*same frozen train, no baseline check or halving/);
+  assert.doesNotMatch(output, /checking failed steps on main|gating its first half/);
+  assert.equal(gates(s), 2, "one original train plus one pressure retry, no baseline or half");
+  const pins = readFileSync(s.gates, "utf8").trim().split("\n").map(line => line.split(" ")[0]);
+  assert.equal(pins[0], pins[1], "both attempts use the exact frozen train");
+  assert.ok(onMain(s, "a.txt") && onMain(s, "b.txt"));
+  const directory = join(s.home, ".cache/nts-land/runs");
+  const runDir = join(directory, readdirSync(directory)[0]);
+  const composite = JSON.parse(readFileSync(join(runDir, "summary.json"), "utf8"));
+  assert.equal(composite.attempts.length, 2); assert.equal(composite.verdict, "green");
+  assert.deepEqual(readFileSync(join(runDir, "summary.attempt-1.json")), readFileSync(once + ".summary"), "original summary bytes are preserved");
+  assert.equal(JSON.parse(readFileSync(join(runDir, "summary.attempt-1.json"), "utf8")).steps[0].verdict, "INSTRUMENT");
+});
+
+test("a hung legacy train holds only its members, releases both locks and resolves through real operator actions",async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land"),allow=join(s.home,"allow-measurement");
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
+if [ -e "$NTS_GATE_TREE/HUNG" ] && [ ! -e '${allow}' ]; then
+ node - "$NTS_GATE_RUN_DIR/summary.json" <<'HUNG'
+const fs=require('node:fs'),file=process.argv[2],summary=JSON.parse(fs.readFileSync(file));
+summary.verdict='red';summary.steps[0]={...summary.steps[0],verdict:'NOT RUN',reason:'fixture file NOT RUN (hung)',instrument:{kind:'hung'}};
+fs.writeFileSync(file,JSON.stringify(summary));
+HUNG
+ exit 2
+fi
+`));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","hung stand-in"]);
+  const a=lane(s,"hung-a",{HUNG:"held\n"}),b=lane(s,"hung-b",{b:"held peer\n"}),c=lane(s,"unrelated",{c:"green\n"});
+  const stack=join(s.home,"Projects/nts-lanes/held-stack");
+  run(s,s.root,["worktree","add","-qb","held-stack",stack,run(s,a,["rev-parse","HEAD"])]);
+  writeFileSync(join(stack,"stack"),"dependent\n");run(s,stack,["add","stack"]);run(s,stack,["commit","-qm","stack"]);
+  const lock=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"));assert.ok(lock);let first:ReturnType<typeof land>,second:ReturnType<typeof land>,legacyId:string;
+  try {
+    first=land(s,a);second=land(s,b);
+    await until("two completed initial queue records",()=>!!first.record()&&!!second.record());
+    const entry=first.record()!;legacyId=entry.id;const pending=join(state,"pending",entry.id+".json");
+    const legacy={...JSON.parse(readFileSync(pending,"utf8"))};delete legacy.durable;delete legacy.unit;
+    mkdirSync(join(state,"queue"),{recursive:true});writeFileSync(join(state,"queue",entry.id+".json"),JSON.stringify(legacy));rmSync(pending);
+  }finally{lock.close();}
+  await until("the durable held batch",()=>heldLandings(state).length===2);
+  const held=heldLandings(state);
+  assert.equal(gates(s),1);assert.equal(states(s).length,0,"incomplete measurement never answers a member");
+  assert.equal(existsSync(join(state,"queue",legacyId!+".json")),false,"the legacy store cannot re-gate a held member");
+  const third=land(s,c),dependent=land(s,stack);
+  const thirdResult=await third.done;assert.equal(thirdResult.status,0,thirdResult.out);
+  await until("the held prerequisite blocks its descendant",()=>!!dependent.record()&&existsSync(join(state,"held-dependencies",dependent.record()!.id+".json")));
+  await until("the service retires with only held work",()=>JSON.parse(readFileSync(join(state,"train-owner.json"),"utf8")).phase==="retiring");
+  await until("both locks actually released after idle retirement",()=>{
+    const gate=GateResource.tryAcquire(join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"));if(!gate)return false;
+    try{const landing=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"));if(!landing)return false;landing.close();return true;}finally{gate.close();}
+  });
+  const view=queuedLandings(state);assert.equal(view.filter(row=>row.hold?.state==="held").length,3);
+  const heldA=held.find(row=>row.entry.sha===run(s,a,["rev-parse","HEAD"]))!,heldB=held.find(row=>row!==heldA)!;
+  // Simulate a crash after the durable retry intent but before queue effects.
+  prepareHeldResolution(state,heldA.batch.id,heldA.entry.id,"retry","operator retried");
+  writeFileSync(join(state,"frozen-train.json"),JSON.stringify({version:1,phase:"running",entries:heldA.batch.entries,composition:{tip:heldA.batch.tip,generation:heldA.batch.generation}}));
+  writeFileSync(allow,"recovered\n");
+  const retry=spawnTest(process.execPath,[LAND,"--retry-held",`${heldA.batch.id}:${heldA.entry.id}`,"--because=operator retried"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(retry.status,0,retry.stderr);
+  const refuse=spawnTest(process.execPath,[LAND,"--refuse-held",`${heldB.batch.id}:${heldB.entry.id}`,"--because=operator declined"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(refuse.status,0,refuse.stderr);
+  const [resultA,resultB,resultD]=await Promise.all([first!.done,second!.done,dependent.done]);
+  assert.equal(resultA.status,0,resultA.out);assert.equal(resultD.status,0,resultD.out);
+  assert.equal(resultB.status,1,resultB.out);assert.match(resultB.out,/operator declined/);
+  assert.ok(onMain(s,"HUNG")&&onMain(s,"stack")&&onMain(s,"c"));assert.equal(onMain(s,"b"),false);
+  assert.equal(gates(s),3,"one hung train, unrelated train, and retried stack; no baseline or halves");
+  assert.equal(heldLandings(state).length,0);
+  const replay=spawnTest(process.execPath,[LAND,"--refuse-held",`${heldB.batch.id}:${heldB.entry.id}`,"--because=operator declined"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(replay.status,0,replay.stderr);
+});
+
+test("an unmeasured baseline holds the frozen members without blaming main or halving",async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land");
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
+if [ ! -e "$NTS_GATE_TREE/RED" ]; then
+ node - "$NTS_GATE_RUN_DIR/summary.json" <<'BASELINE'
+const fs=require('node:fs'),file=process.argv[2],summary=JSON.parse(fs.readFileSync(file));summary.verdict='red';summary.steps[0]={...summary.steps[0],verdict:'INSTRUMENT',reason:'baseline tool unavailable',instrument:{kind:'tooling-setup'}};fs.writeFileSync(file,JSON.stringify(summary));
+BASELINE
+ exit 2
+fi
+`));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","unmeasured baseline"]);
+  const a=lane(s,"baseline-a",{RED:"actual assertion\n"}),b=lane(s,"baseline-b",{b:"green\n"});
+  const results=landTogether(s,[a,b]);
+  await until("baseline instrument hold",()=>heldLandings(state).length===2);
+  assert.equal(states(s).length,0);assert.equal(gates(s),2,"one real red, one unavailable baseline, no half");
+  assert.match(heldLandings(state)[0].batch.reason,/baseline not measured:.*baseline tool unavailable/);
+  for(const row of heldLandings(state)){
+    const r=spawnTest(process.execPath,[LAND,"--refuse-held",`${row.batch.id}:${row.entry.id}`,"--because=control finished"],{cwd:s.root,env:s.env,encoding:"utf8"});assert.equal(r.status,0,r.stderr);
+  }
+  for(const result of await results){assert.equal(result.status,1);assert.match(result.out,/control finished/);assert.doesNotMatch(result.out,/gating its first half|red on main/);}
+});
+
+for(const broken of ["missing","malformed","wrong-pin"] as const)test(`an unavailable ${broken} gate measurement holds instead of attributing a failure`,async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land");
+  const damage=broken==="missing"?'rm "$NTS_GATE_RUN_DIR/summary.json"':broken==="malformed"?'printf "{" > "$NTS_GATE_RUN_DIR/summary.json"':`node - "$NTS_GATE_RUN_DIR/summary.json" <<'PIN'
+const fs=require('node:fs'),file=process.argv[2],summary=JSON.parse(fs.readFileSync(file));summary.identities.commit='f'.repeat(40);fs.writeFileSync(file,JSON.stringify(summary));
+PIN`;
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+damage+"\nexit 2\n"));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","unavailable summary control"]);
+  const a=lane(s,"unmeasured-a",{a:"green\n"}),b=lane(s,"unmeasured-b",{b:"green\n"}),results=landTogether(s,[a,b]);
+  await until("the unavailable measurement hold",()=>heldLandings(state).length===2);
+  assert.equal(states(s).length,0);assert.equal(gates(s),1,"no baseline or half without a result");
+  for(const row of heldLandings(state)){
+    const r=spawnTest(process.execPath,[LAND,"--refuse-held",`${row.batch.id}:${row.entry.id}`,"--because=unavailable control complete"],{cwd:s.root,env:s.env,encoding:"utf8"});assert.equal(r.status,0,r.stderr);
+  }
+  for(const result of await results){assert.equal(result.status,1,result.out);assert.match(result.out,/unavailable control complete/);assert.doesNotMatch(result.out,/checking failed steps on main|gating its first half/);}
 });

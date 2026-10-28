@@ -1,3 +1,4 @@
+import {toolingSliceArgs} from "./tooling-slice.ts";
 // CPUs 4 and 5 are the two threads of the physical P-core reserved for
 // measurement. Restrict a gate's inherited set; never broaden an E-core job.
 import { readFileSync } from "node:fs";
@@ -89,7 +90,7 @@ function cpusetDelegated(pid: number): boolean {
 }
 
 function scopeArgs(cpus: string): string[] {
-  return ["--user", "--scope", "--quiet", "--collect", "--no-ask-password", "--expand-environment=no", `--property=AllowedCPUs=${cpus}`, "--"];
+  return ["--user", "--scope", ...toolingSliceArgs(), "--quiet", "--collect", "--no-ask-password", "--expand-environment=no", `--property=AllowedCPUs=${cpus}`, "--"];
 }
 
 type Scope = { kind: "scope" | "inherited-cpuset" | "best-effort"; reason: string };

@@ -1,3 +1,4 @@
+import {toolingSliceArgs} from "./tooling-slice.ts";
 // The inner loop: what a change owes before it is queued, run as fast as this
 // machine allows -- the gate's own core commands, not look-alikes.
 //
@@ -121,7 +122,7 @@ function heavy(what: string, memoryMax: string, command: string, args: readonly 
   admitted(what);
   const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), command, ...args];
   const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
-    ? ["systemd-run", "--user", "--scope", "-q", "-p", `MemoryMax=${memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
+    ? ["systemd-run", "--user", "--scope", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;
   const [program, ...rest] = scoped;
   return run(program, rest, env);

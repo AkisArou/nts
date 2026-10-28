@@ -28,16 +28,18 @@ ${failure ? "test('real failure beyond the TODOs', () => assert.fail(Array.from(
   // owed self-test. No nested gate runner or shared source tree is executed.
   writeFileSync(join(root, "bin/node"), `#!${process.execPath}
 const {spawnSync}=require('node:child_process');
-if(process.argv[2]==='--test'){
- const result=spawnSync(process.execPath,['--test',process.env.TEST_FIXTURE],{stdio:'inherit'});
+if(process.argv[2]==='--test'||process.argv[2]==='tooling/gate/tooling-runner.ts'){
+ const code="import {runScopedTooling} from "+JSON.stringify(process.env.TEST_RUNNER)+";process.exitCode=(await runScopedTooling([process.env.TEST_FIXTURE],{fixture:true})).status";
+ const result=spawnSync(process.execPath,['--input-type=module','-e',code],{stdio:'inherit'});
  process.exitCode=result.status??1;
-}else if(process.argv[2]!=='tooling/gate/owed.mjs')process.exitCode=99;
+}else if(!process.argv.includes('tooling/gate/owed.mjs'))process.exitCode=99;
 `, { mode: 0o755 });
   const script = join(root, "wrapper.sh");
   writeFileSync(script, wrapper + "\ntooling_tests\n");
   const env: NodeJS.ProcessEnv = {
     ...process.env, PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: join(root, "tmp"),
     NTS_GATE_RUN_DIR: runDirectory ? join(root, "run") : "", TEST_FIXTURE: fixture,
+    TEST_RUNNER: new URL("./tooling-runner.ts", import.meta.url).href,
     FORCE_COLOR: color ? "1" : "0",
   };
   // This is an independent reporter fixture, not a worker of this test file.

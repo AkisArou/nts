@@ -100,7 +100,10 @@ async function status(json: boolean, deep = false): Promise<void> {
   if(!json){
     console.log(`gate: ${marker()??"free"}`);
     if(l)console.log(`landing: ${l.state}; holder ${l.holder_unit??"legacy unit unknown"}; members ${Array.isArray(l.train)?l.train.join(" "):"none"}`);
-    console.log(`queued: ${q.length}`);for(const entry of q)console.log(`  ${entry.sha} ${entry.waitingMin} min ${entry.withdrawalRequested?"withdrawal requested ":""}${entry.tree}`);
+    console.log(`queued: ${q.length}`);for(const entry of q){
+      console.log(`  ${entry.sha} ${entry.waitingMin} min ${entry.withdrawalRequested?"withdrawal requested ":""}${entry.tree}`);
+      if(entry.hold){console.log(`    ${entry.hold.state}: ${entry.hold.reason}${entry.hold.run?`; run ${entry.hold.run}`:""}`);if(entry.hold.actions)console.log(`    ${entry.hold.actions.retry}\n    ${entry.hold.actions.refuse}`);}
+    }
   }
   let trees:RegisteredWorktree[]=[],registryError:string|undefined;
   try{const registry=gitWorktreeRegistry(process.cwd());root=registry.root;trees=registry.trees;}catch(error){registryError=String(error);}

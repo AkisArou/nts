@@ -375,17 +375,20 @@ fi
 # does; the lines are printed in FLOOR order afterwards, as they always were.
 judge() {
   module=$1
-  out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
-    timeout 1800 tooling/gate/token.sh bash tooling/conformance/build.sh "$module" 2>&1)
+  NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
+    timeout 1800 tooling/gate/token.sh bash tooling/conformance/build.sh "$module" > "$addon_logs/$module.build.log" 2>&1
+  build_status=$?
+  printf '%s\n' "$build_status" > "$addon_logs/$module.build.status"
+  out=$(cat "$addon_logs/$module.build.log")
   case $out in *"reused the emission in "*) : > "$verdicts/$module.reused" ;; esac
-  if printf '%s' "$out" | grep -q 'bytes$'; then
+  if [ "$build_status" -eq 0 ] && printf '%s' "$out" | grep -q 'bytes$'; then
     # Compiling is not loading, and the difference is not academic. `dgram`
     # compiled, linked, and failed at `require()` with
     # `undefined symbol: nts_net_default_auto_select_family` -- a binding whose C
     # exists in `net/net.c` and was not being linked into a module that imports
     # `net`'s TypeScript. A shared object resolves lazily, so nothing before the
     # load says a word, and this floor called it a pass for a day.
-    if node -e 'require(process.argv[1])' "$out_dir/$module.node" > /dev/null 2>&1; then
+    if node -e 'require(process.argv[1])' "$out_dir/$module.node" > "$addon_logs/$module.load.log" 2>&1; then
       # Loading is a weaker statement than it reads, and this line used to be
       # the whole of it.
       #
@@ -449,8 +452,7 @@ judge() {
       fi
     else
       echo "BUILDS BUT DOES NOT LOAD"
-      node -e 'require(process.argv[1])' "$out_dir/$module.node" 2>&1 |
-        head -1 | sed 's/^/                         /'
+      head -1 "$addon_logs/$module.load.log" | sed 's/^/                         /'
       judged=fail
     fi
     return
@@ -496,6 +498,12 @@ judge() {
 
 jobs=${NTS_ADDON_JOBS:-${NTS_GATE_JOBS:-4}}
 verdicts=$(mktemp -d)
+if [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
+  addon_logs="$NTS_GATE_RUN_DIR/addons-build"
+  mkdir -p "$addon_logs"
+else
+  addon_logs=$(mktemp -d "${TMPDIR:-$HOME/.cache}/nts-addon-build.XXXXXX")
+fi
 # The sibling objects every module links, compiled once for this run (see
 # build.sh); fresh per run, so nothing carries over from another tree or day.
 NTS_ADDON_SIBLING_CACHE=$(mktemp -d)
@@ -523,7 +531,11 @@ for module in $FLOOR; do
   cat "$verdicts/$module.out"
   case $(cat "$verdicts/$module.verdict" 2>/dev/null) in
     built) built=$((built + 1)) ;;
-    fail) failures=$((failures + 1)) ;;
+    fail)
+      failures=$((failures + 1))
+      echo "                         raw build output: $addon_logs/$module.build.log (exit $(cat "$addon_logs/$module.build.status"))"
+      [ ! -f "$addon_logs/$module.load.log" ] || echo "                         raw load output: $addon_logs/$module.load.log"
+      ;;
     *)
       # A module whose judging printed no verdict was not judged: count it as
       # a failure rather than let the floor shrink by one unnoticed.

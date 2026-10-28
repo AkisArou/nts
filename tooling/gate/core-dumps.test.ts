@@ -10,6 +10,11 @@ test("manual gate runs and individual steps disable cores, with an explicit debu
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   mkdirSync(join(root, "bin"));
+  mkdirSync(join(root, "run"));
+  const upstreamRun=join(root,"upstream");mkdirSync(upstreamRun);
+  const upstreamLog=join(upstreamRun,"tooling-tests.raw.log"),sentinel="retained parent transcript\n";
+  writeFileSync(upstreamLog,sentinel);
+  const upstream={...process.env,NTS_GATE_RUN_DIR:upstreamRun};
   const script = join(root, "tooling/gate/all.sh");
   writeFileSync(script, readFileSync(new URL("./all.sh", import.meta.url)));
   // Observe the limit inherited by a gate child, without running any builds.
@@ -19,10 +24,11 @@ test("manual gate runs and individual steps disable cores, with an explicit debu
   const observed = join(root, "limit");
   const hard = spawnSync("sh", ["-c", "ulimit -Hc"], { encoding: "utf8" }).stdout.trim();
   for (const args of [[], ["--call", "tooling"]]) for (const enabled of [false, true]) {
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: root, CORE_LIMIT_OBSERVED: observed };
+    const env: NodeJS.ProcessEnv = { ...upstream, PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: root, NTS_GATE_RUN_DIR: join(root,"run"), CORE_LIMIT_OBSERVED: observed };
     delete env.NTS_COREDUMPS;
     if (enabled) env.NTS_COREDUMPS = "1";
     const result = spawnSync("sh", [script, ...args], { env, encoding: "utf8" });
+    assert.equal(readFileSync(upstreamLog,"utf8"),sentinel,"a copied gate step must not truncate its parent run's transcript");
     // A default landing unit has a zero hard limit. Debugging then requires
     // the opted-in unit too; a child cannot silently bypass the parent's cap.
     if (enabled && hard === "0") {

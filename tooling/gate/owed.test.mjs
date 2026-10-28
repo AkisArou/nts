@@ -547,6 +547,15 @@ test("the C backend and every runtime module owe C validation", () => {
   }
 });
 
+test("native code generation owes actual addon builds on every landing", () => {
+  for (const path of ["compiler/codegen/c/src/emit/constants.rs", "compiler/codegen/napi/src/lib.rs", "compiler/codegen/common/src/lib.rs"]) {
+    assert.ok(stepsFor(path).includes("addons"), `${path} emits or supplies addon code`);
+  }
+  for (const path of ["compiler/codegen/llvm/src/lib.rs", "compiler/codegen/jvm/src/lib.rs"]) {
+    assert.ok(!stepsFor(path).includes("addons"), `${path} is not selected by the C addon builder`);
+  }
+});
+
 test("an example's nts.config.ts owes config, new or changed, interop's too", () => {
   owes("tests/programs/strings/nts.config.ts", ["config"]);
   superset(changeOwes([{ path: "tests/programs/a-new-one/nts.config.ts", added: true }, { path: "tests/programs/a-new-one/tsconfig.json", added: true }]), ["config"], "a new example with a config");

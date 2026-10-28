@@ -1,3 +1,4 @@
+import {toolingSliceArgs} from "../gate/tooling-slice.ts";
 import { assertLandingEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Queue an immutable submission in a systemd user unit with the gate's environment.
 // Run from a login shell: node tooling/lanes/land-unit.ts <commit> <name>
@@ -53,13 +54,14 @@ try {
   const after=[collector.command,...collector.args].map(systemdArgument).join(" ");
   const client=gateCommand(process.execPath,[land,sha]);
   checked("systemd-run", [
-    "--user", "--collect", "--quiet", `--unit=${unit}`, `--working-directory=${tree}`,
+    "--user", "--collect", "--quiet", ...toolingSliceArgs(), `--unit=${unit}`, `--working-directory=${tree}`,
     `--property=StandardOutput=append:${log}`, `--property=StandardError=append:${log}`,
     "--property=LimitCORE=0",
     `--property=ExecStopPost=${after}`,
     `--setenv=NTS_LAND_AUTHOR_BRANCH=${authorBranch}`,
     `--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,
     ...(process.env.NTS_LAND_AUTHOR_ADDRESS ? [`--setenv=NTS_LAND_AUTHOR_ADDRESS=${process.env.NTS_LAND_AUTHOR_ADDRESS}`] : []),
+    ...(process.env.NTS_TOOLING_SLICE?[`--setenv=NTS_TOOLING_SLICE=${process.env.NTS_TOOLING_SLICE}`]:[]),
     ...systemdEnvironment(), client.command, ...client.args,
   ], root);
   manifest.preparingPid=null;recordManifest();
