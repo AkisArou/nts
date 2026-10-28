@@ -193,21 +193,21 @@ export class BodyState {
     const reader = this.stream.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
-    try {
-      while (true) {
-        const result = await reader.read();
-        if (result.done) return concatBytes(chunks, total);
-        if (!(result.value instanceof Uint8Array)) {
-          throw new TypeError("Response body stream chunks must be Uint8Array values");
-        }
-        total += result.value.length;
-        if (total > this.policy.maxConsumeBytes)
-          throw new LimitError("Body consumption exceeded configured limit");
-        chunks.push(result.value);
+    while (true) {
+      const result = await reader.read();
+      if (result.done) return concatBytes(chunks, total);
+      if (!(result.value instanceof Uint8Array)) {
+        throw new TypeError("Response body stream chunks must be Uint8Array values");
       }
-    } catch (error) {
-      reader.cancel(error).catch(() => {});
-      throw error;
+      total += result.value.length;
+      if (total > this.policy.maxConsumeBytes) {
+        const error = new LimitError("Body consumption exceeded configured limit");
+        // Cancellation belongs to this configured resource policy, not Fetch's
+        // read-all-bytes failure steps for a malformed chunk or source error.
+        void reader.cancel(error).catch(() => {});
+        throw error;
+      }
+      chunks.push(result.value);
     }
   }
 }
