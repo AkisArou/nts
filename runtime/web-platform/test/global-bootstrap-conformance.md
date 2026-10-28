@@ -1,5 +1,8 @@
 # Explicit source-global bootstrap
 
+Prepared on [global-error PR #43](https://github.com/AkisArou/nts/pull/43),
+`chatgpt/global-error-handlers` at `f52f77a56294c30f79ef804b654deb514279012c`.
+
 ## What the new entry point does
 
 `WebPlatformRuntime.bootstrapGlobals(capabilities)` prepares the canonical
@@ -95,9 +98,8 @@ automatic Promise rejection tracking.
 
 The source module exports `WebPlatformGlobalBindings` and the types
 `WebPlatformGlobalCapabilities`, `WebPlatformGlobalHooks` and
-`WebPlatformGlobalBootstrap`. Provider-barrel routing is handled by the stack's
-integration owner; this small change does not edit that barrel or unrelated
-API implementations.
+`WebPlatformGlobalBootstrap`. The provider barrel routes these values/types through its stable entry point.
+This small change does not edit unrelated API implementations.
 
 ## Focused evidence
 
@@ -165,3 +167,43 @@ The stacked full gate belongs to the integration owner. Actual native global
 installation, callback/settings machinery, Promise hooks, epoch correlation,
 native coarsening and compilation with nts remain **not verified** by these
 source-host controls.
+
+## Final combined validation
+
+Both strict TypeScript projects pass on the complete stack. The full
+ordinary-node gate exits zero: **5,150 tests; 4,825 passed, 0 failed, 325
+skipped**. Its broader upstream runner records **2,772 passed, 0 failed, 45
+not applicable**. The compiled axis explicitly skips because the compiler
+is absent. Source/test pins and this new gate's log hash are recorded separately
+from the source-area baseline, review regressions and sabotage evidence.
+
+The shared test tsconfig and check.sh each gain one test entry. No shared
+harness behavior changes in this bootstrap branch. The maintainer-owned
+100 ms adapter control and the FileReader capability dependencies are unchanged.
+
+## Publication status and exclusive bootstrap ownership
+
+This is a prepared branch, not a second open bootstrap PR. The user's handoff
+requires a small PR of its own for `src/provider/web-platform-runtime.ts` and
+forbids another open PR from touching that file at the same time.
+[Web Crypto PR #41](https://github.com/AkisArou/nts/pull/41) is currently open
+and touches it, at head `0ce2ed7a039878f15780a2b2666b1bc057933276` on
+`chatgpt/webcrypto-runtime`. Therefore this branch's PR must wait until that
+ownership is released, or until the user explicitly permits overlapping PRs.
+The six item PRs (A5 and B6–B10) are already published in order.
+
+PR #41's runtime change supplies an optional Crypto provider and a `crypto`
+instance. Its final combined merge with this branch has **not been verified**;
+the measurements above belong to the #43 stack and do not include the separate
+Crypto stack. Before opening the bootstrap PR, reconcile any landed runtime and
+barrel changes, rerun the relevant gates, and use #43's branch as the base while
+it remains open (or main after the dependency has landed). No native capability
+implementation or actual global installation is claimed by this branch.
+
+## Published validation source
+
+The evidence retains the actual local source pin. Its published counterpart is
+[commit `57af5d6c5dee`](https://github.com/AkisArou/nts/commit/57af5d6c5dee5c94106f64c7f0009bc4c2d0ddd6),
+with identical Git tree `310baeb82b49923eba92d2591c30e928ceb35582`. Later report
+commits do not change the tested source or transfer these measurements to a
+different candidate.

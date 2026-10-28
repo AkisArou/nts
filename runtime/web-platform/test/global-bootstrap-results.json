@@ -126,5 +126,32 @@
   "nativeIntegration": "not verified: actual globals, canonical field access, callback context/cleanup, Promise slots/checkpoint, URL canonicalization, epoch correlation and native coarsening",
   "compiledNts": "not verified; maintainers own the compiled gate",
   "wholeSuite": "not run in this internal worktree; parent integration owns the final combined gate",
-  "published": false
+  "published": false,
+  "stackValidation": {
+    "basePullRequest": 43,
+    "baseCommit": "f52f77a56294c30f79ef804b654deb514279012c",
+    "sourceCommit": "205e0ec65811091e5203d6a526b8d3012f1f8307",
+    "sourceTree": "310baeb82b49923eba92d2591c30e928ceb35582",
+    "fullGate": {
+      "exitCode": 0,
+      "tests": 5150,
+      "pass": 4825,
+      "fail": 0,
+      "skipped": 325,
+      "upstreamPass": 2772,
+      "upstreamFail": 0,
+      "upstreamNotApplicable": 45
+    },
+    "strictProjects": "source and WPT pass",
+    "compiled": "not verified; compiler absent",
+    "logSHA256": "5231e7ef30eff00459d586d2ac979db02e44a6eb5e5d2cd80f18a14d32c31513",
+    "publishedSourceCommit": "57af5d6c5dee5c94106f64c7f0009bc4c2d0ddd6",
+    "publishedSourceTree": "310baeb82b49923eba92d2591c30e928ceb35582"
+  },
+  "publication": {
+    "status": "prepared branch; PR not opened while #41 owns the bootstrap file",
+    "blockingPullRequest": 41,
+    "blockingHead": "0ce2ed7a039878f15780a2b2666b1bc057933276",
+    "combinedCryptoStack": "not verified"
+  }
 }
