@@ -57,6 +57,34 @@ Fetch-standard limits; an embedder may raise either limit or set it to `Infinity
 explicitly. A coding must not be advertised unless the provider's decoder validates
 its format, checksum, and trailer as applicable.
 
+`src/provider/compression.ts` defines the synchronous native streaming capability
+for `gzip`, `deflate`, and `deflate-raw`. Its contexts consume a whole input chunk
+per call and support normal processing, synchronous flush, finish, reset, and
+bounded output. Framing, DEFLATE, CRC-32, Adler-32, and gzip header/trailer
+validation belong to the provider. It returns failures as values and reports
+unconsumed trailing input so shared code can deliver valid output before the
+specified error. The same raw-DEFLATE mode supports RFC 7692 without moving
+WebSocket negotiation, tail handling, or context-takeover policy into native code.
+
+The canonical `CompressionStream` and `DecompressionStream` classes in
+`src/compression/compression-stream.ts` implement the
+[Compression Standard §§2–5](https://compression.spec.whatwg.org/) using the shared
+`TransformStream`. Internal embedding factories supply their capability; ordinary
+public construction and the public/provider barrel exports await runtime assembly
+integration. The classes are not yet exposed as Web globals. This staged boundary
+keeps the existing open runtime-assembly and barrel changes separate. Brotli is
+outside this implementation's three-format scope.
+
+The compression test provider lives only in `test/node-compression-provider.ts`
+and calls `node:zlib`'s synchronous native streaming handle on the pinned Node 24
+host. Native strict end handling prevents concatenated gzip members and ignored
+trailing bytes. No compression primitive or checksum is implemented in shared
+TypeScript. Focused tests cover both the stream algorithms and the reusable
+capability; the unedited WPT `compression/` import follows the shared adapter's
+landing. Descriptor-only and patched-intrinsic-accessor cases are left out under
+the cloud-agent rules. Migrating WebSocket's existing provider is a separate change
+after the realtime stack lands.
+
 `WebSocket` and `WebSocketStream` share one URL, protocol-offer, close-code,
 and close-reason conversion layer and the same provider `WebSocketSession`.
 `WebSocketStream` is implemented directly on that session rather than by
