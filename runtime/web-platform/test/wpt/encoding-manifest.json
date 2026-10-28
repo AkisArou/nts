@@ -1,0 +1,1680 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+    "common": "dbd648158d337580885e70a54f929daf215211a0",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "nodeCompatibilityContext": {
+    "version": "v24.20.0",
+    "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+    "versionsURL": "https://github.com/nodejs/node/blob/v24.20.0/test/fixtures/wpt/versions.json",
+    "statusFiles": [
+      "https://github.com/nodejs/node/blob/v24.20.0/test/wpt/status/encoding.json"
+    ],
+    "note": "All selected fixture and helper bytes are verified against the upstream Git tree at the declared directory revision, as well as the local Node 24.20 fixture copy."
+  },
+  "fixtures": [
+    {
+      "path": "encoding/api-basics.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-basics.any.js",
+      "sha256": "275fd8bc9bfa775c9b216720851e5ddc257aa74d34c5381d833547188e1e6618",
+      "gitBlob": "768f8159313ece26042dbe20f8894d5c37c3aa48",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6
+    },
+    {
+      "path": "encoding/api-invalid-label.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-invalid-label.any.js",
+      "sha256": "a1ecb84af46501f1fbd585224c3361508ec0689e7dfca0d4f04cb281b3479955",
+      "gitBlob": "d88f4ae780d3723e4c30bae81d15528c9faa4fd4",
+      "format": "javascript",
+      "support": [
+        "encoding/resources/encodings.js",
+        "common/subset-tests.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3421,
+      "blockedTests": {},
+      "expectedRunnableTests": 3421,
+      "interpretationNote": "The empty adapter location.search selects all 3,421 registrations, combining the unchanged file’s four query variants. Rejection of invalid labels does not establish support for the underlying valid legacy encoding."
+    },
+    {
+      "path": "encoding/api-replacement-encodings.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-replacement-encodings.any.js",
+      "sha256": "0401e4275880ed9d652059d594fa382d4bf11d5e5bbb64b24b5aa238d9dd5e87",
+      "gitBlob": "9031cf6638cad850cc26f92a0df829ba4079eb20",
+      "format": "javascript",
+      "support": [
+        "encoding/resources/encodings.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6
+    },
+    {
+      "path": "encoding/api-surrogates-utf8.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-surrogates-utf8.any.js",
+      "sha256": "fe85f6e4f765ee54e3ddecf0407b9d612d978df211b974a99f72ad2a3cfdbab9",
+      "gitBlob": "52d297314940413151667dd60d03bcd154a0b23c",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6
+    },
+    {
+      "path": "encoding/encodeInto.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/encodeInto.any.js",
+      "sha256": "b2c34ea99026d067f5130159ad09c4be48db7a17613047410b8f2079b67656d3",
+      "gitBlob": "9ea36d23d08cca0d1c380015d415de2abec95f2a",
+      "format": "javascript",
+      "support": [
+        "common/sab.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 111,
+      "blockedTests": {
+        "encodeInto() and a detached output buffer": {
+          "category": "compiler-capability",
+          "reason": "Requires compiler-owned MessageChannel/MessagePort transfer. The ordinary-node package provider exposes no canonical MessageChannel, so this unchanged case is registered as a compiler capability dependency. Node messaging classes and fabricated detachment are not substituted. Direct ArrayBuffer transfer can be covered separately by source policy controls; it does not execute this WPT case."
+        }
+      },
+      "expectedRunnableTests": 110
+    },
+    {
+      "path": "encoding/textdecoder-arguments.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-arguments.any.js",
+      "sha256": "55d636e4a80128ac5b04dd77fb41a9ba1377ff7f6909d2fa82fdd0d412641828",
+      "gitBlob": "2d137b7aa37e15dbb4a93315f616891fee01a6b2",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3
+    },
+    {
+      "path": "encoding/textdecoder-byte-order-marks.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-byte-order-marks.any.js",
+      "sha256": "5bdcdd9a741781da5bee2ed6053d283fc88b985d24c199f485df75265ce9cfa4",
+      "gitBlob": "31350fdf689ed6e8ab277eb0bfdaa7a068d02acb",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3
+    },
+    {
+      "path": "encoding/textdecoder-copy.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-copy.any.js",
+      "sha256": "ea6c797666f6159b68a7525a47a5cc07fdae352dd5f3ee438ac0832ea50b95db",
+      "gitBlob": "61de4142bf27a25df5e6dfb0395c9eb392e58334",
+      "format": "javascript",
+      "support": [
+        "common/sab.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2
+    },
+    {
+      "path": "encoding/textdecoder-eof.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-eof.any.js",
+      "sha256": "98b03ab5d6efff3382ca2d55900738dfc0201859e2c012d2e215d6e39bc59965",
+      "gitBlob": "e41e326aace2440f9f46969bbce6d82c1e582507",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2
+    },
+    {
+      "path": "encoding/textdecoder-fatal-streaming.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-fatal-streaming.any.js",
+      "sha256": "5c2bd29cc3a486bcbcf8fcae803ccff3cc627733ac2e914f59f3cb6779d6d576",
+      "gitBlob": "9043b43eae29aa6fe6a593d0f89e7b176b32481e",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2
+    },
+    {
+      "path": "encoding/textdecoder-fatal.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-fatal.any.js",
+      "sha256": "a07b3592ac50c16c7ce226047680ff7b2e28cb03e6edda88cab454ec5eb43dd0",
+      "gitBlob": "054b35f21f488795a5d0559bd8ea1fdb243099ae",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 36,
+      "blockedTests": {},
+      "expectedRunnableTests": 36
+    },
+    {
+      "path": "encoding/textdecoder-ignorebom.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-ignorebom.any.js",
+      "sha256": "260c4c837d6886bd77d553dd48f0abd8b7f8bb74c68fa341e89424e32a358233",
+      "gitBlob": "e825698ba405230d90da085e6fae70c364cbec16",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-labels.any.js",
+      "sha256": "be155d59592f430d7fcc0827d64a0c39e00a56e8c83323127178e6e18113654f",
+      "gitBlob": "efc4ae2d2ea586cf15d2e89369c9bb337b765cfa",
+      "format": "javascript",
+      "support": [
+        "encoding/resources/encodings.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 222,
+      "blockedTests": {
+        "866 => IBM866": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp866 => IBM866": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csibm866 => IBM866": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ibm866 => IBM866": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin2 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-2 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-101 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-2 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88592 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-2 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-2:1987 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l2 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "latin2 => ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin3 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-3 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-109 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-3 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88593 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-3 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-3:1988 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l3 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "latin3 => ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin4 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-4 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-110 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-4 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88594 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-4 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-4:1988 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l4 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "latin4 => ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatincyrillic => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cyrillic => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-5 => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-144 => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-5 => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88595 => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-5 => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-5:1988 => ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "arabic => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "asmo-708 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csiso88596e => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csiso88596i => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatinarabic => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ecma-114 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-6 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-6-e => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-6-i => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-127 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-6 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88596 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-6 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-6:1987 => ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatingreek => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ecma-118 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "elot_928 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "greek => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "greek8 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-7 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-126 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-7 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88597 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-7 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-7:1987 => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "sun_eu_greek => ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csiso88598e => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatinhebrew => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "hebrew => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-8 => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-8-e => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-138 => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-8 => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88598 => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-8 => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-8:1988 => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "visual => ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csiso88598i => ISO-8859-8-I": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-8-i => ISO-8859-8-I": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "logical => ISO-8859-8-I": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin6 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-10 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-157 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-10 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso885910 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l6 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "latin6 => ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-13 => ISO-8859-13": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-13 => ISO-8859-13": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso885913 => ISO-8859-13": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-14 => ISO-8859-14": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-14 => ISO-8859-14": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso885914 => ISO-8859-14": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin9 => ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-15 => ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-15 => ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso885915 => ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-15 => ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l9 => ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-16 => ISO-8859-16": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-16 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cskoi8r => KOI8-R": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "koi => KOI8-R": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "koi8 => KOI8-R": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "koi8-r => KOI8-R": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "koi8_r => KOI8-R": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "koi8-ru => KOI8-U": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-U codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "koi8-u => KOI8-U": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-U codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csmacintosh => macintosh": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "mac => macintosh": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "macintosh => macintosh": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-mac-roman => macintosh": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "dos-874 => windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-11 => windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-11 => windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso885911 => windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "tis-620 => windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-874 => windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1250 => windows-1250": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1250 => windows-1250": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1250 => windows-1250": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1251 => windows-1251": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1251 => windows-1251": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1251 => windows-1251": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ansi_x3.4-1968 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ascii => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1252 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp819 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin1 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ibm819 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-1 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-100 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-1 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88591 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-1 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-1:1987 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l1 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "latin1 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "us-ascii => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1252 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1252 => windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1253 => windows-1253": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1253 => windows-1253": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1253 => windows-1253": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1254 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csisolatin5 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-8859-9 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-148 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso8859-9 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso88599 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-9 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso_8859-9:1989 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "l5 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "latin5 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1254 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1254 => windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1255 => windows-1255": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1255 => windows-1255": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1255 => windows-1255": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1256 => windows-1256": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1256 => windows-1256": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1256 => windows-1256": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1257 => windows-1257": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1257 => windows-1257": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1257 => windows-1257": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cp1258 => windows-1258": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-1258 => windows-1258": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-cp1258 => windows-1258": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-mac-cyrillic => x-mac-cyrillic": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy x-mac-cyrillic codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-mac-ukrainian => x-mac-cyrillic": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy x-mac-cyrillic codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "chinese => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csgb2312 => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csiso58gb231280 => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "gb2312 => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "gb_2312 => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "gb_2312-80 => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "gbk => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-58 => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-gbk => GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "gb18030 => gb18030": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy gb18030 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "big5 => Big5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "big5-hkscs => Big5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cn-big5 => Big5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csbig5 => Big5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-x-big5 => Big5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cseucpkdfmtjapanese => EUC-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "euc-jp => EUC-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-euc-jp => EUC-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csiso2022jp => ISO-2022-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-2022-jp => ISO-2022-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csshiftjis => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ms932 => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ms_kanji => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "shift-jis => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "shift_jis => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "sjis => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-31j => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-sjis => Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "cseuckr => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "csksc56011987 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "euc-kr => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "iso-ir-149 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "korean => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ks_c_5601-1987 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ks_c_5601-1989 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ksc5601 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "ksc_5601 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "windows-949 => EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "x-user-defined => x-user-defined": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy x-user-defined codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        }
+      },
+      "expectedRunnableTests": 15
+    },
+    {
+      "path": "encoding/textdecoder-streaming.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-streaming.any.js",
+      "sha256": "082646a9a94c8803e5fb7b278f1299df5c6cb91f157afc31b3babb981e93be10",
+      "gitBlob": "e473a7056e24d3dbc4383bb904f14e99e559d2f2",
+      "format": "javascript",
+      "support": [
+        "encoding/resources/encodings.js",
+        "common/sab.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 32,
+      "blockedTests": {},
+      "expectedRunnableTests": 32
+    },
+    {
+      "path": "encoding/textdecoder-utf16-surrogates.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-utf16-surrogates.any.js",
+      "sha256": "1492915bbdefb5e82320704751ed5749f37d75324d257e80c3f0da8112677800",
+      "gitBlob": "7e8322cd19c2133ea4bf557e0502be343b5d524f",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 10,
+      "blockedTests": {},
+      "expectedRunnableTests": 10
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textencoder-constructor-non-utf.any.js",
+      "sha256": "7d475912b1eb15e8bdd27f1b35797d1949c142134874715349a4679ba34a3c5d",
+      "gitBlob": "c7136da4dcec995af4593a35252c726e5d4c9e03",
+      "format": "javascript",
+      "support": [
+        "encoding/resources/encodings.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 79,
+      "blockedTests": {
+        "Encoding argument supported for decode: IBM866": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-2": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-3": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-4": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-6": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-7": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-8": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-8-I": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-10": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-13": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-14": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-15": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-8859-16": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-16 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: KOI8-R": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: KOI8-U": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy KOI8-U codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: macintosh": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-874": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1250": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1251": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1252": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1253": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1254": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1255": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1256": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1257": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: windows-1258": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: x-mac-cyrillic": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy x-mac-cyrillic codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: GBK": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: gb18030": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy gb18030 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: Big5": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: EUC-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: ISO-2022-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: EUC-KR": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "Encoding argument supported for decode: x-user-defined": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy x-user-defined codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        }
+      },
+      "expectedRunnableTests": 43,
+      "interpretationNote": "TextEncoder ignores extra encoding arguments for every label in the table. Those UTF-8 encoder cases remain runnable even when the corresponding TextDecoder requires a native legacy codec."
+    },
+    {
+      "path": "encoding/textencoder-utf16-surrogates.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textencoder-utf16-surrogates.any.js",
+      "sha256": "192e02e865ccc3429a45113e31f24d11fabcd9db68f99e310227c7d7a4da9bf7",
+      "gitBlob": "31657516455bd60b803600db9f36f641504d1c15",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 7,
+      "blockedTests": {},
+      "expectedRunnableTests": 7
+    },
+    {
+      "path": "encoding/streams/backpressure.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/backpressure.any.js",
+      "sha256": "2899b94667fe10d0d5c1d1c8d54949d6eaf665f94c8db89a7461bd3b6dabe154",
+      "gitBlob": "0f67e3358414d344132fdf7f8efe072511a7a80e",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4
+    },
+    {
+      "path": "encoding/streams/decode-attributes.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-attributes.any.js",
+      "sha256": "945cb27c26d89462a0ee81c87c9c30448a3d0de7ebbaf21d1881f2a0bce68491",
+      "gitBlob": "f64f45b56acba90f27689e1c4e2934648bf9fec3",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 28,
+      "blockedTests": {
+        "encoding attribute should have correct value for 'iso-8859-2'": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "encoding attribute should have correct value for 'ascii'": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        }
+      },
+      "expectedRunnableTests": 26
+    },
+    {
+      "path": "encoding/streams/decode-bad-chunks.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-bad-chunks.any.js",
+      "sha256": "5a5001d7f8a2d2fc8dda6f69245c0f1022fc16d9c3c44ce8f9bead80259bd2e8",
+      "gitBlob": "21d61427a2bca357af37df1767bac9a538f233b6",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {},
+      "expectedRunnableTests": 5
+    },
+    {
+      "path": "encoding/streams/decode-ignore-bom.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-ignore-bom.any.js",
+      "sha256": "53a3e9b27e6c4392bc254a96f47ead47039e9fe5e4bf86837fb47d0f9f017b2f",
+      "gitBlob": "92f89c80158c358cdfdc06fdaae6e48e068f9f9f",
+      "format": "javascript",
+      "support": [
+        "encoding/streams/resources/readable-stream-from-array.js",
+        "encoding/streams/resources/readable-stream-to-array.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 12,
+      "blockedTests": {},
+      "expectedRunnableTests": 12
+    },
+    {
+      "path": "encoding/streams/decode-incomplete-input.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-incomplete-input.any.js",
+      "sha256": "31ddc1ea13ace7d8bbd347bac03ad54221bb8a7f004cc570e3a025163b61a127",
+      "gitBlob": "3add74336df33008685d4eabe32f965db3b722d2",
+      "format": "javascript",
+      "support": [
+        "encoding/streams/resources/readable-stream-from-array.js",
+        "encoding/streams/resources/readable-stream-to-array.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-non-utf8.any.js",
+      "sha256": "b65c3a7820361ab268a49205ed2f61651748cf0fa8f3b955474981aa50eb68dd",
+      "gitBlob": "effdee3b430de5dac64962054ed9b5763181e3e1",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 13,
+      "blockedTests": {
+        "TextDecoderStream should be able to decode Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "TextDecoderStream should be able to decode invalid sequences in Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "TextDecoderStream should be able to reject invalid sequences in Shift_JIS": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "TextDecoderStream should be able to decode ISO-2022-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "TextDecoderStream should be able to decode invalid sequences in ISO-2022-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "TextDecoderStream should be able to reject invalid sequences in ISO-2022-JP": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        },
+        "TextDecoderStream should be able to decode ISO-8859-14": {
+          "category": "native-capability",
+          "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+        }
+      },
+      "expectedRunnableTests": 6
+    },
+    {
+      "path": "encoding/streams/decode-split-character.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-split-character.any.js",
+      "sha256": "076a1ccdc9db48b7fb0256b9809a751bc5c23285fc63047b6e1faee75b10458b",
+      "gitBlob": "d589694fce9f167a20194e106b90aeb23698cdb4",
+      "format": "javascript",
+      "support": [
+        "encoding/streams/resources/readable-stream-from-array.js",
+        "encoding/streams/resources/readable-stream-to-array.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 11,
+      "blockedTests": {},
+      "expectedRunnableTests": 11
+    },
+    {
+      "path": "encoding/streams/decode-utf8.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-utf8.any.js",
+      "sha256": "869c03cf7ae7fe2a150df5e504913d2f6c7a08c6aceeac5e556a94a6964fc050",
+      "gitBlob": "f6fceb299bdd368ea04c673c3a1c995ebec175fc",
+      "format": "javascript",
+      "support": [
+        "encoding/streams/resources/readable-stream-from-array.js",
+        "encoding/streams/resources/readable-stream-to-array.js",
+        "common/sab.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 12,
+      "blockedTests": {
+        "decoding a transferred Uint8Array chunk should give no output": {
+          "category": "compiler-capability",
+          "reason": "Requires compiler-owned MessageChannel/MessagePort transfer. The ordinary-node package provider exposes no canonical MessageChannel, so this unchanged case is registered as a compiler capability dependency. Node messaging classes and fabricated detachment are not substituted. Direct ArrayBuffer transfer can be covered separately by source policy controls; it does not execute this WPT case."
+        },
+        "decoding a transferred ArrayBuffer chunk should give no output": {
+          "category": "compiler-capability",
+          "reason": "Requires compiler-owned MessageChannel/MessagePort transfer. The ordinary-node package provider exposes no canonical MessageChannel, so this unchanged case is registered as a compiler capability dependency. Node messaging classes and fabricated detachment are not substituted. Direct ArrayBuffer transfer can be covered separately by source policy controls; it does not execute this WPT case."
+        }
+      },
+      "expectedRunnableTests": 10
+    },
+    {
+      "path": "encoding/streams/encode-bad-chunks.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/encode-bad-chunks.any.js",
+      "sha256": "8cbe37c932054be14d3e66ca80256590ed29dbd27d318bd9afc4fb11b841fcff",
+      "gitBlob": "4a926a67d287c924e7853f5d31fb798d7f704f03",
+      "format": "javascript",
+      "support": [
+        "encoding/streams/resources/readable-stream-from-array.js",
+        "encoding/streams/resources/readable-stream-to-array.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6
+    },
+    {
+      "path": "encoding/streams/encode-utf8.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/encode-utf8.any.js",
+      "sha256": "1549234d7184e4517a3b207a3eaa4c547c90ed325f446c0e6e2d72337c00dfac",
+      "gitBlob": "a5ba8f91eaf7f54454cbc0f56647db12ac7f6f3b",
+      "format": "javascript",
+      "support": [
+        "encoding/streams/resources/readable-stream-from-array.js",
+        "encoding/streams/resources/readable-stream-to-array.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 19,
+      "blockedTests": {},
+      "expectedRunnableTests": 19
+    },
+    {
+      "path": "encoding/streams/readable-writable-properties.any.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/readable-writable-properties.any.js",
+      "sha256": "39e964500a4edbc0027348e1ec820166f8d8f383a790329d58450ee66fd9d327",
+      "gitBlob": "8084cb9942145064387e18e685fc7a87c6422e07",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2
+    },
+    {
+      "path": "encoding/sharedarraybuffer.https.html",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/sharedarraybuffer.https.html",
+      "sha256": "1b3b7dd82bfc5ff41702a00d57c98dddbbf4fac6981df1b62aeaafbd373dd043",
+      "gitBlob": "2cda3e5fb1cf98b0500f8cd67101dc8894f056a0",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1
+    }
+  ],
+  "support": [
+    {
+      "path": "common/sab.js",
+      "revision": "dbd648158d337580885e70a54f929daf215211a0",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/sab.js",
+      "sha256": "7f684ef9aaf7ad29822cbf2ab110463836387da97d230665fa2693c894478047",
+      "gitBlob": "a3ea610e165d0d56ef1faab2ed49186d4e03c392"
+    },
+    {
+      "path": "common/subset-tests.js",
+      "revision": "dbd648158d337580885e70a54f929daf215211a0",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/subset-tests.js",
+      "sha256": "72643af8e7b9e580a754dd7201179e104437da2265d4a20a898eaa15c5d7cb32",
+      "gitBlob": "58e93413de4090792f09e02010ef81c4a627d6bf"
+    },
+    {
+      "path": "encoding/resources/encodings.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/resources/encodings.js",
+      "sha256": "1742a28bafab3e3de2fa4a394366af3796d45c46587a51ba98e4fa90ca64ea64",
+      "gitBlob": "80933bf9386cb629537c32ca4dc5c22a81d7e872"
+    },
+    {
+      "path": "encoding/streams/resources/readable-stream-from-array.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/resources/readable-stream-from-array.js",
+      "sha256": "2e48fb1480b3be710716ba28276af1715b72e8c01b40ffe6f9a7c37d6ecbb925",
+      "gitBlob": "5c12ba8c8bba60ef52a689abae17d1f1e0bfc458"
+    },
+    {
+      "path": "encoding/streams/resources/readable-stream-to-array.js",
+      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/resources/readable-stream-to-array.js",
+      "sha256": "46336dd9a0f1bea753ce82fcc08a1ea3321f39333c240357d122d9940d6ef072",
+      "gitBlob": "fda03e2264492296d9b26986d15211384a6a8b16"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "nativeCapabilityDependencies": {
+    "singleByte": [
+      "IBM866",
+      "ISO-8859-2",
+      "ISO-8859-3",
+      "ISO-8859-4",
+      "ISO-8859-5",
+      "ISO-8859-6",
+      "ISO-8859-7",
+      "ISO-8859-8",
+      "ISO-8859-8-I",
+      "ISO-8859-10",
+      "ISO-8859-13",
+      "ISO-8859-14",
+      "ISO-8859-15",
+      "ISO-8859-16",
+      "KOI8-R",
+      "KOI8-U",
+      "macintosh",
+      "windows-874",
+      "windows-1250",
+      "windows-1251",
+      "windows-1252",
+      "windows-1253",
+      "windows-1254",
+      "windows-1255",
+      "windows-1256",
+      "windows-1257",
+      "windows-1258",
+      "x-mac-cyrillic"
+    ],
+    "multiByte": [
+      "GBK",
+      "gb18030",
+      "Big5",
+      "EUC-JP",
+      "ISO-2022-JP",
+      "Shift_JIS",
+      "EUC-KR"
+    ],
+    "other": [
+      "x-user-defined"
+    ],
+    "note": "Legacy single-byte and multi-byte decoder implementations and their state/index tables belong to native capability work. Replacement-encoding labels are specified to throw and are tested here; they do not need a codec."
+  },
+  "executionProfile": {
+    "node": "24.20.0",
+    "fixtureRealm": "one fresh node:vm context per file",
+    "apiGlobals": "Canonical package TextEncoder/TextDecoder/TextEncoderStream/TextDecoderStream and Streams classes; no host codec globals",
+    "sharedMemoryInput": "The unchanged common/sab.js uses real host WebAssembly.Memory only to obtain the SharedArrayBuffer constructor. Concurrent shared-memory mutation and native compiled shared-memory support are not verified.",
+    "transfer": "Three exact MessageChannel-dependent WPT cases remain blocked; no host MessageChannel substitution.",
+    "harnessChanges": []
+  },
+  "excludedPaths": [
+    {
+      "path": "encoding/idlharness.any.js",
+      "reason": "Full WebIDL reflection harness, interface IDL fetch, descriptor and prototype shape exceed this fixed-layout profile. Behavioral brand and conversion controls are covered separately."
+    },
+    {
+      "path": "encoding/idlharness-shadowrealm.window.js",
+      "reason": "ShadowRealm/browser realm and full WebIDL reflection harness unavailable; Node24.20 also excludes ShadowRealm support."
+    },
+    {
+      "path": "encoding/streams/invalid-realm.window.js",
+      "reason": "Requires Document, iframe and detached browsing contexts; no browser realm emulation."
+    },
+    {
+      "path": "encoding/streams/realms.window.js",
+      "reason": "Requires Window, iframe and distinct browser globals; no browser realm emulation."
+    },
+    {
+      "path": "encoding/streams/stringification-crash.html",
+      "reason": "Worker termination crash test requires DOM, Worker, object URL and asynchronous lifecycle, not a source encoding unit test."
+    },
+    {
+      "path": "encoding/iso-2022-jp-decoder.any.js",
+      "reason": "All cases require native ISO-2022-JP legacy decoder state/index tables; Node24.20 lists a state-handling bug for this file."
+    },
+    {
+      "path": "encoding/textdecoder-fatal-single-byte.any.js",
+      "reason": "All cases require native legacy single-byte codecs. Node24.20 skips the file because iso-8859-16 is unsupported."
+    },
+    {
+      "path": "encoding/single-byte-decoder.window.js",
+      "reason": "Native legacy single-byte decoders plus Document; Node24.20 excludes the Document requirement."
+    },
+    {
+      "path": "encoding/replacement-encodings.any.js",
+      "reason": "XHR decoding of data URLs, not TextDecoder; requires XMLHttpRequest. API-level replacement-label rejection is imported separately."
+    },
+    {
+      "path": "encoding/unsupported-encodings.any.js",
+      "reason": "XHR decoding of data URLs and browser document encodings, not the four requested Encoding APIs; XMLHttpRequest unavailable."
+    },
+    {
+      "path": "encoding/unsupported-labels.window.js",
+      "reason": "Browser document encoding and iframe navigation, not TextDecoder; requires Document."
+    },
+    {
+      "path": "encoding/legacy-mb-japanese/",
+      "reason": "Native EUC-JP, ISO-2022-JP and Shift_JIS indexes/codecs and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/legacy-mb-korean/",
+      "reason": "Native EUC-KR index/codec and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/",
+      "reason": "Native GBK/gb18030 indexes/codecs and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/legacy-mb-tchinese/",
+      "reason": "Native Big5 index/codec and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/big5-encoder.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/bom-handling.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-shift_jis-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-shift_jis.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-one-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-one.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-three-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-three.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-two-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-two.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/iso-2022-jp-encoder.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/remove-only-one-bom.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/sniffing.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/utf-32-from-win1252.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/utf-32.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    }
+  ]
+}
