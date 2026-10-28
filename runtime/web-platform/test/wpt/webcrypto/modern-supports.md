@@ -19,11 +19,12 @@ out whether that operation is available. Failures are values that become false.
 
 Shared code handles dictionary conversion, the registered operation, parameter
 checks, wrapping fallback, public-key eligibility and derived/shared key lengths.
-An ordinary check makes at most one metadata query. A check involving another algorithm
-first checks that target and stops on false before reading the primary
-algorithm's dictionary. It makes at most two queries, one per algorithm. The
-repeated get-key-length normalization required by `deriveKey` remains observable;
-an exception in the final normalization propagates.
+An ordinary check makes at most one metadata query. A composed check makes at
+most two queries, one per algorithm. It queries the target first and stops on
+false before normalizing or querying the primary operation. KEM composition
+first normalizes its primary algorithm to obtain the shared-key length, as
+§3.2.6 requires. The repeated get-key-length normalization required by
+`deriveKey` remains observable; an exception in the final normalization propagates.
 
 The static method obtains the capability from the current installed runtime
 through a private identity association populated during Crypto construction. The
