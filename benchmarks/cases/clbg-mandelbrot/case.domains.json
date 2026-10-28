@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 320,
+        "allowNaN": true,
+        "reason": "NoGc differential mode accumulates every allocation; larger widths exceed the 2 GiB child limit"
+      }
+    },
+    "work": {
+      "n": {
+        "max": 320,
+        "allowNaN": true,
+        "reason": "NoGc differential mode accumulates every allocation; larger widths exceed the 2 GiB child limit"
+      }
+    }
+  }
+}
