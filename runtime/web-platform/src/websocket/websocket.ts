@@ -4,7 +4,7 @@ import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts"
 import { DOMException, LimitError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import { utf8Length } from "../core/utf8.ts";
-import { coerceToUSVString, requireArguments, toUSVString } from "../core/webidl.ts";
+import { coerceToDOMString, coerceToUSVString, requireArguments, toUSVString } from "../core/webidl.ts";
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { Blob } from "../file/blob.ts";
@@ -245,7 +245,10 @@ export class WebSocket extends EventTarget {
   }
 
   set binaryType(value: "blob" | "arraybuffer") {
-    if (value === "blob" || value === "arraybuffer") this.binary = value;
+    // Web IDL 3.7.6: enum attribute setters ignore unknown strings after ToString.
+    // https://webidl.spec.whatwg.org/#es-attributes
+    const type = coerceToDOMString(value);
+    if (type === "blob" || type === "arraybuffer") this.binary = type;
   }
   async #connect(url: URLRecord, protocols: readonly string[]): Promise<void> {
     checkNetworkPort(url.port);
