@@ -45,6 +45,8 @@ export class Event {
   static readonly AT_TARGET = 2;
   static readonly BUBBLING_PHASE = 3;
 
+  declare readonly isTrusted: boolean;
+
   private eventType: string;
   private eventBubbles = false;
   private eventCancelable = false;
@@ -196,6 +198,7 @@ export class Event {
     this.propagationStopped = false;
     this.immediateStopped = false;
     this.canceled = false;
+    this.trusted = false;
     this.eventTarget = null;
     this.eventType = type;
     this.eventBubbles = bubbles ? true : false;

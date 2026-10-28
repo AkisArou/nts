@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AbortController } from "../src/core/abort.ts";
 
 import {
   Event,
@@ -112,3 +113,35 @@ for (const removeAgain of [false, true]) {
     assert.equal(calls, removeAgain ? 0 : 1);
   });
 }
+
+// DOM initialize clears trust, but initEvent is a no-op during dispatch:
+// https://dom.spec.whatwg.org/#concept-event-initialize
+// https://dom.spec.whatwg.org/#dom-event-initevent
+test("initEvent clears trust on a completed provider-created event", () => {
+  const controller = new AbortController();
+  const events: Event[] = [];
+  controller.signal.addEventListener("abort", (event) => { events.push(event); });
+  controller.abort();
+  const event = events[0];
+  assert.ok(event !== undefined);
+  assert.equal(event.isTrusted, true);
+
+  event.initEvent("reinitialized", true, true);
+  assert.equal(event.isTrusted, false);
+  assert.equal(event.target, null);
+  assert.equal(event.type, "reinitialized");
+});
+
+test("initEvent preserves trust while the event is dispatching", () => {
+  const controller = new AbortController();
+  let calls = 0;
+  controller.signal.addEventListener("abort", (event) => {
+    assert.equal(event.isTrusted, true);
+    event.initEvent("ignored", true, true);
+    assert.equal(event.isTrusted, true);
+    assert.equal(event.type, "abort");
+    calls++;
+  });
+  controller.abort();
+  assert.equal(calls, 1);
+});
