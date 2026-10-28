@@ -1,0 +1,126 @@
+{
+  "sourceAndOracle": {
+    "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "node": "v24.20.0",
+    "sourceFiles": {
+      "typescript-compiler.js": {
+        "bytes": 1232383,
+        "sha256": "9e99fe0ddfe48a2462eca622ade1e1ddd13bf49f8e461a6c53463bbbc1d5363a"
+      },
+      "typescript-input.js": {
+        "bytes": 1275283,
+        "sha256": "e23d2fe7b3df9dc069c720ab3fb112006c235d0eb416556ecde7c3a2766a0396"
+      },
+      "typescript.js": {
+        "bytes": 6176,
+        "sha256": "a0f648000ce7a94ff2448df71d0cd86841cc7072cd708bdfeb1db29b5a0f7c68"
+      }
+    },
+    "inputCharacters": 1243591,
+    "inputSHA256": "965e543a9b984769b10942ea6b81db3950437c3963c2186b8c3d6b0e98e5346d",
+    "outputCharacters": 1189939,
+    "outputSHA256": "e74fd3bd69a5723ddaf5cb2c7b7e67ee7cabc89f8feeff8535574f1820edb95c",
+    "diagnosticCount": 192,
+    "diagnosticsSHA256": "0c73751da13d0608ed561f6cb631f7610b8f2651e79f8dbb5d1b2232d11efbec",
+    "originalChecksum": -412589664,
+    "originalChecksumReset": 0,
+    "work0": 0,
+    "work1": 192,
+    "work2": 6144,
+    "json2Comparisons": 52
+  },
+  "strictSyntaxAudit": {
+    "files": {
+      "case.ts": {
+        "bytes": 7491,
+        "parseDiagnostics": 0
+      },
+      "compiler.ts": {
+        "bytes": 1262714,
+        "parseDiagnostics": 0
+      },
+      "input.ts": {
+        "bytes": 1276181,
+        "parseDiagnostics": 0
+      },
+      "json2.ts": {
+        "bytes": 6077,
+        "parseDiagnostics": 0
+      }
+    },
+    "guardCalls": {
+      "numberValue": 7,
+      "present": 4250,
+      "classValue": 600,
+      "booleanValue": 1,
+      "enumValue": 1,
+      "reportErrorTarget": 1,
+      "numericTokenKey": 1,
+      "assertPresent": 2,
+      "optionalNumber": 1,
+      "recoveryValue": 1,
+      "stringValue": 3,
+      "classArray": 2
+    },
+    "classes": 151,
+    "fields": 795,
+    "fieldsWithoutTypes": [],
+    "anyKeywords": 0,
+    "assertionExpressions": 0,
+    "nonNullExpressions": 0,
+    "parameterProperties": 0,
+    "enumDeclarations": 0,
+    "namespaceDeclarations": 0,
+    "ignoredDiagnostics": 0,
+    "imports": [
+      "./compiler.ts",
+      "./compiler.ts",
+      "./input.ts",
+      "./json2.ts"
+    ]
+  },
+  "structuralComparison": {
+    "originalDefinitions": 1437,
+    "portedDefinitions": 1451,
+    "equal": 1428,
+    "different": [
+      "TypeScript_AstWalkerWithDetailCallback_AstWalkerCallback",
+      "TypeScript_Parser.convertToTypeReference",
+      "TypeScript_Parser.parseClassElements",
+      "TypeScript_Parser.parsePostfixOperators",
+      "TypeScript_LexInitialize",
+      "TypeScript_preCollectFuncDeclTypes",
+      "TypeScript_getPrettyName",
+      "TypeScript_getRelativePathToFixedPath",
+      "TypeScript_normalizePath"
+    ],
+    "missing": [],
+    "method": "Restore historical typed source from the complete input recording; modernize class and module syntax; compare erased functions, constructors, methods and initializers using literal-preserving AST fingerprints. Normalize only enumerated checked readers, explicit receiver-preserving calls and child-walker parameter alpha-renaming. The nine remaining differences are reviewed individually below.",
+    "differences": {
+      "TypeScript_AstWalkerWithDetailCallback_AstWalkerCallback": "Validate the runtime-key callback and its boolean return; preserve its receiver and arguments.",
+      "TypeScript_Parser.convertToTypeReference": "Spell unused arrayCount++ as arrayCount = Number(arrayCount) + 1, including undefined-to-NaN error recovery.",
+      "TypeScript_Parser.parseClassElements": "Retain the Firefox undefined-token rescan patch from emitted upstream compiler; absent from the historical typed input.",
+      "TypeScript_Parser.parsePostfixOperators": "Retain the second Firefox undefined-token rescan/continue patch from emitted upstream compiler.",
+      "TypeScript_LexInitialize": "Explicit Number(i) for numeric comparison of original enum-array string keys; stored keys remain unchanged strings.",
+      "TypeScript_preCollectFuncDeclTypes": "Spell fresh [] in an identity comparison as new Array<Signature>() because strict TypeScript diagnoses the original always-unequal reference expression; preserve allocation and comparison.",
+      "TypeScript_getPrettyName": "Resolve this.getPathComponents through its static TypeScript module binding.",
+      "TypeScript_getRelativePathToFixedPath": "Resolve this.getPathComponents through its static TypeScript module binding.",
+      "TypeScript_normalizePath": "Resolve this.getPathComponents through its static TypeScript module binding."
+    }
+  },
+  "timing": {
+    "node": "v24.20.0",
+    "seed": 1,
+    "harness": "benchmarks/common/bench.mjs unchanged",
+    "freshProcessMilliseconds": [
+      288.466361,
+      250.195342,
+      265.908541,
+      283.442811,
+      267.797706
+    ],
+    "bestMilliseconds": 250.195342,
+    "checksumBits": "4068000000000000",
+    "exception": "A single complete original operation exceeds 10 ms; preserve the full input."
+  }
+}
