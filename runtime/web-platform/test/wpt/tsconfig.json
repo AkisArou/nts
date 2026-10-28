@@ -33,6 +33,9 @@
     "../wpt-files-forms.test.ts",
     "../file-forms-wpt-policy.test.ts",
     "../file-reader-wpt-policy.test.ts",
-    "../file-forms-urlencoded-policy.test.ts"
+    "../file-forms-urlencoded-policy.test.ts",
+    "../wpt-websocket.test.ts",
+    "../websocket-handshake-policy.test.ts",
+    "../websocket-wpt-policy.test.ts"
   ]
 }
