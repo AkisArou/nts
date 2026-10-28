@@ -576,3 +576,23 @@ test("FileReader listener exceptions reach the provider without stopping later l
   assert.deepEqual(calls, ["handler", "listener"]);
   assert.deepEqual(scheduler.errors, [marker]);
 });
+
+// HTML activates/deactivates handler listeners internally, without invoking the
+// target's user-overridable addEventListener/removeEventListener methods.
+test("FileReader handler assignment bypasses subclass listener-registration overrides", () => {
+  const calls: string[] = [];
+  class DerivedReader extends FileReader {
+    override addEventListener(): never { calls.push("public add"); throw new Error("public add"); }
+    override removeEventListener(): never { calls.push("public remove"); throw new Error("public remove"); }
+  }
+  const reader = new DerivedReader();
+  assert.doesNotThrow(() => { reader.onload = () => calls.push("handler"); });
+  reader.dispatchEvent(new Event("load"));
+  assert.deepEqual(calls, ["handler"]);
+  assert.doesNotThrow(() => { reader.onload = null; });
+  reader.dispatchEvent(new Event("load"));
+  assert.deepEqual(calls, ["handler"]);
+  assert.doesNotThrow(() => { reader.onload = () => calls.push("replacement"); });
+  reader.dispatchEvent(new Event("load"));
+  assert.deepEqual(calls, ["handler", "replacement"]);
+});
