@@ -3,6 +3,26 @@ import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
 import { WptHarness } from "./wpt/harness.ts";
 
+function manualDeadlines() {
+  const scheduled: { callback: () => void; cancelled: boolean }[] = [];
+  const waiting = new Map<number, (deadline: (typeof scheduled)[number]) => void>();
+  return {
+    scheduled,
+    schedule(callback: () => void, milliseconds: number): () => void {
+      assert.equal(milliseconds, 10000);
+      const deadline = { callback, cancelled: false };
+      scheduled.push(deadline);
+      waiting.get(scheduled.length - 1)?.(deadline);
+      return () => { deadline.cancelled = true; };
+    },
+    at(index: number): Promise<(typeof scheduled)[number]> {
+      const deadline = scheduled[index];
+      if (deadline !== undefined) return Promise.resolve(deadline);
+      return new Promise((resolve) => { waiting.set(index, resolve); });
+    },
+  };
+}
+
 test("WPT callback assertions cannot disappear inside an exception-catching API", async () => {
   const harness = new WptHarness({
     dispatch(callback: () => void) { try { callback(); } catch { /* deliberately swallowed */ } },
@@ -68,9 +88,20 @@ test("WPT capability blocks are named and stale exclusions fail", async () => {
 });
 
 test("WPT reports timeout, top-level errors and cleanup errors as failures", async () => {
-  const timeout = new WptHarness({}, {}, 10);
+  const deadlines = manualDeadlines();
+  const timeout = new WptHarness({}, {}, 10000, {
+    deadlineScheduler: deadlines.schedule,
+  });
   timeout.run('async_test(() => {}, "never completes");', "timeout.js");
-  assert.equal((await timeout.finish())[0]?.status, "fail");
+  const completion = timeout.finish();
+  // The test deadline is the first scheduled operation. Registration already
+  // completed; advancing it explicitly cannot race VM script registration.
+  assert.equal(deadlines.scheduled.length, 2);
+  (await deadlines.at(0)).callback();
+  const results = await completion;
+  assert.equal(results[0]?.status, "fail");
+  assert.match(String(results[0]?.error), /WPT timed out: never completes/);
+  assert.ok(deadlines.scheduled.every((deadline) => deadline.cancelled));
   const topLevel = new WptHarness({});
   topLevel.run('missingCapability();', "top-level.js");
   await assert.rejects(topLevel.finish(), AggregateError);
@@ -137,7 +168,7 @@ test("WPT promise tests run serially after FIFO cleanup invocation and settlemen
 });
 
 test("WPT rejected, throwing, invalid and failed-step promise tests cannot pass or block the queue", async () => {
-  const harness = new WptHarness({}, {}, 100);
+  const harness = new WptHarness({});
   harness.run(`
     promise_test(() => Promise.reject(undefined), "undefined rejection");
     promise_test(() => { throw new Error("body failure"); }, "throwing body");
@@ -159,13 +190,19 @@ test("WPT promise cleanup failures abort later tests and never disappear", async
     ['() => new Promise(() => {})', /cleanup timed out/],
   ] as const) {
     let laterCalls = 0;
-    const harness = new WptHarness({ later: () => { laterCalls++; } }, {}, 20);
+    const deadlines = manualDeadlines();
+    const harness = new WptHarness({ later: () => { laterCalls++; } }, {}, 10000, {
+      deadlineScheduler: deadlines.schedule,
+    });
     harness.run(`
       promise_test(t => { t.add_cleanup(${cleanup}); return Promise.resolve(); }, "cleanup");
       promise_test(() => { later(); return Promise.resolve(); }, "later");
     `, "promise-cleanup.js");
-    await assert.rejects(harness.finish(), (error: unknown) =>
+    const completion = harness.finish();
+    const rejected = assert.rejects(completion, (error: unknown) =>
       error instanceof AggregateError && error.errors.some((entry: unknown) => expected.test(String(entry))));
+    if (cleanup.includes("new Promise")) (await deadlines.at(2)).callback();
+    await rejected;
     assert.equal(laterCalls, 0);
   }
 });
@@ -210,10 +247,14 @@ test("WPT unsupported setup options and missing explicit done fail loudly", asyn
     harness.run(`setup(${options});`, "unsupported-setup.js");
     await assert.rejects(harness.finish(), AggregateError);
   }
-  const pending = new WptHarness({}, {}, 20);
+  const deadlines = manualDeadlines();
+  const pending = new WptHarness({}, {}, 10000, { deadlineScheduler: deadlines.schedule });
   pending.run('setup({explicit_done:true});', "missing-done.js");
-  await assert.rejects(pending.finish(), (error: unknown) =>
+  const completion = pending.finish();
+  const rejected = assert.rejects(completion, (error: unknown) =>
     error instanceof AggregateError && error.errors.some((entry: unknown) => /requires a call to done/.test(String(entry))));
+  (await deadlines.at(0)).callback();
+  await rejected;
 });
 
 test("WPT DOM and promise rejection assertions use injected constructors and exact values", async () => {

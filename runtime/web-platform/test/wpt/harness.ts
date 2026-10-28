@@ -70,6 +70,18 @@ export interface WptBlock {
   reason: string;
 }
 
+/** Schedule a harness deadline and return its idempotent cancellation. */
+export type WptDeadlineScheduler = (callback: () => void, milliseconds: number) => () => void;
+
+const hostDeadline: WptDeadlineScheduler = (callback, milliseconds) => {
+  const timer = setTimeout(callback, milliseconds);
+  return () => clearTimeout(timer);
+};
+
+export interface WptHarnessOptions {
+  deadlineScheduler?: WptDeadlineScheduler;
+}
+
 class WptTest {
   readonly result: WptResult;
   readonly completed: Promise<void>;
@@ -78,7 +90,7 @@ class WptTest {
   private finished = false;
   private readonly cleanups: Cleanup[] = [];
   private readonly timers: ReturnType<typeof setTimeout>[] = [];
-  private timeout: ReturnType<typeof setTimeout> | undefined;
+  private timeout: (() => void) | undefined;
   private readonly timeoutMilliseconds: number;
   private readonly kind: TestKind;
   private readonly harness: WptHarness;
@@ -98,7 +110,7 @@ class WptTest {
 
   start(): void {
     if (this.timeout !== undefined || this.ending) return;
-    this.timeout = setTimeout(() => {
+    this.timeout = this.harness.scheduleDeadline(() => {
       const error = new Error(`WPT timed out: ${this.result.name}`);
       if (this.ending) {
         this.harness.cleanupErrors.push(error);
@@ -171,7 +183,7 @@ class WptTest {
   done(): void {
     if (this.ending) return;
     this.ending = true;
-    clearTimeout(this.timeout);
+    this.timeout?.();
     for (const timer of this.timers) clearTimeout(timer);
     // WPT invokes cleanup callbacks in registration order, including on failure.
     const pending: Promise<unknown>[] = [];
@@ -195,7 +207,7 @@ class WptTest {
     }
     if (pending.length === 0) this.complete();
     else {
-      this.timeout = setTimeout(() => {
+      this.timeout = this.harness.scheduleDeadline(() => {
         this.harness.cleanupErrors.push(new Error(`WPT cleanup timed out: ${this.result.name}`));
         this.complete();
       }, this.timeoutMilliseconds);
@@ -206,7 +218,7 @@ class WptTest {
   private complete(): void {
     if (this.finished) return;
     this.finished = true;
-    clearTimeout(this.timeout);
+    this.timeout?.();
     this.resolve();
   }
 }
@@ -227,15 +239,19 @@ export class WptHarness {
   private readonly registrationDone = Promise.withResolvers<void>();
   private registrationClosed = false;
   private readonly timeout: number;
+  readonly scheduleDeadline: WptDeadlineScheduler;
 
   constructor(
     globals: Record<string, unknown>,
     blocks: Readonly<Record<string, WptBlock>> = {},
     timeout = 10000,
+    options: WptHarnessOptions = {},
   ) {
     this.blocks = blocks;
     assert.ok(Number.isSafeInteger(timeout) && timeout > 0, "WPT timeout must be positive integer milliseconds");
     this.timeout = timeout;
+    this.scheduleDeadline = options.deadlineScheduler ?? hostDeadline;
+    assert.equal(typeof this.scheduleDeadline, "function", "WPT deadline scheduler must be a function");
     this.context = createContext({ ...globals });
     const realmErrors = new Script("({ Error, TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError, AggregateError })").runInContext(
       this.context,
@@ -439,12 +455,12 @@ export class WptHarness {
 
   async finish(): Promise<WptResult[]> {
     if (!this.explicitDone || this.errors.length !== 0) this.closeRegistration();
-    const registrationTimeout = setTimeout(() => {
+    const cancelRegistrationTimeout = this.scheduleDeadline(() => {
       this.recordError(new Error("WPT explicit_done setup requires a call to done()"));
       this.closeRegistration();
     }, this.timeout);
     await this.registrationDone.promise;
-    clearTimeout(registrationTimeout);
+    cancelRegistrationTimeout();
     await this.promiseQueue;
     await Promise.all(this.tests.map((test) => test.completed));
     for (const name of Object.keys(this.blocks)) {
