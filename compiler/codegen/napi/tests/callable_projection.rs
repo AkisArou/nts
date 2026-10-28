@@ -77,8 +77,8 @@ fn callable_source_transport_does_not_publish_function_value_storage() {
             .iter()
             .any(|c| c.face == face)
     );
-    assert!(prepared.program.uncompiled.iter().any(|(name, why)| {
-        name == "readIdentity" && why.contains("identity and unbound receiver")
+    assert!(prepared.program.uncompiled.iter().any(|entry| {
+        entry.name == "readIdentity" && entry.reason.contains("identity and unbound receiver")
     }));
     let program = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(program.is_complete(), "{:?}", program.diagnostics);

@@ -450,7 +450,7 @@ fn callable_supplier_exhaustion_keeps_no_partial_dispatch() {
         beyond
             .uncompiled
             .iter()
-            .any(|(_, why)| why.contains("`Supplier0` where `Maybe` is wanted")),
+            .any(|entry| entry.reason.contains("`Supplier0` where `Maybe` is wanted")),
         "the exhausted contract must refuse by name: {:?}",
         beyond.uncompiled
     );
@@ -464,10 +464,9 @@ fn callable_supplier_exhaustion_keeps_no_partial_dispatch() {
 fn an_accessor_cannot_enter_a_calls_only_supplier_contract() {
     let program = prepared("../../tests/refusals/an-accessor-cannot-supply-a-callable-projection");
     assert!(
-        program
-            .uncompiled
-            .iter()
-            .any(|(_, why)| why.contains("`Accessor` where `PlainMaybe` is wanted")),
+        program.uncompiled.iter().any(|entry| entry
+            .reason
+            .contains("`Accessor` where `PlainMaybe` is wanted")),
         "the getter supplier must refuse by name: {:?}",
         program.uncompiled
     );
