@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 32768,
+        "allowNaN": true,
+        "reason": "Bound generated FASTA output within the Node recorder's memory and CPU budgets while covering benchmark seed 10000."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 32768,
+        "allowNaN": true,
+        "reason": "Bound generated FASTA output within the Node recorder's memory and CPU budgets while covering benchmark seed 10000."
+      }
+    }
+  }
+}
