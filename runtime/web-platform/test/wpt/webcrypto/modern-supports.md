@@ -68,8 +68,9 @@ do not alter upstream tests or add named exclusions.
 
 ## Per-file evidence
 
-[modern-supports-results.json](modern-supports-results.json) records the affected
-files, commands and evidence hashes on the integrated first-five base.
+[modern-supports-results.json](modern-supports-results.json) records all 125
+ordered per-file outcomes, affected raw results, commands, evidence hashes and
+the final six-family package gate.
 
 | File under WebCryptoAPI | Pass | Fail | Blocked |
 | --- | ---: | ---: | ---: |
@@ -110,5 +111,57 @@ and ChaCha20-Poly1305 without allocating large buffers. The common limit comes
 from [`CipherBase::SetAAD` and its `CheckSizeInt32` validation](https://github.com/nodejs/node/blob/v24.20.0/src/crypto/crypto_cipher.cc).
 The new test file is registered in `check.sh`.
 
-The parent integration records the complete ordered-stack package gate in the
-PR. nts compilation remains the maintainer's gate.
+## Final six-family gate and exclusion audit
+
+```sh
+node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts
+sh tooling/conformance/web-platform/check.sh
+```
+
+Both commands exit 0. The complete scoped census has **35,656 pass / 0 fail /
+792 excluded**, with **36,448 registrations across 122 executed files** and the
+same three file-level limitations. All 34 in-scope Modern Algorithms fixture
+entries are active, subject only to their documented transfer and cloning cases.
+
+```text
+WPT directory pins: 355 original files verified
+tests 40429
+pass 39569
+fail 0
+skipped 860
+{"upstreamTests":2817,"applicableTests":2771,"passed":2771,"failed":0,"notApplicable":46}
+check.sh: SKIPPING the compiled axis -- no compiler at .../target/release/nts.
+  Host evidence alone does not show that any of this compiles.
+```
+
+A strict check of every crypto test and the native worker also passes under the
+repository's `tsconfig.base.json` settings. The JSON report records its complete
+verification configuration. Across the six new family test files, all **199
+authored controls** execute in this final gate.
+
+The final exclusion audit compares names, categories and reasons with accepted
+#110. All **302 accepted discrepancy records remain exact**, and all **355 pinned
+originals plus `versions.json` are unchanged**.
+
+| Remaining named exclusions | Cases |
+| --- | ---: |
+| Accepted specification discrepancies | 302 |
+| Additional repeated-name-getter transfer discrepancies | 79 |
+| Native CryptoKey cloning limitations | 63 |
+| Optional compressed EC points | 48 |
+| Browser or global environment requirements | 17 |
+| Deferred TurboSHAKE and KangarooTwelve algorithms | 283 |
+| **Total** | **792** |
+
+The 79 new transfer cases comprise SHA-3 9, cSHAKE 16, KMAC 12, AES-OCB 36
+and ML-DSA 6. The clone total includes 40 existing cases and 23 newly reachable
+cases. TurboSHAKE accounts for 135 deferred cases and KangarooTwelve for 148;
+no in-scope algorithm retains an algorithm-scope exclusion. This pin has no
+hybrid KEM fixture, so it supplies no hybrid coverage. Both IDL harness files
+and the existing asynchronous-registration limitation remain file-level exclusions.
+
+The full package log SHA-256 is `174ef95198831a574d940ffa05eebc300da74d190ea112dd75b8bbfc1b197aca`.
+The final executable source was tested at `4c7af05f44d5062cc051f8a41eea690d32551bd7`,
+tree `9a06d4fd11067a0b2ae2790a54a29ac153adb05e`. Only evidence documentation was added
+after this gate. Maintainers supply the native half, compile with nts and run
+the landing gate.
