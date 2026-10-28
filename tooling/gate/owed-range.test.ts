@@ -115,3 +115,43 @@ test("a failed range worktree creation is identified as infrastructure",t=>{
  const prior=process.env.PATH;t.after(()=>{process.env.PATH=prior;});process.env.PATH=`${bin}:${prior}`;
  assert.throws(()=>selectRange(repo,`${base}..HEAD`),error=>selectionInfrastructure(error)&&String(error).includes("resource unavailable"));
 });
+
+test("Cargo infrastructure crosses the endpoint process without becoming a policy refusal", t => {
+  const repo = mkdtempSync(join(tmpdir(), "range-cargo-"));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const gate = join(repo, "tooling/gate");
+  mkdirSync(gate, { recursive: true });
+  for (const file of ["owed-range.ts", "checks.ts", "change-paths.ts"]) writeFileSync(join(gate, file), readFileSync(join(ROOT, "tooling/gate", file)));
+  writeFileSync(join(repo, "Cargo.toml"), "[workspace]\n");
+  writeFileSync(join(gate, "owed.mjs"), `
+import {readFileSync} from "node:fs";
+import {SelectionInfrastructureError} from "./owed-range.ts";
+const mode=readFileSync(new URL("../../mode",import.meta.url),"utf8");
+export function crates(){
+ if(mode==="typed")throw new SelectionInfrastructureError("cargo metadata --no-deps --offline: metadata control stderr");
+ return mode==="legacy"?null:new Map();
+}
+export const selfTest=()=>mode==="legacy"||mode==="policy"?"broken policy control":null;
+export const owed=()=>[{name:"control",paths:[],steps:["tooling"],arms:[]}];
+export const gateSteps=rules=>rules.flatMap(r=>r.steps);
+export const allSteps=()=>["tooling"];
+`);
+  writeFileSync(join(repo, "mode"), "healthy");
+  git("init", "-qb", "main"); git("add", "."); git("commit", "-qm", "healthy metadata");
+  const base = git("rev-parse", "HEAD");
+  for (const mode of ["typed", "legacy", "policy", "healthy"]) {
+    writeFileSync(join(repo, "mode"), mode);
+    git("add", "mode"); git("commit", "-qm", mode);
+    if (mode === "healthy") {
+      assert.deepEqual(selectRange(repo, `${base}..HEAD`).checks.steps, ["tooling"]);
+    } else {
+      assert.throws(() => selectRange(repo, `${base}..HEAD`), error => {
+        assert.equal(selectionInfrastructure(error), mode !== "policy", String(error));
+        assert.match(String(error), mode === "typed" ? /metadata control stderr/ : mode === "legacy" ? /Cargo metadata is unavailable/ : /broken policy control/);
+        return true;
+      });
+    }
+  }
+});

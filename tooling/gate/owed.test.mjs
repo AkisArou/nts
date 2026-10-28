@@ -8,8 +8,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { relative } from "node:path";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, targetFiles, WIDE } from "./owed.mjs";
 
@@ -31,6 +32,23 @@ const superset = (got, want, what) => {
   for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
+
+test("a failed Cargo metadata prerequisite is named instead of losing crate reach", t => {
+  const directory = mkdtempSync(join(tmpdir(), "owed-cargo-failure-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const bin = join(directory, "bin");
+  mkdirSync(bin);
+  const cargo = join(bin, "cargo");
+  writeFileSync(cargo, "#!/bin/sh\nprintf '%s\\n' 'metadata prerequisite control: offline input unavailable' >&2\nexit 73\n");
+  chmodSync(cargo, 0o755);
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("./owed.mjs", import.meta.url)), "--self-test"], {
+    encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stderr, /cargo metadata --format-version 1 --no-deps --offline/);
+  assert.match(result.stderr, /metadata prerequisite control: offline input unavailable/);
+  assert.doesNotMatch(result.stdout, /the LLVM backend's steps|the gate steps owed/);
+});
 
 test("an earlier data path cannot erase a source script's wide obligations", () => {
   const source = "tooling/conformance/integrity.ts";

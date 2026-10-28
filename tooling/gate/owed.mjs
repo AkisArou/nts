@@ -76,7 +76,7 @@ import { dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
-import { selectRange } from "./owed-range.ts";
+import { selectRange, SelectionInfrastructureError, selectionInfrastructure } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
@@ -773,14 +773,10 @@ export function allSteps() {
 }
 
 /** Production/build dependency reach; workspace tests cover dev dependencies. */
-export function crates() {
-  return once("crates", () => {
-    let meta;
-    try {
-      meta = JSON.parse(execFileSync("cargo", ["metadata", "--format-version", "1", "--no-deps", "--offline"], { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1 << 28 }));
-    } catch {
-      return null; // no cargo: crate paths fall to their rules, or to the full gate
-    }
+function cargoCrates(execute = execFileSync) {
+  const args = ["metadata", "--format-version", "1", "--no-deps", "--offline"];
+  try {
+    const meta = JSON.parse(execute("cargo", args, { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 }));
     const byName = new Map(meta.packages.map((p) => [p.name, rel(dirname(p.manifest_path))]));
     const out = new Map();
     for (const p of meta.packages) {
@@ -789,13 +785,19 @@ export function crates() {
     }
     for (const [dir, c] of out) for (const d of c.deps) out.get(d)?.users.push(dir);
     return out;
-  });
+  } catch (error) {
+    const stderr = error.stderr?.toString().trim();
+    throw new SelectionInfrastructureError(`selector cargo ${args.join(" ")} in ${TREE} failed: ${String(error)}${stderr ? `\nstderr: ${stderr}` : ""}`, { cause: error });
+  }
+}
+
+export function crates() {
+  return once("crates", () => cargoCrates());
 }
 
 /** The crate a path is in (the longest crate directory above it), or null. */
 export function crateOf(path) {
   const all = crates();
-  if (!all) return null;
   let best = null;
   for (const dir of all.keys()) if ((path === dir || path.startsWith(`${dir}/`)) && (!best || dir.length > best.length)) best = dir;
   return best;
@@ -1233,10 +1235,7 @@ export function owed(changes) {
     const own = crateOf(path);
     if (own) roots.add(own);
     for (const c of covering(embedded(), path)) roots.add(c);
-    // No cargo to ask for the graph: any path in a crate, or in a directory a
-    // crate compiles in, owes the full gate.
-    if (!all && (/\.rs$|(^|\/)Cargo\.toml$/.test(path) || cargoDirOf(path) || roots.size)) unplaced = "compiled into a crate, and cargo metadata could not say which crates depend on it";
-    for (const root of all ? roots : []) {
+    for (const root of roots) {
       for (const dir of dependents(root)) {
         const rules = rulesFor(`${dir}/src/lib.rs`, false).filter((r) => r.steps.length || r.full);
         const via = dir === root ? path : `${path} (through ${all.get(dir).name})`;
@@ -1343,6 +1342,12 @@ export function gateSteps(rules) {
 
 // **Seen to select before it is trusted**, on the three changes that motivated it.
 export function selfTest() {
+  try {
+    cargoCrates(() => { throw Object.assign(new Error("Cargo control failure"), { stderr: "metadata control stderr" }); });
+    return "a failed Cargo metadata command granted a crate graph";
+  } catch (error) {
+    if (!selectionInfrastructure(error) || !String(error).includes("cargo metadata --format-version 1 --no-deps --offline") || !String(error).includes("metadata control stderr")) return "a Cargo metadata failure lost its infrastructure cause or stderr";
+  }
   const names = (changes) => owed(changes).map((r) => r.name).join(", ");
   const example = names([{ path: "tests/programs/is-array-of-object/tsconfig.json", added: true }, { path: "tests/programs/is-array-of-object/src/main.ts", added: true }]);
   if (!example.includes("a new example") || example.includes("an example changed")) return `a new example: ${example}`;

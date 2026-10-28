@@ -14,9 +14,17 @@ export type RuleView = { revision: string; checks: Checks; catalogue: string[]; 
 export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[] };
 const SELF = fileURLToPath(import.meta.url);
 const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
-export class SelectionInfrastructureError extends Error {}
+const INFRASTRUCTURE_CODE = "NTS_SELECTION_INFRASTRUCTURE";
+const INFRASTRUCTURE_EXIT = 75;
+export class SelectionInfrastructureError extends Error {
+  readonly code = INFRASTRUCTURE_CODE;
+}
 export function selectionInfrastructure(error:unknown):boolean {
-  return error instanceof SelectionInfrastructureError || error instanceof AggregateError&&error.errors.some(selectionInfrastructure);
+  // Endpoint rules import this module from their own committed tree. Their
+  // error class has a different module identity, so retain the explicit brand.
+  return error instanceof SelectionInfrastructureError
+    || error instanceof Error && "code" in error && error.code === INFRASTRUCTURE_CODE
+    || error instanceof AggregateError&&error.errors.some(selectionInfrastructure);
 }
 function infrastructure<T>(operation:string,run:()=>T):T {
   try{return run();}catch(error){throw new SelectionInfrastructureError(`${operation}: ${String(error)}`,{cause:error});}
@@ -82,7 +90,7 @@ export function selectRange(repo: string, range: string): RangeSelection {
         views.push(readView(text, revision));
       } catch (error) {
         const command=error as NodeJS.ErrnoException&{signal?:string;status?:number};
-        if(command.signal || typeof command.code==="string")throw new SelectionInfrastructureError(`selector worker interrupted at ${revision}: ${String(error)}`,{cause:error});
+        if(command.status===INFRASTRUCTURE_EXIT || command.signal || typeof command.code==="string")throw new SelectionInfrastructureError(`selector worker unavailable at ${revision}: ${String(error)}`,{cause:error});
         throw new Error(`cannot evaluate owed rules at ${revision}: ${String(error)}`, { cause: error });
       }
     }
@@ -104,6 +112,11 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
   for (const name of ["owed", "gateSteps", "allSteps"]) {
     if (typeof m[name] !== "function") throw new Error(`owed.mjs lacks ${name} at ${revision}`);
   }
+  // Older rules returned null on Cargo failure. Check before their self-test,
+  // which otherwise misreports the missing graph as a broken step-order rule.
+  if (existsSync(join(tree, "Cargo.toml")) && typeof m.crates === "function" && m.crates() === null) {
+    throw new SelectionInfrastructureError(`Cargo metadata is unavailable at ${revision}; dependency reach is unknown`);
+  }
   if (typeof m.selfTest === "function") {
     const broken = m.selfTest();
     if (broken) throw new Error(`rule self-test failed at ${revision}: ${broken}`);
@@ -111,9 +124,6 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
     // Historical rule modules exposed their checks only through this command.
     execFileSync(process.execPath, [join(tree, "tooling/gate/owed.mjs"), "--self-test"],
       { cwd: tree, stdio: ["ignore", "pipe", "pipe"] });
-  }
-  if (existsSync(join(tree, "Cargo.toml")) && typeof m.crates === "function" && m.crates() === null) {
-    throw new Error(`Cargo metadata is unavailable at ${revision}; dependency reach is unknown`);
   }
   const rules: Rule[] = m.owed(changes);
   const projects = typeof m.interopOwed==="function"?m.interopOwed(rules):null;
@@ -129,5 +139,5 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     const [operation, tree, revision, ...rest] = process.argv.slice(2);
     if (operation !== "--endpoint" || !tree || !revision || rest.length) throw new Error("invalid owed endpoint invocation");
     process.stdout.write(JSON.stringify(await endpoint(tree, revision, JSON.parse(readFileSync(0,"utf8")))));
-  } catch (error) { console.error(String(error)); process.exitCode = 1; }
+  } catch (error) { console.error(String(error)); process.exitCode = selectionInfrastructure(error) ? INFRASTRUCTURE_EXIT : 1; }
 }
