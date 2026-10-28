@@ -845,19 +845,34 @@ test("Public EventTarget and abort constructors do not expose provider hooks", (
   assert.throws(() => new AbortSignal(), TypeError);
   assert.throws(() => new globalThis.AbortSignal(), TypeError);
 
-  let reported = 0;
-  const target = new EventTarget(() => reported++);
-  target.addEventListener("error", () => {
-    throw new Error("listener failure");
+  const previousRuntime = currentWebPlatformRuntime();
+  const providerErrors: unknown[] = [];
+  const runtime = createHostNodeWebPlatform({}, {}, (error: unknown) => {
+    providerErrors.push(error);
   });
-  assert.equal(target.dispatchEvent(new Event("error")), true);
+  try {
+    let reported = 0;
+    const listenerFailure = new Error("listener failure");
+    const abortFailure = new Error("abort failure");
+    const target = new EventTarget(() => reported++);
+    target.addEventListener("error", () => {
+      throw listenerFailure;
+    });
+    assert.equal(target.dispatchEvent(new Event("error")), true);
 
-  const controller = new AbortController(() => reported++);
-  controller.signal[abortSignalSubscribe](() => {
-    throw new Error("abort failure");
-  });
-  controller.abort();
-  assert.equal(reported, 0);
+    const controller = new AbortController(() => reported++);
+    controller.signal[abortSignalSubscribe](() => {
+      throw abortFailure;
+    });
+    controller.abort();
+    assert.equal(reported, 0);
+    assert.equal(providerErrors.length, 2);
+    assert.equal(providerErrors[0], listenerFailure);
+    assert.equal(providerErrors[1], abortFailure);
+  } finally {
+    runtime.close();
+    installWebPlatformRuntime(previousRuntime);
+  }
 });
 test("AbortSignal.any selects the first reason and detaches", () => {
   const a = new AbortController(),
