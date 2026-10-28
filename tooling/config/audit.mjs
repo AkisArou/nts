@@ -71,8 +71,12 @@ const configPaths = ["tests/programs", "tests/interop", "tests/gjs", "tests/work
 const declaredFields = new Map();
 const unions = new Map();
 let interfacesDeclared = 0;
-for (const f of readdirSync(join(here, "src"))) {
-  const src = readFileSync(join(here, "src", f), "utf8");
+const sources = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+  const path = join(dir, entry.name);
+  return entry.isDirectory() ? sources(path) : entry.name.endsWith(".ts") ? [path] : [];
+});
+for (const path of sources(join(here, "src"))) {
+  const src = readFileSync(path, "utf8");
   interfacesDeclared += (src.match(/^(?:export )?interface /gm) ?? []).length;
   // `{...\n}` or `{}` on one line. The one-line form is not hypothetical: an
   // interface emptied by a field removal became `interface LibraryBase extends
@@ -248,13 +252,24 @@ const visit = (o) => {
 };
 configs.forEach(({ config }) => visit(config));
 
+// Provider policy is consumed by the pure planner before Product grows these
+// fields. Audit its actual profiles and typed schema fixture independently of
+// product configs, so an unrelated product's field cannot cover a selector's.
+const providerFixture = (await import(pathToFileURL(join(here, "fixtures/provider-selector.ts")).href)).default;
+const providerFields = new Set([
+  providerFixture,
+  ...Object.values(pkg.profiles).flatMap((profile) => [
+    ...profile.preferences, ...Object.values(profile.pins),
+  ]),
+].flatMap((selector) => Object.keys(selector)));
+
 const optional = [];
 for (const [iface, fields] of declaredFields) {
   for (const f of fields) if (f.endsWith("?")) optional.push([iface, f.slice(0, -1)]);
 }
 ask(
   "optional fields the types declare and no fixture sets",
-  optional.filter(([, f]) => !usedFields.has(f)),
+  optional.filter(([iface, f]) => !(iface === "ProviderSelector" ? providerFields : usedFields).has(f)),
   ([iface, f]) => `${iface}.${f}`,
 );
 

@@ -16,6 +16,10 @@ serde.workspace = true
 # it is evaluated rather than parsed.
 serde_json.workspace = true
 anyhow.workspace = true
+hmac-sha256.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+nts-codegen-c.workspace = true

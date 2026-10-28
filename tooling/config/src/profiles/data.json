@@ -1,0 +1,390 @@
+{
+  "android": {
+    "ambient_types": {
+      "lib": [
+        "DOM",
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": []
+    },
+    "backends": [
+      "jvm"
+    ],
+    "denied": {
+      "node:*": "This host does not provide the node module family."
+    },
+    "hosts": [
+      "android"
+    ],
+    "id": "android",
+    "pins": {},
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      }
+    ]
+  },
+  "chromium": {
+    "ambient_types": {
+      "lib": [
+        "DOM",
+        "ESNext"
+      ],
+      "overlay": "chromium",
+      "types": []
+    },
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "denied": {
+      "node:*": "This host does not provide the node module family."
+    },
+    "hosts": [
+      "chromium"
+    ],
+    "id": "chromium",
+    "pins": {},
+    "preferences": [
+      {
+        "use": "@nts/chromium"
+      },
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      },
+      {
+        "use": "@nts/node"
+      },
+      {
+        "use": "@nts/runtime"
+      }
+    ]
+  },
+  "gtk": {
+    "ambient_types": {
+      "lib": [
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": [
+        "node"
+      ]
+    },
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "denied": {},
+    "hosts": [
+      "native"
+    ],
+    "id": "gtk",
+    "pins": {
+      "host:loop": {
+        "options": {
+          "adapter": "glib"
+        },
+        "use": "@nts/runtime"
+      }
+    },
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      },
+      {
+        "use": "@nts/node"
+      },
+      {
+        "use": "@nts/runtime"
+      }
+    ]
+  },
+  "jvm": {
+    "ambient_types": {
+      "lib": [
+        "DOM",
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": []
+    },
+    "backends": [
+      "jvm"
+    ],
+    "denied": {
+      "node:*": "This host does not provide the node module family."
+    },
+    "hosts": [
+      "jvm"
+    ],
+    "id": "jvm",
+    "pins": {},
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      }
+    ]
+  },
+  "macos": {
+    "ambient_types": {
+      "lib": [
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": [
+        "node"
+      ]
+    },
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "denied": {},
+    "hosts": [
+      "native"
+    ],
+    "id": "macos",
+    "pins": {
+      "host:loop": {
+        "options": {
+          "adapter": "core-foundation"
+        },
+        "use": "@nts/runtime"
+      }
+    },
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      },
+      {
+        "use": "@nts/node"
+      },
+      {
+        "use": "@nts/runtime"
+      }
+    ]
+  },
+  "native": {
+    "ambient_types": {
+      "lib": [
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": [
+        "node"
+      ]
+    },
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "denied": {},
+    "hosts": [
+      "native"
+    ],
+    "id": "native",
+    "pins": {
+      "host:loop": {
+        "options": {
+          "adapter": "libuv"
+        },
+        "use": "@nts/runtime"
+      }
+    },
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      },
+      {
+        "use": "@nts/node"
+      },
+      {
+        "use": "@nts/runtime"
+      }
+    ]
+  },
+  "node-addon": {
+    "ambient_types": {
+      "lib": [
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": [
+        "node"
+      ]
+    },
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "denied": {},
+    "hosts": [
+      "node"
+    ],
+    "id": "node-addon",
+    "pins": {
+      "host:loop": {
+        "use": "@nts/node"
+      }
+    },
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      },
+      {
+        "use": "@nts/node"
+      },
+      {
+        "use": "@nts/runtime"
+      }
+    ]
+  },
+  "wasm-js": {
+    "ambient_types": {
+      "lib": [
+        "DOM",
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": []
+    },
+    "backends": [],
+    "denied": {
+      "node:*": "This host does not provide the node module family."
+    },
+    "hosts": [
+      "wasm-js"
+    ],
+    "id": "wasm-js",
+    "pins": {},
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      }
+    ]
+  },
+  "wasm-standalone": {
+    "ambient_types": {
+      "lib": [
+        "DOM",
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": []
+    },
+    "backends": [],
+    "denied": {
+      "es:Intl": "The standalone Wasm profile does not provide Intl (D6)."
+    },
+    "hosts": [
+      "wasm-standalone"
+    ],
+    "id": "wasm-standalone",
+    "pins": {},
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      }
+    ]
+  },
+  "windows": {
+    "ambient_types": {
+      "lib": [
+        "ESNext"
+      ],
+      "overlay": null,
+      "types": [
+        "node"
+      ]
+    },
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "denied": {},
+    "hosts": [
+      "native"
+    ],
+    "id": "windows",
+    "pins": {
+      "host:loop": {
+        "options": {
+          "adapter": "win32"
+        },
+        "use": "@nts/runtime"
+      }
+    },
+    "preferences": [
+      {
+        "use": "@nts/compiler"
+      },
+      {
+        "use": "@nts/ecmascript"
+      },
+      {
+        "use": "@nts/web-platform"
+      },
+      {
+        "use": "@nts/node"
+      },
+      {
+        "use": "@nts/runtime"
+      }
+    ]
+  }
+}

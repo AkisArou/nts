@@ -15,7 +15,7 @@
 //!
 //! # What is actually here
 //!
-//! [`config`], and nothing else yet. This crate was fourteen lines of the
+//! [`config`] was its first content. This crate was fourteen lines of the
 //! paragraphs above and no code, depended on by nobody -- a description of a
 //! build planner that did not exist, which reads as capability the same way a
 //! config field nothing reaches does.
@@ -27,7 +27,12 @@
 //! [`dependencies`] is the second, and it is the half of a build graph that is
 //! not ours: what a package needs that this compiler did not produce. It reads
 //! each ecosystem's pinned output and never runs a resolver.
+//!
+//! [`features`] validates provider manifests and complete recorded observations,
+//! then solves one typed plan from the full reached-use and dependency union.
+//! It performs no capture, lowering, environment lookup or artifact execution.
 
 pub mod config;
 pub mod dependencies;
+pub mod features;
 pub mod swift;

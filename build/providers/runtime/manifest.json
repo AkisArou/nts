@@ -1,0 +1,13 @@
+{
+  "name": "@nts/runtime",
+  "nts": {
+    "provides": {
+      "host:loop": {
+        "binding": "c:nts_loop",
+        "backends": ["c", "llvm"],
+        "hosts": ["native"],
+        "limits": "Existing native adapters only. Options, target and complete recorded inputs must match. This catalogue alone is not a conformance record."
+      }
+    }
+  }
+}

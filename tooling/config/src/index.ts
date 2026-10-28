@@ -13,5 +13,6 @@
 
 export * from "./native.ts";
 export * from "./product.ts";
+export * from "./profiles.ts";
 export * from "./target.ts";
 export * from "./workspace.ts";
