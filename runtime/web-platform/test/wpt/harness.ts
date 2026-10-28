@@ -278,7 +278,7 @@ export class WptHarness {
       const receiver = this === undefined || this === null ? fixtureGlobal : Object(this);
       const timer = setTimeout(() => {
         harness.globalTimers.delete(timer);
-        try { apply(callback, receiver, args); }
+        try { callback.apply(receiver, args); }
         catch (error) { harness.reportError(error); }
       }, delay);
       harness.globalTimers.add(timer);
