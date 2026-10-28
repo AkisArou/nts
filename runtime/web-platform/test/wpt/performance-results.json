@@ -406,5 +406,24 @@
     "Browser/worker lifecycle, coarsening/security profile, cross-context clock comparability and suspend behavior.",
     "PerformanceObserver/resource/navigation timelines; latest PerformanceEntry id/navigationId fields; descriptor flags and full IDL harness.",
     "Global exposure is delegated to a separate provider bootstrap pull request."
-  ]
+  ],
+  "stackValidation": {
+    "basePullRequest": 37,
+    "baseCommit": "63bc421083ccd61706105752ee1915119a646c49",
+    "sourceCommit": "502da280d47677b846438cd95926f590f4b99d3b",
+    "sourceTree": "2984ac32fe977b3264f473ea0bd3adb701d4e2b8",
+    "strictProjects": "source and WPT pass",
+    "fullGate": {
+      "exitCode": 0,
+      "tests": 4277,
+      "pass": 3955,
+      "fail": 0,
+      "skipped": 322,
+      "upstreamPass": 2772,
+      "upstreamFail": 0,
+      "upstreamNotApplicable": 45
+    },
+    "compiled": "not verified; compiler absent",
+    "logSHA256": "e58df7c1e7fa81bdf4d988af292e509de47df630bfc9ecdbd152f1b75a01b78e"
+  }
 }

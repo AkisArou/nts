@@ -1,5 +1,9 @@
 # Performance and User Timing source conformance
 
+Stacked on [PromiseRejectionEvent PR #37](https://github.com/AkisArou/nts/pull/37),
+`chatgpt/promise-rejection-event` at `63bc421083ccd61706105752ee1915119a646c49`.
+This is item B7, after A5 and B6 in the corrected handoff.
+
 ## Scope and specifications
 
 This change implements the assigned `Performance`, `PerformanceEntry`,
@@ -212,3 +216,21 @@ brands, JSON and algorithm tests remain independent of those flags. Epoch-origin
 cross-context accuracy, sleep behavior and browser isolation/coarsening are
 **not verified**. Compiled nts execution and the maintainers' full gate are
 **not verified**. Global exposure and provider bootstrap are separate work.
+
+## Integration validation on the published stack
+
+The public API barrel exports the four canonical classes and public option/JSON
+types; the provider barrel exports the internal factory and typed capability
+contract. Global exposure remains in the separate small bootstrap PR.
+
+Both strict TypeScript projects pass on this stack. The complete ordinary-node
+gate exits zero: **4,277 tests; 3,955 passed, 0 failed, 322 skipped**. Its broader
+upstream runner records **2,772 passed, 0 failed, 45 not applicable**. The
+compiled axis explicitly skips because no nts compiler is available. These are
+new measurements on the B6 stack; the archived #27 baseline and the original
+sabotage evidence above retain their own source identities.
+
+Shared-file overlap with PR #10 and the other conformance tasks is additive:
+`assert_approx_equals`, three strict-test registrations, and three check.sh
+entries. The maintainers merge those shared changes; there is no runner or
+timer change in this PR.
