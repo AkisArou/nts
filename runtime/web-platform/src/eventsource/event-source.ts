@@ -228,6 +228,7 @@ export class EventSource extends EventTarget {
   readonly withCredentials: boolean;
 
   private readonly context: EventSourceContext;
+  private readonly retryableScheme: boolean;
   private state = EventSource.CONNECTING;
   private reconnectDelay: number;
   private lastEventId = "";
@@ -258,7 +259,10 @@ export class EventSource extends EventTarget {
     super();
     this[eventTargetSetErrorReporter]((error) => context.scheduler.reportError(error));
     try {
-      this.url = context.urls.parse(input, context.baseURL).href;
+      const parsed = context.urls.parse(input, context.baseURL);
+      this.url = parsed.href;
+      this.retryableScheme = parsed.protocol === "http:" || parsed.protocol === "https:" ||
+        parsed.protocol === "data:" || parsed.protocol === "blob:" || parsed.protocol === "file:";
     } catch {
       throw new DOMException("Invalid EventSource URL", "SyntaxError");
     }
@@ -367,7 +371,9 @@ export class EventSource extends EventTarget {
     } catch (error) {
       if (this.state === EventSource.CLOSED || controller.signal.aborted) return "fatal";
       if (error instanceof LimitError) return "fatal";
-      return "reconnect";
+      // HTML 9.2.2 step 15.2 permits terminal failure when retrying is known
+      // to be futile. Fetch cannot service other schemes in this environment.
+      return this.retryableScheme ? "reconnect" : "fatal";
     } finally {
       if (this.connection === controller) this.connection = null;
     }
