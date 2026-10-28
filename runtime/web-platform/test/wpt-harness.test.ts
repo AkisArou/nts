@@ -241,8 +241,118 @@ test("WPT explicit_done permits asynchronous registration and setup runs immedia
   assert.deepEqual(order, ["setup", "test"]);
 });
 
+test("WPT pending promise tests can register awaited children and grandchildren", async () => {
+  const release = Promise.withResolvers<void>();
+  const order: string[] = [];
+  const harness = new WptHarness({ gate: release.promise, record: (value: string) => { order.push(value); } });
+  harness.run(`
+    promise_test(async () => {
+      await gate;
+      record("setup");
+      promise_test(async () => {
+        await Promise.resolve();
+        record("child");
+        promise_test(() => { record("grandchild"); return Promise.resolve(); }, "grandchild");
+      }, "child");
+    }, "setup - define tests");
+    promise_test(() => { record("already queued"); return Promise.resolve(); }, "already queued");
+  `, "dynamic-promise-registration.js");
+  const completion = harness.finish();
+  release.resolve();
+  const results = await completion;
+  assert.deepEqual(results.map((result) => result.name), ["setup - define tests", "already queued", "child", "grandchild"]);
+  assert.deepEqual(results.map((result) => result.status), ["pass", "pass", "pass", "pass"]);
+  assert.deepEqual(order, ["setup", "already queued", "child", "grandchild"]);
+});
+
+test("WPT pending async tests can register all test kinds before completion", async () => {
+  const release = Promise.withResolvers<void>();
+  const order: string[] = [];
+  const harness = new WptHarness({ gate: release.promise, record: (value: string) => { order.push(value); } });
+  harness.run(`
+    async_test(t => {
+      gate.then(t.step_func(() => {
+        test(() => { record("sync"); }, "sync child");
+        async_test(child => {
+          Promise.resolve().then(child.step_func_done(() => { record("async"); }));
+        }, "async child");
+        promise_test(() => { record("promise"); return Promise.resolve(); }, "promise child");
+        t.done();
+      }));
+    }, "async registrar");
+  `, "dynamic-async-registration.js");
+  const completion = harness.finish();
+  release.resolve();
+  const results = await completion;
+  assert.deepEqual(results.map((result) => result.name), ["async registrar", "sync child", "async child", "promise child"]);
+  assert.deepEqual(results.map((result) => result.status), ["pass", "pass", "pass", "pass"]);
+  assert.deepEqual(order, ["sync", "async", "promise"]);
+});
+
+test("WPT explicit done rejects later registration even while its caller is pending", async () => {
+  for (const setup of ["", "setup({explicit_done:true});"]) {
+    const harness = new WptHarness({});
+    harness.run(`
+      ${setup}
+      promise_test(async () => {
+        await Promise.resolve();
+        done();
+        promise_test(() => Promise.resolve(), "after done");
+      }, "registrar");
+    `, "registration-after-explicit-done.js");
+    const results = await harness.finish();
+    assert.equal(results.length, 1);
+    assert.equal(results[0]?.status, "fail");
+    assert.match(String(results[0]?.error), /test registered after done/);
+  }
+  const synchronous = new WptHarness({});
+  synchronous.run('done(); test(() => {}, "too late");', "synchronous-registration-after-done.js");
+  await assert.rejects(synchronous.finish(), AggregateError);
+});
+
+test("WPT unrelated background promises do not keep a completed fixture open", async () => {
+  const release = Promise.withResolvers<void>();
+  let detached: Promise<unknown> | undefined;
+  const harness = new WptHarness({
+    gate: release.promise,
+    capture: (promise: Promise<unknown>) => { detached = promise; },
+  });
+  harness.run(`
+    promise_test(() => {
+      capture(gate.then(() => promise_test(() => Promise.resolve(), "detached child")));
+      return Promise.resolve();
+    }, "unrelated setup promise");
+  `, "detached-registration.js");
+  const results = await harness.finish();
+  assert.deepEqual(results.map((result) => result.name), ["unrelated setup promise"]);
+  assert.equal(results[0]?.status, "pass");
+  assert.ok(detached !== undefined);
+  const rejected = assert.rejects(detached, /test registered after done/);
+  release.resolve();
+  await rejected;
+});
+
+test("WPT exposes its real assertion error constructor to unchanged fixture helpers", async () => {
+  const harness = new WptHarness({});
+  harness.run(`
+    test(() => assert_throws_js(AssertionError, () => assert_true(false)), "actual assertion constructor");
+    test(() => {
+      try { assert_implements_optional(false, "missing support"); }
+      catch (error) {
+        assert_true(error instanceof AssertionError);
+        assert_true(error instanceof OptionalFeatureUnsupportedError);
+        return;
+      }
+      assert_unreached("the optional assertion must throw");
+    }, "optional error is an assertion error");
+  `, "assertion-error-identity.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "pass"]);
+});
+
 test("WPT unsupported setup options and missing explicit done fail loudly", async () => {
-  for (const options of ['{allow_uncaught_exception: true}', '{unknown_option: false}', '{explicit_done: 1}']) {
+  for (const options of [
+    '{allow_uncaught_exception: true}', '{unknown_option: false}', '{explicit_done: 1}', '{explicit_timeout: 1}',
+  ]) {
     const harness = new WptHarness({});
     harness.run(`setup(${options});`, "unsupported-setup.js");
     await assert.rejects(harness.finish(), AggregateError);
@@ -255,6 +365,196 @@ test("WPT unsupported setup options and missing explicit done fail loudly", asyn
     error instanceof AggregateError && error.errors.some((entry: unknown) => /requires a call to done/.test(String(entry))));
   (await deadlines.at(0)).callback();
   await rejected;
+});
+
+test("WPT membership assertions preserve indexOf identity and numeric semantics", async () => {
+  const harness = new WptHarness({});
+  harness.run(`
+    test(() => assert_in_array("sign", ["verify", "sign"]), "present string");
+    test(() => { const value = {}; assert_in_array(value, [value]); }, "object identity");
+    test(() => assert_in_array(0, [-0]), "signed zero");
+    test(() => assert_in_array(undefined, [undefined]), "explicit undefined");
+    test(() => assert_in_array("sign", ["verify"]), "absent string");
+    test(() => assert_in_array({}, [{}]), "different object");
+    test(() => assert_in_array(1, ["1"]), "no coercion");
+    test(() => assert_in_array(NaN, [NaN]), "NaN never matches");
+    test(() => assert_in_array(undefined, [,]), "array hole does not match");
+  `, "membership-assertions.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status),
+    ["pass", "pass", "pass", "pass", "fail", "fail", "fail", "fail", "fail"]);
+});
+
+test("WPT optional-feature preconditions are blocked with cleanup, never successful tests", async () => {
+  const cleaned: string[] = [];
+  const harness = new WptHarness({ record: (value: string) => { cleaned.push(value); } });
+  harness.run(`
+    test(() => assert_implements_optional({}), "truthy support");
+    test(t => {
+      t.add_cleanup(() => record("sync"));
+      assert_implements_optional(false, "compressed EC points");
+      assert_unreached("must stop this callback");
+    }, "missing optional support");
+    async_test(t => {
+      t.add_cleanup(() => record("async"));
+      t.step(() => assert_implements_optional(0, "another optional feature"));
+    }, "async optional support");
+    promise_test(async t => {
+      t.add_cleanup(async () => { await Promise.resolve(); record("promise"); });
+      await Promise.resolve();
+      assert_implements_optional(null, "optional support after await");
+    }, "promise optional support");
+    promise_test(() => Promise.resolve(), "following test");
+    test(() => { throw new Error("ordinary failure"); }, "ordinary error");
+  `, "optional-feature-assertion.js");
+  const results = await harness.finish();
+  assert.deepEqual(results.map((result) => result.status), ["pass", "blocked", "blocked", "blocked", "pass", "fail"]);
+  assert.equal(results[1]?.reason, "optional feature unsupported: compressed EC points");
+  assert.equal(results[3]?.reason, "optional feature unsupported: optional support after await");
+  assert.deepEqual(cleaned, ["sync", "async", "promise"]);
+  const outsideTest = new WptHarness({});
+  outsideTest.run('assert_implements_optional(false, "file precondition");', "top-level-optional.js");
+  await assert.rejects(outsideTest.finish(), (error: unknown) =>
+    error instanceof AggregateError && error.errors.some((entry: unknown) => /file precondition/.test(String(entry))));
+});
+
+test("WPT explicit_timeout retains external test and registration watchdogs", async () => {
+  const deadlines = manualDeadlines();
+  const harness = new WptHarness({}, {}, 10000, { deadlineScheduler: deadlines.schedule });
+  harness.run('setup({explicit_timeout:true}); async_test(() => {}, "unfinished test");', "explicit-timeout-test.js");
+  const completion = harness.finish();
+  assert.equal(deadlines.scheduled.length, 2);
+  (await deadlines.at(0)).callback();
+  const results = await completion;
+  assert.equal(results[0]?.status, "fail");
+  assert.match(String(results[0]?.error), /WPT timed out: unfinished test/);
+  assert.ok(deadlines.scheduled.every((deadline) => deadline.cancelled));
+
+  const registration = manualDeadlines();
+  const pending = new WptHarness({}, {}, 10000, { deadlineScheduler: registration.schedule });
+  pending.run('setup({explicit_done:true, explicit_timeout:true});', "explicit-timeout-registration.js");
+  const rejected = assert.rejects(pending.finish(), (error: unknown) =>
+    error instanceof AggregateError && error.errors.some((entry: unknown) => /requires a call to done/.test(String(entry))));
+  (await registration.at(0)).callback();
+  await rejected;
+  assert.ok(registration.scheduled.every((deadline) => deadline.cancelled));
+});
+
+test("WPT manual timeout is conditional and explicit_timeout stays enabled once set", async () => {
+  for (const setup of ["", "setup({explicit_timeout:false});"]) {
+    const harness = new WptHarness({});
+    harness.run(`${setup} timeout(); test(() => {}, "timeout is a no-op");`, "ordinary-manual-timeout.js");
+    assert.equal((await harness.finish())[0]?.status, "pass");
+  }
+  for (const setup of ["", "setup({explicit_timeout:false});"]) {
+    const deadlines = manualDeadlines();
+    const harness = new WptHarness({}, {}, 10000, { deadlineScheduler: deadlines.schedule });
+    harness.run(`
+      setup({explicit_timeout:true, explicit_done:true});
+      ${setup}
+      async_test(() => {}, "interrupted test");
+      timeout();
+    `, "explicit-manual-timeout.js");
+    await assert.rejects(harness.finish(), (error: unknown) =>
+      error instanceof AggregateError && error.errors.some((entry: unknown) => /explicitly timed out/.test(String(entry))));
+    assert.ok(deadlines.scheduled.every((deadline) => deadline.cancelled));
+  }
+});
+
+test("WPT quota assertions check values, predicates and the exact injected constructor", async () => {
+  class QuotaExceededError extends DOMException {
+    readonly requested: number | null;
+    readonly quota: number | null;
+    constructor(requested: number | null = null, quota: number | null = null) {
+      super("", "QuotaExceededError");
+      this.requested = requested;
+      this.quota = quota;
+    }
+  }
+  const other = class QuotaExceededError extends DOMException {
+    readonly requested = null;
+    readonly quota = null;
+    constructor() { super("", "QuotaExceededError"); }
+  };
+  const harness = new WptHarness({ QuotaExceededError, OtherQuota: other, DOMException });
+  harness.run(`
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); }, null, null), "null fields");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(12, 8); }, 12, 8, "numeric values"), "number fields");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(12, 8); }, value => value > 8, value => value === 8), "predicates");
+    test(() => assert_throws_quotaexceedederror(OtherQuota, () => { throw new OtherQuota(); }, null, null, "another realm"), "explicit constructor");
+    test(() => assert_throws_quotaexceedederror(function() {
+      assert_equals(this, globalThis);
+      throw new QuotaExceededError();
+    }, null, null), "callback global receiver");
+    test(() => {
+      const error = new QuotaExceededError();
+      error.requested = undefined;
+      error.quota = "8";
+      assert_throws_quotaexceedederror(() => { throw error; }, null, 8);
+    }, "pinned loose comparison");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(12, 8); }, 13, 8), "wrong requested");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(12, 8); }, 12, 9), "wrong quota");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); }, () => false, null), "rejected requested predicate");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); }, null, () => false), "rejected quota predicate");
+    test(() => assert_throws_quotaexceedederror(() => { throw new OtherQuota(); }, null, null), "wrong constructor");
+    test(() => assert_throws_quotaexceedederror(() => { throw new DOMException("", "QuotaExceededError"); }, null, null), "legacy DOMException is insufficient");
+    test(() => assert_throws_quotaexceedederror(() => { throw null; }, null, null), "null is not an exception object");
+    test(() => assert_throws_quotaexceedederror(() => { throw 22; }, null, null), "primitive is not an exception object");
+    test(() => assert_throws_quotaexceedederror(() => {}, null, null), "no exception");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); }, undefined, null), "invalid requested expectation");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); }, null, "8"), "invalid quota expectation");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); }, null, null, "description", "extra"), "unexpected fifth argument");
+    test(() => {
+      const error = new QuotaExceededError();
+      delete error.requested;
+      assert_throws_quotaexceedederror(() => { throw error; }, null, null);
+    }, "missing requested property");
+    test(() => {
+      const error = new QuotaExceededError();
+      delete error.quota;
+      assert_throws_quotaexceedederror(() => { throw error; }, null, null);
+    }, "missing quota property");
+    test(() => {
+      const error = { constructor: QuotaExceededError, code: 20, name: "QuotaExceededError", requested: null, quota: null };
+      assert_throws_quotaexceedederror(() => { throw error; }, null, null);
+    }, "wrong code");
+    test(() => {
+      const error = { constructor: QuotaExceededError, code: 22, name: "AbortError", requested: null, quota: null };
+      assert_throws_quotaexceedederror(() => { throw error; }, null, null);
+    }, "wrong name");
+    test(() => assert_throws_quotaexceedederror(() => { assert_true(false); }, null, null), "assertion failure is not swallowed");
+    test(() => assert_throws_quotaexceedederror(() => {
+      assert_implements_optional(false, "optional assertion");
+    }, null, null), "optional precondition is not swallowed");
+  `, "quota-assertions.js");
+  const results = await harness.finish();
+  assert.deepEqual(results.slice(0, 6).map((result) => result.status), Array<string>(6).fill("pass"));
+  assert.deepEqual(results.slice(6, 23).map((result) => result.status), Array<string>(17).fill("fail"));
+  assert.equal(results[23]?.status, "blocked");
+  assert.match(String(results[22]?.error), /false !== true/);
+  assert.equal(results.length, 24);
+
+  const missing = new WptHarness({ error: new QuotaExceededError() });
+  missing.run('test(() => assert_throws_quotaexceedederror(() => { throw error; }, null, null), "missing quota constructor");', "missing-quota-constructor.js");
+  assert.equal((await missing.finish())[0]?.status, "fail");
+});
+
+test("WPT quota assertions check fixed values before invoking requested and quota predicates", async () => {
+  class QuotaExceededError extends DOMException {
+    readonly requested = 12;
+    readonly quota = 8;
+    constructor() { super("", "QuotaExceededError"); }
+  }
+  const calls: string[] = [];
+  const harness = new WptHarness({ QuotaExceededError, record: (value: string) => { calls.push(value); } });
+  harness.run(`
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); },
+      () => { record("unexpected requested predicate"); return true; }, 9), "fixed quota mismatch");
+    test(() => assert_throws_quotaexceedederror(() => { throw new QuotaExceededError(); },
+      value => { record("requested"); return value === 12; },
+      value => { record("quota"); return value === 8; }), "ordered predicates");
+  `, "quota-predicate-order.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status), ["fail", "pass"]);
+  assert.deepEqual(calls, ["requested", "quota"]);
 });
 
 test("WPT DOM and promise rejection assertions use injected constructors and exact values", async () => {

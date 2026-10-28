@@ -1,0 +1,20 @@
+{
+  "fixture": "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test {length: 128, name: AES-OCB}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 192, name: AES-OCB}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 256, name: AES-OCB}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    }
+  ]
+}

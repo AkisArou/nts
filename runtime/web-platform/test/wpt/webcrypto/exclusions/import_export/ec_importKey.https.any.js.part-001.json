@@ -1,0 +1,245 @@
+{
+  "fixture": "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+  "blockedTests": [
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDSA, namedCurve: P-256}, true, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDSA, namedCurve: P-256}, true, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDSA, namedCurve: P-256}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDSA, namedCurve: P-256}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDSA, namedCurve: P-256}, true, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDSA, namedCurve: P-256}, true, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDSA, namedCurve: P-256}, false, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDSA, namedCurve: P-256}, false, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDSA, namedCurve: P-256}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDSA, namedCurve: P-256}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDSA, namedCurve: P-256}, false, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDSA, namedCurve: P-256}, false, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDSA, namedCurve: P-384}, true, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDSA, namedCurve: P-384}, true, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDSA, namedCurve: P-384}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDSA, namedCurve: P-384}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDSA, namedCurve: P-384}, true, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDSA, namedCurve: P-384}, true, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDSA, namedCurve: P-384}, false, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDSA, namedCurve: P-384}, false, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDSA, namedCurve: P-384}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDSA, namedCurve: P-384}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDSA, namedCurve: P-384}, false, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDSA, namedCurve: P-384}, false, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDSA, namedCurve: P-521}, true, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDSA, namedCurve: P-521}, true, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDSA, namedCurve: P-521}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDSA, namedCurve: P-521}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDSA, namedCurve: P-521}, true, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDSA, namedCurve: P-521}, true, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDSA, namedCurve: P-521}, false, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDSA, namedCurve: P-521}, false, [verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDSA, namedCurve: P-521}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDSA, namedCurve: P-521}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDSA, namedCurve: P-521}, false, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDSA, namedCurve: P-521}, false, [verify, verify])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDH, namedCurve: P-256}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDH, namedCurve: P-256}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (spki, buffer(59, compressed), {name: ECDH, namedCurve: P-256}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (raw, buffer(33, compressed), {name: ECDH, namedCurve: P-256}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDH, namedCurve: P-384}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDH, namedCurve: P-384}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (spki, buffer(72, compressed), {name: ECDH, namedCurve: P-384}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-384 bits (raw, buffer(49, compressed), {name: ECDH, namedCurve: P-384}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDH, namedCurve: P-521}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDH, namedCurve: P-521}, true, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (spki, buffer(90, compressed), {name: ECDH, namedCurve: P-521}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDH, namedCurve: P-521}, false, [])",
+      "category": "optional-compressed-ec-point",
+      "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    }
+  ]
+}

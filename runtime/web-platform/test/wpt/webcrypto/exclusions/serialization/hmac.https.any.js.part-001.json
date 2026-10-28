@@ -1,0 +1,45 @@
+{
+  "fixture": "WebCryptoAPI/serialization/hmac.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test {hash: SHA-1, length: 160, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-256, length: 256, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-384, length: 384, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-512, length: 512, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-1, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-256, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-384, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-512, name: HMAC}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    }
+  ]
+}

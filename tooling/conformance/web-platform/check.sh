@@ -74,6 +74,7 @@ node --expose-gc \
   runtime/web-platform/test/wpt-runner.test.ts \
   runtime/web-platform/test/wpt-versions.test.ts \
   runtime/web-platform/test/wpt-events-abort.test.ts \
+  runtime/web-platform/test/wpt-webcrypto.test.ts \
   runtime/web-platform/test/wpt-streams.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \

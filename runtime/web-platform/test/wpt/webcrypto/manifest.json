@@ -1,0 +1,1736 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "fixtures": [
+    {
+      "path": "WebCryptoAPI/algorithm-discards-context.https.window.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 13,
+      "blockedTestFiles": [
+        "exclusions/algorithm-discards-context.https.window.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/crypto_key_cached_slots.https.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/derive_bits_keys/argon2_vectors.js",
+        "WebCryptoAPI/derive_bits_keys/argon2.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTestFiles": [
+        "exclusions/derive_bits_keys/argon2.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_fixtures.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 19,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_fixtures.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 18,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_fixtures.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 17,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_fixtures.js",
+        "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 16,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/derived_bits_length.js",
+        "WebCryptoAPI/derive_bits_keys/derived_bits_length_vectors.js",
+        "WebCryptoAPI/derive_bits_keys/derived_bits_length_testcases.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 29,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/ecdh_bits.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 40,
+      "blockedTestFiles": [
+        "exclusions/derive_bits_keys/ecdh_bits.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/derive_bits_keys/ecdh_keys.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 31,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/derive_bits_keys/hkdf_vectors.js",
+        "WebCryptoAPI/derive_bits_keys/hkdf.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3661,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/derive_bits_keys/pbkdf2_vectors.js",
+        "WebCryptoAPI/derive_bits_keys/pbkdf2.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 8632,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/digest/cshake.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 88,
+      "blockedTestFiles": [
+        "exclusions/digest/cshake.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/digest.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 116,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 148,
+      "blockedTestFiles": [
+        "exclusions/digest/kangarootwelve.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 48,
+      "blockedTestFiles": [
+        "exclusions/digest/sha3.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 135,
+      "blockedTestFiles": [
+        "exclusions/digest/turboshake.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/encap_decap/ml_kem_vectors.js",
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 9,
+      "blockedTestFiles": [
+        "exclusions/encap_decap/encap_decap_bits.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/encap_decap/ml_kem_vectors.js",
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 120,
+      "blockedTestFiles": [
+        "exclusions/encap_decap/encap_decap_keys.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_cbc_vectors.js",
+        "WebCryptoAPI/encrypt_decrypt/aes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 61,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/aes_cbc.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_ctr_vectors.js",
+        "WebCryptoAPI/encrypt_decrypt/aes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 52,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/aes_ctr.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_gcm_96_iv_fixtures.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_gcm_vectors.js",
+        "WebCryptoAPI/encrypt_decrypt/aes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 577,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/aes_gcm.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv_fixtures.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_gcm_vectors.js",
+        "WebCryptoAPI/encrypt_decrypt/aes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 577,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/aes_gcm_256_iv.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_ocb_fixtures.js",
+        "WebCryptoAPI/encrypt_decrypt/aes_ocb_vectors.js",
+        "WebCryptoAPI/encrypt_decrypt/aes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 277,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-001.json",
+        "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-002.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 28,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/encrypt_decrypt/rsa_vectors.js",
+        "WebCryptoAPI/encrypt_decrypt/rsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 181,
+      "blockedTestFiles": [
+        "exclusions/encrypt_decrypt/rsa_oaep.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 774,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 774,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 774,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 516,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 774,
+      "blockedTestFiles": [
+        "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-001.json",
+        "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-002.json",
+        "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-003.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 476,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 454,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 412,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 412,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_HMAC.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 616,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 516,
+      "blockedTestFiles": [
+        "exclusions/generateKey/failures_ML-DSA.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1044,
+      "blockedTestFiles": [
+        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-001.json",
+        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-002.json",
+        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-003.json",
+        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-004.json",
+        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-005.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 532,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 428,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 428,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 424,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 424,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 500,
+      "blockedTestFiles": [
+        "exclusions/generateKey/failures_chacha20_poly1305.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/generateKey/failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 552,
+      "blockedTestFiles": [
+        "exclusions/generateKey/failures_kmac.tentative.https.any.js.part-001.json",
+        "exclusions/generateKey/failures_kmac.tentative.https.any.js.part-002.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 288,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 288,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 288,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 72,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 288,
+      "blockedTestFiles": [
+        "exclusions/generateKey/successes_AES-OCB.tentative.https.any.js.part-001.json",
+        "exclusions/generateKey/successes_AES-OCB.tentative.https.any.js.part-002.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 72,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 54,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 36,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 36,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_HMAC.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 192,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 108,
+      "blockedTestFiles": [
+        "exclusions/generateKey/successes_ML-DSA.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 468,
+      "blockedTestFiles": [
+        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-001.json",
+        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-002.json",
+        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-003.json",
+        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-004.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 156,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 36,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 36,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 32,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 32,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 192,
+      "blockedTestFiles": [
+        "exclusions/generateKey/successes_chacha20_poly1305.tentative.https.any.js.part-001.json",
+        "exclusions/generateKey/successes_chacha20_poly1305.tentative.https.any.js.part-002.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "common/subset-tests.js",
+        "WebCryptoAPI/generateKey/successes.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 144,
+      "blockedTestFiles": [
+        "exclusions/generateKey/successes_kmac.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 37,
+      "blockedTestFiles": [
+        "exclusions/getPublicKey.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/getRandomValues.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 39,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/historical.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/historical.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/symmetric_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 72,
+      "blockedTestFiles": [
+        "exclusions/import_export/AES-OCB_importKey.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/symmetric_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 45,
+      "blockedTestFiles": [
+        "exclusions/import_export/Argon2_importKey.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/symmetric_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 24,
+      "blockedTestFiles": [
+        "exclusions/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/symmetric_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 144,
+      "blockedTestFiles": [
+        "exclusions/import_export/KMAC_importKey.tentative.https.any.js.part-001.json",
+        "exclusions/import_export/KMAC_importKey.tentative.https.any.js.part-002.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/ML-DSA_importKey_fixtures.js",
+        "WebCryptoAPI/import_export/ML-DSA_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 180,
+      "blockedTestFiles": [
+        "exclusions/import_export/ML-DSA_importKey.tentative.https.any.js.part-001.json",
+        "exclusions/import_export/ML-DSA_importKey.tentative.https.any.js.part-002.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/ML-KEM_importKey_fixtures.js",
+        "WebCryptoAPI/import_export/ML-KEM_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 324,
+      "blockedTestFiles": [
+        "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-001.json",
+        "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-002.json",
+        "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-003.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",
+      "format": "javascript",
+      "support": [
+        "common/gc.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 264,
+      "blockedTestFiles": [
+        "exclusions/import_export/ec_importKey.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/ec_importKey_failures_fixtures.js",
+        "WebCryptoAPI/import_export/importKey_failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 620,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/ec_importKey_failures_fixtures.js",
+        "WebCryptoAPI/import_export/importKey_failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 620,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_fixtures.js",
+        "WebCryptoAPI/import_export/okp_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 72,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_fixtures.js",
+        "WebCryptoAPI/import_export/okp_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 72,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_fixtures.js",
+        "WebCryptoAPI/import_export/okp_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 54,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_fixtures.js",
+        "WebCryptoAPI/import_export/okp_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 54,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_failures_fixtures.js",
+        "WebCryptoAPI/import_export/importKey_failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 530,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_failures_fixtures.js",
+        "WebCryptoAPI/import_export/importKey_failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 530,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_failures_fixtures.js",
+        "WebCryptoAPI/import_export/importKey_failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 454,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/okp_importKey_failures_fixtures.js",
+        "WebCryptoAPI/import_export/importKey_failures.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 454,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 20,
+      "blockedTestFiles": [
+        "exclusions/import_export/raw_format_aliases.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1056,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/symmetric_importKey.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/import_export/symmetric_importKey.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 606,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/normalize-algorithm-name.https.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/randomUUID.https.any.js",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/secure_context/crypto-subtle-secure-context-available.https.sub.html.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-cbc.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/aes-cbc.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ctr.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/aes-ctr.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-gcm.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/aes-gcm.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-kw.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/aes-kw.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/aes-ocb.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/chacha20-poly1305.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdh.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/ecdh.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdsa.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTestFiles": [
+        "exclusions/serialization/ecdsa.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/ed25519.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/ed448.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/hmac.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 8,
+      "blockedTestFiles": [
+        "exclusions/serialization/hmac.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTestFiles": [
+        "exclusions/serialization/kmac.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mldsa.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTestFiles": [
+        "exclusions/serialization/mldsa.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTestFiles": [
+        "exclusions/serialization/mlkem.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-oaep.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/rsa-oaep.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-pss.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/rsa-pss.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/rsassa-pkcs1-v1_5.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/x25519.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/serialization/serialization.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTestFiles": [
+        "exclusions/serialization/x448.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/ecdsa.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/ecdsa_vectors.js",
+        "WebCryptoAPI/sign_verify/ecdsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 325,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/ecdsa.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/eddsa_vectors.js",
+        "WebCryptoAPI/sign_verify/eddsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 19,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/eddsa_curve25519.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/eddsa_vectors.js",
+        "WebCryptoAPI/sign_verify/eddsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 19,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/eddsa_curve448.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/eddsa_vectors.js",
+        "WebCryptoAPI/sign_verify/eddsa_small_order_points.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 14,
+      "blockedTestFiles": []
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/hmac.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/hmac_vectors.js",
+        "WebCryptoAPI/sign_verify/hmac.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 65,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/hmac.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/kmac_vectors.js",
+        "WebCryptoAPI/sign_verify/kmac.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 103,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/kmac.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/mldsa_vectors.js",
+        "WebCryptoAPI/sign_verify/mldsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 58,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/mldsa.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/rsa_pkcs_vectors.js",
+        "WebCryptoAPI/sign_verify/rsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 69,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/rsa_pkcs.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pss.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/sign_verify/rsa_pss_vectors.js",
+        "WebCryptoAPI/sign_verify/rsa.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 145,
+      "blockedTestFiles": [
+        "exclusions/sign_verify/rsa_pss.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/supports-modern.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 94,
+      "blockedTestFiles": [
+        "exclusions/supports-modern.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/supports.tentative.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 171,
+      "blockedTestFiles": [
+        "exclusions/supports.tentative.https.any.js.part-001.json"
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+      "format": "javascript",
+      "support": [
+        "WebCryptoAPI/util/helpers.js",
+        "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey_vectors.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 357,
+      "blockedTestFiles": []
+    }
+  ],
+  "support": [
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/argon2.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/argon2_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length_testcases.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_bits.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_keys.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/hkdf.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/hkdf_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/pbkdf2.js"
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/pbkdf2_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/ml_kem_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_cbc_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ctr_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_96_iv_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/rsa.js"
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/rsa_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures.js"
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-DSA_importKey.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-DSA_importKey_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/importKey_failures.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_fixtures.js"
+    },
+    {
+      "path": "WebCryptoAPI/import_export/symmetric_importKey.js"
+    },
+    {
+      "path": "WebCryptoAPI/serialization/serialization.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/ecdsa.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/ecdsa_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_small_order_points.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/hmac.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/hmac_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/kmac.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/kmac_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/mldsa.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/mldsa_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pkcs_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pss_vectors.js"
+    },
+    {
+      "path": "WebCryptoAPI/util/helpers.js"
+    },
+    {
+      "path": "WebCryptoAPI/util/worker-report-crypto-subtle-presence.js"
+    },
+    {
+      "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey_vectors.js"
+    },
+    {
+      "path": "common/subset-tests.js"
+    },
+    {
+      "path": "common/gc.js"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md"
+  },
+  "metadata": [
+    {
+      "path": "WebCryptoAPI/META.yml"
+    },
+    {
+      "path": "WebCryptoAPI/README.md"
+    },
+    {
+      "path": "WebCryptoAPI/WEB_FEATURES.yml"
+    },
+    {
+      "path": "WebCryptoAPI/tools/generate.py"
+    }
+  ],
+  "excludedFixtures": [
+    {
+      "path": "WebCryptoAPI/idlharness.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope."
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.tentative.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope."
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.https.any.js",
+      "category": "upstream-asynchronous-registration",
+      "reason": "Unedited define_tests starts importKeys().then(register tests) but returns a separate resolved promise; registrations arrive after its setup test completes. Initial execution reports late registration. No timer delay or fixture rewrite is used to hide the missing await."
+    }
+  ]
+}

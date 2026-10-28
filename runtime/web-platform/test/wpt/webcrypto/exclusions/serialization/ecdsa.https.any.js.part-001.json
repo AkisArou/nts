@@ -1,0 +1,20 @@
+{
+  "fixture": "WebCryptoAPI/serialization/ecdsa.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test {name: ECDSA, namedCurve: P-256}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {name: ECDSA, namedCurve: P-384}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {name: ECDSA, namedCurve: P-521}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    }
+  ]
+}
