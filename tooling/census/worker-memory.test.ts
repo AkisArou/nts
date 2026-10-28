@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
+import { Admission } from "../gate/admission.ts";
 import { compileSync, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 
@@ -126,6 +127,45 @@ test("only a worker-subtree OOM establishes a memory-cap verdict", () => {
   assert.throws(() => memoryCause(before, { oom: 2, kills: 5 }, 7, 7), /counters went backwards/);
 });
 
+test("aggregate pressure restarts an idle worker without losing or replaying its completed case", { timeout: TEST_HANG_MS }, async t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const name of ["idle", "trigger"]) {
+    const result = spawnTest("mkfifo", [join(directory, `release-${name}`)], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  let admitting = true;
+  const rows: any[] = [];
+  const reports: string[] = [];
+  const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
+  const summary = await runMemoryWorkers({
+    paths: ["idle-holder", "idle-trigger", "after"], jobs: 2, memory, workerBytes: 768 * 2 ** 20,
+    args: () => [fixture, directory],
+    admission: new Admission({ read: () => admitting ? 32 : 0 }),
+    onRow: row => {
+      rows.push(row);
+      if (row.path === "idle-holder") {
+        admitting = false;
+        writeFileSync(join(directory, "idle-reported"), "idle");
+      }
+    },
+    report: message => {
+      reports.push(message);
+      if (message.startsWith("resident pressure: idle worker ")) {
+        admitting = true;
+        writeFileSync(join(directory, "release-trigger"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK });
+      }
+    },
+  });
+  assert.deepEqual(rows.map(row => [row.path, row.bucket]).sort(), [["after", "strict-pass"], ["idle-holder", "strict-pass"], ["idle-trigger", "strict-pass"]]);
+  assert.equal(summary.idlePressureRestarts, 1, reports.join("\n"));
+  assert.equal(summary.pressureRequeues, 0);
+  assert.equal(summary.isolatedReplays, 0);
+  assert.ok(summary.aggregatePressureKills >= 1);
+  assert.equal(summary.systemPressureKills, 0);
+  assert.equal(existsSync(join(CGROUP, memory.group)), false);
+});
+
 test("a worker death without any OOM evidence is an instrument failure", async t => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -135,6 +175,43 @@ test("a worker death without any OOM evidence is an instrument failure", async t
     args: () => [fixture, directory], onRow: row => rows.push(row) }), /no OOM kill recorded/);
   assert.deepEqual(rows, []);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
+});
+
+test("compileSync reads the explicit aggregate across intermediate worker ancestors", () => {
+  const module = new URL("./worker-memory.ts", import.meta.url).href;
+  const code = `import fs from 'node:fs';
+import cp from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+const aggregate='/test-run.slice', worker=aggregate+'/intermediate.slice/worker.slice';
+process.env.NTS_CENSUS_RUN_GROUP=aggregate;
+process.env.NTS_CENSUS_WORKER_GROUP=worker;
+process.env.NTS_CENSUS_WORKER_MAX_BYTES='1024';
+let killed=false; const reads=[]; const original=fs.readFileSync;
+fs.readFileSync=(path,...args)=>{
+ const name=String(path);
+ if(name==='/proc/self/cgroup')return '0::'+worker+'/command.scope';
+ if(name.startsWith('/sys/fs/cgroup/')){
+  reads.push(name);
+  if(name.endsWith('/memory.max'))return '1024';
+  if(name.endsWith('/memory.swap.max'))return '0';
+  if(name==='/sys/fs/cgroup'+worker+'/memory.events')return 'oom 0\\noom_kill '+Number(killed)+'\\n';
+  if(name==='/sys/fs/cgroup'+aggregate+'/memory.events.local')return 'oom '+Number(killed)+'\\noom_kill 0\\n';
+  throw new Error('unexpected group read '+name);
+ }
+ return original(path,...args);
+};
+cp.spawnSync=()=>{killed=true;return {status:137,stdout:'',stderr:''};};
+syncBuiltinESMExports();
+const {compileSync}=await import(${JSON.stringify(module)});
+let error;
+try{compileSync({},'unused',[],{encoding:'utf8'});}catch(caught){error=String(caught);}
+console.log(JSON.stringify({error,reads}));`;
+  const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const actual = JSON.parse(result.stdout);
+  assert.match(actual.error, /aggregate-pressure: compiler OOM kill is not a case verdict/);
+  assert.equal(actual.reads.filter(path => path === "/sys/fs/cgroup/test-run.slice/memory.events.local").length, 2);
+  assert.ok(!actual.reads.some(path => path.endsWith("intermediate.slice/memory.events.local")));
 });
 
 test("an unavailable user bus refuses to compile instead of running uncapped", () => {

@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 
 const CGROUP = "/sys/fs/cgroup";
@@ -188,7 +188,7 @@ export class MemoryWorker {
     const scope = {
       unit, ready,
       argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${this.bytes}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=continue", "sh", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
-      env: { ...process.env, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
+      env: { ...process.env, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
     };
     this.#scopes.add(scope);
     return scope;
@@ -216,6 +216,10 @@ export class MemoryWorker {
 export function inResidentWorker(): boolean {
   const boundary = process.env.NTS_CENSUS_WORKER_GROUP;
   if (!boundary) return false;
+  const aggregate = process.env.NTS_CENSUS_RUN_GROUP;
+  if (!aggregate?.startsWith("/") || aggregate === "/" || aggregate.split("/").includes("..") || !boundary.startsWith(`${aggregate}/`)) {
+    throw new Error("resident cap: worker has no valid aggregate group; refusing to infer its boundary");
+  }
   const current = readFileSync("/proc/self/cgroup", "utf8").trim().replace(/^0::/, "");
   const limit = Number(readFileSync(join(CGROUP, current, "memory.max"), "utf8"));
   if (!current.startsWith(`${boundary}/`) || !Number.isFinite(limit) || limit < 1 || limit > Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES) || readFileSync(join(CGROUP, current, "memory.swap.max"), "utf8").trim() !== "0") {
@@ -260,10 +264,11 @@ export function compileSync(tools, command: string, args: readonly string[], opt
   const noAddressLimit = ["-c", 'ulimit -c 0; exec "$0" "$@"', command, ...args];
   if (inResidentWorker()) {
     const boundary = process.env.NTS_CENSUS_WORKER_GROUP!;
+    const aggregate = process.env.NTS_CENSUS_RUN_GROUP!;
     const before = events(boundary);
-    const aggregateBefore = events(dirname(boundary), true).oom;
+    const aggregateBefore = events(aggregate, true).oom;
     const result = spawnSync("sh", noAddressLimit, options);
-    const cause = memoryCause(before, events(boundary), aggregateBefore, events(dirname(boundary), true).oom);
+    const cause = memoryCause(before, events(boundary), aggregateBefore, events(aggregate, true).oom);
     if (cause === "aggregate-pressure" || cause === "system-pressure") throw new Error(`resident ${cause}: compiler OOM kill is not a case verdict`);
     return { ...result, memoryKilled: cause === "own-limit", residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
   }
