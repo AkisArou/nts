@@ -1,6 +1,6 @@
 import { DOMException } from "../core/errors.ts";
 import { requireArguments } from "../core/webidl.ts";
-import type { CryptoDigestProvider } from "../provider/crypto.ts";
+import type { CryptoProvider } from "../provider/crypto.ts";
 import type { RandomSource, Scheduler } from "../provider/primitives.ts";
 import {
   cryptoBytes,
@@ -22,9 +22,9 @@ export class Crypto {
   #uuidOffset: number;
 
   /** Tests/embedders construct directly until the runtime-assembly PR. */
-  constructor(random: RandomSource, provider: CryptoDigestProvider, scheduler: Scheduler) {
+  constructor(random: RandomSource, provider: CryptoProvider, scheduler: Scheduler) {
     this.#random = random;
-    this.#subtle = new SubtleCrypto(provider, scheduler);
+    this.#subtle = new SubtleCrypto(provider, scheduler, random);
     this.#uuidPool = undefined;
     this.#uuidOffset = uuidPoolBytes;
   }

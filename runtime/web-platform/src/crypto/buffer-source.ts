@@ -50,6 +50,11 @@ export function toCryptoBufferSource(value: unknown): CryptoBufferSource {
   return value;
 }
 
+/** Select BufferSource before the dictionary branch of importKey's IDL union. */
+export function isCryptoBufferSource(value: unknown): boolean {
+  return isArrayBufferView(value) || value instanceof ArrayBuffer;
+}
+
 /**
  * Borrow precisely the bytes the specification would copy. Native primitives
  * consume them synchronously without running script or retaining input memory.
@@ -72,4 +77,17 @@ export function cryptoBytes(source: CryptoBufferSource): Uint8Array {
 export function cryptoViewByteLength(view: ArrayBufferView): number {
   // This helper is used after getRandomValues has rejected DataView/float views.
   return view.byteLength;
+}
+
+/** Internal bounds are already checked; intrinsic view slots have fixed layouts. */
+export function cryptoByteSubarray(bytes: Uint8Array, start: number, end: number): Uint8Array {
+  return new ByteArray(bytes.buffer, bytes.byteOffset + start, end - start);
+}
+
+/** Snapshot only when later author code can observe the specification's copy. */
+export function copyCryptoBytes(source: CryptoBufferSource): Uint8Array {
+  const bytes = cryptoBytes(source);
+  const result = new ByteArray(bytes.byteLength);
+  result.set(bytes);
+  return result;
 }

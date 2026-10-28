@@ -7,6 +7,7 @@ import {
   Algorithm,
   DigestAlgorithm,
   normalizeAlgorithm,
+  supportsCryptoOperation,
   toAlgorithmIdentifier,
 } from "../src/crypto/algorithms.ts";
 import type { CryptoOperation } from "../src/crypto/algorithms.ts";
@@ -61,4 +62,48 @@ test("AlgorithmIdentifier preserves objects without consulting coercion hooks", 
   assert.equal(toAlgorithmIdentifier(undefined), "undefined");
   assert.equal(toAlgorithmIdentifier(12n), "12");
   assert.throws(() => toAlgorithmIdentifier(Symbol("SHA-256")), TypeError);
+});
+
+const allOperations: readonly CryptoOperation[] = ["digest", ...otherOperations];
+const symmetricRegistrations: readonly { name: string; operations: readonly CryptoOperation[] }[] = [
+  { name: "AES-CTR", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
+  { name: "AES-CBC", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
+  { name: "AES-GCM", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
+  { name: "AES-KW", operations: ["wrapKey", "unwrapKey", "generateKey", "importKey", "exportKey"] },
+  { name: "HMAC", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+];
+
+for (const registration of symmetricRegistrations) {
+  test(registration.name + " registers exactly the implemented specification operations", () => {
+    for (const operation of allOperations) {
+      let reads = 0;
+      const input = {
+        get name() { reads++; return registration.name.toLowerCase(); },
+        counter: new Uint8Array(16),
+        iv: new Uint8Array(16),
+        length: 128,
+        hash: "SHA-256",
+      };
+      const supported = registration.operations.includes(operation);
+      assert.equal(supportsCryptoOperation(registration.name.toLowerCase(), operation), supported);
+      if (supported) {
+        assert.equal(normalizeAlgorithm(input, operation).name, registration.name);
+        assert.equal(reads, 2);
+      } else {
+        assert.throws(
+          () => normalizeAlgorithm(input, operation),
+          (error: unknown) => error instanceof DOMException && error.name === "NotSupportedError",
+        );
+        assert.equal(reads, 1);
+      }
+    }
+  });
+}
+
+test("future families and Modern Algorithms remain unregistered", () => {
+  for (const name of ["RSA-OAEP", "ECDSA", "Ed25519", "HKDF", "PBKDF2", "AES-OCB", "KMAC128"]) {
+    for (const operation of allOperations) {
+      assert.equal(supportsCryptoOperation(name, operation), false);
+    }
+  }
 });

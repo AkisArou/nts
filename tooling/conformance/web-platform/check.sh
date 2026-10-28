@@ -35,6 +35,11 @@ node --expose-gc \
   runtime/web-platform/test/crypto.test.ts \
   runtime/web-platform/test/crypto-key.test.ts \
   runtime/web-platform/test/crypto-algorithms.test.ts \
+  runtime/web-platform/test/crypto-normalization.test.ts \
+  runtime/web-platform/test/crypto-provider.test.ts \
+  runtime/web-platform/test/crypto-aes.test.ts \
+  runtime/web-platform/test/crypto-jwk.test.ts \
+  runtime/web-platform/test/crypto-secret-key.test.ts \
   runtime/web-platform/test/wpt-harness.test.ts \
   runtime/web-platform/test/wpt-runner.test.ts \
   runtime/web-platform/test/wpt-versions.test.ts \
