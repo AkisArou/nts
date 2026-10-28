@@ -264,9 +264,9 @@ export class ERR_FS_EISDIR extends NodeError {
  * the optional member explicitly keeps both cases typed without asserting a
  * different type for the global constructor.
  */
-interface StackCapturingErrorConstructor extends ErrorConstructor {
+type StackCapturingErrorConstructor = ErrorConstructor & {
   captureStackTrace?(target: object, below?: CallableFunction): void;
-}
+};
 
 const stackCapturingError: StackCapturingErrorConstructor = Error;
 
