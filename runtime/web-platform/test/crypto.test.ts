@@ -202,7 +202,7 @@ test("getRandomValues returns a detached fixed integer view without writing byte
   assert.throws(() => crypto.getRandomValues(dataView), domError("TypeMismatchError"));
 });
 
-test("getRandomValues accepts cross-realm typed arrays", () => {
+test("getRandomValues accepts cross-realm typed arrays", { skip: "nts programs have one realm" }, () => {
   const { crypto, random } = fixture();
   const view: Uint16Array = runInNewContext("new Uint16Array(new ArrayBuffer(16), 4, 3)");
   assert.equal(crypto.getRandomValues(view), view);
@@ -211,7 +211,9 @@ test("getRandomValues accepts cross-realm typed arrays", () => {
   assert.deepEqual([...new Uint8Array(view.buffer, 4, 6)], [0, 1, 2, 3, 4, 5]);
 });
 
-test("getRandomValues reads intrinsic typed-array slots, not overridden accessors", () => {
+test("getRandomValues reads intrinsic typed-array slots, not overridden accessors", {
+  skip: "redefining an intrinsic accessor is something nts programs cannot do",
+}, () => {
   class TrickyBytes extends Uint8Array {
     override get buffer(): ArrayBuffer { throw new Error("buffer getter must not run"); }
     override get byteOffset(): number { throw new Error("offset getter must not run"); }
@@ -231,7 +233,9 @@ test("getRandomValues reads intrinsic typed-array slots, not overridden accessor
   assert.deepEqual([...new Uint8Array(buffer)], [0, 0, 0, 0x42, 0x42, 0x42, 0x42, 0, 0, 0, 0, 0]);
 });
 
-test("getRandomValues does not trust a floating view's forged toStringTag", () => {
+test("getRandomValues does not trust a floating view's forged toStringTag", {
+  skip: "redefining an intrinsic accessor is something nts programs cannot do",
+}, () => {
   class DisguisedFloat extends Float32Array {
     override get [Symbol.toStringTag](): "Float32Array" {
       return "Uint8Array" as "Float32Array";
@@ -547,7 +551,7 @@ test("digest handles algorithm getter mutation and detachment before reading byt
   assert.equal(hex(await second), vectors[1]!.empty);
 });
 
-test("digest accepts cross-realm ArrayBuffer and views", async () => {
+test("digest accepts cross-realm ArrayBuffer and views", { skip: "nts programs have one realm" }, async () => {
   const { crypto, scheduler } = fixture();
   for (const expression of [
     "new Uint8Array([97, 98, 99]).buffer",
@@ -561,7 +565,9 @@ test("digest accepts cross-realm ArrayBuffer and views", async () => {
   }
 });
 
-test("digest does not read overridden BufferSource accessors", async () => {
+test("digest does not read overridden BufferSource accessors", {
+  skip: "redefining an intrinsic accessor is something nts programs cannot do",
+}, async () => {
   class TrickyView extends DataView<ArrayBuffer> {
     override get buffer(): ArrayBuffer { throw new Error("buffer getter must not run"); }
     override get byteOffset(): number { throw new Error("offset getter must not run"); }
