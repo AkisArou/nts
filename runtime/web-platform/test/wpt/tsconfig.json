@@ -23,6 +23,8 @@
     "../streams-wpt-policy.test.ts",
     "./versions.ts",
     "./verify-versions.ts",
-    "../wpt-versions.test.ts"
+    "../wpt-versions.test.ts",
+    "../wpt-html-support.test.ts",
+    "../wpt-fetch-data.test.ts"
   ]
 }

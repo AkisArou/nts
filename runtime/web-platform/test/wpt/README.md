@@ -48,9 +48,13 @@ its bytes independently. Absolute WPT script references resolve from this
 folder; relative references resolve from the fixture's WPT directory. The
 adapter rejects unpinned dependencies. `META: timeout=long` selects the WPT long
 timeout; the outer `node:test` suite timeout must also accommodate its corpus.
-Selected HTML fixtures may contain ordinary inline scripts and the two WPT
-harness/report imports. Other HTML script forms fail explicitly and need a
-reviewed adapter extension or a real browser environment.
+Selected HTML fixtures may contain ordinary inline scripts, the two WPT
+harness/report imports, and pinned classic support scripts. HTML helpers are
+declared in the fixture's ordered support list and run where their script tags
+occur; the complete dependency plan is checked before any fixture code runs.
+External origins, server-processing query parameters, modules and async/defer
+script execution fail explicitly and need a reviewed adapter extension or a
+real browser environment. `../wpt-html-support.test.ts` controls this path.
 
 The shim implements a checked subset of WPT's harness; unsupported calls fail
 instead of pretending to pass. Keep its negative controls in
