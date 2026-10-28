@@ -287,6 +287,14 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   `toString` the compiler can see is called, so no other program pays for it
   ("go with L27 as recommended").
 
+## Compiler settings (10-28)
+
+- **A program compiles only under `strict`** (register L8): every flag
+  `strict` turns on must be on in effect, whether set through `strict` or one
+  by one, and a project with any of them off is refused, naming the flags and
+  the tsconfig that sets them. Asked "Require `strict` in a project's
+  tsconfig?", the user answered "Yes, strict!".
+
 ## Gate and landing (10-27)
 
 - **The fast landing model,** all three parts ("yes I agree with all those 3

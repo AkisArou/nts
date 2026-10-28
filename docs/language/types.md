@@ -135,7 +135,7 @@ nts reads the program's `tsconfig.json` and depends on some of its settings:
 
 | Setting | What nts requires | What happens otherwise |
 |---|---|---|
-| `strict` | `true`: layouts depend on `strictNullChecks` | not checked yet (register [L8](../open-questions.md#1-language-and-compiler)) |
+| `strict` | every flag `strict` turns on, on in effect: layouts depend on `strictNullChecks` | refused, naming each flag that is off and the file that sets it. Not built yet: today nothing is checked |
 | `useDefineForClassFields` | `true`, class fields with define semantics | ``NTS1001 class field `x` needs useDefineForClassFields: true (effective false)`` at the first emitted field |
 | `experimentalDecorators`, `emitDecoratorMetadata` | `false` | ``NTS1001 a decorator needs experimentalDecorators: false (effective true)`` at the first decorator |
 
@@ -170,6 +170,11 @@ under `tests/outcomes/`.
 
 ## Decisions
 
+- **A program compiles only under `strict`:** every flag `strict` turns on
+  must be on in effect, set through `strict` or one by one, and a project with
+  one off is refused, naming it (10-28,
+  [log](../records/notebooks/decisions-log.md#compiler-settings-10-28)).
+  Not built yet.
 - **When a type's claim is false at run time, nts behaves as node does, with
   one exception:** an erased value (from `any`, `unknown`, JSON or foreign
   code) asserted to a type it does not have throws a catchable `TypeError`

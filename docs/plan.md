@@ -107,8 +107,10 @@ Benchmarks run through every phase.
     that would close a cycle now keeps a counted root, so a closure that
     captures `this` no longer leaks: *done*):
     - an optional callable property in a structural type (the node stdio
-      setup), then one writer per stream for `console.log`,
+      setup, *done*), then one writer per stream for `console.log`,
       `process.stdout.write` and the node `console`;
+    - a project that is not `strict` is refused, naming the flags that are
+      off (L8);
     - a `declare` field with no visible writer is refused, not read as 0;
     - decorators refused until implemented;
     - a throw through any indirect call is catchable (L15), so a failed
