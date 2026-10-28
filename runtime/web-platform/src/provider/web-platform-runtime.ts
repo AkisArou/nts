@@ -328,20 +328,41 @@ export class WebPlatformRuntime
       }
       return this.globalBootstrap;
     }
-    if (capabilities == null || capabilities.performance == null ||
-        capabilities.performance.timeOrigin == null || capabilities.performance.detailCloner == null ||
-        capabilities.navigator == null || capabilities.urlPattern == null || capabilities.errors == null) {
+    if (capabilities == null) {
       throw new TypeError("Web-platform global bootstrap requires all explicit provider capabilities");
+    }
+    // Ordinary typed getters can run script. Complete every configuration read
+    // before any registry is updated, then use only these stable snapshots.
+    const performanceCapability = capabilities.performance;
+    const navigatorCapability = capabilities.navigator;
+    const urlPatternCapability = capabilities.urlPattern;
+    const errorCapabilities = capabilities.errors;
+    if (performanceCapability == null || navigatorCapability == null ||
+        urlPatternCapability == null || errorCapabilities == null) {
+      throw new TypeError("Web-platform global bootstrap requires all explicit provider capabilities");
+    }
+    const origin = performanceCapability.timeOrigin;
+    const detailCloner = performanceCapability.detailCloner;
+    if (origin == null || detailCloner == null) {
+      throw new TypeError("Web-platform global bootstrap requires all explicit provider capabilities");
+    }
+    const epochMilliseconds = origin.epochMilliseconds;
+    const monotonicMilliseconds = origin.monotonicMilliseconds;
+    if (!Number.isFinite(epochMilliseconds) || !Number.isFinite(monotonicMilliseconds)) {
+      throw new TypeError("Performance time origin must contain finite clock values");
     }
     // Event.timeStamp reads the runtime clock directly. A nonzero Performance
     // offset would expose two time domains at the same global; do not install it.
-    if (capabilities.performance.timeOrigin.monotonicMilliseconds !== 0) {
+    if (monotonicMilliseconds !== 0) {
       throw new TypeError("Global bootstrap requires a runtime clock relative to the environment origin (offset zero)");
     }
-    const performance = createPerformance(this, capabilities.performance);
-    const navigator = createNavigator(capabilities.navigator);
-    const errors = new GlobalErrorRuntime(capabilities.errors);
-    installURLPatternURLCapability(this, capabilities.urlPattern);
+    const performanceCapabilities = {
+      timeOrigin: { epochMilliseconds, monotonicMilliseconds }, detailCloner,
+    };
+    const navigator = createNavigator(navigatorCapability);
+    const errors = new GlobalErrorRuntime(errorCapabilities);
+    const performance = createPerformance(this, performanceCapabilities);
+    installURLPatternURLCapability(this, urlPatternCapability);
     const bootstrap: WebPlatformGlobalBootstrap = {
       globals: new WebPlatformGlobalBindings(performance, navigator, errors),
       hooks: errors,

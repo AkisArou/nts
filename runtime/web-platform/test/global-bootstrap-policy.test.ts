@@ -13,7 +13,7 @@ import { installWebPlatformRuntime } from "../src/provider/environment.ts";
 import { getURLPatternURLCapability, URLPatternCapabilityError } from "../src/provider/url-pattern.ts";
 import { WebPlatformRuntime } from "../src/provider/web-platform-runtime.ts";
 import type {
-  WebPlatformGlobalBindings, WebPlatformGlobalCapabilities,
+  WebPlatformGlobalBindings, WebPlatformGlobalBootstrap, WebPlatformGlobalCapabilities,
 } from "../src/provider/web-platform-runtime.ts";
 import { URLPattern } from "../src/urlpattern/url-pattern.ts";
 import { ErrorDriver } from "./support/global-errors-driver.ts";
@@ -120,6 +120,71 @@ test("global bootstrap refuses a nonzero Performance offset before installing an
   assert.throws(() => runtime.bootstrapGlobals(offset), /runtime clock relative to the environment origin/);
   assert.throws(() => getURLPatternURLCapability(runtime), URLPatternCapabilityError);
   assert.ok(runtime.bootstrapGlobals(capabilities).globals.performance instanceof Performance);
+});
+
+test("global bootstrap snapshots capability getters before registration and permits failed-read retry", (t) => {
+  const { runtime, capabilities } = environment(t);
+  const sentinel = new Error("a second errors read must not occur");
+  let reads = 0;
+  const unstable = {
+    ...capabilities,
+    get errors() {
+      if (++reads === 2) throw sentinel;
+      return capabilities.errors;
+    },
+  };
+  let failure: unknown;
+  let result: WebPlatformGlobalBootstrap | undefined;
+  try { result = runtime.bootstrapGlobals(unstable); }
+  catch (error) { failure = error; }
+  if (failure !== undefined) {
+    assert.equal(failure, sentinel);
+    assert.doesNotThrow(() => runtime.bootstrapGlobals(capabilities),
+      "a failed capability read must not leave Performance registered");
+  }
+  assert.equal(failure, undefined, "a capability getter is read only once");
+  assert.equal(reads, 1);
+  assert.equal(runtime.bootstrapGlobals(unstable), result);
+  assert.equal(reads, 1, "an idempotent call does not read the configuration again");
+
+  const retry = environment(t);
+  let ready = false;
+  const firstReadFailure = new Error("provider configuration not ready");
+  const delayed = {
+    ...retry.capabilities,
+    get navigator() {
+      if (!ready) throw firstReadFailure;
+      return retry.capabilities.navigator;
+    },
+  };
+  assert.throws(() => retry.runtime.bootstrapGlobals(delayed), (error) => error === firstReadFailure);
+  assert.throws(() => getURLPatternURLCapability(retry.runtime), URLPatternCapabilityError);
+  ready = true;
+  assert.ok(retry.runtime.bootstrapGlobals(delayed).globals.navigator instanceof Navigator);
+});
+
+test("global bootstrap snapshots the origin object and both scalar values before zero-offset validation", (t) => {
+  const { runtime, capabilities, state } = environment(t);
+  const reads = { performance: 0, origin: 0, epoch: 0, offset: 0, cloner: 0 };
+  const unstablePerformance = {
+    get timeOrigin() {
+      reads.origin++;
+      return {
+        get epochMilliseconds() { return 123_456 + 1000 * reads.epoch++; },
+        get monotonicMilliseconds() { return ++reads.offset === 1 ? 0 : 25; },
+      };
+    },
+    get detailCloner() { reads.cloner++; return capabilities.performance.detailCloner; },
+  };
+  const unstable = {
+    ...capabilities,
+    get performance() { reads.performance++; return unstablePerformance; },
+  };
+  const { globals } = runtime.bootstrapGlobals(unstable);
+  assert.equal(globals.performance.now(), state.now);
+  assert.equal(new Event("same clock").timeStamp, globals.performance.now());
+  assert.equal(globals.performance.timeOrigin, 123_456);
+  assert.deepEqual(reads, { performance: 1, origin: 1, epoch: 1, offset: 1, cloner: 1 });
 });
 
 test("global Event timestamps and Performance share the provider's environment-relative clock", (t) => {
