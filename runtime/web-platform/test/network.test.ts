@@ -1383,7 +1383,7 @@ suite("WebSocketStream exchanges text and binary over the real transport", async
   await closing;
 });
 
-suite("WebSocket accepts a server that declines every offered subprotocol", async (t) => {
+suite("WebSocketStream rejects a server that omits every offered subprotocol", async (t) => {
   const s = await websocketServer(t, (socket: net.Socket) =>
     peerParser(socket, (incoming: PeerFrame) => {
       if (incoming.opcode === 8) socket.end(frame(8, incoming.payload));
@@ -1391,11 +1391,11 @@ suite("WebSocket accepts a server that declines every offered subprotocol", asyn
   );
   runtime(t);
   const stream = new WebSocketStream(s.url, { protocols: ["first", "second"] });
-  const { writable, protocol } = await stream.opened;
-  assert.equal(protocol, "");
-  const closing = writable.getWriter().close();
-  await stream.closed;
-  await closing;
+  // WebSockets §2.2 response step 11.2 is shared by both API surfaces.
+  await Promise.all([
+    assert.rejects(stream.opened, WebSocketError),
+    assert.rejects(stream.closed, WebSocketError),
+  ]);
 });
 
 suite("permessage-deflate preserves context across fragmented messages", async (t) => {
