@@ -438,3 +438,99 @@ test("CustomEvent default dictionaries capture the clock once and retain default
     assert.equal(event.timeStamp, 10);
   }
 });
+
+function eventAttribute(event: Event, name: string): unknown {
+  const getter = Object.getOwnPropertyDescriptor(Event.prototype, name)?.get;
+  assert.ok(getter !== undefined, `missing Event attribute: ${name}`);
+  return getter.call(event);
+}
+
+// Web IDL interface identity and DOM internal state survive prototype changes.
+// https://webidl.spec.whatwg.org/#es-interface
+// https://dom.spec.whatwg.org/#concept-event-dispatch
+test("dispatch uses internal state on real events and targets with null prototypes", () => {
+  const target = new EventTarget();
+  const event = new Event("x", { cancelable: true });
+  const observations: unknown[][] = [];
+  const record = (event: Event): void => {
+    Event.prototype.preventDefault.call(event);
+    observations.push([
+      eventAttribute(event, "currentTarget"),
+      eventAttribute(event, "eventPhase"),
+      eventAttribute(event, "defaultPrevented"),
+    ]);
+  };
+  target.addEventListener("x", record, { capture: true, passive: true });
+  target.addEventListener("x", record);
+  Object.setPrototypeOf(event, null);
+  Object.setPrototypeOf(target, null);
+
+  assert.equal(EventTarget.prototype.dispatchEvent.call(target, event), false);
+  assert.deepEqual(observations, [
+    [target, Event.AT_TARGET, false],
+    [target, Event.AT_TARGET, true],
+  ]);
+  assert.equal(eventAttribute(event, "target"), target);
+  assert.equal(eventAttribute(event, "currentTarget"), null);
+  assert.equal(eventAttribute(event, "eventPhase"), Event.NONE);
+  assert.deepEqual(Event.prototype.composedPath.call(event), []);
+  assert.equal(EventTarget.prototype.dispatchEvent.call(target, event), false);
+  assert.equal(observations.length, 4, "dispatch clears its flag even without a prototype");
+});
+
+test("changing an event prototype during dispatch preserves stop flags and cleanup", () => {
+  const target = new EventTarget();
+  const event = new Event("x");
+  const order: string[] = [];
+  let nestedError: unknown;
+  target.addEventListener("x", () => {
+    order.push("capture");
+    Object.setPrototypeOf(event, null);
+    Event.prototype.stopPropagation.call(event);
+    try {
+      target.dispatchEvent(event);
+    } catch (error) {
+      nestedError = error;
+    }
+  }, { capture: true, once: true });
+  target.addEventListener("x", () => { order.push("later capture"); }, true);
+  target.addEventListener("x", () => { order.push("bubble"); });
+
+  assert.equal(target.dispatchEvent(event), true);
+  assert.equal((nestedError as { name?: string })?.name, "InvalidStateError");
+  assert.deepEqual(order, ["capture", "later capture"]);
+  assert.equal(eventAttribute(event, "cancelBubble"), false);
+  order.length = 0;
+  assert.equal(target.dispatchEvent(event), true);
+  assert.deepEqual(order, ["later capture", "bubble"]);
+});
+
+// https://dom.spec.whatwg.org/#concept-event-initialize
+test("initEvent initializes internal state after the prototype is removed", () => {
+  const event = new Event("old", { cancelable: true });
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  Object.setPrototypeOf(event, null);
+
+  Event.prototype.initEvent.call(event, "new", true, false);
+  assert.equal(eventAttribute(event, "type"), "new");
+  assert.equal(eventAttribute(event, "bubbles"), true);
+  assert.equal(eventAttribute(event, "cancelable"), false);
+  assert.equal(eventAttribute(event, "defaultPrevented"), false);
+  assert.equal(eventAttribute(event, "cancelBubble"), false);
+});
+
+test("initCustomEvent initializes both interfaces after the prototype is removed", () => {
+  const event = new CustomEvent("old", { detail: "old", cancelable: true });
+  event.preventDefault();
+  Object.setPrototypeOf(event, null);
+
+  CustomEvent.prototype.initCustomEvent.call(event, "new", true, false, "new detail");
+  const detail = Object.getOwnPropertyDescriptor(CustomEvent.prototype, "detail")?.get;
+  assert.ok(detail !== undefined);
+  assert.equal(detail.call(event), "new detail");
+  assert.equal(eventAttribute(event, "type"), "new");
+  assert.equal(eventAttribute(event, "bubbles"), true);
+  assert.equal(eventAttribute(event, "cancelable"), false);
+  assert.equal(eventAttribute(event, "defaultPrevented"), false);
+});
