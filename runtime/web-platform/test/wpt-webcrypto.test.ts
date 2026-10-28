@@ -16,7 +16,7 @@ const selected = prefix === undefined ? manifest : {
 assert.ok(selected.fixtures.length + selected.excludedFixtures.length > 0,
   "The WebCrypto fixture filter must select at least one file");
 
-test("WPT WebCryptoAPI — Node 24.20 directory revision", { timeout: 600000 }, async (suite) => {
+test("WPT WebCryptoAPI — Node 24.20 directory revision", async (suite) => {
   await runWptFixtures(suite, root, selected, createWebCryptoWptEnvironment);
   for (const fixture of selected.excludedFixtures) {
     await suite.test(fixture.path, { skip: `${fixture.category}: ${fixture.reason}` }, () => {});
