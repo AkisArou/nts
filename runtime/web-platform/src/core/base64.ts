@@ -1,5 +1,46 @@
 import { isASCIIWhitespace } from "./ascii.ts";
 
+// The byte and binary-string loops stay in this native-replacement boundary.
+// HTML argument conversion and exception policy live in base64-globals.ts.
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Infra's forgiving-base64 encoder, shared with File API and HTTP proxy auth. */
+export function forgivingBase64Encode(bytes: Uint8Array): string {
+  let result = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] ?? 0;
+    const second = bytes[index + 1] ?? 0;
+    const third = bytes[index + 2] ?? 0;
+    result +=
+      BASE64_ALPHABET.charAt(first >>> 2) +
+      BASE64_ALPHABET.charAt(((first & 3) << 4) | (second >>> 4));
+    result +=
+      index + 1 < bytes.length ? BASE64_ALPHABET.charAt(((second & 15) << 2) | (third >>> 6)) : "=";
+    result += index + 2 < bytes.length ? BASE64_ALPHABET.charAt(third & 63) : "=";
+  }
+  return result;
+}
+
+/** HTML's binary string uses one byte per code unit; failure must not truncate. */
+export function base64BinaryStringToBytes(input: string): Uint8Array | null {
+  const bytes = new Uint8Array(input.length);
+  for (let index = 0; index < input.length; index++) {
+    const unit = input.charCodeAt(index);
+    if (unit > 0xff) return null;
+    bytes[index] = unit;
+  }
+  return bytes;
+}
+
+/** Map each decoded byte to the same-valued code unit, without UTF-8 decoding. */
+export function base64BytesToBinaryString(bytes: Uint8Array): string {
+  let result = "";
+  for (let index = 0; index < bytes.length; index++) {
+    result += String.fromCharCode(bytes[index]!);
+  }
+  return result;
+}
+
 function base64Value(code: number): number {
   if (code >= 0x41 && code <= 0x5a) return code - 0x41;
   if (code >= 0x61 && code <= 0x7a) return code - 0x61 + 26;

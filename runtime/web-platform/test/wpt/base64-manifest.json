@@ -1,0 +1,46 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "html/webappapis": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "fetch": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "scope": "HTML atob and btoa over the shared forgiving-base64 implementation.",
+  "fixtures": [
+    {
+      "path": "html/webappapis/atob/base64.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/atob/base64.any.js",
+      "sha256": "0297126f8867772b48a24c4d979debe38732294571d64b8d689b6506a3f53b9a",
+      "gitBlob": "fbb64042932a2890ed448e632bfa7366fcc2739f",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 380,
+      "blockedTests": {}
+    }
+  ],
+  "support": [
+    {
+      "path": "fetch/data-urls/resources/base64.json",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/data-urls/resources/base64.json",
+      "sha256": "0cdb75b4fcc46e4a6caa0e3b0005157a0d0be03e00bcf7b7054a045b1267568d",
+      "gitBlob": "01f981a6502aec41351de52519c5437d6c77a609"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "notes": [
+    "Both fixture and JSON corpus are exact upstream bytes at the existing html/webappapis and fetch directory revisions; their original headers and the shared BSD-3-Clause licence are retained.",
+    "The fixture registers 285 btoa cases, one atob setup promise test, and 94 atob cases after loading the pinned JSON corpus.",
+    "fetch_json is a test-only loader for exactly ../../../fetch/data-urls/resources/base64.json. The shared runner verifies the corpus hashes before fixture execution; no fetch implementation or host network is supplied.",
+    "The source atob, btoa and DOMException exports are the only Web API globals supplied. The test VM does not inherit host atob or btoa.",
+    "The adapter adds generate_tests with the pinned testharness.js receiver and argument behavior. Unsupported nonempty per-test properties fail explicitly.",
+    "Window and Worker global installation and Web IDL descriptor flags are outside this source-host fixture profile."
+  ]
+}

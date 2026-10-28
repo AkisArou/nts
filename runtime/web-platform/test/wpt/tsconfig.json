@@ -64,6 +64,9 @@
     "./webcrypto/report.ts",
     "../crypto-quota.test.ts",
     "../wpt-compression.test.ts",
-    "./compression-streams/census.ts"
+    "./compression-streams/census.ts",
+    "../wpt-base64.test.ts",
+    "../wpt-base64-harness.test.ts",
+    "../base64-policy.test.ts"
   ]
 }

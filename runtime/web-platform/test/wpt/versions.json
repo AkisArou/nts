@@ -3131,6 +3131,14 @@
     "media/test-av-384k-44100Hz-1ch-320x240-30fps-10kfr.webm": {
       "sha256": "032d3fd8d1a0301820f5531d58477f9d54c42e2c43d4738fef97035b43ca5df0",
       "gitBlob": "8b705dbc8980708aa847f7c1868300979faa12f8"
+    },
+    "fetch/data-urls/resources/base64.json": {
+      "sha256": "0cdb75b4fcc46e4a6caa0e3b0005157a0d0be03e00bcf7b7054a045b1267568d",
+      "gitBlob": "01f981a6502aec41351de52519c5437d6c77a609"
+    },
+    "html/webappapis/atob/base64.any.js": {
+      "sha256": "0297126f8867772b48a24c4d979debe38732294571d64b8d689b6506a3f53b9a",
+      "gitBlob": "fbb64042932a2890ed448e632bfa7366fcc2739f"
     }
   }
 }

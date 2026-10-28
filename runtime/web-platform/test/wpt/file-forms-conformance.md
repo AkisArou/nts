@@ -67,7 +67,7 @@ worker emulation are not substituted. META global variants execute once in
 this host environment; browser exposure and nts garbage collection are not
 established by that execution.
 
-## Before and after, per file
+## Original A4 before and after, per file
 
 The baseline uses source at the updated #18 head, with the same final fixtures,
 adapter and exclusions. Since FileReader and ProgressEvent do not exist there,
@@ -211,20 +211,34 @@ bootstrap is left for its own coordinated PR.
 
 ## Named exclusions and missing capabilities
 
-All 17 blocked WPT registrations are named in the manifest; the same list is
-used before and after. They are separate from the ten legacy descriptor-only
-surface skips and the 84 wholly excluded source paths.
+The original A4 comparison above used the same 17 named blocked registrations
+before and after. The subsequent HTML base64 change enables the nine DataURL
+registrations; the current manifest retains eight blocked registrations. The
+original comparison and its result records are historical evidence, not
+updated measurements of the new selection. These exclusions are separate from
+the ten legacy descriptor-only surface skips and the 84 wholly excluded paths.
 
 | Reason | Registered cases | Required resolution |
 | --- | ---: | --- |
 | Intrinsic prototype mutation | 5 | Excluded by the fixed-layout language profile; ordinary iterables still run. |
 | FrozenArray obtained from MessageChannel/MessagePort | 1 | Compiler-owned messaging/transfer support; no fabricated ports array. |
-| FileReader DataURL encoding | 9 | A canonical bytes-to-base64 ASCII capability. |
 | Callback-cleanup microtask checkpoint | 2 | Shared provider/engine callback execution support, described below. |
 
-`readAsDataURL()` is deliberately absent pending that base64 capability.
-A native operation must return failures as values for source policy to convert
-to exceptions. No source base64 codec, Node shortcut or global hook is added.
+`readAsDataURL()` now shares the `core/base64.ts` encoder with HTML's `btoa()`.
+FileReader retains its existing asynchronous read, progress, abort and cleanup
+state machine; its DataURL packaging calls that encoder without another codec
+or byte loop. The nine named base64 dependencies are removed from
+`FileReader-multiple-reads.any.js`, `filereader_readAsDataURL.any.js`,
+`filereader_readystate.any.js` and `filereader_result.any.js`.
+
+[File API packaging](https://w3c.github.io/FileAPI/#package-data) currently says
+to omit an empty MIME type, while the pinned WPT explicitly expects
+`application/octet-stream`. This implementation follows those unchanged WPT
+expectations for untyped and empty Blobs, and otherwise uses the Blob's stored
+MIME type. The specification leaves exact DataURL generation open in
+[FileAPI issue #104](https://github.com/w3c/FileAPI/issues/104); the default MIME
+spelling is a compatibility choice, not a claim that the current normative
+prose specifies it.
 
 Canonical TextDecoder currently supplies UTF-8 and UTF-16. Invalid labels
 follow File API's MIME-charset/UTF-8 fallback. When decoding requires an
