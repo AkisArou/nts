@@ -120,4 +120,5 @@ originals verify. The compiled axis is explicitly skipped because nts is not
 available. Maintainers still compile and run the landing gate.
 
 `modern-sha3-kmac-results.json` records all 125 original file outcomes and the
-complete package result. The full-check log SHA-256 is `cd1122a39a5cd7328e673cc5dc00a6aec360d1ff5b5a5768c72cb3fc6f21ecad`.
+complete package result, including the §16.7.2 correction that preserves native
+KMAC verification failures as values. The full-check log SHA-256 is `c3c0f3f7ce11e528f621ff29c01d08fe9202e17695bf4a5bf33259d5addef7cd`.
