@@ -75,16 +75,28 @@ node tooling/lanes/land.ts <commit>             # gate and land, ~30 min: run it
 ```
 
 Run it from your tree at that commit, **bare**: never inside a `flock` or a
-lock of your own. It takes the landing lock itself; a wrapper holding it while
-`land` waited stopped every lane's landing for most of an hour, and `land` now
-refuses to run under one. Landings queue, and whoever holds the lock next gates
-every queued one as **one train**: replayed onto `main` in turn, gated once
-for exactly what `owed.mjs` says the range owes (choosing steps by hand is how
+lock of your own. A wrapper holding the lock while `land` waited stopped every
+lane's landing for most of an hour, and `land` now refuses to run under one.
+It records the landing in a durable queue and waits for its answer. A **train
+service** that the lander owns (one systemd unit, `nts-land-train-<id>`,
+started when a landing needs it) holds the locks and gates every compatible
+queued landing as **one train**: replayed onto `main` in turn, gated once for
+exactly what `owed.mjs` says the range owes (choosing steps by hand is how
 `main` went red), and landed together on a green summary. A red train is
 halved until the red landing is alone, and only it is refused. One gate is
 half an hour whether it carries one landing or six, so queue a change as soon
-as it is reviewed and ready; `lane status` lists the queue. Never `git merge`
-onto `main` yourself.
+as it is reviewed and ready. `lane status` lists the queue and the running
+train, and the service's log names every landing it leaves out, with the
+reason. Never `git merge` onto `main` yourself.
+
+**Withdraw a landing with `land.ts --withdraw <commit>`, never by stopping a
+unit.** Stopping the submitting process withdraws nothing, and the request is
+honoured before the next train is composed. A train that stalls holds every
+lane's landing: stop the train's unit by name, then record why with
+`land.ts --abandon-frozen <owner-id> --because=<reason> --run=<run dir>`, which
+answers its members and frees the queue. On 2026-10-28 a withdrawal made by
+stopping a landing's unit killed a running train, and a test that never exited
+held the locks.
 
 **Never cap the gate's parallelism for a landing:** no `NTS_JOBS`,
 `NTS_GATE_SLOTS` or `NTS_GATE_JOBS` in its environment. The gate sizes itself
@@ -119,7 +131,11 @@ commits them to `main` without a gate, but **only while no train is running**:
   lock is held, a train is gating against `main`, and moving `main` would make
   `land` refuse it at the end;
 - while a train runs, leave uncommitted edits only on files that train does
-  not change. A dirty file the fast-forward must update aborts the landing.
+  not change. A dirty file the fast-forward must update aborts the landing;
+- while the queue is busy, submit the commit with `land-unit.ts` from a
+  detached tree at it, after staging the same files in `~/Projects/nts`. A
+  docs-only commit is checked on its own tree and fast-forwarded at the next
+  train boundary, with no gate.
 
 **A page in `docs/` is a specification, not a notebook** (user, 2026-10-27).
 It states the current design and contract, with no dates, history or running

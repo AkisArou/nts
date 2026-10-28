@@ -76,12 +76,15 @@ log path.
 Run `land` from your tree, at the commit you are landing, bare: never inside a
 lock of your own. It:
 
-1. **joins the queue** and waits for the landing lock (a kernel lock; it also
-   honours the `GATE-RUNNING` marker);
-2. **gates a train:** whoever holds the lock gates every queued landing at
-   once, up to six, oldest first. Each landing's commits since it left `main`
-   are replayed onto `main`, each onto the last. One that conflicts is refused
-   (rebase it and land again), and the train goes on without it;
+1. **joins the queue:** it records a durable entry under
+   `~/.cache/nts-land/pending` and polls for its answer. A train service, one
+   systemd unit the lander owns, holds the landing and gate-tree locks while a
+   train runs, and releases both between trains and whenever it is idle;
+2. **gates a train:** the service gates every compatible queued landing at
+   once, up to six, ancestry first. Each landing's commits since it left
+   `main` are replayed onto `main`, each onto the last. One that conflicts is
+   refused (rebase it and land again), and the train goes on without it. The
+   service's log names each landing it leaves out, and why;
 3. **asks `owed.mjs --range main..<tip>`** which gate steps and which interop
    projects the train owes;
 4. **runs exactly those** with `pinned.sh`, in the one gate tree;
@@ -95,6 +98,18 @@ lock of your own. It:
      refused, and the rest land;
 6. **records the run** as a git note on the tip
    (`git notes --ref=land show <commit>`).
+
+The service runs `main`'s lander. After a landing changes `tooling/lanes` or
+`tooling/gate`, it moves to the new `main` at the next boundary. A train that a
+crash interrupts is gated again from its recorded members before anything new
+is composed.
+
+- **Withdrawing:** `land.ts --withdraw <commit>` asks for a landing to leave the
+  queue before the next train is composed. Stopping a submitting process
+  withdraws nothing.
+- **A stalled train:** stop its unit by name, then answer it with
+  `land.ts --abandon-frozen <owner-id> --because=<reason> --run=<run dir>`,
+  which records the reason before it frees the queue.
 
 Landings and full runs refuse a missing environment requirement before taking
 the lock. Steps declare capabilities (`jvm`, `android`, `valgrind`), and an
@@ -124,7 +139,9 @@ stable patch ID) and nothing else uses them. These decisions are logged in
   in parallel.
 - **Documentation goes straight to `main`.** The coordinator writes docs-only
   changes in `~/Projects/nts` and commits them without a gate, holding the
-  landing lock, while no train is running.
+  landing lock, while no train is running. While the queue is busy, it
+  submits them with `land-unit.ts` instead, and the service fast-forwards a
+  checked docs-only commit at the next train boundary.
 
 ## Reporting
 
