@@ -444,24 +444,59 @@ function quoteAscii(value: string): string {
   return result + '"';
 }
 
-/** Serialize the generated oct JWK without observable toJSON/prototype hooks. */
+function stringJsonMember(text: string, name: string, value: string | undefined): string {
+  if (value === undefined) return text;
+  return text + (text.length === 1 ? "" : ",") + '"' + name + '":' + quoteAscii(value);
+}
+
+/** Serialize a generated key dictionary without observable toJSON/prototype hooks. */
 export function serializeWrappedJwk(key: JsonWebKey, padToEight: boolean): Uint8Array {
-  if (key.kty !== "oct" || key.k === undefined) throw new TypeError("Expected an exported oct JWK");
-  // Match dictionary-to-object member order. Only these fields are generated for
-  // HMAC and AES; no caller-owned objects or stringifier callbacks are consulted.
+  if ((key.kty !== "oct" || key.k === undefined) &&
+      (key.kty !== "RSA" || key.n === undefined || key.e === undefined)) {
+    throw new TypeError("Expected an exported octet or RSA JWK");
+  }
+  // Match dictionary-to-object's lexicographic member order. These are internal
+  // typed dictionaries from export, so no caller-owned toJSON, replacer, prototype
+  // or stringifier callback can run while wrapping parameters remain borrowed.
   let text = "{";
-  if (key.alg !== undefined) text += '"alg":' + quoteAscii(key.alg) + ",";
-  if (key.ext !== undefined) text += '"ext":' + (key.ext ? "true" : "false") + ",";
-  text += '"k":' + quoteAscii(key.k) + ",";
+  text = stringJsonMember(text, "alg", key.alg);
+  text = stringJsonMember(text, "crv", key.crv);
+  text = stringJsonMember(text, "d", key.d);
+  text = stringJsonMember(text, "dp", key.dp);
+  text = stringJsonMember(text, "dq", key.dq);
+  text = stringJsonMember(text, "e", key.e);
+  if (key.ext !== undefined) text += (text.length === 1 ? "" : ",") + '"ext":' + (key.ext ? "true" : "false");
+  text = stringJsonMember(text, "k", key.k);
   if (key.key_ops !== undefined) {
-    text += '"key_ops":[';
+    text += (text.length === 1 ? "" : ",") + '"key_ops":[';
     for (let index = 0; index < key.key_ops.length; index++) {
       if (index !== 0) text += ",";
       text += quoteAscii(key.key_ops[index]!);
     }
-    text += "],";
+    text += "]";
   }
-  text += '"kty":"oct"}';
+  text = stringJsonMember(text, "kty", key.kty);
+  text = stringJsonMember(text, "n", key.n);
+  if (key.oth !== undefined) {
+    text += (text.length === 1 ? "" : ",") + '"oth":[';
+    for (let index = 0; index < key.oth.length; index++) {
+      if (index !== 0) text += ",";
+      const prime = key.oth[index]!;
+      let object = "{";
+      object = stringJsonMember(object, "d", prime.d);
+      object = stringJsonMember(object, "r", prime.r);
+      object = stringJsonMember(object, "t", prime.t);
+      text += object + "}";
+    }
+    text += "]";
+  }
+  text = stringJsonMember(text, "p", key.p);
+  text = stringJsonMember(text, "q", key.q);
+  text = stringJsonMember(text, "qi", key.qi);
+  text = stringJsonMember(text, "use", key.use);
+  text = stringJsonMember(text, "x", key.x);
+  text = stringJsonMember(text, "y", key.y);
+  text += "}";
   // §14.3.11 expressly permits adapting JWK serialization to AES-KW's size.
   if (padToEight) while (text.length % 8 !== 0) text += " ";
   const result = new Uint8Array(text.length);

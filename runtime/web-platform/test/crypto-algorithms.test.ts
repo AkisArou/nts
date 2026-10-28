@@ -65,15 +65,18 @@ test("AlgorithmIdentifier preserves objects without consulting coercion hooks", 
 });
 
 const allOperations: readonly CryptoOperation[] = ["digest", ...otherOperations];
-const symmetricRegistrations: readonly { name: string; operations: readonly CryptoOperation[] }[] = [
+const keyRegistrations: readonly { name: string; operations: readonly CryptoOperation[] }[] = [
   { name: "AES-CTR", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
   { name: "AES-CBC", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
   { name: "AES-GCM", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
   { name: "AES-KW", operations: ["wrapKey", "unwrapKey", "generateKey", "importKey", "exportKey"] },
   { name: "HMAC", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+  { name: "RSASSA-PKCS1-v1_5", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+  { name: "RSA-PSS", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+  { name: "RSA-OAEP", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
 ];
 
-for (const registration of symmetricRegistrations) {
+for (const registration of keyRegistrations) {
   test(registration.name + " registers exactly the implemented specification operations", () => {
     for (const operation of allOperations) {
       let reads = 0;
@@ -83,6 +86,9 @@ for (const registration of symmetricRegistrations) {
         iv: new Uint8Array(16),
         length: 128,
         hash: "SHA-256",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        saltLength: 32,
       };
       const supported = registration.operations.includes(operation);
       assert.equal(supportsCryptoOperation(registration.name.toLowerCase(), operation), supported);
@@ -101,7 +107,7 @@ for (const registration of symmetricRegistrations) {
 }
 
 test("future families and Modern Algorithms remain unregistered", () => {
-  for (const name of ["RSA-OAEP", "ECDSA", "Ed25519", "HKDF", "PBKDF2", "AES-OCB", "KMAC128"]) {
+  for (const name of ["ECDSA", "Ed25519", "HKDF", "PBKDF2", "AES-OCB", "KMAC128"]) {
     for (const operation of allOperations) {
       assert.equal(supportsCryptoOperation(name, operation), false);
     }

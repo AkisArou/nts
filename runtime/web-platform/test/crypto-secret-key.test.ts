@@ -5,8 +5,8 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import { Crypto } from "../src/crypto/crypto.ts";
 import { SubtleCrypto } from "../src/crypto/subtle-crypto.ts";
-import { createCryptoKey, getCryptoKeySlots, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
-import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
+import { createCryptoKey, CryptoKey, getCryptoKeySlots, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
+import type { KeyUsage } from "../src/crypto/crypto-key.ts";
 import { DOMException } from "../src/core/errors.ts";
 import type { RandomSource } from "../src/provider/primitives.ts";
 import { VirtualScheduler } from "../src/provider/virtual-time.ts";
@@ -127,6 +127,7 @@ for (const name of ["AES-CTR", "AES-CBC", "AES-GCM", "AES-KW"]) {
         const f = fixture();
         const usages: KeyUsage[] = name === "AES-KW" ? ["unwrapKey", "wrapKey", "wrapKey"] : ["unwrapKey", "decrypt", "encrypt", "wrapKey", "encrypt"];
         const key = await f.settle(f.subtle.generateKey({ name, length }, extractable, usages));
+        assert.ok(key instanceof CryptoKey);
         assert.equal(key.type, "secret");
         assert.equal(key.extractable, extractable);
         assert.deepEqual(key.algorithm, { name, length });
@@ -160,6 +161,7 @@ for (const [hash, block] of [["SHA-1", 512], ["SHA-256", 512], ["SHA-384", 1024]
     const f = fixture();
     for (const length of [undefined, 1, 7, 8, 9, 17, 128, 160, 256, 1024]) {
       const key = await f.settle(f.subtle.generateKey({ name: "HMAC", hash, length }, true, ["verify", "sign"]));
+      assert.ok(key instanceof CryptoKey);
       const logical = length ?? block;
       assert.deepEqual(key.algorithm, { name: "HMAC", hash: { name: hash }, length: logical });
       const bytes = await f.raw(key);
@@ -495,13 +497,14 @@ test("public key algorithms and JWK objects use Web IDL member order", async () 
 test("key generation cannot be redirected by a replacement Math.ceil", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const original = Math.ceil;
-  let pending: Promise<CryptoKey>;
+  let pending: ReturnType<SubtleCrypto["generateKey"]>;
   try {
     pending = f.subtle.generateKey({
       get name() { Math.ceil = () => 0; return "HMAC"; }, hash: "SHA-256", length: 17,
     }, true, ["sign"]);
   } finally { Math.ceil = original; }
   const key = await f.settle(pending);
+  assert.ok(key instanceof CryptoKey);
   assert.equal(f.random.lastLength, 3);
   assert.deepEqual(await f.raw(key), new Uint8Array([255, 255, 128]));
 });

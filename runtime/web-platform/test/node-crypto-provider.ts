@@ -1,11 +1,19 @@
 import { Buffer } from "node:buffer";
 import {
+  constants,
   createCipheriv,
   createDecipheriv,
   createHash,
   createHmac,
+  createPrivateKey,
+  createPublicKey,
   createSecretKey,
+  generateKeyPairSync,
+  privateDecrypt,
+  publicEncrypt,
+  sign,
   timingSafeEqual,
+  verify,
 } from "node:crypto";
 import type { CipherGCMTypes, KeyObject } from "node:crypto";
 import type {
@@ -22,6 +30,8 @@ import type {
   CryptoKeyPairRecord,
   CryptoKeyRecord,
   CryptoProvider,
+  CryptoRsaComponents,
+  CryptoRsaOtherPrime,
   CryptoSignature,
   CryptoSignatureParameters,
 } from "../src/provider/crypto.ts";
@@ -40,6 +50,9 @@ const keyWrapIv = new ByteArray(8).fill(0xa6);
 const ceil = Math.ceil;
 const floor = Math.floor;
 const min = Math.min;
+const rsaPkcs1Padding = constants.RSA_PKCS1_PADDING;
+const rsaPssPadding = constants.RSA_PKCS1_PSS_PADDING;
+const rsaOaepPadding = constants.RSA_PKCS1_OAEP_PADDING;
 
 function hashName(name: CryptoDigestName): string {
   switch (name) {
@@ -73,6 +86,128 @@ function secretBits(key: KeyObject): number {
   const size = key.symmetricKeySize;
   if (size === undefined) throw new TypeError("Expected a native secret key");
   return size * 8;
+}
+
+function keyRecord(key: KeyObject): CryptoKeyRecord {
+  const handle = {} as CryptoKeyHandle;
+  keyObjects.set(handle, key);
+  if (key.type === "secret") {
+    return { handle, info: { family: "secret", type: "secret", length: secretBits(key) } };
+  }
+  if (key.asymmetricKeyType !== "rsa") throw new TypeError("Expected an unrestricted native RSA key");
+  const modulusLength = key.asymmetricKeyDetails?.modulusLength;
+  const components = key.export({ format: "jwk" });
+  if (modulusLength === undefined || components.e === undefined) throw new TypeError("Missing native RSA metadata");
+  return {
+    handle,
+    info: {
+      family: "RSA",
+      type: key.type,
+      modulusLength,
+      publicExponent: owned(Buffer.from(components.e, "base64url")),
+    },
+  };
+}
+
+// The ordinary-Node fixture has no component import/export primitive. Encode
+// or decode PKCS #1 only to adapt that native API; shared code independently
+// owns the original input's DER and JWK policy. No integer arithmetic or key
+// derivation takes place here.
+function derValue(tag: number, value: Uint8Array): Buffer {
+  const lengthBytes: number[] = [];
+  let length = byteLength(value);
+  if (length < 128) {
+    lengthBytes[0] = length;
+  } else {
+    while (length !== 0) {
+      lengthBytes.unshift(length % 256);
+      length = floor(length / 256);
+    }
+    lengthBytes.unshift(128 + lengthBytes.length);
+  }
+  return Buffer.concat([Buffer.from([tag, ...lengthBytes]), value]);
+}
+
+function derInteger(value: Uint8Array): Buffer {
+  const unsigned = byteLength(value) === 0 ? new ByteArray([0]) : value;
+  return derValue(2, unsigned[0]! >= 128 ? Buffer.concat([Buffer.from([0]), unsigned]) : unsigned);
+}
+
+function rsaComponentsDer(components: CryptoRsaComponents): Buffer {
+  const values = [derInteger(components.n), derInteger(components.e)];
+  if (components.d === undefined) return derValue(0x30, Buffer.concat(values));
+  // Node requires CRT values. Missing-CRT imports are explicitly unavailable in
+  // this test adapter; the shared API accepts and forwards n/e/d-only keys to a
+  // capable binding. Filling CRT fields with zeros creates an unusable native key.
+  if (components.p === undefined || components.q === undefined || components.dp === undefined
+    || components.dq === undefined || components.qi === undefined) {
+    throw new TypeError("The Node native primitive requires RSA CRT components");
+  }
+  values.unshift(derInteger(new ByteArray([components.oth === undefined ? 0 : 1])));
+  values.push(derInteger(components.d), derInteger(components.p), derInteger(components.q),
+    derInteger(components.dp), derInteger(components.dq), derInteger(components.qi));
+  if (components.oth !== undefined) {
+    const primes: Buffer[] = [];
+    for (const prime of components.oth) {
+      primes.push(derValue(0x30, Buffer.concat([derInteger(prime.r), derInteger(prime.d), derInteger(prime.t)])));
+    }
+    values.push(derValue(0x30, Buffer.concat(primes)));
+  }
+  return derValue(0x30, Buffer.concat(values));
+}
+
+class NativeDerReader {
+  readonly bytes: Uint8Array;
+  offset: number;
+
+  constructor(bytes: Uint8Array) {
+    this.bytes = bytes;
+    this.offset = 0;
+  }
+
+  read(tag: number): Uint8Array {
+    if (this.bytes[this.offset++] !== tag) throw new TypeError("Unexpected native RSA encoding");
+    let length = this.bytes[this.offset++]!;
+    if (length >= 128) {
+      const size = length - 128;
+      length = 0;
+      for (let index = 0; index < size; index++) length = length * 256 + this.bytes[this.offset++]!;
+    }
+    const value = byteSlice(this.bytes, this.offset, length);
+    this.offset += length;
+    return value;
+  }
+
+  integer(): Uint8Array {
+    const bytes = this.read(2);
+    return owned(bytes[0] === 0 && byteLength(bytes) > 1 ? byteSlice(bytes, 1, byteLength(bytes) - 1) : bytes);
+  }
+}
+
+function rsaComponents(key: KeyObject): CryptoRsaComponents {
+  if (key.type === "public") {
+    const components = key.export({ format: "jwk" });
+    if (components.n === undefined || components.e === undefined) throw new TypeError("Missing native RSA components");
+    return { family: "RSA", n: owned(Buffer.from(components.n, "base64url")), e: owned(Buffer.from(components.e, "base64url")) };
+  }
+  const reader = new NativeDerReader(new NativeDerReader(key.export({ format: "der", type: "pkcs1" })).read(0x30));
+  const version = reader.integer()[0]!;
+  const n = reader.integer();
+  const e = reader.integer();
+  const d = reader.integer();
+  const p = reader.integer();
+  const q = reader.integer();
+  const dp = reader.integer();
+  const dq = reader.integer();
+  const qi = reader.integer();
+  if (version === 0) return { family: "RSA", n, e, d, p, q, dp, dq, qi };
+  const otherReader = new NativeDerReader(reader.read(0x30));
+  const oth: CryptoRsaOtherPrime[] = [];
+  while (otherReader.offset < byteLength(otherReader.bytes)) {
+    const prime = new NativeDerReader(otherReader.read(0x30));
+    oth.push({ r: prime.integer(), d: prime.integer(), t: prime.integer() });
+  }
+  return { family: "RSA", n, e, d, p, q, dp, dq, qi, oth };
 }
 
 /**
@@ -124,7 +259,12 @@ function ctr(parameters: CryptoAesCtrParameters, key: KeyObject, data: Uint8Arra
   return owned(Buffer.concat([first, second]));
 }
 
-/** Test-only native primitives. No Web Crypto implementation is called here. */
+/**
+ * Test-only native primitives. No Web Crypto implementation is called here.
+ * Node's key decoder is not an exhaustive RSA mathematical validator: these
+ * tests establish policy/encoding and actual operations, not native check_key
+ * behavior. The real bindings must report invalid mathematical material.
+ */
 export class NodeCryptoProvider implements CryptoProvider {
   digest(algorithm: CryptoDigestName, bytes: Uint8Array): Uint8Array | CryptoFailure {
     try {
@@ -136,22 +276,31 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   importKey(input: CryptoKeyImport): CryptoKeyRecord | CryptoFailure {
     try {
-      let bytes: Uint8Array;
       if (input.format === "raw" && input.family === "secret") {
-        bytes = input.bytes;
-      } else if (input.format === "components" && input.components.family === "secret") {
-        bytes = input.components.k;
-      } else {
-        // Asymmetric encodings arrive with their separate implementation PRs.
-        return { failure: "operation" };
+        return keyRecord(createSecretKey(input.bytes));
       }
-      const key = createSecretKey(bytes);
-      const handle = {} as CryptoKeyHandle;
-      keyObjects.set(handle, key);
-      return {
-        handle,
-        info: { family: "secret", type: "secret", length: secretBits(key) },
-      };
+      if (input.format === "components" && input.components.family === "secret") {
+        return keyRecord(createSecretKey(input.components.k));
+      }
+      if (input.format === "spki") {
+        return keyRecord(createPublicKey({ key: Buffer.from(input.bytes), format: "der", type: "spki" }));
+      }
+      if (input.format === "pkcs8") {
+        return keyRecord(createPrivateKey({ key: Buffer.from(input.bytes), format: "der", type: "pkcs8" }));
+      }
+      if (input.format === "components" && input.components.family === "RSA") {
+        const components = input.components;
+        if (components.d !== undefined && (components.p === undefined || components.q === undefined
+          || components.dp === undefined || components.dq === undefined || components.qi === undefined)) {
+          return { failure: "operation" };
+        }
+        const key = components.d === undefined
+          ? createPublicKey({ key: rsaComponentsDer(components), format: "der", type: "pkcs1" })
+          : createPrivateKey({ key: rsaComponentsDer(components), format: "der", type: "pkcs1" });
+        return keyRecord(key);
+      }
+      // Other asymmetric families arrive with their separate implementation PRs.
+      return { failure: "operation" };
     } catch {
       return { failure: "invalid-key" };
     }
@@ -161,8 +310,8 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
-      if (format !== "raw") return { failure: "operation" };
-      return owned(nativeKey.export());
+      if (format === "raw") return owned(nativeKey.export());
+      return owned(nativeKey.export({ format: "der", type: format }));
     } catch {
       return { failure: "operation" };
     }
@@ -172,14 +321,28 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
-      return { family: "secret", k: owned(nativeKey.export()) };
+      if (nativeKey.type === "secret") return { family: "secret", k: owned(nativeKey.export()) };
+      return rsaComponents(nativeKey);
     } catch {
       return { failure: "operation" };
     }
   }
 
-  generateKeyPair(_parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
-    return { failure: "operation" };
+  generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
+    try {
+      if (parameters.family !== "RSA") return { failure: "operation" };
+      let publicExponent = 0;
+      for (let index = 0; index < byteLength(parameters.publicExponent); index++) {
+        publicExponent = publicExponent * 256 + parameters.publicExponent[index]!;
+        // Node's generateKeyPairSync accepts an unsigned 32-bit exponent only.
+        // The shared Web API imposes no corresponding restriction.
+        if (publicExponent > 0xffffffff) return { failure: "operation" };
+      }
+      const pair = generateKeyPairSync("rsa", { modulusLength: parameters.modulusLength, publicExponent });
+      return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
+    } catch {
+      return { failure: "operation" };
+    }
   }
 
   encrypt(
@@ -190,6 +353,17 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
+      if (parameters.name === "RSA-OAEP") {
+        return {
+          bytes: owned(publicEncrypt({
+            key: nativeKey,
+            padding: rsaOaepPadding,
+            oaepHash: hashName(parameters.hash),
+            oaepLabel: parameters.label,
+          }, data)),
+          tag: null,
+        };
+      }
       if (parameters.name === "AES-CTR") {
         return { bytes: ctr(parameters, nativeKey, data), tag: null };
       }
@@ -225,6 +399,14 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
+      if (parameters.name === "RSA-OAEP") {
+        return owned(privateDecrypt({
+          key: nativeKey,
+          padding: rsaOaepPadding,
+          oaepHash: hashName(parameters.hash),
+          oaepLabel: parameters.label,
+        }, data.bytes));
+      }
       if (parameters.name === "AES-CTR") return ctr(parameters, nativeKey, data.bytes);
       if (parameters.name === "AES-GCM") {
         if (data.tag === null) return { failure: "operation" };
@@ -260,9 +442,17 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
-      if (parameters.name !== "HMAC") return { failure: "operation" };
-      const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
-      return { kind: "bytes", bytes: owned(bytes) };
+      if (parameters.name === "HMAC") {
+        const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
+        return { kind: "bytes", bytes: owned(bytes) };
+      }
+      if (parameters.name === "RSASSA-PKCS1-v1_5" || parameters.name === "RSA-PSS") {
+        const options = parameters.name === "RSA-PSS"
+          ? { key: nativeKey, padding: rsaPssPadding, saltLength: parameters.saltLength }
+          : { key: nativeKey, padding: rsaPkcs1Padding };
+        return { kind: "bytes", bytes: owned(sign(hashName(parameters.hash), data, options)) };
+      }
+      return { failure: "operation" };
     } catch {
       return { failure: "operation" };
     }
@@ -276,12 +466,19 @@ export class NodeCryptoProvider implements CryptoProvider {
   ): boolean {
     try {
       const nativeKey = keyObjects.get(key);
-      if (nativeKey === undefined || parameters.name !== "HMAC" || signature.kind !== "bytes") {
-        return false;
+      if (nativeKey === undefined || signature.kind !== "bytes") return false;
+      if (parameters.name === "HMAC") {
+        const expected = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
+        return expected.byteLength === byteLength(signature.bytes)
+          && timingSafeEqual(expected, signature.bytes);
       }
-      const expected = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
-      return expected.byteLength === byteLength(signature.bytes)
-        && timingSafeEqual(expected, signature.bytes);
+      if (parameters.name === "RSASSA-PKCS1-v1_5" || parameters.name === "RSA-PSS") {
+        const options = parameters.name === "RSA-PSS"
+          ? { key: nativeKey, padding: rsaPssPadding, saltLength: parameters.saltLength }
+          : { key: nativeKey, padding: rsaPkcs1Padding };
+        return verify(hashName(parameters.hash), data, options, signature.bytes);
+      }
+      return false;
     } catch {
       return false;
     }
