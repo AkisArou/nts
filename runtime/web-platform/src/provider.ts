@@ -5,6 +5,20 @@
  * entry point instead of depending on the shared runtime's internal layout.
  */
 export { createPerformance } from "./performance/performance.ts";
+export { GlobalErrorRuntime } from "./core/global-errors.ts";
+export type {
+  GlobalErrorCapabilities,
+  GlobalErrorInformation,
+  GlobalErrorEventData,
+  GlobalErrorEventType,
+  GlobalErrorListener,
+  GlobalExceptionReporter,
+  GlobalWorkerErrorOwner,
+  GlobalHandlerArguments,
+  GlobalHandlerCallback,
+  GlobalHandlerContext,
+  GlobalHandlerInvocationResult,
+} from "./provider/global-errors.ts";
 export { createNavigator } from "./navigator/navigator.ts";
 export type { NavigatorCapability } from "./provider/navigator.ts";
 export { installURLPatternURLCapability, URLPatternCapabilityError } from "./provider/url-pattern.ts";
