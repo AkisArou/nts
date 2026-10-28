@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 32768,
+        "allowNaN": true,
+        "reason": "Bound the generated FASTA strings and k-mer tables within the Node recorder's budgets; cover benchmark seed and published input 1000."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 32768,
+        "allowNaN": true,
+        "reason": "Bound the generated FASTA strings and k-mer tables within the Node recorder's budgets; cover benchmark seed and published input 1000."
+      }
+    }
+  }
+}
