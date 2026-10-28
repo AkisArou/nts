@@ -1,0 +1,3235 @@
+{
+  "wpt": {
+    "repository": "https://github.com/web-platform-tests/wpt",
+    "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "scope": "websockets/ excluding stream/"
+  },
+  "after": {
+    "sourceCommit": "af41054060a856b96fdc2c86119b7798c2a9fc86",
+    "driver": "runtime/web-platform/test/wpt-websocket.test.ts",
+    "command": "node --expose-gc --test runtime/web-platform/test/wpt-websocket.test.ts",
+    "fixtureFiles": 172,
+    "registeredTests": 871,
+    "blocksApplied": true,
+    "manifestSha256": "d4c8970713046ac374b7af3a904bd26310c3c6efbcf443bd50bb67c3496232ee",
+    "logSha256": "5a0363c7132e6e20069781b65fbbbee2e5b89ac05d5aef10dade556d61cad310",
+    "countsCaptureSha256": "3de06c7f293a7dd283aa21edc19659b2541439d8dd7471f6a86dafdaa907bad9",
+    "note": "Completed run after WebSocket source fixes and the 25 named capability/binding/specification blocks. Every file/variant diagnostic and registration count matches the manifest. Counts below are WPT leaf cases; Node also reports 330 fixture containers and one suite container. countsCaptureSha256 hashes UTF-8 JSON.stringify({summary,runs,files}, null, 2) followed by LF."
+  },
+  "tools": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "dependencies": [
+    {
+      "pullRequest": 2,
+      "url": "https://github.com/AkisArou/nts/pull/2",
+      "role": "shared WPT adapter and events/abort policy"
+    },
+    {
+      "pullRequest": 3,
+      "url": "https://github.com/AkisArou/nts/pull/3",
+      "role": "Node-only local WPT server and immutable resources"
+    },
+    {
+      "pullRequest": 10,
+      "url": "https://github.com/AkisArou/nts/pull/10",
+      "role": "shared adapter network, HTML, substitutions and literal importScripts support"
+    }
+  ],
+  "summary": {
+    "runs": 330,
+    "pass": 846,
+    "fail": 0,
+    "blocked": 25
+  },
+  "runs": [
+    {
+      "file": "websockets/basic-auth.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/002.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/002.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/004.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/004.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/005.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/005.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binaryType-wrong-value.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binaryType-wrong-value.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000-reason.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000-reason.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000-verify-code.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000-verify-code.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1005-verify-code.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1005-verify-code.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1005.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1005.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-2999-reason.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-2999-reason.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-3000-reason.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-3000-reason.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-3000-verify-code.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-3000-verify-code.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-4999-reason.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-4999-reason.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-delayed.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-delayed.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/close-invalid.any.js?default",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/close-invalid.any.js?wss",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-onlyReason.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-onlyReason.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-readyState-Closed.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-readyState-Closed.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-readyState-Closing.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-readyState-Closing.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-Reason-124Bytes.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-Reason-124Bytes.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-reason-unpaired-surrogates.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-reason-unpaired-surrogates.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-server-initiated-close.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-server-initiated-close.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-undefined.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-undefined.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/002.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/002.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/003.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/003.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/004.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/004.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/004.html?default",
+      "pass": 161,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/004.html?wss",
+      "pass": 161,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/005.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/005.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/007.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/007.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/008.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/008.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/009.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/009.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/010.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/010.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/011.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/011.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/012.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/012.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/013.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/013.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/014.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/014.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/016.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/016.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/017.html?default",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/017.html?wss",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/018.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/018.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/019.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/019.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/020.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/020.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/021.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/021.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/022.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/022.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/third-param-ignored.any.js?default",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/third-param-ignored.any.js?wss",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/cookies/cross-origin-cookie-set.html",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/Create-asciiSep-protocol-string.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-asciiSep-protocol-string.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-blocked-port.any.js",
+      "pass": 82,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "file": "websockets/Create-extensions-empty.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-extensions-empty.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-http-urls.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-invalid-urls.any.js",
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-non-absolute-url.any.js",
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-nonAscii-protocol-string.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-nonAscii-protocol-string.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-protocol-with-space.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-protocol-with-space.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/Create-protocols-repeated.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-protocols-repeated.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-url-with-space.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-url-with-space.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-url-with-windows-1252-encoding.html",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-array-protocols.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-array-protocols.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-binaryType-blob.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-binaryType-blob.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-empty.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-empty.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-setCorrectly.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-setCorrectly.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-string.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-string.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/eventhandlers.any.js?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/eventhandlers.any.js?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/extended-payload-length.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/extended-payload-length.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/clean-close.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/clean-close.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/constructor.html",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/historical.html",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-arraybuffer.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-arraybuffer.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-blob.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-blob.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-getter.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-getter.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-setter.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-setter.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-deleting.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-deleting.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-getting.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-getting.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-initial.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-initial.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-large.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-large.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-readonly.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-readonly.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-unicode.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-unicode.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-basic.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-basic.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-connecting-async.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-connecting-async.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-connecting.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-connecting.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-multiple.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-multiple.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-nested.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-nested.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-replace.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-replace.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-return.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-return.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/001.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/001.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/002.html?default",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 4
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/002.html?wss",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 4
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/003.html?default",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 4
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/003.html?wss",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 4
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/004.html?default",
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/004.html?wss",
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/005.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/005.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/006.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/006.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/001.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/001.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/002.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/002.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/004.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/004.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/006.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/006.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/010.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/010.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/011.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/011.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/012.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/012.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/013.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/013.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/014.html?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/014.html?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/015.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/015.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/016.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/016.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/017.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/017.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/018.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/018.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/020.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/020.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/extensions/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/extensions/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/protocol/protocol-initial.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/protocol/protocol-initial.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/002.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/002.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/003.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/003.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/004.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/004.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/005.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/005.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/006.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/006.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/007.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/007.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/008.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/008.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/002.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/002.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/003.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/003.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/004.html?default",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/004.html?wss",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/005.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/005.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/006.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/006.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/007.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/007.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/008.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/008.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/009.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/009.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/011.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/011.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/012.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/012.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/002.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/002.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/003.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/003.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/004.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/004.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/005.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/005.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/006.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/006.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/resolve.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/resolve.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/keeping-connection-open/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/keeping-connection-open/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/mixed-content.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/opening-handshake/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/002.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/002.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/003-sets-origin.worker.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/003.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/003.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/005.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/005.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/006.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/006.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/received-301-code.html",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/referrer.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/security/001.html?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/security/001.html?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-0byte-data.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-0byte-data.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-65K-data.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-65K-data.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-before-open.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-before-open.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-65K-arraybuffer.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-65K-arraybuffer.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybuffer.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybuffer.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float16.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float16.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float32.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float32.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float64.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float64.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int16-offset.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int16-offset.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int32.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int32.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int8.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int8.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint16-offset-length.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint16-offset-length.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint32-offset.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint32-offset.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint8-offset-length.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint8-offset-length.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint8-offset.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint8-offset.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-blob.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-blob.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/send-data-isolation.sub.html",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "file": "websockets/Send-data.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-data.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-data.worker.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-data.worker.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/send-many-64K-messages-with-backpressure.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/send-many-64K-messages-with-backpressure.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-null.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-null.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-paired-surrogates.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-paired-surrogates.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-unicode-data.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-unicode-data.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-unpaired-surrogates.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-unpaired-surrogates.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    }
+  ],
+  "files": [
+    {
+      "file": "websockets/basic-auth.any.js",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/002.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/004.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binary/005.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/binaryType-wrong-value.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000-reason.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000-verify-code.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1000.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1005-verify-code.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-1005.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-2999-reason.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-3000-reason.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-3000-verify-code.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-4999-reason.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-delayed.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/close-invalid.any.js",
+      "runs": 2,
+      "pass": 12,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-onlyReason.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-readyState-Closed.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-readyState-Closing.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-Reason-124Bytes.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-reason-unpaired-surrogates.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-server-initiated-close.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Close-undefined.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/002.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/003.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/closing-handshake/004.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/004.html",
+      "runs": 2,
+      "pass": 322,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/005.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/007.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/008.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/009.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/010.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/011.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/012.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/013.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/014.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/016.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/017.html",
+      "runs": 2,
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/018.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/019.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/020.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/021.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/022.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/constructor/third-param-ignored.any.js",
+      "runs": 2,
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/cookies/cross-origin-cookie-set.html",
+      "runs": 1,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/Create-asciiSep-protocol-string.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-blocked-port.any.js",
+      "runs": 1,
+      "pass": 82,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "file": "websockets/Create-extensions-empty.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-http-urls.any.js",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-invalid-urls.any.js",
+      "runs": 1,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-non-absolute-url.any.js",
+      "runs": 1,
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-nonAscii-protocol-string.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-protocol-with-space.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-protocols-repeated-case-insensitive.any.js",
+      "runs": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "file": "websockets/Create-protocols-repeated.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-url-with-space.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-url-with-windows-1252-encoding.html",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-array-protocols.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-binaryType-blob.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-empty.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-setCorrectly.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol-string.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url-protocol.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Create-valid-url.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/eventhandlers.any.js",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/extended-payload-length.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/clean-close.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/constructor.html",
+      "runs": 1,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/CloseEvent/historical.html",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-arraybuffer.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-blob.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-getter.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-setter.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-deleting.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-getting.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-initial.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-large.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-readonly.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-unicode.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-basic.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-connecting-async.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-connecting.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-multiple.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-nested.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-replace.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/close/close-return.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/001.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/002.html",
+      "runs": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 8
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/003.html",
+      "runs": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 8
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/004.html",
+      "runs": 2,
+      "pass": 16,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/005.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/constants/006.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/001.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/002.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/004.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/006.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/010.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/011.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/012.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/013.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/014.html",
+      "runs": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/015.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/016.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/017.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/018.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/events/020.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/extensions/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/protocol/protocol-initial.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/002.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/003.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/004.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/005.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/006.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/007.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/readyState/008.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/002.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/003.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/004.html",
+      "runs": 2,
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/005.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/006.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/007.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/008.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/009.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/011.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/send/012.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/002.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/003.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/004.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/005.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/006.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/interfaces/WebSocket/url/resolve.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/keeping-connection-open/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/mixed-content.https.any.js",
+      "runs": 1,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/opening-handshake/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/002.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/003-sets-origin.worker.js",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/003.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/005.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/006.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/opening-handshake/received-301-code.html",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/referrer.any.js",
+      "runs": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/security/001.html",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-0byte-data.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-65K-data.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-before-open.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-65K-arraybuffer.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybuffer.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float16.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float32.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-float64.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int16-offset.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int32.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-int8.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint16-offset-length.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint32-offset.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint8-offset-length.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-arraybufferview-uint8-offset.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-binary-blob.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/send-data-isolation.sub.html",
+      "runs": 1,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "file": "websockets/Send-data.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-data.worker.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/send-many-64K-messages-with-backpressure.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-null.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-paired-surrogates.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-unicode-data.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/Send-unpaired-surrogates.any.js",
+      "runs": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    }
+  ]
+}

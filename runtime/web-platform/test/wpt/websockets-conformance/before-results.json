@@ -5,7 +5,7 @@
     "scope": "websockets/ excluding stream/"
   },
   "baseline": {
-    "sourceCommit": "40800bc6e2d7255892e355e5041d3a4501586fef",
+    "sourceCommit": "ebc8170fae933300a31a047d06c69f4f8c2b18b6",
     "driver": "runtime/web-platform/test/wpt-websocket.test.ts",
     "command": "node --expose-gc --test runtime/web-platform/test/wpt-websocket.test.ts",
     "fixtureFiles": 172,

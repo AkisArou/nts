@@ -1,0 +1,126 @@
+{
+  "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "tools": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "typechecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    }
+  ],
+  "packageGate": {
+    "sourceCommit": "150522b7a057ce2f123866dc1d2550d36cae3922",
+    "sourceTree": "22907ddab3e9a608591be7ded8674ca17006721c",
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 0,
+    "node": {
+      "tests": 2408,
+      "pass": 2375,
+      "fail": 0,
+      "skipped": 33,
+      "cancelled": 0,
+      "todo": 0
+    },
+    "websocketWpt": {
+      "files": 172,
+      "runs": 330,
+      "registered": 871,
+      "pass": 846,
+      "fail": 0,
+      "blocked": 25
+    },
+    "existingUpstreamRunner": {
+      "upstreamTests": 2817,
+      "applicableTests": 2772,
+      "passed": 2772,
+      "failed": 0,
+      "notApplicable": 45
+    },
+    "compiledAxis": {
+      "status": "skipped",
+      "reason": "No nts compiler is available; host evidence does not establish nts compilation."
+    },
+    "logSha256": "d6749cc8587fd654a275004abc72e1ba5a795eff7ddfb9036c085b91600daf9c",
+    "note": "The published commit tree equals the locally tested tree. The later reporting commit changes only conformance evidence and documentation. The 33 skips consist of 25 WebSocket blocks and eight inherited blocks/deferred controls."
+  },
+  "initialPackageGate": {
+    "sourceCommit": "af41054060a856b96fdc2c86119b7798c2a9fc86",
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 1,
+    "node": {
+      "tests": 2408,
+      "pass": 2374,
+      "fail": 1,
+      "skipped": 33
+    },
+    "failure": {
+      "file": "runtime/web-platform/test/network.test.ts",
+      "name": "WebSocket accepts a server that declines every offered subprotocol",
+      "reason": "The old control expected a successful WebSocketStream opening after the server omitted every offered subprotocol. The shared WHATWG opening handshake requires rejection.",
+      "correctionCommit": "150522b7a057ce2f123866dc1d2550d36cae3922"
+    },
+    "laterStages": "The shell stopped before the existing upstream runner and compiled axis. The final complete rerun above reached both.",
+    "logSha256": "ab25ab3ca7e7566e13495345875ca8b08c62589fd289f4647edd2f6406b3f1d2"
+  },
+  "focusedPackageFiles": [
+    {
+      "file": "runtime/web-platform/test/websocket-handshake-policy.test.ts",
+      "pass": 35,
+      "fail": 0
+    },
+    {
+      "file": "runtime/web-platform/test/websocket-wpt-policy.test.ts",
+      "pass": 9,
+      "fail": 0
+    },
+    {
+      "file": "runtime/web-platform/test/dispatched-websocket.test.ts",
+      "pass": 9,
+      "fail": 0
+    },
+    {
+      "file": "runtime/web-platform/test/websocket-server.test.ts",
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "file": "runtime/web-platform/test/network.test.ts",
+      "pass": 67,
+      "fail": 0,
+      "logSha256": "5e6b5cad33d9902c234efa15512ed00658e6f2f74a635a97ae09035f2005f979"
+    }
+  ],
+  "sabotage": {
+    "sourceCommit": "af41054060a856b96fdc2c86119b7798c2a9fc86",
+    "file": "runtime/web-platform/src/websocket/websocket.ts",
+    "original": "if (typeof data === \"string\") data = toUSVString(data);",
+    "temporaryReplacement": "if (typeof data === \"string\") data = \"NTS WebSocket WPT sabotage\";",
+    "command": "NTS_WPT_WEBSOCKET_FILTER='Send-data.any.js' node --expose-gc --test --test-reporter=spec runtime/web-platform/test/wpt-websocket.test.ts",
+    "mutated": {
+      "exitCode": 1,
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failure": "The unchanged bufferedAmount assertion reports 15 !== 26 in both default and WSS variants.",
+      "logSha256": "32f4f879bfcdf0d6e70b37fca09ced59b1ae0d81a603a878fd6fa61b71ceeefb"
+    },
+    "restored": {
+      "exitCode": 0,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0,
+      "worktreeClean": true,
+      "sourceSha256": "0e61837c9f346104ad79574bb3cbeb052169e090e895ecc2a22331ad6b54f3ab",
+      "logSha256": "3ae245e2f075dc2afbaab43e3f6fd334bb1968015f5f87665d76691a24c181d9"
+    },
+    "counts": "WPT leaves only; enclosing node:test containers are excluded.",
+    "note": "Run in a separate detached worktree after the fixes were committed. Only the sabotaged source file was restored; no mutation remains."
+  }
+}
