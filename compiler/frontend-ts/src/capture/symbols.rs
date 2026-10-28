@@ -54,7 +54,7 @@ impl<'p> Capture<'p, '_> {
                 }
             }),
             name: PropertyKey::Name(String::new()),
-            flags: schema_flags(classification),
+            flags: schema_flags(classification, symbol.global_bindings()),
             declarations: captured,
             declaration_sites,
             ty: None,
@@ -178,7 +178,10 @@ pub(super) fn semantic_name(name: SymbolName<'_>) -> Result<String, SnapshotErro
     })
 }
 
-fn schema_flags(class: SymbolClassification) -> SymbolFlags {
+fn schema_flags(
+    class: SymbolClassification,
+    global: nts_frontend_tsrs::GlobalBindings,
+) -> SymbolFlags {
     let mut flags = SymbolFlags::default();
     for (present, flag) in [
         (class.variable, SymbolFlags::VARIABLE),
@@ -190,6 +193,8 @@ fn schema_flags(class: SymbolClassification) -> SymbolFlags {
         (class.module, SymbolFlags::MODULE),
         (class.property, SymbolFlags::PROPERTY),
         (class.method, SymbolFlags::METHOD),
+        (global.value, SymbolFlags::GLOBAL_VALUE),
+        (global.type_, SymbolFlags::GLOBAL_TYPE),
     ] {
         if present {
             flags = flags.union(flag);

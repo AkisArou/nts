@@ -68,7 +68,8 @@ use crate::origin::Origin;
 /// responsible for each disabled member, for project compile policy.
 /// 51: owned source contexts and declaration sites, including external symbols
 /// and selected overloads, for inspection-to-final-capture rebinding.
-pub const SCHEMA_VERSION: u32 = 51;
+/// 52: checker-proved membership in the global value and type binding tables.
+pub const SCHEMA_VERSION: u32 = 52;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -619,6 +620,7 @@ mod library_tests {
 ///
 /// A bitflag rather than an enum because TypeScript genuinely merges kinds —
 /// a class is a value and a type, a namespace can merge with a function.
+/// Global binding meanings are independent checker-proved scope facts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SymbolFlags(pub u32);
 
@@ -632,6 +634,12 @@ impl SymbolFlags {
     pub const MODULE: Self = Self(1 << 6);
     pub const PROPERTY: Self = Self(1 << 7);
     pub const METHOD: Self = Self(1 << 8);
+    /// Exact merged-symbol identity in the checked global value table. This
+    /// does not imply a compiler/provider owns the binding or its suppliers.
+    pub const GLOBAL_VALUE: Self = Self(1 << 9);
+    /// The independent global type meaning. Local import aliases do not gain
+    /// either meaning by sharing a name; their denoted target retains its facts.
+    pub const GLOBAL_TYPE: Self = Self(1 << 10);
 
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {

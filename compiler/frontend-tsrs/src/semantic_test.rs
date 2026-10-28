@@ -61,6 +61,114 @@ fn hash(value: impl Hash) -> u64 {
     hash.finish()
 }
 
+fn named_global_bindings(file: File<'_>, name: &str) -> Vec<GlobalBindings> {
+    let mut pending = vec![file.root()];
+    let mut found = Vec::new();
+    while let Some(node) = pending.pop() {
+        if node.name_text() == Some(name) {
+            found.push((
+                node.span().expect("source span").start,
+                node.symbol().expect("named binding").global_bindings(),
+            ));
+        }
+        for edge in node.edges() {
+            match edge {
+                Edge::Node { node, .. } => pending.push(node),
+                Edge::List { list, .. } => pending.extend(list.iter()),
+            }
+        }
+    }
+    found.sort_by_key(|(at, _)| *at);
+    found.into_iter().map(|(_, bindings)| bindings).collect()
+}
+
+#[test]
+fn global_binding_meanings_are_independent_and_shadowing_keeps_its_own_identity() {
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session.open(spec("declare const valueOnly: number;\ninterface TypeOnly { value: number; }\ndeclare class Both { value: number; }\nfunction ordinary(valueOnly: number) { return valueOnly; }\n")).expect("scope fixture");
+            let file = source(&checked);
+            assert_eq!(
+                named_global_bindings(file, "valueOnly"),
+                [
+                    GlobalBindings {
+                        value: true,
+                        type_: false
+                    },
+                    GlobalBindings::default(),
+                    GlobalBindings::default(),
+                ]
+            );
+            assert_eq!(
+                named_global_bindings(file, "TypeOnly"),
+                [GlobalBindings {
+                    value: false,
+                    type_: true
+                }]
+            );
+            assert_eq!(
+                named_global_bindings(file, "Both"),
+                [GlobalBindings {
+                    value: true,
+                    type_: true
+                }]
+            );
+            assert_eq!(
+                named_global_bindings(file, "ordinary"),
+                [GlobalBindings {
+                    value: true,
+                    type_: false
+                }],
+                "a source implementation can be global without being a provided builtin"
+            );
+            assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
+        });
+    }
+}
+
+#[test]
+fn local_aliases_resolve_to_the_actual_global_or_source_supplier() {
+    run(options(1), |session| {
+        let mut request = spec(
+            "import GlobalMath = require('./global');\nimport Math = require('./supplied');\nexport const result = GlobalMath.abs(-1) + Math.abs(-1);\n",
+        );
+        request.overlays.insert("tsconfig.json".into(), r#"{"compilerOptions":{"strict":true,"target":"ESNext","module":"CommonJS","types":[]},"files":["main.ts"]}"#.into());
+        request
+            .overlays
+            .insert("global.ts".into(), "export = Math;\n".into());
+        request.overlays.insert("supplied.ts".into(), "const supplied = { abs(value: number): number { return value; } }; export = supplied;\n".into());
+        let checked = session.open(request).expect("alias fixture");
+        let imports = statements(source(&checked));
+        let global = imports[0]
+            .child(ChildRole::ImportEqualsDeclarationName)
+            .expect("global alias")
+            .symbol()
+            .expect("alias symbol");
+        let local = imports[1]
+            .child(ChildRole::ImportEqualsDeclarationName)
+            .expect("local alias")
+            .symbol()
+            .expect("alias symbol");
+        assert_eq!(global.global_bindings(), GlobalBindings::default());
+        assert_eq!(local.global_bindings(), GlobalBindings::default());
+        assert!(
+            global
+                .alias_target()
+                .expect("global supplier")
+                .global_bindings()
+                .value
+        );
+        assert_eq!(
+            local
+                .alias_target()
+                .expect("source supplier")
+                .global_bindings(),
+            GlobalBindings::default()
+        );
+        assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
+    });
+}
+
 fn heritage_reference(owner: Node<'_>) -> Reference<'_> {
     owner
         .list(ListRole::ClassDeclarationHeritageClauses)

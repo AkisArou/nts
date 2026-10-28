@@ -167,6 +167,25 @@ impl<'p> File<'p> {
 }
 
 impl<'p> Symbol<'p> {
+    /// Exact membership in this checked program's global value/type tables.
+    /// A local alias keeps its own scope; follow `alias_target` to ask about
+    /// its actual supplier. These are binding facts, never builtin availability
+    /// or proof that an ambient declaration has no source implementation.
+    #[must_use]
+    pub fn global_bindings(self) -> GlobalBindings {
+        self.file.with_checker(|checker| {
+            let mut contains = |meaning| {
+                checker
+                    .get_global_symbol_exported(self.native.name(), meaning, None)
+                    .is_some_and(|symbol| checker.get_merged_symbol_exported(symbol) == self.native)
+            };
+            GlobalBindings {
+                value: contains(SymbolFlags::Value),
+                type_: contains(SymbolFlags::Type),
+            }
+        })
+    }
+
     /// A built-in binding by checker identity, never by its written name alone.
     #[must_use]
     pub fn builtin_binding(self) -> Option<BuiltinBinding> {
@@ -317,6 +336,13 @@ pub enum BuiltinBinding {
     Infinity,
     GlobalThis,
     Arguments,
+}
+
+/// Independent meanings of the actual global binding, not its written name.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GlobalBindings {
+    pub value: bool,
+    pub type_: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
