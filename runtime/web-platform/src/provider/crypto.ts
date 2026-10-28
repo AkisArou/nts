@@ -20,6 +20,8 @@
  * handling and constant-time authentication. No per-byte or per-block calls cross
  * this interface. The caller settles its promise through Scheduler.enqueue after
  * the primitive returns; primitives know nothing about tasks or promises.
+ * Failures cross as CryptoFailure values, never native exceptions. The shared
+ * operation maps each failure to the specification's error at the required step.
  *
  * RandomSource in primitives.ts remains the randomness capability. Symmetric key
  * generation fills raw bytes with it before importing a secret handle. Randomized
@@ -40,7 +42,7 @@ export type CryptoDigestName = "SHA-1" | "SHA-256" | "SHA-384" | "SHA-512";
  * serving both interfaces needs a small adapter instead of changing that contract.
  */
 export interface CryptoDigestProvider {
-  digest(algorithm: CryptoDigestName, bytes: Uint8Array): Uint8Array;
+  digest(algorithm: CryptoDigestName, bytes: Uint8Array): Uint8Array | CryptoFailure;
 }
 
 declare const cryptoKeyHandleBrand: unique symbol;
@@ -321,23 +323,19 @@ export type CryptoDerivationParameters =
   | CryptoHkdfParameters
   | CryptoPbkdf2Parameters;
 
-/** The shared operation maps these failures to its specified DOMException. */
-export class CryptoPrimitiveError extends Error {
+/** A native failure value; the shared operation selects its specified DOMException. */
+export interface CryptoFailure {
   readonly failure: "invalid-key" | "operation";
-
-  constructor(failure: "invalid-key" | "operation", message = "Cryptographic primitive failed") {
-    super(message);
-    this.name = "CryptoPrimitiveError";
-    this.failure = failure;
-  }
 }
 
 /**
  * Complete seam proposed for review before implementing the remaining algorithms.
  * No method performs Web Crypto's operation registration, input conversion, usage,
  * extractability or format-policy checks. Invalid mathematical key material may
- * fail with CryptoPrimitiveError("invalid-key"); other native failures use
- * "operation". The shared caller alone selects the observable error and its order.
+ * return { failure: "invalid-key" }; other native failures return
+ * { failure: "operation" }. Native code does not throw across this interface.
+ * Verification returns a boolean. The shared caller alone selects observable
+ * errors and their order.
  */
 export interface CryptoProvider extends CryptoDigestProvider {
   /**
@@ -353,25 +351,27 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * the requested cryptographic operation's rules when the key is used. Shared
    * code is responsible for any format-specific public/private consistency check.
    */
-  importKey(input: CryptoKeyImport): CryptoKeyRecord;
+  importKey(input: CryptoKeyImport): CryptoKeyRecord | CryptoFailure;
 
   /**
    * Shared code selects the permitted format and checks extractability first.
    * DER output uses the standard key's SPKI/PKCS #8 structures, never encrypted
    * PKCS #8, PEM, native structs or a provider-specific algorithm identifier.
    */
-  exportKey(key: CryptoKeyHandle, format: "raw" | "spki" | "pkcs8"): Uint8Array;
-  exportKey(key: CryptoKeyHandle, format: "components"): CryptoKeyComponents;
+  exportKey(key: CryptoKeyHandle, format: "raw" | "spki" | "pkcs8"): Uint8Array | CryptoFailure;
 
-  generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord;
+  /** Return decoded components; the shared layer constructs and validates JWK. */
+  exportComponents(key: CryptoKeyHandle): CryptoKeyComponents | CryptoFailure;
+
+  generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure;
 
   /** CBC input is already padded; GCM returns its tag separately, others use null. */
-  encrypt(parameters: CryptoCipherParameters, key: CryptoKeyHandle, data: Uint8Array): CryptoCiphertext;
+  encrypt(parameters: CryptoCipherParameters, key: CryptoKeyHandle, data: Uint8Array): CryptoCiphertext | CryptoFailure;
 
   /** CBC output remains padded. Authentication failure must not return plaintext. */
-  decrypt(parameters: CryptoCipherParameters, key: CryptoKeyHandle, data: CryptoCiphertext): Uint8Array;
+  decrypt(parameters: CryptoCipherParameters, key: CryptoKeyHandle, data: CryptoCiphertext): Uint8Array | CryptoFailure;
 
-  sign(parameters: CryptoSignatureParameters, key: CryptoKeyHandle, data: Uint8Array): CryptoSignature;
+  sign(parameters: CryptoSignatureParameters, key: CryptoKeyHandle, data: Uint8Array): CryptoSignature | CryptoFailure;
 
   /** Invalid signatures return false; HMAC comparison must be constant-time. */
   verify(
@@ -387,5 +387,5 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * without data-dependent early exit. KDF requests specify the complete byte count;
    * shared code validates their bit-length/iteration rules before the single call.
    */
-  derive(parameters: CryptoDerivationParameters, key: CryptoKeyHandle): Uint8Array;
+  derive(parameters: CryptoDerivationParameters, key: CryptoKeyHandle): Uint8Array | CryptoFailure;
 }

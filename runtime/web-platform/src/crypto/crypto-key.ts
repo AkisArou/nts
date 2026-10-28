@@ -121,21 +121,6 @@ export class CryptoKey {
   }
 }
 
-// Web IDL interface descriptors; see core/interface-tag.ts.
-for (const key of Object.getOwnPropertyNames(CryptoKey.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(CryptoKey.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(CryptoKey.prototype, key, descriptor);
-}
-Object.defineProperty(CryptoKey.prototype, Symbol.toStringTag, {
-  value: "CryptoKey",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-
 /**
  * Construct a key after the algorithm's validation and usage normalization.
  * The caller, not the primitive provider or this slot constructor, determines

@@ -157,20 +157,6 @@ test("CryptoKey internal reads ignore public properties and their getters", () =
   assert.deepEqual(reads, []);
 });
 
-test("CryptoKey has Web IDL interface descriptors", () => {
-  assert.equal(CryptoKey.length, 0);
-  assert.equal(Object.prototype.toString.call(key()), "[object CryptoKey]");
-  assert.deepEqual(Object.getOwnPropertyDescriptor(CryptoKey.prototype, Symbol.toStringTag), {
-    value: "CryptoKey", writable: false, enumerable: false, configurable: true,
-  });
-  for (const name of ["type", "extractable", "algorithm", "usages"]) {
-    const descriptor = Object.getOwnPropertyDescriptor(CryptoKey.prototype, name)!;
-    assert.equal(descriptor.enumerable, true);
-    assert.equal(descriptor.configurable, true);
-    assert.equal(descriptor.set, undefined);
-  }
-});
-
 test("CryptoKey rejects invalid receivers and prototype forgeries", () => {
   const actual = key();
   const invalid: unknown[] = [

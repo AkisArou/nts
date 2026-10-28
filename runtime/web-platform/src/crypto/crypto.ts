@@ -83,19 +83,3 @@ export class Crypto {
       + uuidHex[pool[offset + 14]!]! + uuidHex[pool[offset + 15]!]!;
   }
 }
-
-// Web IDL interface descriptors, inline as required by core/interface-tag.ts.
-for (const key of Object.getOwnPropertyNames(Crypto.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(Crypto.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(Crypto.prototype, key, descriptor);
-}
-Object.defineProperty(Crypto.prototype, Symbol.toStringTag, {
-  value: "Crypto",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-Object.defineProperty(Crypto, "length", { value: 0 });

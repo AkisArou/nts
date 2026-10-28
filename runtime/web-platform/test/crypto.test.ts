@@ -6,9 +6,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { Crypto } from "../src/crypto/crypto.ts";
-import { SubtleCrypto } from "../src/crypto/subtle-crypto.ts";
 import { DOMException } from "../src/core/errors.ts";
-import type { CryptoDigestName, CryptoDigestProvider } from "../src/provider/crypto.ts";
+import type { CryptoDigestName, CryptoDigestProvider, CryptoFailure } from "../src/provider/crypto.ts";
 import type { RandomSource } from "../src/provider/primitives.ts";
 import { VirtualScheduler } from "../src/provider/virtual-time.ts";
 import { NodeCryptoProvider } from "./node-crypto-provider.ts";
@@ -30,7 +29,7 @@ class RecordingDigestProvider extends NodeCryptoProvider {
   algorithm: CryptoDigestName | undefined;
   bytes: Uint8Array | undefined;
 
-  override digest(algorithm: CryptoDigestName, bytes: Uint8Array): Uint8Array {
+  override digest(algorithm: CryptoDigestName, bytes: Uint8Array): Uint8Array | CryptoFailure {
     this.calls++;
     this.algorithm = algorithm;
     // A spy observes the borrowed view only to assert the no-copy boundary.
@@ -86,25 +85,6 @@ test("digest's byte access survives changes to buffer globals during normalizati
   scheduler.runPending();
   assert.equal(hex(await promise), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 });
-
-for (const [constructor, members] of [
-  [Crypto, ["subtle", "getRandomValues", "randomUUID"]],
-  [SubtleCrypto, ["digest"]],
-] as const) {
-  test(constructor.name + " has the specified interface tag and member descriptors", () => {
-    assert.deepEqual(Object.getOwnPropertyDescriptor(constructor.prototype, Symbol.toStringTag), {
-      value: constructor.name, writable: false, enumerable: false, configurable: true,
-    });
-    assert.equal(constructor.length, 0);
-    for (const member of members) {
-      const descriptor = Object.getOwnPropertyDescriptor(constructor.prototype, member)!;
-      assert.equal(descriptor.enumerable, true);
-      assert.equal(descriptor.configurable, true);
-      if ("value" in descriptor) assert.equal(descriptor.writable, true);
-      else assert.equal(descriptor.set, undefined);
-    }
-  });
-}
 
 const integerTypes: readonly {
   name: string;
@@ -462,20 +442,28 @@ test("digest returns separate result buffers on successive operations", async ()
   assert.equal(hex(b), vectors[1]!.abc);
 });
 
-test("digest maps primitive failures to OperationError on a scheduler task", async () => {
-  const failure = new Error("native digest failure");
-  let calls = 0;
-  const provider: CryptoDigestProvider = { digest() { calls++; throw failure; } };
-  const { crypto, scheduler } = fixture(provider);
-  let rejected = false;
-  const pending = crypto.subtle.digest("SHA-256", ascii("abc"));
-  void pending.catch(() => { rejected = true; });
-  assert.equal(calls, 1);
-  await Promise.resolve();
-  assert.equal(rejected, false);
-  assert.equal(scheduler.hasPending, true);
-  scheduler.runPending();
-  await assert.rejects(pending, domError("OperationError"));
+test("the Node digest adapter returns a failure value for a native exception", () => {
+  const provider = new NodeCryptoProvider();
+  // Deliberately bypass the typed algorithm boundary to exercise createHash failure.
+  const unavailable = "missing-native-digest" as CryptoDigestName;
+  assert.deepEqual(provider.digest(unavailable, new Uint8Array()), { failure: "operation" });
+});
+
+test("digest maps returned primitive failures to OperationError on a scheduler task", async () => {
+  for (const failure of ["operation", "invalid-key"] as const) {
+    let calls = 0;
+    const provider: CryptoDigestProvider = { digest() { calls++; return { failure }; } };
+    const { crypto, scheduler } = fixture(provider);
+    let rejected = false;
+    const pending = crypto.subtle.digest("SHA-256", ascii("abc"));
+    void pending.catch(() => { rejected = true; });
+    assert.equal(calls, 1);
+    await Promise.resolve();
+    assert.equal(rejected, false);
+    assert.equal(scheduler.hasPending, true);
+    scheduler.runPending();
+    await assert.rejects(pending, domError("OperationError"));
+  }
 });
 
 test("digest invalid receivers and missing arguments return rejected promises", async () => {

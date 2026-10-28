@@ -29,15 +29,16 @@ export class SubtleCrypto {
       const normalized = normalizeAlgorithm(identifier, "digest");
       const bytes = cryptoBytes(source);
       const pending = Promise.withResolvers<ArrayBuffer>();
-      try {
-        // Exactly one whole-input primitive call, before script can change data.
-        // The provider transfers a fresh, full-buffer Uint8Array to this layer.
-        const digest = provider.digest(normalized.name, bytes);
-        const result = digest.buffer as ArrayBuffer;
-        scheduler.enqueue(() => pending.resolve(result));
-      } catch {
+      // Exactly one whole-input primitive call, before script can change data.
+      // Native bindings report failures as values; they cannot throw into TS.
+      const digest = provider.digest(normalized.name, bytes);
+      if ("failure" in digest) {
         const error = new DOMException("The digest operation failed", "OperationError");
         scheduler.enqueue(() => pending.reject(error));
+      } else {
+        // The provider transfers a fresh, full-buffer Uint8Array to this layer.
+        const result = digest.buffer as ArrayBuffer;
+        scheduler.enqueue(() => pending.resolve(result));
       }
       return pending.promise;
     } catch (error) {
@@ -45,19 +46,3 @@ export class SubtleCrypto {
     }
   }
 }
-
-// Web IDL interface descriptors; see core/interface-tag.ts.
-for (const key of Object.getOwnPropertyNames(SubtleCrypto.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(SubtleCrypto.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(SubtleCrypto.prototype, key, descriptor);
-}
-Object.defineProperty(SubtleCrypto.prototype, Symbol.toStringTag, {
-  value: "SubtleCrypto",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-Object.defineProperty(SubtleCrypto, "length", { value: 0 });
