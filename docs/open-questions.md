@@ -63,9 +63,9 @@ Ranked by how much each blocks or how much harm it does today.
 | G2 | Host or own, feature by feature | only Intl and RegExp decided (host on JS hosts) | Own by default (exactness); the host only where decided; Node addons own |
 | G3 | Feature detection: `typeof X === "undefined"`, `"X" in globalThis` | folds for intrinsics only | Fold both forms per target at compile time; `globalThis` itself is L24 |
 | G4 | Node's types in the one lib | no rule | `types: ["node"]` where a profile provides `node:*`; node's timer types on native, the DOM's elsewhere |
-| G5 | Web globals for native apps | `runtime/sdk`'s lib subset, unimplemented | WinterTC's Minimum Common Web API as the floor on native and the JVM; retire the subset (decision 11) |
+| G5 | Web globals for native apps | `runtime/sdk`'s lib subset, unimplemented | WinterTC's Minimum Common Web API as the floor on native and the JVM; retire the subset (decision 11). **user** (10-28): the WinterTC floor |
 | G6 | Chromium's overlay | listed in tsconfig | Injected by `target.chromium()`, checked against lib.dom; Blink errors as `DOMException` |
-| G7 | Web platform coverage | TypeScript exists for most, bound to no global | The WinterTC floor as plan of record; `URL` lives in `runtime/web-platform`; carry out decision 10 |
+| G7 | Web platform coverage | TypeScript exists for most, bound to no global | The WinterTC floor as plan of record; `URL` lives in `runtime/web-platform`; carry out decision 10. **user** (10-28): the WinterTC floor; one package per spec family, so JSON moves to `runtime/ecmascript` and `URL` to `runtime/web-platform` |
 | G8 | Platform network stacks or the shared engine | the shared engine; OkHttp on Android | The shared engine first; platform stacks only where store rules require. **research:** trust stores, proxies |
 | G9 | `runtime/web-platform`'s JSON parser | runs `json-parse`; documents disagree | Stays the untyped path until the compiler's untyped parser exists, then becomes a test oracle |
 | G10 | `node:*` scope and how programs reach it | 28 modules, no resolver | Owe the 28; a `node:` resolver and `process`/`Buffer` globals in the native profile |

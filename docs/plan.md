@@ -147,7 +147,10 @@ The designs and their build orders are in [`foundations/`](foundations).
 3. **Then:** memory stage 3 (per-site regions, json-parse first), Unicode
    stages 2–3, the strings stages D and E, numbers, and the keyed hash.
 4. **The builtins mechanism** ([builtins](foundations/builtins.md)), approved,
-   from its stage 1. The clock and randomness come with stage 6.
+   from its stage 1, with WinterTC's Minimum Common Web API as the web floor on
+   native and the JVM. JSON moves to `runtime/ecmascript` and `URL` to
+   `runtime/web-platform` before stage 5 makes them reachable. The clock and
+   randomness come with stage 6.
 
 ## Phase 3: conformance-driven development
 

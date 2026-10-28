@@ -252,10 +252,8 @@ recommendations:
 - G2: host or own, feature by feature, beyond Intl and RegExp;
 - G3: which forms of feature detection fold;
 - G4: node's types beside the DOM's, such as `setTimeout`'s two signatures;
-- G5 and G7: the web platform's floor on native and the JVM (WinterTC's
-  Minimum Common Web API);
 - G6: Chromium's overlay under this mechanism;
-- G9: what becomes of `runtime/web-platform`'s JSON parser;
+- G9: what becomes of the untyped JSON parser (moving to `runtime/ecmascript`);
 - G11: which builtins a Node addon uses;
 - G13 to G19: time zones, Intl's locales, Temporal on Wasm, crypto, the DOM on
   Wasm, `console`, and shared memory.
@@ -265,7 +263,15 @@ recommendations:
 This page is approved as a whole (10-28,
 [log](../records/notebooks/decisions-log.md#builtins-mechanism-10-28)): a package declares
 what it can provide in its `package.json`, each target's profile orders the
-providers, and an app's `nts.config.ts` may override a choice.
+providers, and an app's `nts.config.ts` may override a choice. With it, also
+10-28:
+
+- **The web floor on native and the JVM is WinterTC's Minimum Common Web
+  API:** every API in it is provided there (register G5, G7).
+- **One package per spec family:** `es:*` features live in
+  `runtime/ecmascript`, `web:*` in `runtime/web-platform` and `node:*` in
+  `runtime/node`. So JSON (ECMAScript) moves to `runtime/ecmascript` and `URL`
+  (WHATWG) to `runtime/web-platform`.
 
 From the user ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)):
 

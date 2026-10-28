@@ -296,6 +296,11 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   package and must be readable as data without running any dependency's code
   (most providers have no `nts.config.ts`); each target's preference is its
   profile's; an app's own choice is its `nts.config.ts` override.
+- **WinterTC's Minimum Common Web API is the web floor on native and the JVM**
+  (register G5, G7): "I agree about WinterTC's Minimum Common Web API!".
+- **One package per spec family:** `es:*` in `runtime/ecmascript`, `web:*` in
+  `runtime/web-platform`, `node:*` in `runtime/node`; JSON and `URL` move
+  accordingly: "they should move to the appropriate dirs".
 
 ## Compiler settings (10-28)
 
