@@ -91,7 +91,7 @@ class Color {
         this.blue = b;
     }
 
-    add(c1: Color, c2: Color): Color {
+    static add(c1: Color, c2: Color): Color {
         var result = new Color(0,0,0);
 
         result.red = c1.red + c2.red;
@@ -101,7 +101,7 @@ class Color {
         return result;
     }
 
-    addScalar(c1: Color, s: number): Color {
+    static addScalar(c1: Color, s: number): Color {
         var result = new Color(0,0,0);
 
         result.red = c1.red + s;
@@ -113,7 +113,7 @@ class Color {
         return result;
     }
 
-    subtract(c1: Color, c2: Color): Color {
+    static subtract(c1: Color, c2: Color): Color {
         var result = new Color(0,0,0);
 
         result.red = c1.red - c2.red;
@@ -123,7 +123,7 @@ class Color {
         return result;
     }
 
-    multiply(c1: Color, c2: Color): Color {
+    static multiply(c1: Color, c2: Color): Color {
         var result = new Color(0,0,0);
 
         result.red = c1.red * c2.red;
@@ -133,7 +133,7 @@ class Color {
         return result;
     }
 
-    multiplyScalar(c1: Color, f: number): Color {
+    static multiplyScalar(c1: Color, f: number): Color {
         var result = new Color(0,0,0);
 
         result.red = c1.red * f;
@@ -143,7 +143,7 @@ class Color {
         return result;
     }
 
-    divideFactor(c1: Color, f: number): Color {
+    static divideFactor(c1: Color, f: number): Color {
         var result = new Color(0,0,0);
 
         result.red = c1.red / f;
@@ -164,11 +164,11 @@ class Color {
         return d;
     }
 
-    blend(c1: Color, c2: Color, w: number): Color {
+    static blend(c1: Color, c2: Color, w: number): Color {
         var result = new Color(0,0,0);
-        result = Color.prototype.add(
-                    Color.prototype.multiplyScalar(c1, 1 - w),
-                    Color.prototype.multiplyScalar(c2, w)
+        result = Color.add(
+                    Color.multiplyScalar(c1, 1 - w),
+                    Color.multiplyScalar(c2, w)
                   );
         return result;
     }
@@ -244,20 +244,20 @@ class Vector {
         return this.x * w.x + this.y * w.y + this.z * w.z;
     }
 
-    add(v: Vector, w: Vector): Vector {
+    static add(v: Vector, w: Vector): Vector {
         return new Vector(w.x + v.x, w.y + v.y, w.z + v.z);
     }
 
-    subtract(v: Vector, w: Vector): Vector {
+    static subtract(v: Vector, w: Vector): Vector {
         if(!w || !v) throw 'Vectors must be defined [' + v + ',' + w + ']';
         return new Vector(v.x - w.x, v.y - w.y, v.z - w.z);
     }
 
-    multiplyVector(v: Vector, w: Vector): Vector {
+    static multiplyVector(v: Vector, w: Vector): Vector {
         return new Vector(v.x * w.x, v.y * w.y, v.z * w.z);
     }
 
-    multiplyScalar(v: Vector, w: number): Vector {
+    static multiplyScalar(v: Vector, w: number): Vector {
         return new Vector(v.x * w, v.y * w, v.z * w);
     }
 
@@ -397,7 +397,7 @@ class Sphere {
         var info = new IntersectionInfo();
         info.shape = this;
 
-        var dst = Vector.prototype.subtract(ray.position, this.position);
+        var dst = Vector.subtract(ray.position, this.position);
 
         var B = dst.dot(ray.direction);
         var C = dst.dot(dst) - (this.radius * this.radius);
@@ -406,14 +406,14 @@ class Sphere {
         if(D > 0){ // intersection!
             info.isHit = true;
             info.distance = (-B) - Math.sqrt(D);
-            info.position = Vector.prototype.add(
+            info.position = Vector.add(
                                                 ray.position,
-                                                Vector.prototype.multiplyScalar(
+                                                Vector.multiplyScalar(
                                                     ray.direction,
                                                     info.distance!
                                                 )
                                             );
-            info.normal = Vector.prototype.subtract(
+            info.normal = Vector.subtract(
                                             info.position!,
                                             this.position
                                         ).normalize();
@@ -453,9 +453,9 @@ class Plane {
 
         info.shape = this;
         info.isHit = true;
-        info.position = Vector.prototype.add(
+        info.position = Vector.add(
                                             ray.position,
-                                            Vector.prototype.multiplyScalar(
+                                            Vector.multiplyScalar(
                                                 ray.direction,
                                                 t
                                             )
@@ -513,19 +513,19 @@ class Camera {
         this.lookAt = lookAt;
         this.up = up;
         this.equator = lookAt.normalize().cross(this.up);
-        this.screen = Vector.prototype.add(this.position, this.lookAt);
+        this.screen = Vector.add(this.position, this.lookAt);
     }
 
     getRay(vx: number, vy: number): Ray {
-        var pos = Vector.prototype.subtract(
+        var pos = Vector.subtract(
             this.screen,
-            Vector.prototype.subtract(
-                Vector.prototype.multiplyScalar(this.equator, vx),
-                Vector.prototype.multiplyScalar(this.up, vy)
+            Vector.subtract(
+                Vector.multiplyScalar(this.equator, vx),
+                Vector.multiplyScalar(this.up, vy)
             )
         );
         pos.y = pos.y * -1;
-        var dir = Vector.prototype.subtract(
+        var dir = Vector.subtract(
             pos,
             this.position
         );
@@ -651,8 +651,8 @@ class Engine {
 
     getReflectionRay(P: Vector, N: Vector, V: Vector): Ray {
         var c1 = -N.dot(V);
-        var R1 = Vector.prototype.add(
-            Vector.prototype.multiplyScalar(N, 2*c1),
+        var R1 = Vector.add(
+            Vector.multiplyScalar(N, 2*c1),
             V
         );
         return new Ray(P, R1);
@@ -660,7 +660,7 @@ class Engine {
 
     rayTrace(info: IntersectionInfo, ray: Ray, scene: Scene, depth: number): Color {
         // Calc ambient
-        var color = Color.prototype.multiplyScalar(info.color, scene.background.ambience);
+        var color = Color.multiplyScalar(info.color, scene.background.ambience);
         var oldColor = color;
         var shininess = Math.pow(10, info.shape!.material.gloss + 1);
 
@@ -668,7 +668,7 @@ class Engine {
             var light = scene.lights[i];
 
             // Calc diffuse lighting
-            var v = Vector.prototype.subtract(
+            var v = Vector.subtract(
                                 light.position,
                                 info.position!
                             ).normalize();
@@ -676,11 +676,11 @@ class Engine {
             if(this.options.renderDiffuse){
                 var L = v.dot(info.normal!);
                 if(L > 0.0){
-                    color = Color.prototype.add(
+                    color = Color.add(
                                         color,
-                                        Color.prototype.multiply(
+                                        Color.multiply(
                                             info.color,
-                                            Color.prototype.multiplyScalar(
+                                            Color.multiplyScalar(
                                                 light.color,
                                                 L
                                             )
@@ -704,7 +704,7 @@ class Engine {
                   refl.color = scene.background.color;
                         }
 
-                  color = Color.prototype.blend(
+                  color = Color.blend(
                     color,
                     refl.color,
                     info.shape!.material.reflection
@@ -724,32 +724,32 @@ class Engine {
 
                 shadowInfo = this.testIntersection(shadowRay, scene, info.shape!);
                 if(shadowInfo.isHit && shadowInfo.shape! != info.shape! /*&& shadowInfo.shape!.type != 'PLANE'*/){
-                    var vA = Color.prototype.multiplyScalar(color, 0.5);
+                    var vA = Color.multiplyScalar(color, 0.5);
                     var dB = (0.5 * Math.pow(shadowInfo.shape!.material.transparency, 0.5));
-                    color = Color.prototype.addScalar(vA,dB);
+                    color = Color.addScalar(vA,dB);
                 }
             }
 
       // Phong specular highlights
       if(this.options.renderHighlights && !shadowInfo.isHit && info.shape!.material.gloss > 0){
-        var Lv = Vector.prototype.subtract(
+        var Lv = Vector.subtract(
                             info.shape!.position,
                             light.position
                         ).normalize();
 
-        var E = Vector.prototype.subtract(
+        var E = Vector.subtract(
                             scene.camera.position,
                             info.shape!.position
                         ).normalize();
 
-        var H = Vector.prototype.subtract(
+        var H = Vector.subtract(
                             E,
                             Lv
                         ).normalize();
 
         var glossWeight = Math.pow(Math.max(info.normal!.dot(H), 0), shininess);
-        color = Color.prototype.add(
-                            Color.prototype.multiplyScalar(light.color, glossWeight),
+        color = Color.add(
+                            Color.multiplyScalar(light.color, glossWeight),
                             color
                         );
       }
