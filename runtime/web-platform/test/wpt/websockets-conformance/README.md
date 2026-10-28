@@ -26,13 +26,20 @@ for network fixtures, HTML metadata, substitutions and literal `importScripts`.
 before WebSocket source fixes and before any named blocks were applied. It gives
 counts for all 330 URL variants and aggregates them for all 172 source files.
 The recorded baseline driver/source commit is
-`40800bc6e2d7255892e355e5041d3a4501586fef`; the report also records the WPT pin,
+`ebc8170fae933300a31a047d06c69f4f8c2b18b6`; the report also records the WPT pin,
 tool versions and capture hashes.
 
 | Capture | Passed | Failed | Blocked | Registrations |
 | --- | ---: | ---: | ---: | ---: |
 | Initial, with every imported case enabled | 799 | 72 | 0 | 871 |
-| Final, after source fixes | Pending final capture | Pending final capture | Pending final capture | 871 |
+| Final, after source fixes | 846 | 0 | 25 | 871 |
+
+[after-results.json](after-results.json) preserves all final variant diagnostics.
+[per-file-results.md](per-file-results.md) gives before/after counts for all 172
+source files. The source fixes turn 47 initial failures into passes; the other
+25 remain explicit blocks. The final standalone capture is at
+`af41054060a856b96fdc2c86119b7798c2a9fc86`. These published capture commits have
+trees identical to the local trees used for their recorded runs.
 
 All initial registration counts matched the manifest. Node's test totals also
 include fixture containers and the enclosing suite; the counts above count WPT
@@ -60,6 +67,75 @@ unfiltered run is required for the complete counts. The driver uses generous
 network deadlines and honors WPT's long-timeout declarations. Upstream server
 delays and assertions execute unchanged; the driver adds no machine-speed
 assertions.
+
+The complete package check at `150522b7a057ce2f123866dc1d2550d36cae3922` exits 0:
+**2,408 Node entries: 2,375 pass, 0 fail, 33 skipped**. The skips are this corpus's
+25 named blocks and eight inherited blocks/deferred controls. The existing
+upstream runner reports **2,772 pass, 0 fail, 45 not applicable**. The compiled
+axis is explicitly skipped because no nts compiler is available. Both the
+source and shared-adapter TypeScript projects pass.
+
+The first combined run exposed one stale existing `network.test.ts` expectation
+that an offered subprotocol could be omitted. It was corrected to require both
+WebSocketStream promises to reject, as the shared opening handshake requires.
+The complete network file then passed all 67 tests and the full package check
+was rerun successfully. This does not import the separate WebSocketStream WPT
+corpus. [validation.json](validation.json) records the commands, counts, capture
+commits and evidence hashes, including this initial failure.
+
+### Package-implementation sabotage
+
+After committing the source, an isolated worktree temporarily replaced the
+package `WebSocket.send()` string conversion with the fixed text
+`"NTS WebSocket WPT sabotage"`. The unchanged `Send-data.any.js` default and WSS
+variants both failed their `bufferedAmount` assertion: **0 pass, 2 fail**.
+Restoring the exact committed source and repeating the identical filtered run
+gave **2 pass, 0 fail**. The isolated worktree is clean. This establishes that
+the driver exercises this package's send path, rather than Node's WebSocket.
+
+## Source fixes and specification references
+
+The WebSocket reference is the
+[WHATWG snapshot `7f25d7dc8c2598ebca795ce4af68909d913a3888`](https://websockets.spec.whatwg.org/commit-snapshots/7f25d7dc8c2598ebca795ce4af68909d913a3888/)
+(19 October 2026), together with RFC 6455. Each runtime fix is its own commit.
+
+| Behavior | Specification | Evidence |
+| --- | --- | --- |
+| Convert the required send argument before checking connection state; retain binary snapshots. | WebSockets section 3.1 `send()`; Web IDL union/USVString conversion. | Eight failing WPT cases now pass. |
+| Convert event-handler assignments with `LegacyTreatNonObjectAsNull`; retain non-callable objects without calling `handleEvent`. | HTML section 8.1.8.1; Web IDL callback conversion and invocation. | 36 failing WPT cases now pass. |
+| Serialize opening handshakes to a destination, retaining queue order when a waiter aborts. | RFC 6455 section 4.1 step 2; WebSockets section 2.1. | Both `constructor/014.html` variants now pass; deterministic queue controls. |
+| Answer one origin Basic challenge using URL credentials, with a fresh nonce and cancellation intact. | RFC 6455 section 4.1 response step 1; RFC 7617 section 2; WebSockets sections 2.2 and 3.1. | `basic-auth.any.js?wss` now passes; raw/dispatched retry controls. |
+| Fail an upgrade when an offered subprotocol is omitted. | WebSockets section 2.2 response step 11.2. | Corrected package server and network controls; imported WPT was already green. |
+| Fire trusted protocol events while keeping script redispatch untrusted. | WebSockets section 4; DOM's fire-an-event and dispatchEvent algorithms. | Two supplemental controls fail before and pass after the fix. |
+| Invoke handlers for matching event types without requiring a particular Event subclass or message payload. | HTML section 8.1.8.1 `EventHandler(Event)`. | A supplemental synthetic-event control fails before and passes after. |
+
+The last three findings do not reduce the recorded initial WPT failure count.
+The corrected WebSocketStream network expectation follows the
+[WHATWG PR 48 draft preview, 28 March 2024](https://whatpr.org/websockets/48.html#the-websocketstream-interface),
+whose section 4 constructor uses the same opening handshake. Stream-specific
+conformance remains a separate item.
+
+The changes leave masking, UTF-8 validation, DEFLATE contexts and payload
+snapshot behavior in their existing implementations. No new payload copy or
+closure is allocated per frame/message by these fixes. Queue/authentication
+allocations occur during connection establishment; event-handler conversion
+uses a shared no-op for retained non-callable objects.
+
+### Transport boundaries
+
+Connection serialization keys normalized hostname and effective port. The
+connector does not expose the selected peer IP before connecting, so distinct
+DNS aliases for one IP require a provider capability to share a reservation.
+The hostname fallback follows RFC 6455 section 4.1.
+
+The built-in authentication policy answers one `401 Basic` challenge with URL
+credentials using the existing strict UTF-8 userinfo helpers. It adds no prompt,
+credential cache, proxy authentication or redirect retry. The controls cover
+the raw transport and direct dispatched transport. The existing
+`AuthenticationInterceptor` can answer a challenge before the dispatched
+WebSocket fallback sees it; its retry currently omits `acceptTunnel` and
+`upgradeProtocol`. That independent dispatcher-composition limitation remains
+follow-up work and is not claimed as covered here.
 
 ## What the execution profile establishes
 
