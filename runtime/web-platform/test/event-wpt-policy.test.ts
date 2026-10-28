@@ -1,3 +1,4 @@
+import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AbortController } from "../src/core/abort.ts";
@@ -278,4 +279,71 @@ test("Event constants have immutable descriptors on the interface and prototype"
       });
     }
   }
+});
+
+// Web IDL calls the callback, not its overridable `call` property:
+// https://webidl.spec.whatwg.org/#call-a-user-objects-operation
+// https://webidl.spec.whatwg.org/#invoke-a-callback-function
+test("function listeners ignore an own call property and receive the target", () => {
+  const target = new EventTarget();
+  const event = new Event("x");
+  const calls: { receiver: unknown; event: Event }[] = [];
+  let shadowCalls = 0;
+  const listener = Object.assign(function (this: unknown, event: Event): void {
+    calls.push({ receiver: this, event });
+  }, {
+    call(): void { shadowCalls++; },
+  });
+  target.addEventListener("x", listener, true);
+  target.addEventListener("x", listener);
+
+  target.dispatchEvent(event);
+  assert.equal(shadowCalls, 0);
+  assert.deepEqual(calls, [
+    { receiver: target, event },
+    { receiver: target, event },
+  ]);
+});
+
+test("object listeners read handleEvent once and ignore the returned function's call", () => {
+  const target = new EventTarget();
+  const event = new Event("x");
+  const calls: { receiver: unknown; event: Event }[] = [];
+  let shadowCalls = 0;
+  let reads = 0;
+  const callback = Object.assign(function (this: unknown, event: Event): void {
+    calls.push({ receiver: this, event });
+  }, {
+    call(): void { shadowCalls++; },
+  });
+  const listener = {
+    get handleEvent() {
+      reads++;
+      return callback;
+    },
+  };
+  target.addEventListener("x", listener);
+  assert.equal(reads, 0, "the callback member is read at invocation time");
+
+  target.dispatchEvent(event);
+  assert.equal(reads, 1);
+  assert.equal(shadowCalls, 0);
+  assert.deepEqual(calls, [{ receiver: listener, event }]);
+});
+
+test("event handler attributes ignore an own call property on their callback", () => {
+  const controller = new AbortController();
+  const calls: { receiver: unknown; event: Event }[] = [];
+  let shadowCalls = 0;
+  controller.signal.onabort = Object.assign(function (this: unknown, event: Event): void {
+    calls.push({ receiver: this, event });
+  }, {
+    call(): void { shadowCalls++; },
+  });
+
+  controller.abort();
+  assert.equal(shadowCalls, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.receiver, controller.signal);
+  assert.equal(calls[0]?.event.type, "abort");
 });
