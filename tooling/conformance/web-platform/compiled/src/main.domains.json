@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "functions": {
+    "jsonArrayLength": {
+      "count": {
+        "max": 65535,
+        "allowNaN": true,
+        "reason": "Bound generated container sizes inside the Node oracle's memory and CPU caps while preserving ordinary array-length answers."
+      }
+    }
+  }
+}
