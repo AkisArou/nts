@@ -1,0 +1,804 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "revisions": {
+    "websockets/stream/tentative": "a8f306ee4399724f33399dfdcac7da296f3cc05a"
+  },
+  "scope": [
+    "websockets/stream/tentative/"
+  ],
+  "inventoryNote": "All nine original .any.js fixture files and their declared non-HTTP/2 variants are selected. Fixtures and required support match one pinned WPT revision byte-for-byte; the shared adapter verifies SHA-256 and Git blob IDs. Eight HTTP/2 variants are explicitly excluded. The initial baseline has no named test blocks.",
+  "specification": {
+    "name": "WebSocketStream draft",
+    "status": "tentative proposal, not part of the published WebSockets Standard",
+    "repository": "https://github.com/whatwg/websockets",
+    "pullRequest": 48,
+    "pullRequestURL": "https://github.com/whatwg/websockets/pull/48",
+    "revision": "d5570f3448ce165eacca2e0a519eeacd4d4a5123",
+    "sourceURL": "https://github.com/whatwg/websockets/blob/d5570f3448ce165eacca2e0a519eeacd4d4a5123/index.bs",
+    "previewURL": "https://whatpr.org/websockets/48.html#the-websocketstream-interface",
+    "previewDate": "2024-03-28",
+    "protocol": "RFC 6455"
+  },
+  "fixtures": [
+    {
+      "path": "websockets/stream/tentative/abort.any.js",
+      "sourcePath": "websockets/stream/tentative/abort.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/abort.any.js",
+      "sha256": "b0f46ed58466d6e43d5aeef985c95fb25dbb3b0bb87d06c14e910307bc99bc0f",
+      "gitBlob": "cbfc8dd038410dced109c5e6552a6ebbd3e78099",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js",
+        "common/utils.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {},
+      "expectedRunnableTests": 5,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-receive.any.js",
+      "sourcePath": "websockets/stream/tentative/backpressure-receive.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/backpressure-receive.any.js",
+      "sha256": "7ad69b466c18b634a9c065e8b855ef3403771713af40206bcf7e171c79c434b2",
+      "gitBlob": "236bb2e40fac1a6db1506958e5828cf2dc29d79a",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "long"
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-send.any.js",
+      "sourcePath": "websockets/stream/tentative/backpressure-send.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/backpressure-send.any.js",
+      "sha256": "8766d5694c3140f7d6a8917ebcc3ecd1fbd837a732088e1754fa8cff391eecdf",
+      "gitBlob": "e4a80f6e1c071b33b032e699ba3e0de2c1c8572e",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "long"
+    },
+    {
+      "path": "websockets/stream/tentative/close.any.js",
+      "sourcePath": "websockets/stream/tentative/close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/close.any.js",
+      "sha256": "bf465ae4cb8c92f169f06dc9f6ab31300bb7cdced3defb08857024f850c3281c",
+      "gitBlob": "ad41dc6e2e9fd3fcff4af10da30c548a60d8e880",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 27,
+      "blockedTests": {},
+      "expectedRunnableTests": 27,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?default",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/close.any.js",
+      "sourcePath": "websockets/stream/tentative/close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/close.any.js",
+      "sha256": "bf465ae4cb8c92f169f06dc9f6ab31300bb7cdced3defb08857024f850c3281c",
+      "gitBlob": "ad41dc6e2e9fd3fcff4af10da30c548a60d8e880",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 27,
+      "blockedTests": {},
+      "expectedRunnableTests": 27,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/constructor.any.js",
+      "sourcePath": "websockets/stream/tentative/constructor.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/constructor.any.js",
+      "sha256": "6dbb783fa89327503b440b89026a52ceab49c44f472a56ba5c5f302d2c1f0d3b",
+      "gitBlob": "66df97430355f174d2c334e138db8b5e73a391aa",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 8,
+      "blockedTests": {},
+      "expectedRunnableTests": 8,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/read.any.js",
+      "sourcePath": "websockets/stream/tentative/read.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/read.any.js",
+      "sha256": "af6c23d4e44f48870f3222ca0902c5511b9e76150c76b7b8c04c945b983dd96d",
+      "gitBlob": "fb7546d30e95654020dd2c84e2ca4556e53ce1f5",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js",
+        "common/gc.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?default",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/read.any.js",
+      "sourcePath": "websockets/stream/tentative/read.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/read.any.js",
+      "sha256": "af6c23d4e44f48870f3222ca0902c5511b9e76150c76b7b8c04c945b983dd96d",
+      "gitBlob": "fb7546d30e95654020dd2c84e2ca4556e53ce1f5",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js",
+        "common/gc.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/remote-close.any.js",
+      "sourcePath": "websockets/stream/tentative/remote-close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/remote-close.any.js",
+      "sha256": "27081159488655fb3a16d439a2cae669151b32062384a022c02df98929c11bd4",
+      "gitBlob": "c3e7ad5f9fbef1494ed7594dc7d497e9f867361a",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 7,
+      "blockedTests": {},
+      "expectedRunnableTests": 7,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?default",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/remote-close.any.js",
+      "sourcePath": "websockets/stream/tentative/remote-close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/remote-close.any.js",
+      "sha256": "27081159488655fb3a16d439a2cae669151b32062384a022c02df98929c11bd4",
+      "gitBlob": "c3e7ad5f9fbef1494ed7594dc7d497e9f867361a",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 7,
+      "blockedTests": {},
+      "expectedRunnableTests": 7,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/websocket-error.any.js",
+      "sourcePath": "websockets/stream/tentative/websocket-error.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/websocket-error.any.js",
+      "sha256": "57f4ac04cabff6824750e8a865fb1d256d5ec1e0d25157248e93438dd6acc8ff",
+      "gitBlob": "b114bbb3e3495d2ae4ce0c75454539d4b2fddea7",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 10,
+      "blockedTests": {},
+      "expectedRunnableTests": 10,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [],
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/write.any.js",
+      "sourcePath": "websockets/stream/tentative/write.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/write.any.js",
+      "sha256": "b595793ccfeb055692b84eb9a3f76a32ef2d608bb61824cca35064e92529af84",
+      "gitBlob": "7f859e125790cb91bf71d1d9e47f93fceac33797",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js",
+        "common/gc.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?default",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    },
+    {
+      "path": "websockets/stream/tentative/write.any.js",
+      "sourcePath": "websockets/stream/tentative/write.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/write.any.js",
+      "sha256": "b595793ccfeb055692b84eb9a3f76a32ef2d608bb61824cca35064e92529af84",
+      "gitBlob": "7f859e125790cb91bf71d1d9e47f93fceac33797",
+      "format": "javascript",
+      "support": [
+        "websockets/constants.sub.js",
+        "websockets/stream/tentative/resources/url-constants.js",
+        "common/gc.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 6,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
+      "timeoutCategory": "network",
+      "declaredGlobals": "window,worker",
+      "declaredVariants": [
+        "?default",
+        "?wss",
+        "?wpt_flags=h2"
+      ],
+      "variant": "?wss",
+      "upstreamGlobalEnvironments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "upstreamTimeout": "normal"
+    }
+  ],
+  "support": [
+    {
+      "path": "websockets/constants.sub.js",
+      "sourcePath": "websockets/constants.sub.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/constants.sub.js",
+      "sha256": "676e20ac136832faf9b5d20c702cad1cbfc2b90aad3f8634febe542af540b008",
+      "gitBlob": "fd44185a2aa566e82731c9cba8ec39e8e0f72b7c"
+    },
+    {
+      "path": "websockets/stream/tentative/resources/url-constants.js",
+      "sourcePath": "websockets/stream/tentative/resources/url-constants.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/resources/url-constants.js",
+      "sha256": "abecda63229dc39cf663aeaeee95120c3d1f3cfbdcffc46433e985b9b299526c",
+      "gitBlob": "fe681af5c42a446944ce130d6cb2fcd2d11bde95"
+    },
+    {
+      "path": "common/gc.js",
+      "sourcePath": "common/gc.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/common/gc.js",
+      "sha256": "186144288438fb6d520defdc16a6a86fff193184a30fe04e901fe93febe3f8c4",
+      "gitBlob": "ac43a4cfaf7735a08dfd1be177918167f815e800"
+    },
+    {
+      "path": "common/utils.js",
+      "sourcePath": "common/utils.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/common/utils.js",
+      "sha256": "8dd4c32ad80d3c332d62197595ca5bf57f63e6a1bd93117cf0b9dbc6a9468aca",
+      "gitBlob": "d410b0753582e061572302f3ce9118e95635c6b1"
+    }
+  ],
+  "license": {
+    "path": "server/LICENSE.wpt.md",
+    "sourcePath": "LICENSE.md",
+    "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/LICENSE.md",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
+    "identifier": "BSD-3-Clause",
+    "note": "The existing unedited WPT licence is pinned to this same revision; original fixture headers and bytes are preserved."
+  },
+  "excluded": [],
+  "excludedVariants": [
+    {
+      "path": "websockets/stream/tentative/abort.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/abort.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-receive.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/backpressure-receive.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-send.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/backpressure-send.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/close.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/constructor.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/constructor.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/read.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/read.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/remote-close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/remote-close.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    },
+    {
+      "path": "websockets/stream/tentative/write.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/write.any.js",
+      "variant": "?wpt_flags=h2",
+      "category": "http2-websocket",
+      "reason": "Requires HTTP/2 extended CONNECT (RFC 8441); the local server and supplied connector implement RFC 6455 HTTP/1.1 over TCP/TLS only.",
+      "fixtureOtherwiseSelected": true
+    }
+  ],
+  "metadata": [
+    {
+      "path": "websockets/stream/tentative/README.md",
+      "sourcePath": "websockets/stream/tentative/README.md",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/README.md",
+      "sha256": "ab4010aaae886b31b79527c062b47209f6ee88f340b3b83cf1f51fe980732c3c",
+      "gitBlob": "6c5158877417a3271ff0179449eace740cf157a1",
+      "kind": "upstream-documentation",
+      "vendored": false,
+      "note": "Inventory metadata for the original tentative-corpus README; the original tests and required executable support are vendored."
+    }
+  ],
+  "inventory": [
+    {
+      "path": "websockets/stream/tentative/abort.any.js",
+      "sourcePath": "websockets/stream/tentative/abort.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/abort.any.js",
+      "sha256": "b0f46ed58466d6e43d5aeef985c95fb25dbb3b0bb87d06c14e910307bc99bc0f",
+      "gitBlob": "cbfc8dd038410dced109c5e6552a6ebbd3e78099",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 5
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-receive.any.js",
+      "sourcePath": "websockets/stream/tentative/backpressure-receive.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/backpressure-receive.any.js",
+      "sha256": "7ad69b466c18b634a9c065e8b855ef3403771713af40206bcf7e171c79c434b2",
+      "gitBlob": "236bb2e40fac1a6db1506958e5828cf2dc29d79a",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 1
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-send.any.js",
+      "sourcePath": "websockets/stream/tentative/backpressure-send.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/backpressure-send.any.js",
+      "sha256": "8766d5694c3140f7d6a8917ebcc3ecd1fbd837a732088e1754fa8cff391eecdf",
+      "gitBlob": "e4a80f6e1c071b33b032e699ba3e0de2c1c8572e",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 1
+    },
+    {
+      "path": "websockets/stream/tentative/close.any.js",
+      "sourcePath": "websockets/stream/tentative/close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/close.any.js",
+      "sha256": "bf465ae4cb8c92f169f06dc9f6ab31300bb7cdced3defb08857024f850c3281c",
+      "gitBlob": "ad41dc6e2e9fd3fcff4af10da30c548a60d8e880",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 27
+    },
+    {
+      "path": "websockets/stream/tentative/constructor.any.js",
+      "sourcePath": "websockets/stream/tentative/constructor.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/constructor.any.js",
+      "sha256": "6dbb783fa89327503b440b89026a52ceab49c44f472a56ba5c5f302d2c1f0d3b",
+      "gitBlob": "66df97430355f174d2c334e138db8b5e73a391aa",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 8
+    },
+    {
+      "path": "websockets/stream/tentative/read.any.js",
+      "sourcePath": "websockets/stream/tentative/read.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/read.any.js",
+      "sha256": "af6c23d4e44f48870f3222ca0902c5511b9e76150c76b7b8c04c945b983dd96d",
+      "gitBlob": "fb7546d30e95654020dd2c84e2ca4556e53ce1f5",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 1
+    },
+    {
+      "path": "websockets/stream/tentative/README.md",
+      "sourcePath": "websockets/stream/tentative/README.md",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/README.md",
+      "sha256": "ab4010aaae886b31b79527c062b47209f6ee88f340b3b83cf1f51fe980732c3c",
+      "gitBlob": "6c5158877417a3271ff0179449eace740cf157a1",
+      "kind": "upstream-documentation",
+      "vendored": false,
+      "note": "Inventory metadata for the original tentative-corpus README; the original tests and required executable support are vendored."
+    },
+    {
+      "path": "websockets/stream/tentative/remote-close.any.js",
+      "sourcePath": "websockets/stream/tentative/remote-close.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/remote-close.any.js",
+      "sha256": "27081159488655fb3a16d439a2cae669151b32062384a022c02df98929c11bd4",
+      "gitBlob": "c3e7ad5f9fbef1494ed7594dc7d497e9f867361a",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 7
+    },
+    {
+      "path": "websockets/stream/tentative/resources/url-constants.js",
+      "sourcePath": "websockets/stream/tentative/resources/url-constants.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/resources/url-constants.js",
+      "sha256": "abecda63229dc39cf663aeaeee95120c3d1f3cfbdcffc46433e985b9b299526c",
+      "gitBlob": "fe681af5c42a446944ce130d6cb2fcd2d11bde95",
+      "kind": "support"
+    },
+    {
+      "path": "websockets/stream/tentative/websocket-error.any.js",
+      "sourcePath": "websockets/stream/tentative/websocket-error.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/websocket-error.any.js",
+      "sha256": "57f4ac04cabff6824750e8a865fb1d256d5ec1e0d25157248e93438dd6acc8ff",
+      "gitBlob": "b114bbb3e3495d2ae4ce0c75454539d4b2fddea7",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 10
+    },
+    {
+      "path": "websockets/stream/tentative/write.any.js",
+      "sourcePath": "websockets/stream/tentative/write.any.js",
+      "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/websockets/stream/tentative/write.any.js",
+      "sha256": "b595793ccfeb055692b84eb9a3f76a32ef2d608bb61824cca35064e92529af84",
+      "gitBlob": "7f859e125790cb91bf71d1d9e47f93fceac33797",
+      "kind": "fixture",
+      "expectedTestsPerVariant": 6
+    }
+  ],
+  "executionContext": {
+    "global": "ordinary-host",
+    "note": "Each fixture body executes once per declared non-HTTP/2 URL variant with canonical package classes. Upstream Window and Worker environments are recorded; no Window or WorkerGlobalScope exposure, separate-realm behavior, or browser lifecycle is claimed.",
+    "globalMetadataSource": "https://github.com/web-platform-tests/wpt/blob/a8f306ee4399724f33399dfdcac7da296f3cc05a/tools/manifest/sourcefile.py",
+    "workerKeywordExpansion": [
+      "dedicatedworker",
+      "sharedworker",
+      "serviceworker"
+    ],
+    "globalAliases": [
+      "self"
+    ],
+    "bufferRealm": "The fixture and package implementation share the host ECMAScript buffer constructors. Cross-realm behavior is not established.",
+    "garbageCollection": "common/gc.js is unchanged and uses the real exposed Node gc capability when the driver is invoked with --expose-gc; no synthetic collection is supplied."
+  },
+  "globalContextExclusions": [
+    {
+      "path": "websockets/stream/tentative/abort.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-receive.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/backpressure-send.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/close.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/constructor.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/read.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/remote-close.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/websocket-error.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    },
+    {
+      "path": "websockets/stream/tentative/write.any.js",
+      "environments": [
+        "dedicatedworker",
+        "serviceworker",
+        "sharedworker",
+        "window"
+      ],
+      "reason": "The unchanged fixture body runs only in the ordinary host. Browser Window and DedicatedWorkerGlobalScope, SharedWorkerGlobalScope, and ServiceWorkerGlobalScope exposure/lifecycle are not exercised."
+    }
+  ],
+  "baselinePolicy": {
+    "namedBlocksApplied": false,
+    "note": "All 107 selected registrations are initially enabled, including upstream timing and operating-system buffer assumptions. Any later named block requires the observed baseline and an explicit reason; it must not count as a pass."
+  },
+  "registrationCountSource": "Counted from the original registrations, including literal loop expansion in close.any.js and websocket-error.any.js. The shared runner requires each observed registration count to match.",
+  "summary": {
+    "upstreamFiles": 11,
+    "fixtureFiles": 9,
+    "fixtureVariants": 13,
+    "expectedRegisteredTests": 107,
+    "expectedRunnableTests": 107,
+    "explicitlyBlockedTests": 0,
+    "excludedPaths": 0,
+    "excludedHttp2Variants": 8,
+    "excludedHttp2VariantsForSelectedFixtures": 8,
+    "internalSupportPaths": 1,
+    "externalSupportPaths": 3,
+    "metadataPaths": 1
+  }
+}
