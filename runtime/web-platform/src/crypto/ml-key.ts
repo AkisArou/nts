@@ -73,7 +73,7 @@ export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: U
   let type: "public" | "private";
   let bytes: Uint8Array;
   let expanded: Uint8Array | undefined;
-  let expectedPublic: Uint8Array | undefined;
+  let expectedPublic: string | undefined;
   if (format === "jwk") {
     if (!(data instanceof JsonWebKey)) throw new DOMException("Expected a module-lattice JWK", "DataError");
     type = data.priv === undefined ? "public" : "private";
@@ -82,7 +82,7 @@ export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: U
     checkJwkPolicy(data, "sig", extractable, usages);
     if (type === "private") {
       bytes = jwkBytes(data.priv, mlSeedLength(name));
-      expectedPublic = jwkBytes(data.pub, mlPublicKeyLength(name));
+      expectedPublic = data.pub;
     } else bytes = jwkBytes(data.pub, mlPublicKeyLength(name));
   } else if (format === "spki" || format === "pkcs8" || format === "raw-public" || format === "raw-seed") {
     type = format === "pkcs8" || format === "raw-seed" ? "private" : "public";
@@ -108,11 +108,14 @@ export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: U
     throw new DOMException("The module-lattice key could not be imported", record.failure === "invalid-key" ? "DataError" : "OperationError");
   }
   recordShape(record, name, type);
-  if (expectedPublic !== undefined) {
+  if (format === "jwk" && type === "private") {
+    // §8.4.4 creates the seed-backed key before validating its JWK public key.
+    // A native import failure therefore precedes a missing or malformed `pub`.
+    const publicBytes = jwkBytes(expectedPublic, mlPublicKeyLength(name));
     const components = provider.exportComponents(record.handle);
     if ("failure" in components || components.family !== "ML") throw new DOMException("The private key cannot be inspected", "OperationError");
     componentShape(components, name, true);
-    if (!bytesEqual(components.pub, expectedPublic)) throw new DOMException("The JWK public key does not correspond to its seed", "DataError");
+    if (!bytesEqual(components.pub, publicBytes)) throw new DOMException("The JWK public key does not correspond to its seed", "DataError");
   }
   if (type === "private" && usages.length === 0) throw new DOMException("A private key must have a usage", "SyntaxError");
   return createCryptoKey(type, extractable, new KeyAlgorithm(name), normalizeKeyUsages(usages), record.handle);
