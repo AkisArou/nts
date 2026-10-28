@@ -64,6 +64,25 @@ What this costs:
 
 ## The design
 
+### Which kind of provider
+
+A feature's provider kind follows from what its work depends on, and an
+implementation known to win is the first one built, never a later
+replacement for a slower one:
+
+| kind | when | features |
+|---|---|---|
+| **compiler** | the work depends on the layout of the values it is given | `Map`, `Set`, arrays and strings; `JSON.stringify` and typed `JSON.parse`; `structuredClone`, and the messages `MessagePort` carries; the walk `console` does over a typed value; `RegExp` literal patterns, matched by code generated at compile time |
+| **native, from the start** | a native implementation is known to win | converting between strings and bytes, with SIMD in `runtime/c`: UTF-8 for `TextEncoder` and `TextDecoder`, base64 for `atob` and `btoa`, UTF-8 validation for WebSocket text; compression through a vendored library (`CompressionStream`); `crypto` through OpenSSL; `Intl` through ICU; `WebAssembly` through an engine. On the JVM the JDK's own (intrinsified) code, on JS hosts the host's |
+| **source** | everything else | API surfaces, protocol state machines and policy: Fetch, Streams, HTTP, cookies, events, forms, `Temporal`'s calendar arithmetic |
+
+A native feature's TypeScript is its API surface over a `host:` capability
+(`host:utf8`, `host:base64`, `host:zlib`), so one surface serves every
+target. Each feature is held to a benchmark row against node and Bun, and a
+source provider that loses is fixed in the compiler first, where the same
+weakness slows ordinary programs too. URL parsing is expected to need native
+code as well, as node's Ada parser shows; its benchmark row decides.
+
 ### Manifests
 
 A package that provides features declares them in one manifest:
@@ -71,8 +90,8 @@ A package that provides features declares them in one manifest:
 
 ```jsonc
 "nts": { "provides": {
-  "web:TextEncoder": { "source": "./src/core/encoding.ts" },
-  "es:JSON":         { "source": "./src/json/index.ts", "members": ["stringify"] },
+  "web:AbortController": { "source": "./src/core/abort.ts" },
+  "web:TextEncoder": { "source": "./src/core/encoding.ts", "requires": ["host:utf8"] },
   "web:fetch":       { "source": "./src/fetch/index.ts",
                        "requires": ["host:tcp", "host:tls", "host:random", "host:loop"] },
   "es:Intl":         { "source": "./src/intl/index.ts", "requires": ["host:icu"] },
@@ -240,7 +259,7 @@ its result are [in the records](../records/notebooks/studies/v8-math-random.md).
 | 2 | Feature identity, and the compiler's table | `SymbolRecord::library` and the helper slice of `features.rs` built; the compiler's provider table, with members, open |
 | 3 | Manifests, profiles and the resolver, encoding exactly what exists today. `host:loop` replaces `loop_host()`. `nts providers` and a census step. | open |
 | 4 | One binding table in lowering. `nts:dom` binds by name, and the overlay goes. | open |
-| 5 | The first source providers: `TextEncoder` and `TextDecoder`, `atob` and `btoa`, `AbortController`, and `es:JSON` (`stringify` first) | open |
+| 5 | The first providers: `AbortController` and the event classes as source; `TextEncoder`, `TextDecoder`, `atob` and `btoa` over `runtime/c`'s SIMD conversions (`host:utf8`, `host:base64`); `JSON.stringify`, which the compiler already generates per type, through the provider table | open |
 | 6 | The clock and randomness (above) | designed |
 | 7 | Wasm host providers | decided (decision 3) |
 | 8 | `runtime/ecmascript` as Intl, Temporal, RegExp and the full Date. `host:icu` is ICU4C on native and ICU4J on the JVM. | open |
@@ -302,8 +321,9 @@ From the open-questions audit, also 10-28
 - **Randomness and crypto:** the OS's secure random generator on each target,
   as `host:random`; `crypto.subtle` from the vendored OpenSSL on native, the
   JCA on the JVM, and the host on JS hosts (G16).
-- **`console` formats values as node's `util.inspect` does,** in shared
-  TypeScript, and writes to each platform's log (G18).
+- **`console` formats values as node's `util.inspect` does,** and writes to
+  each platform's log (G18). The walk over a typed value is generated per
+  type by the compiler; the formatting rules are shared TypeScript.
 
 Each target's own choices are on its page: Chromium's overlay (G6) on
 [Chromium](../targets/chromium.md#decisions), a Node addon's builtins (G11) on

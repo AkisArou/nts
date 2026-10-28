@@ -7,11 +7,13 @@ and [`workflow.md`](workflow.md); this page is what differs.
 
 ## What a cloud agent works on
 
-Plain TypeScript implementations of published specifications, in
-`runtime/web-platform`: the APIs of WinterTC's Minimum Common Web API that
-the package does not implement yet, then other web standards nts provides
-([builtins](../foundations/builtins.md#decisions)). The code is ordinary
-runtime code. It needs no compiler builtin and no change to nts itself.
+Plain TypeScript in `runtime/web-platform`, for features whose provider is
+source code ([which kind of provider](../foundations/builtins.md#which-kind-of-provider)):
+the specification-defined API surfaces and policy, and the conformance tests
+that hold them to their specifications. Never a feature the compiler or
+native code provides: whatever depends on the layout of the values it is
+given (`structuredClone`, string conversions) and whatever has a known native
+winner (SIMD transcoding, compression, cryptography) is built inside nts.
 
 Out of scope: `compiler/`, `runtime/c/`, `tooling/` (except adding a test file
 to `tooling/conformance/web-platform/check.sh`'s list), `docs/` (except a

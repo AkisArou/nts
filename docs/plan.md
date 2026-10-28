@@ -163,7 +163,9 @@ The designs and their build orders are in [`foundations/`](foundations).
    `Math.max` are on `main`; typed collector visitors are next
    ([results](../results)).
 3. **Then:** memory stage 3 (per-site regions, json-parse first), Unicode
-   stages 2–3, the strings stages D and E, numbers, and the keyed hash.
+   stages 2–3, the strings stages D and E (E's SIMD conversions also serve
+   `TextEncoder`, `TextDecoder`, `atob` and `btoa`), numbers, and the keyed
+   hash.
 4. **The builtins mechanism** ([builtins](foundations/builtins.md)), approved,
    from its stage 1, with WinterTC's Minimum Common Web API as the web floor on
    native and the JVM. JSON moves to `runtime/ecmascript` and `URL` to

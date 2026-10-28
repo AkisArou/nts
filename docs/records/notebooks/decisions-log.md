@@ -32,6 +32,20 @@ Dates are 2026.
   and as sane we can"** (10-27). What the checker knows is the first source of
   facts; where TypeScript is unsound by design, the compiler proves the fact,
   checks it at run time, or refuses.
+- **An obvious winner is built first** (10-28): where a faster
+  implementation is obvious or much expected (SIMD, a native library, code the
+  compiler generates per type), it is the first one built, not a later
+  replacement for a slower one. "We should be AS FAST AS POSSIBLE! as close
+  to C/C++ and beat node/bun by the biggest margin we can! Again, I am saying
+  that only if something is obvious/much expected." Applied the same day:
+  `structuredClone` and `console`'s walk over a typed value are generated per
+  type; UTF-8 and base64 conversions are SIMD in `runtime/c`; compression
+  goes through a vendored library ([builtins](../../foundations/builtins.md#which-kind-of-provider)).
+- **Apple's SDKs are used only on Apple hardware** (10-28; the user asked the
+  coordinator to decide): bindings are generated on a Mac or a hosted macOS
+  runner, and only nts's generated declarations reach other machines. Zig
+  carries the C library's headers, not the frameworks', so it does not change
+  this.
 
 ## Priorities and order
 

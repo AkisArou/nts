@@ -19,15 +19,17 @@ is refused by name ([native](native.md#products)). Both backends build Apple
 products, and a program that sends Objective-C messages is refused off Apple,
 by name.
 
-**The toolchain.** Everything is built on Linux:
+**The toolchain.** A build compiles with
 `clang -target <arch>-apple-macos<min> -isysroot <sdk> -fuse-ld=lld` (the
-simulator's triple for iOS), against an SDK copied from a Mac
-(`tooling/apple/sync-sdk.sh`, or `NTS_APPLE_SDK`) or zig's Darwin libc
-(`tooling/apple/zig-sdk.sh`). libuv is cross-built from
-source. Swift's names for the SDK's frameworks come from symbol graphs
-extracted on a Mac once per SDK (`tooling/apple/symbolgraph.sh`); a project's
-own headers and Swift go through the open-source Swift toolchain on Linux, so
-`nts build` never contacts a Mac.
+simulator's triple for iOS). Apple's SDKs are used only on Apple hardware, so
+a build that needs a framework (AppKit, Foundation, UIKit), and generating the
+framework bindings, run on a Mac or a hosted macOS runner. On Linux, a
+program that needs only the C library cross-builds against zig's Darwin libc
+(`tooling/apple/zig-sdk.sh`); zig carries no framework headers. libuv is
+cross-built from source. Swift's names for the SDK's frameworks come from
+symbol graphs extracted on a Mac once per SDK (`tooling/apple/symbolgraph.sh`),
+and a project's own headers and Swift go through the open-source Swift
+toolchain.
 
 ## Objective-C from TypeScript
 
@@ -172,6 +174,11 @@ qemu. No Mac is available now, so the Apple interop tests (`tests/interop/macos-
 - `NSException` reaching a `catch`: [I-2](../open-questions.md#5-interop-and-hosts).
 
 ## Decisions
+
+- **Apple's SDKs are used only on Apple hardware:** framework builds and
+  binding generation run on a Mac or a hosted macOS runner, and only nts's
+  generated declarations reach other machines (10-28,
+  [log](../records/notebooks/decisions-log.md#the-bar)).
 
 - macOS and AppKit first, iOS later; no Mac hardware and no hosted CI, a local
   VM runs what Linux builds

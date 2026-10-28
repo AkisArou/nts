@@ -140,8 +140,9 @@ encoding, streams and WebIDL modules from here, while it still carries its own
 **Reachable from no global yet.** A compiled program reaches these values only
 by importing their modules; binding them as builtins is
 [builtins](../foundations/builtins.md#stages-smallest-first) stages 5 and 10
-(`TextEncoder`, `TextDecoder`, `atob`, `btoa`, `AbortController` and `JSON`
-first, then the network).
+(`AbortController` and the event classes first, with `TextEncoder`,
+`TextDecoder`, `atob` and `btoa` over `runtime/c`'s SIMD conversions, then the
+network).
 
 ## Testing
 
