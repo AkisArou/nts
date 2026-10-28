@@ -18,11 +18,22 @@ class RecordingSession implements WebSocketSession {
   readonly protocol = "";
   readonly extensions = "";
   readonly sent: SocketMessage[] = [];
-  private readonly incoming = Promise.withResolvers<SocketIncoming>();
+  private readonly incoming: SocketIncoming[] = [];
+  private readonly reads: PromiseWithResolvers<SocketIncoming>[] = [];
   private sendChanged = Promise.withResolvers<void>();
 
   next(): Promise<SocketIncoming> {
-    return this.incoming.promise;
+    const queued = this.incoming.shift();
+    if (queued !== undefined) return Promise.resolve(queued);
+    const read = Promise.withResolvers<SocketIncoming>();
+    this.reads.push(read);
+    return read.promise;
+  }
+
+  push(value: SocketIncoming): void {
+    const read = this.reads.shift();
+    if (read === undefined) this.incoming.push(value);
+    else read.resolve(value);
   }
 
   send(message: SocketMessage): Promise<void> {
@@ -37,20 +48,22 @@ class RecordingSession implements WebSocketSession {
   }
 
   close(code: number | null, reason: string): Promise<void> {
-    this.incoming.resolve({ kind: "close", code: code ?? 1005, reason, wasClean: true, failed: false });
+    this.push({ kind: "close", code: code ?? 1005, reason, wasClean: true, failed: false });
     return Promise.resolve();
   }
 
   abort(): void {
-    this.incoming.resolve({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
+    this.push({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
   }
 }
 
-function controlledSocket(t: TestContext) {
+function controlledSocket(t: TestContext, connectError?: Error) {
   const session = new RecordingSession();
   const errors: unknown[] = [];
   const runtime = createHostNodeWebPlatform({
-    webSocketTransport: { connect: () => Promise.resolve(session) },
+    webSocketTransport: {
+      connect: () => connectError === undefined ? Promise.resolve(session) : Promise.reject(connectError),
+    },
   }, {}, (error) => errors.push(error));
   t.after(() => runtime.close());
   const socket = new WebSocket("ws://example.test/socket");
@@ -221,5 +234,65 @@ suite("WebSocket handler replacement preserves its listener position until a pri
     socket.removeEventListener(event.type, before);
     socket.removeEventListener(event.type, after);
   }
+  assert.deepEqual(errors, []);
+});
+
+function assertScriptRedispatch(socket: WebSocket, events: readonly Event[]): void {
+  for (const event of events) {
+    const observations: { event: Event; trusted: boolean }[] = [];
+    socket.addEventListener(event.type, (received) => {
+      observations.push({ event: received, trusted: received.isTrusted });
+    }, { once: true });
+    socket.dispatchEvent(event);
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.event, event);
+    assert.equal(observations[0]?.trusted, false);
+    assert.equal(event.isTrusted, false);
+  }
+}
+
+suite("WebSocket protocol open, message, and close events are trusted until script redispatch", async (t) => {
+  const { socket, session, opened, closed, errors } = controlledSocket(t);
+  const events: Event[] = [];
+  const trust: boolean[] = [];
+  const record = (event: Event): void => {
+    events.push(event);
+    trust.push(event.isTrusted);
+  };
+  for (const type of ["open", "message", "close"]) socket.addEventListener(type, record);
+  await opened;
+  const received = new Promise<void>((resolve) => socket.addEventListener("message", () => resolve(), { once: true }));
+  session.push({ kind: "text", data: "message from the provider" });
+  await received;
+  socket.close(1000, "done");
+  await closed;
+  for (const type of ["open", "message", "close"]) socket.removeEventListener(type, record);
+
+  assert.deepEqual(events.map((event) => event.type), ["open", "message", "close"]);
+  assert.deepEqual(trust, [true, true, true]);
+  assert.ok(events[1] instanceof MessageEvent);
+  assert.ok(events[2] instanceof CloseEvent);
+  assertScriptRedispatch(socket, events);
+  assert.deepEqual(errors, []);
+});
+
+suite("WebSocket failed connection error and close events are trusted until script redispatch", async (t) => {
+  const { socket, closed, errors } = controlledSocket(t, new Error("connection refused"));
+  const events: Event[] = [];
+  const trust: boolean[] = [];
+  const record = (event: Event): void => {
+    events.push(event);
+    trust.push(event.isTrusted);
+  };
+  for (const type of ["open", "error", "close"]) socket.addEventListener(type, record);
+  await closed;
+  for (const type of ["open", "error", "close"]) socket.removeEventListener(type, record);
+
+  assert.deepEqual(events.map((event) => event.type), ["error", "close"]);
+  assert.deepEqual(trust, [true, true]);
+  assert.ok(events[1] instanceof CloseEvent);
+  assert.equal(events[1].code, 1006);
+  assert.equal(events[1].wasClean, false);
+  assertScriptRedispatch(socket, events);
   assert.deepEqual(errors, []);
 });
