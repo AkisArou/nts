@@ -12,7 +12,7 @@ import type { Blob } from "../file/blob.ts";
 import type { BlobURLStore } from "../file/object-url.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
-import { Headers, convertHeadersInit, copyHeaders, createHeadersFromConvertedInit, isToken } from "./headers.ts";
+import { Headers, convertHeadersInit, copyHeaders, createHeadersFromConvertedInit, getHeaderValue, isToken } from "./headers.ts";
 import type { ConvertedHeadersInit, HeadersInit } from "./headers.ts";
 import type { FileURLProvider } from "./file-url.ts";
 import type { DigestProvider } from "./integrity.ts";
@@ -348,7 +348,7 @@ const requestConstructorKey: unique symbol = Symbol("construct NTS Request");
 
 export class Request extends Body {
   private readonly requestMethod: string;
-  private readonly requestHeaders: Headers;
+  readonly #requestHeaders: Headers;
   private readonly requestSignal: AbortSignal;
   private readonly requestRedirect: RequestRedirect;
   private readonly requestCredentials: RequestCredentials;
@@ -438,7 +438,7 @@ export class Request extends Body {
       throw new TypeError("A streaming request body cannot use keepalive");
     }
     const headers = convertedInit.headers === undefined
-      ? source === null ? new Headers() : copyHeaders(source.requestHeaders)
+      ? source === null ? new Headers() : copyHeaders(source.#requestHeaders)
       : createHeadersFromConvertedInit(convertedInit.headers);
     let state = hasNewBody
       ? BodyState.fromConvertedBody(convertedInit.body, context.random, context.bodyPolicy)
@@ -456,7 +456,7 @@ export class Request extends Body {
       headers.set("content-type", state.type);
     super(state);
     this.requestMethod = method;
-    this.requestHeaders = headers;
+    this.#requestHeaders = headers;
     this.parsedURL = url;
     this.blobURLObject =
       blobURLObject !== undefined
@@ -496,7 +496,7 @@ export class Request extends Body {
   }
 
   get headers(): Headers {
-    return this.requestHeaders;
+    return this.#requestHeaders;
   }
 
   get destination(): RequestDestination {
@@ -552,7 +552,9 @@ export class Request extends Body {
   }
 
   protected override [bodyContentType](): string | null {
-    return this.headers.get("content-type");
+    // Fetch reads the internal header list, without invoking public accessors.
+    // https://fetch.spec.whatwg.org/#concept-body-mime-type
+    return getHeaderValue(this.#requestHeaders, "content-type");
   }
 
   clone(): Request {
