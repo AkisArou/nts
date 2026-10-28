@@ -19,6 +19,7 @@ The environment factory receives an exception reporter and returns:
 ```ts
 interface WptEnvironment {
   globals: Record<string, unknown>;
+  exposeSelf?: boolean;
   close(): void | Promise<void>;
 }
 ```
@@ -28,6 +29,16 @@ provider that sends exceptions to that reporter. Each file gets a fresh VM
 context containing only those supplied globals plus the harness. Node's web API
 globals are never inherited. The factory owns any provider-specific setup and
 cleanup; the adapter has no events, streams or cryptography implementation.
+
+Set `exposeSelf: true` when an unchanged helper publishes names through `self`.
+This aliases the fixture's actual VM global object; it does not provide a
+`Window`, `WorkerGlobalScope`, document or another platform API. Direct harness
+users select it with the fourth constructor argument, `{ exposeSelf: true }`.
+Package code and fixture code can still execute in distinct JavaScript realms.
+Supply genuine implementation-realm ECMAScript constructors when a corpus
+compares returned value identities. Cases that require a shared literal,
+prototype or global realm need an explicit adapter limitation; constructor
+injection does not establish full realm equivalence.
 
 Declare every `META: script` dependency in the manifest's support list and pin
 its bytes independently. Absolute WPT script references resolve from this
@@ -45,14 +56,17 @@ exposure or optional platform API is fabricated. Exclusions must name the exact
 case and missing capability, and stale exclusions fail the run.
 
 The shared surface includes `test`, `async_test`, serialized `promise_test`,
-test steps and timeouts, FIFO cleanup invocation with awaited promise cleanups,
-and `setup(callback?, { explicit_done })`. With `explicit_done`, asynchronous
+test steps, global and test-owned `step_timeout`, FIFO cleanup invocation with
+awaited promise cleanups, and `setup(callback?, { explicit_done })`. With `explicit_done`, asynchronous
 registration stays open until global `done()`; without it, register cases while
 their scripts execute. Provider-reported errors retain their test ownership
 across `await`.
+Timeout callbacks preserve their receiver and additional arguments. Global
+timer exceptions reach the owning test or the harness, and outstanding global
+timers are cleared when the fixture finishes.
 
-Assertions cover exact equality, arrays and enumerable object contents,
-JavaScript and injected DOM exception classes, and the `promise_rejects_js`,
+Assertions cover exact equality, numeric/bigint `assert_greater_than`, arrays and
+enumerable object contents, JavaScript and injected DOM exception classes, and the `promise_rejects_js`,
 `promise_rejects_dom` and `promise_rejects_exactly` forms. `promise_setup`,
 optional-feature status helpers, QuotaExceededError-specific assertions,
 browser/worker aggregation and other setup options are not implemented; using

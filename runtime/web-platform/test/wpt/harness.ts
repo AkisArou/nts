@@ -74,6 +74,10 @@ export interface WptBlock {
   reason: string;
 }
 
+export interface WptHarnessOptions {
+  exposeSelf?: boolean;
+}
+
 class WptTest {
   readonly result: WptResult;
   readonly completed: Promise<void>;
@@ -146,8 +150,8 @@ class WptTest {
     };
   }
 
-  step_timeout(callback: Callback, delay: number): ReturnType<typeof setTimeout> {
-    const timer = setTimeout(this.step_func(callback), delay);
+  step_timeout(callback: Callback, delay = 0, ...args: unknown[]): ReturnType<typeof setTimeout> {
+    const timer = setTimeout(() => this.step(callback, this, ...args), delay);
     this.timers.push(timer);
     return timer;
   }
@@ -231,16 +235,33 @@ export class WptHarness {
   private readonly registrationDone = Promise.withResolvers<void>();
   private registrationClosed = false;
   private readonly timeout: number;
+  private readonly globalTimers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(
     globals: Record<string, unknown>,
     blocks: Readonly<Record<string, WptBlock>> = {},
     timeout = 10000,
+    options: WptHarnessOptions = {},
   ) {
     this.blocks = blocks;
     assert.ok(Number.isSafeInteger(timeout) && timeout > 0, "WPT timeout must be positive integer milliseconds");
     this.timeout = timeout;
     this.context = createContext({ ...globals });
+    const fixtureGlobal = new Script("globalThis").runInContext(this.context) as object;
+    if (options.exposeSelf) Object.assign(this.context, { self: fixtureGlobal });
+    const harness = this;
+    function stepTimeout(this: unknown, callback: Callback, delay = 0, ...args: unknown[]): ReturnType<typeof setTimeout> {
+      assert.equal(typeof callback, "function", "step_timeout requires a callback");
+      // Upstream's global helper is non-strict and preserves its call receiver.
+      const receiver = this === undefined || this === null ? fixtureGlobal : Object(this);
+      const timer = setTimeout(() => {
+        harness.globalTimers.delete(timer);
+        try { apply(callback, receiver, args); }
+        catch (error) { harness.reportError(error); }
+      }, delay);
+      harness.globalTimers.add(timer);
+      return timer;
+    }
     const realmErrors = new Script("({ Error, TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError, AggregateError })").runInContext(
       this.context,
     ) as Record<string, unknown>;
@@ -311,6 +332,11 @@ export class WptHarness {
       assert_not_equals: assert.notStrictEqual,
       assert_true: (value: unknown, message?: string) => assert.equal(value, true, message),
       assert_false: (value: unknown, message?: string) => assert.equal(value, false, message),
+      assert_greater_than: (actual: unknown, expected: unknown, message?: string) => {
+        assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
+        assert.equal(typeof actual, typeof expected, message);
+        assert.ok(actual > (expected as number | bigint), message);
+      },
       assert_unreached: (message?: string) => assert.fail(message),
       assert_array_equals: (actual: unknown[], expected: unknown[], message?: string) => {
         assert.ok(typeof actual === "object" && actual !== null && "length" in actual, message);
@@ -389,6 +415,7 @@ export class WptHarness {
         if (callback !== undefined) this.checkSynchronousResult(apply(callback, undefined, []), "setup callback");
       },
       done: () => this.closeRegistration(),
+      step_timeout: stepTimeout,
     });
   }
 
@@ -447,16 +474,22 @@ export class WptHarness {
       this.recordError(new Error("WPT explicit_done setup requires a call to done()"));
       this.closeRegistration();
     }, this.timeout);
-    await this.registrationDone.promise;
-    clearTimeout(registrationTimeout);
-    await this.promiseQueue;
-    await Promise.all(this.tests.map((test) => test.completed));
-    for (const name of Object.keys(this.blocks)) {
-      assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
+    try {
+      await this.registrationDone.promise;
+      clearTimeout(registrationTimeout);
+      await this.promiseQueue;
+      await Promise.all(this.tests.map((test) => test.completed));
+      for (const name of Object.keys(this.blocks)) {
+        assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
+      }
+      if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
+        throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
+      }
+      return this.tests.map((test) => test.result);
+    } finally {
+      clearTimeout(registrationTimeout);
+      for (const timer of this.globalTimers) clearTimeout(timer);
+      this.globalTimers.clear();
     }
-    if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
-      throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
-    }
-    return this.tests.map((test) => test.result);
   }
 }

@@ -272,3 +272,111 @@ test("WPT observes rejected promises returned from invalid synchronous callbacks
     await assert.rejects(harness.finish(), AggregateError);
   }
 });
+
+// Streams' unedited helpers publish through self and schedule asynchronous work
+// through global step_timeout. Neither facility claims a Window or Worker realm.
+test("WPT exposes self only on request as the fixture's actual global object", async () => {
+  const ordinary = new WptHarness({});
+  ordinary.run('test(() => assert_equals(typeof self, "undefined"), "no implicit self");', "no-self.js");
+  assert.equal((await ordinary.finish())[0]?.status, "pass");
+
+  const harness = new WptHarness({}, {}, 100, { exposeSelf: true });
+  harness.run(`
+    test(() => {
+      assert_equals(self, globalThis);
+      self.helperPublishedByDependency = () => 7;
+      assert_equals(helperPublishedByDependency(), 7);
+      globalThis.sharedBinding = 9;
+      assert_equals(self.sharedBinding, 9);
+      assert_equals(typeof Window, "undefined");
+      assert_equals(typeof document, "undefined");
+    }, "same fixture global");
+  `, "self-alias.js");
+  assert.equal((await harness.finish())[0]?.status, "pass");
+  assert.equal(Object.hasOwn(globalThis, "helperPublishedByDependency"), false);
+});
+
+test("WPT greater-than assertions require ordered numbers or same-type bigints", async () => {
+  const harness = new WptHarness({});
+  harness.run(`
+    test(() => assert_greater_than(2, 1), "number");
+    test(() => assert_greater_than(2n, 1n), "bigint");
+    test(() => assert_greater_than(Infinity, 1), "infinity");
+    test(() => assert_greater_than(1, 1), "equal");
+    test(() => assert_greater_than(0, 1), "less");
+    test(() => assert_greater_than(NaN, 1), "NaN");
+    test(() => assert_greater_than("2", "1"), "strings");
+    test(() => assert_greater_than(new Number(2), 1), "boxed number");
+    test(() => assert_greater_than(2, 1n), "mixed numeric types");
+  `, "numeric-comparison.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status),
+    ["pass", "pass", "pass", "fail", "fail", "fail", "fail", "fail", "fail"]);
+});
+
+test("WPT timeout helpers preserve receivers and extra arguments across await", async () => {
+  const harness = new WptHarness({}, {}, 100);
+  harness.run(`
+    async_test(t => {
+      const receiver = { step_timeout };
+      receiver.step_timeout(function(a, b) {
+        assert_equals(this, receiver);
+        assert_equals(a, 7);
+        assert_equals(b, "second");
+        t.done();
+      }, 0, 7, "second");
+    }, "explicit receiver");
+    promise_test(async () => {
+      await Promise.resolve();
+      await new Promise(resolve => step_timeout(function(value) {
+        assert_equals(this, globalThis);
+        assert_equals(value, 11);
+        resolve();
+      }, 0, 11));
+    }, "bare global receiver after await");
+    async_test(t => {
+      t.step_timeout(function(value) {
+        assert_equals(this, t);
+        assert_equals(value, 13);
+        t.done();
+      }, undefined, 13);
+    }, "test receiver and omitted delay");
+  `, "timeout-arguments.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "pass", "pass"]);
+});
+
+test("WPT global timer exceptions fail their owner or the harness", async () => {
+  const failure = new Error("timer callback assertion");
+  const harness = new WptHarness({ failure }, {}, 100);
+  harness.run(`
+    promise_test(async () => {
+      await Promise.resolve();
+      await new Promise(() => step_timeout(() => { throw failure; }, 0));
+    }, "timer owner after await");
+    promise_test(() => Promise.resolve(), "following test");
+  `, "owned-timer-error.js");
+  const results = await harness.finish();
+  assert.deepEqual(results.map((result) => result.status), ["fail", "pass"]);
+  assert.equal(results[0]?.error, failure);
+
+  const unowned = new WptHarness({ failure }, {}, 100);
+  unowned.run(`
+    setup({ explicit_done: true });
+    step_timeout(() => { done(); throw failure; }, 0);
+  `, "unowned-timer-error.js");
+  await assert.rejects(unowned.finish(), (error: unknown) =>
+    error instanceof AggregateError && error.errors.includes(failure));
+});
+
+test("WPT clears abandoned global timers when a fixture finishes", async () => {
+  let calls = 0;
+  const harness = new WptHarness({ record: () => { calls++; } }, {}, 100);
+  harness.run(`
+    promise_test(() => {
+      step_timeout(record, 10);
+      return Promise.resolve();
+    }, "abandoned timer");
+  `, "timer-cleanup.js");
+  assert.equal((await harness.finish())[0]?.status, "pass");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(calls, 0);
+});
