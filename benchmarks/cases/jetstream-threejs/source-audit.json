@@ -1,0 +1,3166 @@
+{
+  "suite": "JetStream 3.0",
+  "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "workload": "threejs",
+  "files": [
+    {
+      "path": "threejs/three.js",
+      "bytes": 1246430,
+      "lines": 31208,
+      "sha256": "bdae33e8de1ad252d53c48100ea6bb565aee233e9d6e44dd153244f494d9f2ea",
+      "gitBlob": "6c5062e6277c191e70d8440ef6b7eb8f02710d2c"
+    },
+    {
+      "path": "threejs/benchmark.js",
+      "bytes": 6547,
+      "lines": 224,
+      "sha256": "d970caada644f035fa000820dba27d8d68cee7192364945f465de95fe750f6ac",
+      "gitBlob": "3a2898198948ce0fe2b96b695561de6aaea3f9c1"
+    }
+  ],
+  "fullLibraryRetained": true,
+  "originalInputs": {
+    "particles": 8000,
+    "circleSegments": 32,
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "cameraFieldOfView": 75,
+    "cameraAspect": 1,
+    "cameraZ": 500,
+    "cameraNear": 0.1,
+    "cameraFar": 1000
+  },
+  "originalStaticOperations": {
+    "Object.defineProperty": 10,
+    "Object.defineProperties": 2,
+    "Object.setPrototypeOf": 0,
+    "Object.getPrototypeOf": 0,
+    "Object.getOwnPropertyDescriptor": 0,
+    "Object.getOwnPropertyDescriptors": 0,
+    "Object.freeze": 3,
+    "Object.create": 0
+  },
+  "originalNullPrototypeNamespaceLiterals": 3,
+  "constructorConversions": {
+    "factories": [
+      "CubicPoly",
+      "WebGLAnimation",
+      "WebGLAttributes",
+      "WebGLBackground",
+      "WebGLBindingStates",
+      "WebGLCapabilities",
+      "WebGLCubeMaps",
+      "WebGLCubeUVMaps",
+      "WebGLExtensions",
+      "WebGLGeometries",
+      "WebGLInfo",
+      "WebGLMorphtargets",
+      "WebGLObjects",
+      "WebGLPrograms",
+      "WebGLProperties",
+      "WebGLRenderList",
+      "WebGLRenderLists",
+      "UniformsCache",
+      "WebGLLights",
+      "WebGLRenderState",
+      "WebGLRenderStates",
+      "WebGLState",
+      "WebGLUtils",
+      "WebGLMaterials",
+      "WebGLUniformsGroups"
+    ],
+    "classes": [
+      "WebGLBufferRenderer",
+      "WebGLClipping",
+      "WebGLIndexedBufferRenderer",
+      "WebGLProgram",
+      "WebGLShadowMap",
+      "WebGLTextures"
+    ],
+    "nestedFactories": [
+      "ColorBuffer",
+      "DepthBuffer",
+      "StencilBuffer"
+    ]
+  },
+  "fullFrameOracle": [
+    {
+      "iteration": 1,
+      "draws": 264120,
+      "particles": 8000,
+      "objects": 8000,
+      "geometryCount": 16000,
+      "render": {
+        "frame": 1,
+        "calls": 16000,
+        "triangles": 344000,
+        "points": 0,
+        "lines": 0
+      },
+      "characters": 24992197,
+      "sha256": "86f2cb40ec664d62f411126b2d6c71e31e3a793164344ac43ba0a2da7d6b121e"
+    },
+    {
+      "iteration": 2,
+      "draws": 264120,
+      "particles": 8000,
+      "objects": 8000,
+      "geometryCount": 16000,
+      "render": {
+        "frame": 2,
+        "calls": 16000,
+        "triangles": 344000,
+        "points": 0,
+        "lines": 0
+      },
+      "characters": 24992011,
+      "sha256": "2c520ca2225e238f746f55fec8eece14d68a766596f1ddc16d91695e477da0b1"
+    },
+    {
+      "iteration": 3,
+      "draws": 264120,
+      "particles": 8000,
+      "objects": 8000,
+      "geometryCount": 16000,
+      "render": {
+        "frame": 3,
+        "calls": 16000,
+        "triangles": 344000,
+        "points": 0,
+        "lines": 0
+      },
+      "characters": 24992378,
+      "sha256": "febc2564f1c93a98ea0ee62f1af89534b161c25f5c8b795ee6a42ff6e879e41c"
+    }
+  ],
+  "oracleMethod": "Node 24.20.0 vm realm; untouched threejs/three.js and threejs/benchmark.js; JetStreamDriver deterministic random generator reset before each iteration; all particle positions/velocities, child geometry positions/indices and matrixWorld elements serialized in source order.",
+  "definitionAudit": {
+    "originalDefinitions": 2171,
+    "unchangedBodies": 1849,
+    "changedBodies": 322,
+    "missing": [],
+    "parameterChanges": [
+      {
+        "key": "Texture.set image",
+        "index": 0,
+        "original": [
+          {
+            "name": "value",
+            "rest": false,
+            "initializer": "null"
+          }
+        ],
+        "port": [
+          {
+            "name": "value",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "MaterialLoader.parse",
+        "index": 0,
+        "original": [
+          {
+            "name": "json",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "input",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "BufferGeometryLoader.parse",
+        "index": 0,
+        "original": [
+          {
+            "name": "json",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "input",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "ObjectLoader.parse",
+        "index": 0,
+        "original": [
+          {
+            "name": "json",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "onLoad",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "input",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "onLoad",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "ObjectLoader.parseAsync",
+        "index": 0,
+        "original": [
+          {
+            "name": "json",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "input",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "flatten",
+        "index": 0,
+        "original": [
+          {
+            "name": "array",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "nBlocks",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "blockSize",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "input",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "nBlocks",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "blockSize",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "arraysEqual",
+        "index": 0,
+        "original": [
+          {
+            "name": "a",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "b",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "a",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "other",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      },
+      {
+        "key": "copyArray",
+        "index": 0,
+        "original": [
+          {
+            "name": "a",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "b",
+            "rest": false,
+            "initializer": null
+          }
+        ],
+        "port": [
+          {
+            "name": "a",
+            "rest": false,
+            "initializer": null
+          },
+          {
+            "name": "other",
+            "rest": false,
+            "initializer": null
+          }
+        ]
+      }
+    ],
+    "types": {
+      "any": [],
+      "assertions": [],
+      "nonNull": 1361,
+      "suppressions": [],
+      "declarations": 2302
+    },
+    "changed": [
+      {
+        "key": "generateUUID",
+        "index": 0,
+        "originalLine": 270,
+        "portLine": 264,
+        "originalBodySha256": "c80301f142d5a73fe9658b2be88d7059be3d71faf8688d91c7404aff82776197",
+        "portBodySha256": "4df0a232a5f4ad622366b89309a510a518a5da69955cace6d204c403e6028be4"
+      },
+      {
+        "key": "randInt",
+        "index": 0,
+        "originalLine": 318,
+        "portLine": 317,
+        "originalBodySha256": "8a4ac1b83d97c91245b63d07f7d8f66abb566e040890a83d54e18eeee75cd421",
+        "portBodySha256": "08d34082e6aaf2ad17b7b8d4122adbf7d672af3c8471fd3689ba1d62b09fbfd3"
+      },
+      {
+        "key": "randFloat",
+        "index": 0,
+        "originalLine": 321,
+        "portLine": 320,
+        "originalBodySha256": "202f2c314133cec966d13845e6c86ee519b27fefccf7c1e1494790ea78551351",
+        "portBodySha256": "c10f10e51826fdbb6c648c63631156ac02d638664874da5a616fa7b0f16c8bd4"
+      },
+      {
+        "key": "randFloatSpread",
+        "index": 0,
+        "originalLine": 324,
+        "portLine": 323,
+        "originalBodySha256": "8059596fc08a4737695dd2d465bd56b94e6a3df20280d5632ab03f1b9149d2f8",
+        "portBodySha256": "9cd8adea0b79bc3d4de8fe80fa2d74b25f61cec0f0b29610f61390cb1713c72d"
+      },
+      {
+        "key": "Vector2.random",
+        "index": 0,
+        "originalLine": 694,
+        "portLine": 699,
+        "originalBodySha256": "869d89fb4b1914f9b09f21f0c719b7312114128e7e8fea3ee1ba48a076e6ef66",
+        "portBodySha256": "0162eba7d00f9940cceccb4aaac68118063fb5a5ca1c945c8f4f104f03361f17"
+      },
+      {
+        "key": "Quaternion.random",
+        "index": 0,
+        "originalLine": 1055,
+        "portLine": 1057,
+        "originalBodySha256": "f98b6874cf170007606b21dcd491c133f0f935642b6905a133c52555028d4523",
+        "portBodySha256": "4d3f4ab0be4e5a2b57c3860df966dfabdc394c7f7f4f341c32ded4202fdcd2f0"
+      },
+      {
+        "key": "Vector3.random",
+        "index": 0,
+        "originalLine": 1489,
+        "portLine": 1495,
+        "originalBodySha256": "33c2080f300e27653ee08ab8b8fdad9fecbe267b788f1341d14959082a37da4e",
+        "portBodySha256": "93b05e0c648fcc6012687827a1b6faf3f9c6cceca7f77f4651a0295cab7321a8"
+      },
+      {
+        "key": "Vector3.randomDirection",
+        "index": 0,
+        "originalLine": 1495,
+        "portLine": 1501,
+        "originalBodySha256": "adcc30667bebb43f8b7944402d2d8a70c46842999cd6465ffa891d40658298e0",
+        "portBodySha256": "505dbdf692b11f0339ac9edfe3a885f344444698e8821b7dcd5f61b02b7b45b0"
+      },
+      {
+        "key": "ImageUtils.getDataURL",
+        "index": 0,
+        "originalLine": 1915,
+        "portLine": 1907,
+        "originalBodySha256": "e177a495a0ede1cfd16fb3bb70f14078f309948c1cc25c966849664acc07418c",
+        "portBodySha256": "a2b6c6bd0fcfde9e2b93c2e7f123767c2b9e3ce3b12f9bc9f39fa9258cb93fe6"
+      },
+      {
+        "key": "ImageUtils.sRGBToLinear",
+        "index": 0,
+        "originalLine": 1939,
+        "portLine": 1934,
+        "originalBodySha256": "2bf0e30324eb0859d0b67b26d48a45c77661759b1fbd3fa7fc5ae0e6468fd4de",
+        "portBodySha256": "b452f2ca2044e835ef09e488e0b4ba214b02bf503fef66bd4716b7a18aeff2a3"
+      },
+      {
+        "key": "Source.getSize",
+        "index": 0,
+        "originalLine": 1985,
+        "portLine": 1983,
+        "originalBodySha256": "d9a3b7443f238ef5c328a90d9d361c853bfb1214fb4a4446b6204d5446679776",
+        "portBodySha256": "34941a3ea77fd69dbb5ebcb95772f003563cf29ae0afb35f2fd916429429fc0e"
+      },
+      {
+        "key": "serializeImage",
+        "index": 0,
+        "originalLine": 2031,
+        "portLine": 2034,
+        "originalBodySha256": "4315c628d848622488d4c5b25bd63b6c7efa624a268d9532656a7701cfb4fdf7",
+        "portBodySha256": "a1930983315bb78314de70342f62b3992ab0d09ecd50f3585deb1763454f0cfc"
+      },
+      {
+        "key": "Texture.set image",
+        "index": 0,
+        "originalLine": 2103,
+        "portLine": 2108,
+        "originalBodySha256": "988f72c8fd10e55c061cd6e698fab019920af5aa7e6ef3275e38b923ee6d684d",
+        "portBodySha256": "d6510e1cdd51ce0d4b1252a046a3f7c230d31fcc1cfdf78558bb2b53e65f81bb"
+      },
+      {
+        "key": "Texture.setValues",
+        "index": 0,
+        "originalLine": 2150,
+        "portLine": 2157,
+        "originalBodySha256": "93eb80db41abb1ad22a2add308ad3f514cf1822dad605ed362269337152cdfb4",
+        "portBodySha256": "f71513169d69ae885c6946c9a0c346b6f3ab2d075e772df9270841ee1a6063f4"
+      },
+      {
+        "key": "Vector4.random",
+        "index": 0,
+        "originalLine": 2647,
+        "portLine": 2671,
+        "originalBodySha256": "4e4555c2e66edde32bfda572c79aeadf0cba0c3c8a9b85fa8afceaa5cd6b9c55",
+        "portBodySha256": "fe8da2d55bcbe75c7e75405e9a869993981936fcd65090cc4d99f1c94f4ad635"
+      },
+      {
+        "key": "Object3D.getObjectByProperty",
+        "index": 0,
+        "originalLine": 4545,
+        "portLine": 4653,
+        "originalBodySha256": "1c8086e23bbca77451a6ece0ab344d0a143990b6277097f82a978a335f96605c",
+        "portBodySha256": "11cf6636816cf77ba3ebe45fef45c8485957b3271bb93d4e6d10eaa2bf0dff12"
+      },
+      {
+        "key": "Object3D.getObjectsByProperty",
+        "index": 0,
+        "originalLine": 4556,
+        "portLine": 4665,
+        "originalBodySha256": "ac43b9c8f53018f3b98c0638a8a6f573f8c0a7fd5f61ff47ddf2d8129eeac0eb",
+        "portBodySha256": "7090401625ea810e91580a19e14c0b02ae9ceb87b46d2d196eb109605fa8f402"
+      },
+      {
+        "key": "Object3D.toJSON",
+        "index": 0,
+        "originalLine": 4650,
+        "portLine": 4765,
+        "originalBodySha256": "0558357b8fc572e55f6e36f43f8aca6c7cda3beb8129ff93fff16b92bfc32fbf",
+        "portBodySha256": "40212e34e9468f18fd351da59a3430c09fbe54da0a328e653ef2972fadcffaf8"
+      },
+      {
+        "key": "Object3D.toJSON.serialize",
+        "index": 0,
+        "originalLine": 4723,
+        "portLine": 4847,
+        "originalBodySha256": "a431d23b8ec0116d537630977baa79041809891473b64cb5bcaa8a30f18c4ffa",
+        "portBodySha256": "b01f31504224e4cefd119ee27150d22edffa8319daf379b713d09138572f64d0"
+      },
+      {
+        "key": "Color.set",
+        "index": 0,
+        "originalLine": 5084,
+        "portLine": 5227,
+        "originalBodySha256": "e843a6184c3d1c01ada704cc44a22a470ba91e87942f8fcf9e53bcfd055dd3e3",
+        "portBodySha256": "9268d9262df4288604823592502f04a6138d1f034b428e0a497283cb50648260"
+      },
+      {
+        "key": "Material.setValues",
+        "index": 0,
+        "originalLine": 5465,
+        "portLine": 5605,
+        "originalBodySha256": "b2c5b6c1342aa9cf99a5a52a55ce564612e50c93ca189442fc69dfacfcb31329",
+        "portBodySha256": "4f1424a65c8f9313d808b7a9c7fd81bba358f7e59b4614c73e153e3b3e096618"
+      },
+      {
+        "key": "Material.toJSON",
+        "index": 0,
+        "originalLine": 5487,
+        "portLine": 5630,
+        "originalBodySha256": "e329c47ebe685621a13704aba9e34c34753d7bde4eec40522c6bcc900e463d6a",
+        "portBodySha256": "7b87c0cfdae8423393fcdd40f96e94062248b486ffea2b7c46aa4375c532bccd"
+      },
+      {
+        "key": "Material.copy",
+        "index": 0,
+        "originalLine": 5663,
+        "portLine": 5900,
+        "originalBodySha256": "ee14ec6e88ee2156f2f7830212dac38d071e07e2103c63fb9949be96fbccc916",
+        "portBodySha256": "ba69e69718b53e1e383425cae1fa4579fb9097bcf65841780cfc2aad96f750c8"
+      },
+      {
+        "key": "BufferAttribute.set",
+        "index": 0,
+        "originalLine": 5967,
+        "portLine": 6212,
+        "originalBodySha256": "a582b07bfd706fb76eaa6477c7322bfe915d8c864f3f4b171fb20ed914599f3e",
+        "portBodySha256": "89bfb354bc942b34b3e51e559cc568beafdbf1845cec7be58cd42aa4b3df7dab"
+      },
+      {
+        "key": "cloneUniforms",
+        "index": 0,
+        "originalLine": 7084,
+        "portLine": 7360,
+        "originalBodySha256": "cb84d7265a33260ab0da3fd578d2d970ef8c0b7c050a2a3339db137a6aa0f3a7",
+        "portBodySha256": "ac19ecc8da1adee3ab49ea3de24351ad6782e5a4c06eb47e68360c9c327388fb"
+      },
+      {
+        "key": "ShaderMaterial.toJSON",
+        "index": 0,
+        "originalLine": 7188,
+        "portLine": 7467,
+        "originalBodySha256": "edce28f9b5efb4acadff945654c07d8d3104ec27916fe385cc73c75f173639ff",
+        "portBodySha256": "54b6dc7768759317f75e8ffc626a09c25224d45300114e24ea827a79cbba64da"
+      },
+      {
+        "key": "WebGLCubeRenderTarget.fromEquirectangularTexture",
+        "index": 0,
+        "originalLine": 7528,
+        "portLine": 7821,
+        "originalBodySha256": "ba1a44fdd5f8dd297169d3d3f8e53fcf4beb712fcc2ebd803bee08e78c07136f",
+        "portBodySha256": "a43ad2f78a8323b7db8dd2d845e2006c9f18a91b5005bcbf746be5a321bf3f1b"
+      },
+      {
+        "key": "Scene.copy",
+        "index": 0,
+        "originalLine": 7858,
+        "portLine": 8158,
+        "originalBodySha256": "1a019901572b533252eb99502e18bc295b2ac636f138119eea791ceaade42528",
+        "portBodySha256": "baaec3fa17286fd6f3ec29cf93cc0040f2cc6bb3dc6b48436e036a4e059edf28"
+      },
+      {
+        "key": "InterleavedBuffer.set",
+        "index": 0,
+        "originalLine": 7923,
+        "portLine": 8232,
+        "originalBodySha256": "a582b07bfd706fb76eaa6477c7322bfe915d8c864f3f4b171fb20ed914599f3e",
+        "portBodySha256": "89bfb354bc942b34b3e51e559cc568beafdbf1845cec7be58cd42aa4b3df7dab"
+      },
+      {
+        "key": "SkinnedMesh.pose",
+        "index": 0,
+        "originalLine": 8475,
+        "portLine": 8807,
+        "originalBodySha256": "b8241f769db8448070ea5d820009f6738de6029d66be76553644548ec6f9ed1e",
+        "portBodySha256": "14f7403ad374fb4ad6c1da24d94a6487988b4c9dbb43684382104f7bbb824a65"
+      },
+      {
+        "key": "SkinnedMesh.applyBoneTransform",
+        "index": 0,
+        "originalLine": 8502,
+        "portLine": 8837,
+        "originalBodySha256": "6021fa63682b99add3da51f5a8f4dae8dd89509aefa3f1a5e6efdba1603c64bb",
+        "portBodySha256": "e6c0ade650b8def92206ec1c44b48e303b89e2357fed2584cbbd1aeb9e5a16cf"
+      },
+      {
+        "key": "InstancedMesh.copy",
+        "index": 0,
+        "originalLine": 8746,
+        "portLine": 9083,
+        "originalBodySha256": "1d841cc2930e2357dcad289abdae13dbc0517c0890a35065b69845e68ac9fdce",
+        "portBodySha256": "d48e7069362a1aaac22e0d31db26759b85263b60f05e3bf7d2ca8a0731dc7059"
+      },
+      {
+        "key": "InstancedMesh.getMorphAt",
+        "index": 0,
+        "originalLine": 8762,
+        "portLine": 9103,
+        "originalBodySha256": "5087cae753895db3db3411b8d8c23ff8d0d0f40b13fac676b1d216b9a8d27a71",
+        "portBodySha256": "4b9f28c32c1a157afc8cc0886f3bb3217d0109aa53318ae0e1f6df42f7a0a9aa"
+      },
+      {
+        "key": "InstancedMesh.setMorphAt",
+        "index": 0,
+        "originalLine": 8804,
+        "portLine": 9148,
+        "originalBodySha256": "4212027416ae6224440f3d5de3c6891f58a6b104d7909431896561d1067bb016",
+        "portBodySha256": "d9039c3ad8e54e214df1965421ee982040ee529f2ab40d60f4dacfed2b8fa1c2"
+      },
+      {
+        "key": "BatchedMesh.addInstance",
+        "index": 0,
+        "originalLine": 9367,
+        "portLine": 9690,
+        "originalBodySha256": "b2ad010a9ca89b7e23e56851c1e6d601bee17ecb1808285e0a5f4c3458e9a934",
+        "portBodySha256": "efe6c4f8002e50d8eb1f08c36615013a06c8c587cf85ff88cc09442b595b8517"
+      },
+      {
+        "key": "BatchedMesh.setGeometryAt",
+        "index": 0,
+        "originalLine": 9444,
+        "portLine": 9767,
+        "originalBodySha256": "d70803737a9f7d483ccdd204d57ad8845855278f0f44a4dac7d2509fe7ff3c1f",
+        "portBodySha256": "66d41a5a0bc870200b922ba061a23941baa6942cb41db9fcebfad7b2c3d07f39"
+      },
+      {
+        "key": "BatchedMesh.setMatrixAt",
+        "index": 0,
+        "originalLine": 9625,
+        "portLine": 9946,
+        "originalBodySha256": "98c117a6181af3b948b15f27a57a3c96e3688da476505dfcb1958ae544ae22f4",
+        "portBodySha256": "c99871604b0742bde325364f0bdcb82e6858f76750924523a016d90a45398193"
+      },
+      {
+        "key": "BatchedMesh.getMatrixAt",
+        "index": 0,
+        "originalLine": 9633,
+        "portLine": 9954,
+        "originalBodySha256": "82b2e7522fb491ee387221ca087e9804a2f51018bf4b3a0429942e276cd02de7",
+        "portBodySha256": "85bc456ec1f1a7c1740fd9b5915c223c0b41df319f208c5a49b77dce5c195a43"
+      },
+      {
+        "key": "BatchedMesh.setColorAt",
+        "index": 0,
+        "originalLine": 9637,
+        "portLine": 9958,
+        "originalBodySha256": "6ed6905a91b223ddb0078031eac4cf1e54ca39226b5707031f7be30d78cb9c7a",
+        "portBodySha256": "7ff593f8de6c0aa31b992dc4c0831c6d96e03b743a0f2bdb51abde8c73a0798f"
+      },
+      {
+        "key": "BatchedMesh.getColorAt",
+        "index": 0,
+        "originalLine": 9646,
+        "portLine": 9967,
+        "originalBodySha256": "796e054bfa91deb10e0577ef175ff50bae36e759bb6c90a170c8cc530e9e45c6",
+        "portBodySha256": "755a1afc965d1d567af2b6c35a4adc8a46e04f969e15c21668f3f7dd5a0fb254"
+      },
+      {
+        "key": "BatchedMesh.setInstanceCount",
+        "index": 0,
+        "originalLine": 9686,
+        "portLine": 10007,
+        "originalBodySha256": "1b40a0c772efccca7f8e21db582e7bf8ee407c953b07a12e7be3437dfde0af29",
+        "portBodySha256": "68fc355e2688d5b55ce2ee9f7914ea5cd8d8dc6f420684febf3d941935b2d8c0"
+      },
+      {
+        "key": "BatchedMesh.copy",
+        "index": 0,
+        "originalLine": 9786,
+        "portLine": 10107,
+        "originalBodySha256": "60285251e91a01d72ef13da7b0ec47609cd5703b7833f7eaf0f0c4ded8d7bce2",
+        "portBodySha256": "6939c3f976f50584acf4e99492a140c078cad86d8d79980ffdb623022a027364"
+      },
+      {
+        "key": "BatchedMesh.onBeforeRender",
+        "index": 0,
+        "originalLine": 9831,
+        "portLine": 10152,
+        "originalBodySha256": "2e1f2521f25afdf1ba8771c5a0a425b9bbb9e2408ab08439ce0101255734f15b",
+        "portBodySha256": "db0e3dd152b2cbbbba2e311ec82f625c7769af6dae656922773d605db97b1058"
+      },
+      {
+        "key": "Curve.getLengths",
+        "index": 0,
+        "originalLine": 10956,
+        "portLine": 11382,
+        "originalBodySha256": "0b68f433e2b82593d1809da488ae470b03d52e6efa8b54fc33b22d46d547dfd5",
+        "portBodySha256": "988dccc4208081c7e3dd6622484aea6552ff823e4a5b152ea4197c714d2364ab"
+      },
+      {
+        "key": "Curve.getTangent",
+        "index": 0,
+        "originalLine": 11014,
+        "portLine": 11443,
+        "originalBodySha256": "c7c377263777f8324abe4156fc0e0ab4ea611b25c530b826b9be3ba197ab47d3",
+        "portBodySha256": "04996146972f78147cb88d4e0a070086419a20edab1a46ada3044d79fb33b218"
+      },
+      {
+        "key": "EllipseCurve.fromJSON",
+        "index": 0,
+        "originalLine": 11185,
+        "portLine": 11620,
+        "originalBodySha256": "9c3de3faf98dcb039ba739d9f72611a685e0d645a066ae59a12e137773b57e9a",
+        "portBodySha256": "ed7dc0465940d0d08d9cf235c8c453f12227a5bd1ee52f21bf79d6dcca8b5b62"
+      },
+      {
+        "key": "CatmullRomCurve3.fromJSON",
+        "index": 0,
+        "originalLine": 11320,
+        "portLine": 11760,
+        "originalBodySha256": "d000c1534d2b0fedbedacbb23ff3bdb35f6d778a2fa5e1b5833cf02b0f17ae8d",
+        "portBodySha256": "353f1ac7b54101516ac267fdce2f9d35e3acd81222e634af1c55543fea10d713"
+      },
+      {
+        "key": "CubicBezierCurve.fromJSON",
+        "index": 0,
+        "originalLine": 11407,
+        "portLine": 11844,
+        "originalBodySha256": "cff2a3d5125220483ae5950869e4a5eec78a10d0618e4f29dc2c6d1b8ef8451e",
+        "portBodySha256": "0f78ecd51ed2cd62a16bc857c7eedbeaedc22bb8b96a9dcfa98a124bebb32aa6"
+      },
+      {
+        "key": "CubicBezierCurve3.fromJSON",
+        "index": 0,
+        "originalLine": 11452,
+        "portLine": 11885,
+        "originalBodySha256": "cff2a3d5125220483ae5950869e4a5eec78a10d0618e4f29dc2c6d1b8ef8451e",
+        "portBodySha256": "0f78ecd51ed2cd62a16bc857c7eedbeaedc22bb8b96a9dcfa98a124bebb32aa6"
+      },
+      {
+        "key": "LineCurve.fromJSON",
+        "index": 0,
+        "originalLine": 11500,
+        "portLine": 11934,
+        "originalBodySha256": "f253367c8f9de7d64ad4ba080d60dfa4497f11e794c57db7f16326a532df6a9d",
+        "portBodySha256": "af1584696c139df179fbf1a17d4c33570f5d3c1592b0e17479fa0b25c3094984"
+      },
+      {
+        "key": "LineCurve3.fromJSON",
+        "index": 0,
+        "originalLine": 11546,
+        "portLine": 11981,
+        "originalBodySha256": "f253367c8f9de7d64ad4ba080d60dfa4497f11e794c57db7f16326a532df6a9d",
+        "portBodySha256": "af1584696c139df179fbf1a17d4c33570f5d3c1592b0e17479fa0b25c3094984"
+      },
+      {
+        "key": "QuadraticBezierCurve.fromJSON",
+        "index": 0,
+        "originalLine": 11585,
+        "portLine": 12017,
+        "originalBodySha256": "53874b300a2fe745bcb347f1c03bd62d7a622e998c7db4cd46de5491a0ad4c20",
+        "portBodySha256": "a7dca5ad5158d65fa4d3c0937363825dc27d1c1006d3cb86d06f8e006f96cc3d"
+      },
+      {
+        "key": "QuadraticBezierCurve3.fromJSON",
+        "index": 0,
+        "originalLine": 11626,
+        "portLine": 12054,
+        "originalBodySha256": "53874b300a2fe745bcb347f1c03bd62d7a622e998c7db4cd46de5491a0ad4c20",
+        "portBodySha256": "a7dca5ad5158d65fa4d3c0937363825dc27d1c1006d3cb86d06f8e006f96cc3d"
+      },
+      {
+        "key": "SplineCurve.fromJSON",
+        "index": 0,
+        "originalLine": 11675,
+        "portLine": 12100,
+        "originalBodySha256": "191653d383000a52c5ed2ff80d8fbce102dd0a5de2c3e26a57df9c7d156dddae",
+        "portBodySha256": "350297922df639c503de5e850766b57f160b4e58cf9dc5a6ece5cdd86c2e1bfd"
+      },
+      {
+        "key": "CurvePath.closePath",
+        "index": 0,
+        "originalLine": 11708,
+        "portLine": 12133,
+        "originalBodySha256": "812961f1e72d3055ac8ad6be856bd87b5fdaeb79cf4106ac6698718268c814ea",
+        "portBodySha256": "5ff5f805121fad07cfd3ef4c36c33448a87bbefa7329aad0d89658d9e8a44fdb"
+      },
+      {
+        "key": "CurvePath.getPoints",
+        "index": 0,
+        "originalLine": 11765,
+        "portLine": 12190,
+        "originalBodySha256": "a100bbfbe1c12a74e22176bc41955bfb2620172a10618611957da28cfc59c3b4",
+        "portBodySha256": "4bd612385ef8539681b0b1473e2bd6dce026643f9353385125f67f199474f1aa"
+      },
+      {
+        "key": "CurvePath.fromJSON",
+        "index": 0,
+        "originalLine": 11807,
+        "portLine": 12233,
+        "originalBodySha256": "8ecca80c787606d7ee25b0f844ddd17a0b5a7466aacf70ab03a9478c0b3d895c",
+        "portBodySha256": "d614ac2a53de1b74ffb703d2f5361b9fdc6d447cd91d41d3c2fba4acc1e1bd81"
+      },
+      {
+        "key": "Path.fromJSON",
+        "index": 0,
+        "originalLine": 11912,
+        "portLine": 12328,
+        "originalBodySha256": "258458d33e3ac818d0c69f1d0ed4679f4f7a5766b9d797c7c21f21d31d69d090",
+        "portBodySha256": "0550bd2fc4acaaada9553d918b7823f47b5d9ea286dc82f79d23103521918273"
+      },
+      {
+        "key": "Shape.fromJSON",
+        "index": 0,
+        "originalLine": 11957,
+        "portLine": 12373,
+        "originalBodySha256": "b483871fb6149da52140581da7b669a0cd3fd985c3a25d0133fbb6a22c6f7dd3",
+        "portBodySha256": "93de30966c96284745fa03a7c71a270014dc2b0df8589c338cb25c6b2a27ffb4"
+      },
+      {
+        "key": "removeDupEndPts",
+        "index": 0,
+        "originalLine": 12449,
+        "portLine": 12891,
+        "originalBodySha256": "0711f70666137d17a54efa079e910f4f5d1ae34596625b78c98b8e616dadcdcc",
+        "portBodySha256": "6213242eb78336d7ab85972e84ca95368ee4412cc9510126aa2d9b4d7ae87377"
+      },
+      {
+        "key": "ExtrudeGeometry.constructor",
+        "index": 0,
+        "originalLine": 12462,
+        "portLine": 12904,
+        "originalBodySha256": "ff708ab536a54a8588d50c734ba4477d2c99dce15529c3ead29c3de62d849b45",
+        "portBodySha256": "88e965139b435d66a29054df5966c9edd0b0e52074255670d341e9a0c32610fb"
+      },
+      {
+        "key": "ExtrudeGeometry.constructor.addShape",
+        "index": 0,
+        "originalLine": 12480,
+        "portLine": 12922,
+        "originalBodySha256": "ec9a5568fb30c555a5ed0166c8d60414eaec9e0d603ac8e721bdc97f7cb43011",
+        "portBodySha256": "42f528d6dece10c9fd7e224c90836f8c8ac465070de9fee0a5e147cde41e9c1f"
+      },
+      {
+        "key": "ExtrudeGeometry.constructor.addShape.scalePt2",
+        "index": 0,
+        "originalLine": 12555,
+        "portLine": 12992,
+        "originalBodySha256": "89f45bd96ea526256aa53aeca25e9c00fc5d4c402afb98487e708537bfb5fbe3",
+        "portBodySha256": "42c653cd1deac4307d06835ab0eaa9219f228c9e29ac6c4d59fc2afd12541bbe"
+      },
+      {
+        "key": "ExtrudeGeometry.fromJSON",
+        "index": 0,
+        "originalLine": 12821,
+        "portLine": 13272,
+        "originalBodySha256": "d80cadd9fa8ab7665efd75d694e7b44e5821d29dfad110ad9a193af9cf9718c2",
+        "portBodySha256": "3073b2da20284fb52ed0893779542e355b5d37e7aca347228b72ab0467eef2a9"
+      },
+      {
+        "key": "toJSON$1",
+        "index": 0,
+        "originalLine": 12878,
+        "portLine": 13330,
+        "originalBodySha256": "9da6ab4c2ff2a97c871ff26c66b785225776a8a5e0dce8ac07a258c36ab086ea",
+        "portBodySha256": "85938c7735bfdf03991f2633db25b01617122084bcac980cd0ab9a0a8c75a22e"
+      },
+      {
+        "key": "toJSON",
+        "index": 0,
+        "originalLine": 13236,
+        "portLine": 13691,
+        "originalBodySha256": "63d19ff3d6582b7733b861f8ce4d6f0b1fcc2acca077c97f171a85018f6cb059",
+        "portBodySha256": "d8715230b2a79d496b92026020c1e9232c61023fcaba044ac9208a35637a5d0f"
+      },
+      {
+        "key": "TubeGeometry.constructor",
+        "index": 0,
+        "originalLine": 13480,
+        "portLine": 13939,
+        "originalBodySha256": "bf52065922d6b842c450b6b9d176e3bb31ae0be4d331ad2923d4e0f3d5b5fbfc",
+        "portBodySha256": "2f727c23d0adfe77c8c3252d9b8a8987767b895afafd41ec62bd8aa361801b07"
+      },
+      {
+        "key": "TubeGeometry.constructor.generateSegment",
+        "index": 0,
+        "originalLine": 13515,
+        "portLine": 13974,
+        "originalBodySha256": "7c820da733feb87bcbc98da9ebf24d2c4e976c13d7cd36c8834fd76b711b204c",
+        "portBodySha256": "6252f56428d38ebbc891851adb926dc4fc316437052568c18ffd8b2f13c18e6f"
+      },
+      {
+        "key": "TubeGeometry.toJSON",
+        "index": 0,
+        "originalLine": 13561,
+        "portLine": 14020,
+        "originalBodySha256": "2d01f3f7db01a11c6a82cecd9098c683e1986262eb506c7418f4d9303d25864b",
+        "portBodySha256": "34a60eafb38594f31fe531c9603327807242ea78ac1657ebd2c4d1fe2e2542b6"
+      },
+      {
+        "key": "TubeGeometry.fromJSON",
+        "index": 0,
+        "originalLine": 13566,
+        "portLine": 14025,
+        "originalBodySha256": "acec57e5629b08f59a5267a45836059ebb88fb8e47934ca3146ea276c1cd0c5e",
+        "portBodySha256": "ade11c31d09e3a9ba0d5e149893778b382645e28f4016c22490157b1bbd7c747"
+      },
+      {
+        "key": "convertArray",
+        "index": 0,
+        "originalLine": 14268,
+        "portLine": 14797,
+        "originalBodySha256": "23733f5916c7eead65e570cdc4ee41fcc43d7408da7c171e553bb0ad44c54df6",
+        "portBodySha256": "ea8e15494c16944fda4c50496d430f5a7104ab63e1d9bcc0f604479df34cebf8"
+      },
+      {
+        "key": "sortedArray",
+        "index": 0,
+        "originalLine": 14288,
+        "portLine": 14819,
+        "originalBodySha256": "f35673367743bd67080708326ec3ad9e1de01ab9dda64811303963ff23241d9c",
+        "portBodySha256": "ae43662503d3892c6f9e2b707266b076e35d4c554d7ae1cb49ec52a12bcfcb42"
+      },
+      {
+        "key": "flattenJSON",
+        "index": 0,
+        "originalLine": 14299,
+        "portLine": 14830,
+        "originalBodySha256": "2851385dfc2b535846034d4950e4d5843187a3ffb1167a7a90c0080313957f83",
+        "portBodySha256": "f33d2394dbf6b2596abf9b1a0a967d2422fe5018dd3c3a5cb4b1a34760ee8ef6"
+      },
+      {
+        "key": "subclip",
+        "index": 0,
+        "originalLine": 14336,
+        "portLine": 14871,
+        "originalBodySha256": "532cb132b8e26a49768a587214bcdd5fe9fa8edfb76a0c828378a56ea05c5386",
+        "portBodySha256": "1e8882480c1b84c0c9c6d14c6f317ccb1a3c0df9632bf393c7e532cec94dd5ad"
+      },
+      {
+        "key": "makeClipAdditive",
+        "index": 0,
+        "originalLine": 14371,
+        "portLine": 14908,
+        "originalBodySha256": "65ef6e4dc5d8e4af2f6fb2d81a2ba5fa6b56ca76db0ae127153b92433cbff826",
+        "portBodySha256": "b29685f93fb8d94952104f4f539f959b37bac946dc415239bfcaac750418b2a2"
+      },
+      {
+        "key": "Interpolant.constructor",
+        "index": 0,
+        "originalLine": 14462,
+        "portLine": 14998,
+        "originalBodySha256": "12bb65760efcc4ee79f9a557de308347b4134c7e2b08ad86fcb32bc8061f54e2",
+        "portBodySha256": "8772f3dcd87144a897ede72835d9715236bc3c6579422e959d6b19d5d8810726"
+      },
+      {
+        "key": "CubicInterpolant.interpolate_",
+        "index": 0,
+        "originalLine": 14621,
+        "portLine": 15152,
+        "originalBodySha256": "207adee1962ae82421e19c1e9b9c929ef4b258246df2a4632ed9a53b6a1e5b0d",
+        "portBodySha256": "879be9e7c743cf45a008388a7a9634c7603caf2f2d343c7e189fa1bc106866b0"
+      },
+      {
+        "key": "LinearInterpolant.interpolate_",
+        "index": 0,
+        "originalLine": 14649,
+        "portLine": 15172,
+        "originalBodySha256": "bed14e7b327c2930df73af36d8ce3f7b6e6119661eb3a9d5c956265371e3f210",
+        "portBodySha256": "bcab10aa702f4ebcf9ff82f107a24e78f55ff762747e0c568d360bec57c3df9f"
+      },
+      {
+        "key": "KeyframeTrack.constructor",
+        "index": 0,
+        "originalLine": 14674,
+        "portLine": 15191,
+        "originalBodySha256": "a3388a08589949fffc83f3928de78432f37d1a5ca7f3730d41d09f8f45123b5d",
+        "portBodySha256": "0afcb8f806e09d36a0cc04b68a0f143cc70eb4aefbe657a0caf26666cf568053"
+      },
+      {
+        "key": "KeyframeTrack.toJSON",
+        "index": 0,
+        "originalLine": 14682,
+        "portLine": 15201,
+        "originalBodySha256": "fec6790c85eb2b3bd17286428f00f8850d98626c3b6535f30384ce1eb5c7b3cb",
+        "portBodySha256": "01807b40ad0346076b19247950f71ed752f252d9c59e65b1e01be57980640f68"
+      },
+      {
+        "key": "KeyframeTrack.validate",
+        "index": 0,
+        "originalLine": 14793,
+        "portLine": 15312,
+        "originalBodySha256": "2d3f8b2974a544112d054a024293fbc0d4a5017049f18195a81d9b735fe6480a",
+        "portBodySha256": "34a3751e6c9d4bb841a9383cae79ffa205948570056ec2df83574ca3776058e4"
+      },
+      {
+        "key": "QuaternionLinearInterpolant.interpolate_",
+        "index": 0,
+        "originalLine": 14931,
+        "portLine": 15443,
+        "originalBodySha256": "7dfbbc0eff561f0ed0f130b165ffb45da71f3acabe808822036f81361c42fbbd",
+        "portBodySha256": "a808b6e840f2d49a42fa00a161db75f339d9f5c4bc6351146e0dadf58669986f"
+      },
+      {
+        "key": "AnimationClip.findByName",
+        "index": 0,
+        "originalLine": 15032,
+        "portLine": 15531,
+        "originalBodySha256": "d3dcf7db437aaa8b25e1de23f554ee7673e0671b358012c34f6a3fad0c627f56",
+        "portBodySha256": "b25b3959b8d99bd8747a2e62f5d65e77b87d46b8d7a2ee356d94339e2dfbb177"
+      },
+      {
+        "key": "AnimationClip.parseAnimation",
+        "index": 0,
+        "originalLine": 15066,
+        "portLine": 15565,
+        "originalBodySha256": "9ae57a577c41af48fc95413d38b82d1437b16253ef7bbffb3fb314ed3f068177",
+        "portBodySha256": "a2d2023612e0702a64e2ae02714b0594635e1757467a8afab4459fa6a374eb87"
+      },
+      {
+        "key": "parseKeyframeTrack",
+        "index": 0,
+        "originalLine": 15196,
+        "portLine": 15691,
+        "originalBodySha256": "809fdae0670484bba6c04ff10ee9184a50ba32f4636a32fbb232ad644c14c39d",
+        "portBodySha256": "b22d677f1449dcbfb41f86cb0f17a45898718fe9c021228a176e1c39570de2a8"
+      },
+      {
+        "key": "LoadingManager.constructor",
+        "index": 0,
+        "originalLine": 15232,
+        "portLine": 15747,
+        "originalBodySha256": "a0fa82748f02919ce9be8ce14b991cb2a89a9f740ad583c99017267522cdb3d1",
+        "portBodySha256": "65d633f15bf2122b21e288d3b55dd0cbb1ca23eb463ddafb2f670cee37942a3c"
+      },
+      {
+        "key": "FileLoader.load",
+        "index": 0,
+        "originalLine": 15356,
+        "portLine": 15872,
+        "originalBodySha256": "734fb38ba91b7ce67722ebcff21808ed7148d33ff3fbad1a98eea836bcf0438e",
+        "portBodySha256": "a6fa246c2b0074697f5223220b2dd2635d0fa26de61b21df028926efbe3d3fd2"
+      },
+      {
+        "key": "AnimationLoader.load",
+        "index": 0,
+        "originalLine": 15498,
+        "portLine": 16023,
+        "originalBodySha256": "ccec7a87f351b3d3aa40ce986f3fb0599c077f9098664d687b0b04da1b491bc7",
+        "portBodySha256": "196b6bfa800490da6d8f3c94eacfdb065935ffcea7a2f10327f9a40654ec619d"
+      },
+      {
+        "key": "ImageLoader.load",
+        "index": 0,
+        "originalLine": 15599,
+        "portLine": 16131,
+        "originalBodySha256": "56734b680eacffba300bcdc3077b42ca8cb52b009a3fa02c449f791b6fbf9450",
+        "portBodySha256": "806a72a558f888e7c2cbb5112697594715be14b47b9ec9fe0e3f4ea6d93a52d8"
+      },
+      {
+        "key": "CubeTextureLoader.load",
+        "index": 0,
+        "originalLine": 15665,
+        "portLine": 16205,
+        "originalBodySha256": "ffccee284609fc5836d12d9ba66880b82d6cbd294622869e28b82d78aae570e3",
+        "portBodySha256": "fb72eba37b85dfdede6d40d088878e2bfe45487e45f73d0df84e6adcf666e236"
+      },
+      {
+        "key": "CubeTextureLoader.load.loadTexture",
+        "index": 0,
+        "originalLine": 15672,
+        "portLine": 16212,
+        "originalBodySha256": "90b64fee87eaca6ce37b04dc19b05a20cca32a5c41ff5a0bb6147b123b4e57fd",
+        "portBodySha256": "812cbe6083be78927500c3b95aa621df3ff285fd33f27b9a1aa30a0917278924"
+      },
+      {
+        "key": "Light.toJSON",
+        "index": 0,
+        "originalLine": 15787,
+        "portLine": 16332,
+        "originalBodySha256": "90395b75cac5e105c4cd832e49019b3032dbf7ee119dc6b1ddff3d1200a01ce5",
+        "portBodySha256": "490db4e34d27cf3ce643ea2a631278058699b9b90150d23eb4aa81d39ab5b780"
+      },
+      {
+        "key": "LightShadow.updateMatrices",
+        "index": 0,
+        "originalLine": 15847,
+        "portLine": 16399,
+        "originalBodySha256": "68b49874a1f238df37661348011139d9021f39b1d74b8d13ad0153d2387c5319",
+        "portBodySha256": "b289eedee1e57a0d2a5c54450e36fee0a58a6077fce0d49c6e6be4748b1321c0"
+      },
+      {
+        "key": "SpotLightShadow.updateMatrices",
+        "index": 0,
+        "originalLine": 15913,
+        "portLine": 16465,
+        "originalBodySha256": "cfeb3e11b9119e40d048021171b82b0b45147842d3dc94db2909baef87d7eb66",
+        "portBodySha256": "f3bd0ed8c8cc02497f5f6c1657e67ba4edfa8f6375542cf99aaeb33eeb1471a2"
+      },
+      {
+        "key": "SpotLight.copy",
+        "index": 0,
+        "originalLine": 15956,
+        "portLine": 16508,
+        "originalBodySha256": "9d50a4856f07102c1d70f91e3b15345c6b30b8cfbf8075f7989a94e629c65ce2",
+        "portBodySha256": "9015d60da16f53db554dbe816e3832d62e6e2e7d896aba36b20b71bab8ecf7fc"
+      },
+      {
+        "key": "DirectionalLight.copy",
+        "index": 0,
+        "originalLine": 16145,
+        "portLine": 16698,
+        "originalBodySha256": "4b6bb29524b1885a485b320f5560d32f0c14447446f3cfc4620c912c141c1095",
+        "portBodySha256": "3d58f91bca3566e9050ec3648d9e9d69bfa8686900fb28c1833ec11e60688514"
+      },
+      {
+        "key": "MaterialLoader.load",
+        "index": 0,
+        "originalLine": 16326,
+        "portLine": 16879,
+        "originalBodySha256": "4ede88422c244e1e482674158bdfd1b5350042e409af0517f8cc49159546a40d",
+        "portBodySha256": "5747b96a54c7e5bce2e7fef895f0c3cfc36a0e9456b741c9e0c9d5bb04ee31d5"
+      },
+      {
+        "key": "MaterialLoader.parse",
+        "index": 0,
+        "originalLine": 16345,
+        "portLine": 16900,
+        "originalBodySha256": "3551d6c0636b5f0af0946acf56c6c3cd6b5294242d16d845ff964e97c6dbf636",
+        "portBodySha256": "ee102ec2f7306cb05a3edbe9073faf70d13e47959f35d80a4f66979918c7a70a"
+      },
+      {
+        "key": "BufferGeometryLoader.load",
+        "index": 0,
+        "originalLine": 16597,
+        "portLine": 17279,
+        "originalBodySha256": "4ede88422c244e1e482674158bdfd1b5350042e409af0517f8cc49159546a40d",
+        "portBodySha256": "5747b96a54c7e5bce2e7fef895f0c3cfc36a0e9456b741c9e0c9d5bb04ee31d5"
+      },
+      {
+        "key": "BufferGeometryLoader.parse",
+        "index": 0,
+        "originalLine": 16616,
+        "portLine": 17300,
+        "originalBodySha256": "5ce70ca6fbef84cb962907565537c44cb8b9dbd990e9387c5e39338fa35614eb",
+        "portBodySha256": "d38ee628f2e7ce0aa245d5c12883b5f05fcba2b3ae4944b6784f0003feb2e4fe"
+      },
+      {
+        "key": "ObjectLoader.load",
+        "index": 0,
+        "originalLine": 16705,
+        "portLine": 17399,
+        "originalBodySha256": "36625e3f239df0dfd854413ccd42845eccbdfea17ddecd43958ac68f35473ef4",
+        "portBodySha256": "c4fe52d6e23b4b658df40500b3ef972bf25f75f25cbc075cf7cd541a419cb1eb"
+      },
+      {
+        "key": "ObjectLoader.loadAsync",
+        "index": 0,
+        "originalLine": 16731,
+        "portLine": 17428,
+        "originalBodySha256": "a032d12d5270d0beba96cdf14e28e8ba6e041785f27c36558ae56bff5f2d69ea",
+        "portBodySha256": "6a7035495093ca1a780b5efbe9609a6e7232721c26f062e23650e3ad6f2968ad"
+      },
+      {
+        "key": "ObjectLoader.parse",
+        "index": 0,
+        "originalLine": 16747,
+        "portLine": 17444,
+        "originalBodySha256": "e1a492af9aee77cfa9fc82481df8a3dbe903925cc5eb7727d616387a07951eab",
+        "portBodySha256": "9f7448a4fde59870390ae43586d7371c6a039452cae92be46e8be8b411aaa0bb"
+      },
+      {
+        "key": "ObjectLoader.parseAsync",
+        "index": 0,
+        "originalLine": 16772,
+        "portLine": 17472,
+        "originalBodySha256": "7655fb80e10fbbd63a4886783b5234617a69f62193b0e63a29b94542723b1419",
+        "portBodySha256": "261f4fdf8c58614486d7fc34ccc92369fa8e59d1b2b7c3637c3facf29448f7eb"
+      },
+      {
+        "key": "ObjectLoader.parseSkeletons",
+        "index": 0,
+        "originalLine": 16795,
+        "portLine": 17496,
+        "originalBodySha256": "371ce780a8709c994783ea03224bd32bc7d874c722e2bc11a33d2c0abf7427d8",
+        "portBodySha256": "dfc46502d7437ddfc24a0cc0fefb91287ab94983476736644100c016d2568e97"
+      },
+      {
+        "key": "ObjectLoader.parseGeometries",
+        "index": 0,
+        "originalLine": 16809,
+        "portLine": 17511,
+        "originalBodySha256": "9d0c257a3b1d02af6b00cc522dd2e6cbb2ea85cc2756f211a897566388b25832",
+        "portBodySha256": "49613cdf193c32b163ec5b1d2e4f0c329f37164bc374a82b5a968f5bdeabb932"
+      },
+      {
+        "key": "ObjectLoader.parseImages",
+        "index": 0,
+        "originalLine": 16863,
+        "portLine": 17568,
+        "originalBodySha256": "0967beb1c4e85131e7a3be168dca62b68d4d41e700f4695ae9403d4c9b5c2fea",
+        "portBodySha256": "5cb06b90b6382ace39d318161576e9c24dc1f83fa98cee7c12cbd3eaa824a649"
+      },
+      {
+        "key": "ObjectLoader.parseImagesAsync",
+        "index": 0,
+        "originalLine": 16922,
+        "portLine": 17631,
+        "originalBodySha256": "6bb06c55dfd3d3952a324077d832850bc7e2600ccfb895843c4bb744c96b8040",
+        "portBodySha256": "5d028418ff82704f97a6dcc380d28ee5e2b6426cfebac5d47d758d624eaba978"
+      },
+      {
+        "key": "ObjectLoader.parseTextures",
+        "index": 0,
+        "originalLine": 16971,
+        "portLine": 17684,
+        "originalBodySha256": "3845181a426db2f4803946a8391a68f9ffc496c9ad178966fac0c272a6520966",
+        "portBodySha256": "83f67ee7b46aac801df6bbc046c01f3a1eacec4d7321d264fd458f5e6e076790"
+      },
+      {
+        "key": "ObjectLoader.parseObject",
+        "index": 0,
+        "originalLine": 17032,
+        "portLine": 17770,
+        "originalBodySha256": "b59efe85905869420c561d1223dbd3bfd6d623e1082aeb675c8c8ab550b9623b",
+        "portBodySha256": "201cc0c32090a03a6a68881877a532275b1fd2dabf5ada0378e2b241a0cac80f"
+      },
+      {
+        "key": "ObjectLoader.bindSkeletons",
+        "index": 0,
+        "originalLine": 17281,
+        "portLine": 18061,
+        "originalBodySha256": "6384f976a28c90a2c55442c91f4423a5821f308dfbe6aebdef972e057797eeb7",
+        "portBodySha256": "e4a43fda6e1a63e8aa9781bd7f876cdb8a211f58c5532815d75dcdc458b5e3cd"
+      },
+      {
+        "key": "ImageBitmapLoader.load",
+        "index": 0,
+        "originalLine": 17346,
+        "portLine": 18129,
+        "originalBodySha256": "7ee26a7b209ea96ead58bb5ef69b0cbf13bad1875b266394c136d0e941cc9bd2",
+        "portBodySha256": "b8886ead3c7efd5f8442be4895e4e3eadbca85b100a5cbdd29f9e78d62fd8030"
+      },
+      {
+        "key": "AudioContext.getContext",
+        "index": 0,
+        "originalLine": 17399,
+        "portLine": 18190,
+        "originalBodySha256": "826c60d28b0204732d94ce4b8007cc72b35ed5ee0ef02ffd3337261fed864008",
+        "portBodySha256": "832f618b0d2f8b0368c60a6f0e816f921b4b375c42c8f55bd98664640e7628d6"
+      },
+      {
+        "key": "AudioLoader.load",
+        "index": 0,
+        "originalLine": 17413,
+        "portLine": 18204,
+        "originalBodySha256": "4b456cc8ceb791438747c1c6490d91cdd407e2f799a0d51a1f2205c6acdf94c4",
+        "portBodySha256": "ec27734f3d86bbeb84366233f9dae458646df7cf083ce74eabfa4ae6425185e2"
+      },
+      {
+        "key": "AudioAnalyser.constructor",
+        "index": 0,
+        "originalLine": 17941,
+        "portLine": 18743,
+        "originalBodySha256": "30a0de0268e68bf71c6095acb424233f454d27c10bc335d02212e886778148c3",
+        "portBodySha256": "8dbca5d41e1149e8e46095b5f943830214e5ce589a350745c15a27f91a95be44"
+      },
+      {
+        "key": "PropertyMixer._slerp",
+        "index": 0,
+        "originalLine": 18091,
+        "portLine": 18880,
+        "originalBodySha256": "240cc28e154b201ef4b5df70f80e3314b81d9ed39c8cf0d665b5e39a2fdf79b4",
+        "portBodySha256": "eb76ef927ea614372d5a91fcf85e8c78124098d386f71a550453495e05962e90"
+      },
+      {
+        "key": "PropertyMixer._slerpAdditive",
+        "index": 0,
+        "originalLine": 18094,
+        "portLine": 18883,
+        "originalBodySha256": "21763e3dcccc28d4f032518e35e0217aa684e7b386371049dd00f36146231379",
+        "portBodySha256": "01218c0068cea529a4529bb3b03086144707cd3a4240dc01675ffa9543457c1e"
+      },
+      {
+        "key": "PropertyMixer._lerp",
+        "index": 0,
+        "originalLine": 18099,
+        "portLine": 18888,
+        "originalBodySha256": "b980b1f657fa14704035bfc9828257757db4c47f86fdb18cad633c6aee4d534c",
+        "portBodySha256": "526e17ed610eb46c8ffeb912566347d8d198019ba13bba40fe25ca3596ba967a"
+      },
+      {
+        "key": "PropertyMixer._lerpAdditive",
+        "index": 0,
+        "originalLine": 18106,
+        "portLine": 18895,
+        "originalBodySha256": "1bebc43aa9c1d2cb41e7057ad9db27275b31cd9222e43c17d3aa9c5209c0b811",
+        "portBodySha256": "10b45130618ad56d4ac7d5b8a0a00c07f91be9367a04d2c0831af5677f2781aa"
+      },
+      {
+        "key": "PropertyBinding.create",
+        "index": 0,
+        "originalLine": 18170,
+        "portLine": 18958,
+        "originalBodySha256": "73464c23d8daec2a0edbd34be0b921b8b49de9719411b2bd1c4f6620446dfb1d",
+        "portBodySha256": "312129c827813e5c9fd43db46ebd394dd7760794e0fc9f15660dcf365e6b6f9c"
+      },
+      {
+        "key": "PropertyBinding.parseTrackName",
+        "index": 0,
+        "originalLine": 18180,
+        "portLine": 18969,
+        "originalBodySha256": "ae00558f8f79cc5bc7bc06673abbe866b0c0b581dee88197445f614d053dece1",
+        "portBodySha256": "518e5a1c11bbe1fabfbf3b6ca831906b60253c589da7f942c61132877492cfcd"
+      },
+      {
+        "key": "PropertyBinding.findNode",
+        "index": 0,
+        "originalLine": 18205,
+        "portLine": 18994,
+        "originalBodySha256": "fa9c152b7d5927f46b8e35fa9bb52189ce1c1a30f5ee1a8ea853b542c7affa81",
+        "portBodySha256": "7f83ea80528c2622a6f7a34245906730a4053180d0917dd041b799408e594606"
+      },
+      {
+        "key": "PropertyBinding._getValue_direct",
+        "index": 0,
+        "originalLine": 18236,
+        "portLine": 19026,
+        "originalBodySha256": "a8e387f1be7dcf5adf23e46b843958d1e625689988c98425fc2c45a82ce2be6e",
+        "portBodySha256": "ac5a1d4de19695668663754ab043fedc5f163639bf34bfc9b9cf48bba54a1ad4"
+      },
+      {
+        "key": "PropertyBinding._getValue_array",
+        "index": 0,
+        "originalLine": 18239,
+        "portLine": 19029,
+        "originalBodySha256": "0ce81755b98224bc84ad638d21df7a6fba4bbd7ee61bf4af3f6323ff13c80877",
+        "portBodySha256": "cd1829870276c0c23aef6cc13066b282404998ac6519bbb7cfe801a0c5ab9e21"
+      },
+      {
+        "key": "PropertyBinding._getValue_arrayElement",
+        "index": 0,
+        "originalLine": 18245,
+        "portLine": 19035,
+        "originalBodySha256": "d81483887725355a61e1c93ea28e477041a86a2f4740509543c61dca6a53a9d6",
+        "portBodySha256": "d538dab0780dbd1ede7ea2992e51954534edd811da319975e1a7dd168fba4929"
+      },
+      {
+        "key": "PropertyBinding._getValue_toArray",
+        "index": 0,
+        "originalLine": 18248,
+        "portLine": 19038,
+        "originalBodySha256": "439e578a6938c6a8903bcc672a13925c6cb68cc56b950aa0f10a82171b267713",
+        "portBodySha256": "c8f686f4be7c41420fac248872ed3e36b7d48ac3d913ca8c5274bc96f0502e1b"
+      },
+      {
+        "key": "PropertyBinding._setValue_direct",
+        "index": 0,
+        "originalLine": 18251,
+        "portLine": 19041,
+        "originalBodySha256": "83a2ada36c5b5ca9440f5b9e295f1933031ce831b04252d6a5329411ea850f72",
+        "portBodySha256": "31f13059f947b3eea31dac447cc110301f528e09ef9c8e0cbb64893b68f573e5"
+      },
+      {
+        "key": "PropertyBinding._setValue_direct_setNeedsUpdate",
+        "index": 0,
+        "originalLine": 18254,
+        "portLine": 19044,
+        "originalBodySha256": "94b90901ae890739643b5171649fc92323ce72f5a497b64c4ab72cb61442bc7e",
+        "portBodySha256": "ecf93007b97fb3c3504638f117b746b55762a3cfd5b24bde52517b0dc21304d6"
+      },
+      {
+        "key": "PropertyBinding._setValue_direct_setMatrixWorldNeedsUpdate",
+        "index": 0,
+        "originalLine": 18258,
+        "portLine": 19048,
+        "originalBodySha256": "b98b9621270262dd9bfc645b7f0ad7e8ef92987af488a157dc01878ae6feca5c",
+        "portBodySha256": "4233483ac2233c86d1a1950dadf1a1239de7ad406d89a110b4675480de145440"
+      },
+      {
+        "key": "PropertyBinding._setValue_array",
+        "index": 0,
+        "originalLine": 18262,
+        "portLine": 19052,
+        "originalBodySha256": "e2c07fe48563a8385d9fd300367fc31fbc25abbe4025131b58230913c8431066",
+        "portBodySha256": "0c60269758a689ca6c4a10d03a14176aa9c9fbf30e212191402baf6c7162f0bd"
+      },
+      {
+        "key": "PropertyBinding._setValue_array_setNeedsUpdate",
+        "index": 0,
+        "originalLine": 18268,
+        "portLine": 19058,
+        "originalBodySha256": "50bbcb1a9eac85e22e53c284fe9443cff770938693e237e5b685be007fec7016",
+        "portBodySha256": "724fdaed392d2dfc3bfe6acc06b4f5400a60ee8d2fe4511cbd09b79258556ad6"
+      },
+      {
+        "key": "PropertyBinding._setValue_array_setMatrixWorldNeedsUpdate",
+        "index": 0,
+        "originalLine": 18275,
+        "portLine": 19065,
+        "originalBodySha256": "12c9d5462b357fd73a0f1aca8ce7f853420713505c3b978073ba9ab8077de049",
+        "portBodySha256": "8ea47463a7da209579e176f6839179f18e7eaabcf490080030925a8a5afdcdc9"
+      },
+      {
+        "key": "PropertyBinding._setValue_arrayElement",
+        "index": 0,
+        "originalLine": 18282,
+        "portLine": 19072,
+        "originalBodySha256": "ae6511d9e27748d43215518b18ea5149cff0202921bd40bff36c89f6de7d19d4",
+        "portBodySha256": "36ab39d8bc307953024efb0267afb3e0de04ad5c352396c00726a3dd8c14ccca"
+      },
+      {
+        "key": "PropertyBinding._setValue_arrayElement_setNeedsUpdate",
+        "index": 0,
+        "originalLine": 18285,
+        "portLine": 19075,
+        "originalBodySha256": "44b2e31c2670bb2badd4bf4942d51a54b0c45bd631808e0aa79fcba0b49cae4c",
+        "portBodySha256": "9a33059d996c005b4052de8f92a895f0f5fcc945797d66186919f7bbeea6e4b3"
+      },
+      {
+        "key": "PropertyBinding._setValue_arrayElement_setMatrixWorldNeedsUpdate",
+        "index": 0,
+        "originalLine": 18289,
+        "portLine": 19079,
+        "originalBodySha256": "08b4c6429a6d00844f5221641f898af09b99956def128359a11bc526fdc316f5",
+        "portBodySha256": "2f435b2e06ec0f43cca4dc46d6e39d6346840d8954b0c60a38f70ec25cb4273d"
+      },
+      {
+        "key": "PropertyBinding._setValue_fromArray",
+        "index": 0,
+        "originalLine": 18293,
+        "portLine": 19083,
+        "originalBodySha256": "d4c6ffde359e5f722e11bfd142a2709e607ba8cc88810b28adecf7f4cd44fde3",
+        "portBodySha256": "da8ed8de4c62ea2a54631fda89272202316c910e6416d5abdb6f81009c2826ff"
+      },
+      {
+        "key": "PropertyBinding._setValue_fromArray_setNeedsUpdate",
+        "index": 0,
+        "originalLine": 18296,
+        "portLine": 19086,
+        "originalBodySha256": "14b821a9f42f81bbd5e7d88a4617d99d671e13797f65e27e28f917d0dd6a0c8f",
+        "portBodySha256": "62b6362b965cb07e106418da8b218133ab5082754bf8395930fdbdd17c738239"
+      },
+      {
+        "key": "PropertyBinding._setValue_fromArray_setMatrixWorldNeedsUpdate",
+        "index": 0,
+        "originalLine": 18300,
+        "portLine": 19090,
+        "originalBodySha256": "7bda04143a89b1996610a4c4a50bd9f8dc7dcdad2414e13adf7b2c81632fe1ac",
+        "portBodySha256": "a46633eddd9cb4109d6cc0454196036668669d159578acedfb9cc0768f164109"
+      },
+      {
+        "key": "PropertyBinding.bind",
+        "index": 0,
+        "originalLine": 18312,
+        "portLine": 19102,
+        "originalBodySha256": "3c4db3c8eff128ac1c9d1967af8f8f8e69eb295b56a6954328d8b82fe5854581",
+        "portBodySha256": "18b4b6a07f18ef739499fb1a701e6889c9ffa6498e77bba21332fec11b3da096"
+      },
+      {
+        "key": "AnimationObjectGroup.constructor",
+        "index": 0,
+        "originalLine": 18473,
+        "portLine": 19267,
+        "originalBodySha256": "9cd7fcbb2ff919d3163d32a720c1cdc626b4d97d0c5550a927812bbd8872d759",
+        "portBodySha256": "539c75fadabdad926b5e833e31a8ac27cc264a8c45437f65347a515e863b9457"
+      },
+      {
+        "key": "AnimationObjectGroup.add",
+        "index": 0,
+        "originalLine": 18502,
+        "portLine": 19296,
+        "originalBodySha256": "ef6ecabe38b10a976b36c1e1b97a8a2e841b299e48e36555b7f4dcf7acc82896",
+        "portBodySha256": "4ab20b768afe46dd3cae31ba6546a92bfc57d74e2361a4006edd7528ec361437"
+      },
+      {
+        "key": "AnimationObjectGroup.remove",
+        "index": 0,
+        "originalLine": 18548,
+        "portLine": 19334,
+        "originalBodySha256": "3dd9677e6ff09dccdb2b5bf3349fbfa4d3ccc3aa61340db4304c1ab9afc36f99",
+        "portBodySha256": "5c0339b17df634d87fba945b6533b9ea27ee7c82b345431fa28f3564f5938481"
+      },
+      {
+        "key": "AnimationObjectGroup.uncache",
+        "index": 0,
+        "originalLine": 18576,
+        "portLine": 19354,
+        "originalBodySha256": "17662b7d60ff4b3f40602973ec0804ec475085dc1ab55f398e99f4d1157136e6",
+        "portBodySha256": "c7e386de5dbd366c0f3ada65e85ca7db9d0f512b3d672e047ddf2089fedba8b2"
+      },
+      {
+        "key": "AnimationAction._updateWeight",
+        "index": 0,
+        "originalLine": 18868,
+        "portLine": 19618,
+        "originalBodySha256": "8687afbc69a1b0390925f1dab95d8fb22eb25cb22903a21e717a39525e0d3e65",
+        "portBodySha256": "882b227ca1fff10fbe66d05c167e4a7b6118306621fddff342430a25fe042724"
+      },
+      {
+        "key": "AnimationAction._updateTimeScale",
+        "index": 0,
+        "originalLine": 18887,
+        "portLine": 19637,
+        "originalBodySha256": "861ff7156f326b76d8b386874eae44a5187001a76ae60a29bb2c5a8e62377dd7",
+        "portBodySha256": "db94ae770122ad725221aa82d691d1304c333f232a0629bc1b9aa43e9970958b"
+      },
+      {
+        "key": "AnimationAction._updateTime",
+        "index": 0,
+        "originalLine": 18908,
+        "portLine": 19659,
+        "originalBodySha256": "00ccc43e7cab43f8d16225f67a442f2165a90907a3b31aead528b2aad55abedb",
+        "portBodySha256": "0098efb241fc1f3f00cbd59348b42e4282d105f34a37e1fa2ed9954abb13c1d4"
+      },
+      {
+        "key": "AnimationMixer._activateAction",
+        "index": 0,
+        "originalLine": 19070,
+        "portLine": 19827,
+        "originalBodySha256": "b333c5fdfc8b1302bb1194c61f51c201a556185efd8ef1a1b5d82e5fbe1f082b",
+        "portBodySha256": "613dab160033cc5993dd1f88f15759224e4e27ed3c83ca613e5ef94ecbbcbbd2"
+      },
+      {
+        "key": "AnimationMixer.clipAction",
+        "index": 0,
+        "originalLine": 19293,
+        "portLine": 20012,
+        "originalBodySha256": "a65209375e5866995fcff3aa2b5d23623f1d7f96de1555e7015ca0010ed61f68",
+        "portBodySha256": "3f880ba83b3604212f505a767a1bbff4a1717f07ddbad4addaba8c8085eb4508"
+      },
+      {
+        "key": "AnimationMixer.existingAction",
+        "index": 0,
+        "originalLine": 19322,
+        "portLine": 20042,
+        "originalBodySha256": "bea806df1174916f1877b3a8263698ab32d44c92d6e33e464b7c472b93b5f232",
+        "portBodySha256": "4296f7c3b480e3f6b26db9f4cfd2977c6e9c76ccb81aa6f9f5d60407b2c62302"
+      },
+      {
+        "key": "Uniform.clone",
+        "index": 0,
+        "originalLine": 19435,
+        "portLine": 20147,
+        "originalBodySha256": "8fe8e5714f6d760f655804c5cb7d1af11e15392652e03317bce4207be5e9c387",
+        "portBodySha256": "a8c0a2c8bef1efeca27fc633347be0df1d41471defb96d02983d5cf622e08122"
+      },
+      {
+        "key": "UniformsGroup.copy",
+        "index": 0,
+        "originalLine": 19469,
+        "portLine": 20182,
+        "originalBodySha256": "3f5b7b5785f129ed50ed750dd8b27318b443ae4c40d3fed9307c541dd36b9877",
+        "portBodySha256": "cd35863f6ca3c5fe23df6823900660f645003e79663adfcd4acb13f36dd664b9"
+      },
+      {
+        "key": "SpotLightHelper.dispose",
+        "index": 0,
+        "originalLine": 19907,
+        "portLine": 20619,
+        "originalBodySha256": "afbd4dae941ef23601716f68b6f18df440d075b216657581b3c1fc9398b6d6f7",
+        "portBodySha256": "44f8ad48ad7f6a2c738c8f76309ac74026aa311ab7d66371bb68f5ca14c9043f"
+      },
+      {
+        "key": "SpotLightHelper.update",
+        "index": 0,
+        "originalLine": 19911,
+        "portLine": 20623,
+        "originalBodySha256": "eae84597989fffcd19c0abb6e94aa0b4d636b854d804163c70d83a5877339a5c",
+        "portBodySha256": "a9ebf4d038e13bcbc4bc13ecb500e20441cc2982d12d9e32f92b885e9910b2d0"
+      },
+      {
+        "key": "getBoneList",
+        "index": 0,
+        "originalLine": 19992,
+        "portLine": 20706,
+        "originalBodySha256": "8126e188b5ef8a7373872d2291fee2acb429b9245977b61516bf3ee17b074685",
+        "portBodySha256": "5e12503b075c1a41139521ad96f49645cc4f3ce6c9457a3260174e4e3fba9126"
+      },
+      {
+        "key": "HemisphereLightHelper.dispose",
+        "index": 0,
+        "originalLine": 20048,
+        "portLine": 20764,
+        "originalBodySha256": "0a131227df3c23ec327ec464cf0acfb3e0f1230c98c169679cd01303e992df51",
+        "portBodySha256": "306a0908aaa3c4fda9c1bbe61bf14c84436303ecbaf432737f94563ba2cca0a5"
+      },
+      {
+        "key": "DirectionalLightHelper.dispose",
+        "index": 0,
+        "originalLine": 20174,
+        "portLine": 20896,
+        "originalBodySha256": "9c43a915e7f3f5ab7f95fe14df1a208770b70f286f6601a9ef977084a303f63f",
+        "portBodySha256": "42e2be00164408191e7c2cc5b9f7a5f93ebef87091664b7d7df58c4a5c90f31e"
+      },
+      {
+        "key": "DirectionalLightHelper.update",
+        "index": 0,
+        "originalLine": 20180,
+        "portLine": 20902,
+        "originalBodySha256": "254d4fbded6154d13a9f0fa92ecc0efe2dc4e87cfcc9cd0c85ee99b15975e080",
+        "portBodySha256": "7ea6ce08bf858cb52785a0f99da59f3c88c715d85549a4442886a256627c0e43"
+      },
+      {
+        "key": "PlaneHelper.dispose",
+        "index": 0,
+        "originalLine": 20433,
+        "portLine": 21200,
+        "originalBodySha256": "0e81786adc11dfff4daa94754ce161d5034c9c5ff4e31d4b31df35c211528cc1",
+        "portBodySha256": "f5c4126ff13ddbccd971c47e8dff6b893e0737d5aeb50077680ff6808c23841a"
+      },
+      {
+        "key": "ArrowHelper.setColor",
+        "index": 0,
+        "originalLine": 20480,
+        "portLine": 21249,
+        "originalBodySha256": "5cd399e9263fd84e443a905614c567f0ba0b53fdee8ced54aabf3719ee9fa064",
+        "portBodySha256": "0409f1ead884eb9cda153cc6bf0883f3a8aa41097e4546c5609b8b639167f1a8"
+      },
+      {
+        "key": "ArrowHelper.dispose",
+        "index": 0,
+        "originalLine": 20490,
+        "portLine": 21259,
+        "originalBodySha256": "8af343fe5c54b9f0a06d2033dd667ce5c96b94d238eb4cc0bbdeca7b10974ed2",
+        "portBodySha256": "6a8c9ecb843c25fde81061d5a9b7bed8f6b726a61ecfc0c482dae0d4d0a8892e"
+      },
+      {
+        "key": "WebGLAnimation",
+        "index": 0,
+        "originalLine": 20873,
+        "portLine": 22580,
+        "originalBodySha256": "052929da33cb2c35eedb683bcdae64e70306c7433d3f02018110ccb20718d2c0",
+        "portBodySha256": "f96a0416cef90e842f97a724dc60483ca7afbd337fcf14c7076a4491e58b47a1"
+      },
+      {
+        "key": "WebGLAnimation.onAnimationFrame",
+        "index": 0,
+        "originalLine": 20878,
+        "portLine": 22585,
+        "originalBodySha256": "ff2876e106ad2d8a0dd41ca734a6ab7625627b9f16d5cfeaabe92420e99bb270",
+        "portBodySha256": "b8cf4cc0c384d56c722655ad1665624430770cd92a550ebe4aac218b384da167"
+      },
+      {
+        "key": "WebGLBackground",
+        "index": 0,
+        "originalLine": 21742,
+        "portLine": 23467,
+        "originalBodySha256": "79aeb31fcc9f1b505bbf0cbf263304f26835d476b02fae7c6e26fa1d27b4c38c",
+        "portBodySha256": "801d3965429377df32187c939349fbde65185847ed7f46bb9c479cc7a5674fe2"
+      },
+      {
+        "key": "WebGLBackground.getBackground",
+        "index": 0,
+        "originalLine": 21750,
+        "portLine": 23475,
+        "originalBodySha256": "7fc8b0abe3d13ac5fc447a0f3d01677d8d83c8cb35daa1d771197c6c7e5fb110",
+        "portBodySha256": "842e7a602d3784a9f8a5938b0c8c5a3cb5a6048d492121e221f1792386f398f6"
+      },
+      {
+        "key": "WebGLBackground.addToRenderList",
+        "index": 0,
+        "originalLine": 21780,
+        "portLine": 23507,
+        "originalBodySha256": "413b11392373073bd7b20b6bc4f1167fcf8b29604d4c1358a43a2482384368fe",
+        "portBodySha256": "c79d1a46af5a63024dada489e5c9a638429bcd09b8f5d0695535d4597832d5be"
+      },
+      {
+        "key": "WebGLBackground.dispose",
+        "index": 0,
+        "originalLine": 21879,
+        "portLine": 23603,
+        "originalBodySha256": "427d5fc1f09ec029ccdb6bbed61b42e47009bedf0703fafeb85873f592bb0f49",
+        "portBodySha256": "34199c295adada593ef1a4520e117dae86ba60a5e9069271e4a5b6650cb19a40"
+      },
+      {
+        "key": "WebGLBindingStates",
+        "index": 0,
+        "originalLine": 21912,
+        "portLine": 23638,
+        "originalBodySha256": "7f7a5b3d7ff52a510ee1c31197726fcb3bde3f4b87fc4395dfa6d8486d2171c9",
+        "portBodySha256": "285250a7d9eda9f1f54eaa57dc7fa3f85836f9648ad710fb289a794a9baebc51"
+      },
+      {
+        "key": "WebGLBindingStates.getBindingState",
+        "index": 0,
+        "originalLine": 21947,
+        "portLine": 23674,
+        "originalBodySha256": "9ab4f12e67382979db7c17b563d9c34bf269f26f07cea55df9d57b97743f75f5",
+        "portBodySha256": "5c29e0497c77145dcc1ed8831efaaf9575883e297e5162e3498b022ba778742a"
+      },
+      {
+        "key": "WebGLBindingStates.createBindingState",
+        "index": 0,
+        "originalLine": 21966,
+        "portLine": 23693,
+        "originalBodySha256": "44d3bb91e3b57f2a28c8cf9cb9275fad9008bf0301e49b50dde872b62de07ff5",
+        "portBodySha256": "06f297cdc1af7c6eec20d002219355888c3e203da89b9357610dcffcd24db9d4"
+      },
+      {
+        "key": "WebGLBindingStates.needsUpdate",
+        "index": 0,
+        "originalLine": 21987,
+        "portLine": 23714,
+        "originalBodySha256": "46dd03fbf139d2d318472285896a5028c6ef72563fdcb1b0392fb46144de85ea",
+        "portBodySha256": "b03abf568e110e2473c62feab229f3491559eea310fb59c7a44b328aa4212b51"
+      },
+      {
+        "key": "WebGLBindingStates.saveCache",
+        "index": 0,
+        "originalLine": 22011,
+        "portLine": 23745,
+        "originalBodySha256": "b1694f7fcd6e310e70093aa81711208d446a0d70c2274f38d04e3e0de7ecb4b8",
+        "portBodySha256": "0bee39a6d7c2b72e01dd51441e1e6b78bbfca6bffd25e112f4f7afb3a30658b6"
+      },
+      {
+        "key": "WebGLBindingStates.setupVertexAttributes",
+        "index": 0,
+        "originalLine": 22077,
+        "portLine": 23814,
+        "originalBodySha256": "bb2d0a822b9760c1bd488d18c59cfa7bc31c7f43e53859ee2d408981011e12aa",
+        "portBodySha256": "ff4d4b0432dca4e8e4b8e8a396a831e5fe094c9623a075a2020bf8e8d0638b54"
+      },
+      {
+        "key": "WebGLBindingStates.dispose",
+        "index": 0,
+        "originalLine": 22175,
+        "portLine": 23903,
+        "originalBodySha256": "3d5881092a38e42b2593ba92734a0111abee5880442d860906cae6bed800a31e",
+        "portBodySha256": "7b197e9c68e0f1adf52adc45de4eb1bd5ddcbe9a587ff57f8d067cdf444cddd2"
+      },
+      {
+        "key": "WebGLBindingStates.releaseStatesOfGeometry",
+        "index": 0,
+        "originalLine": 22190,
+        "portLine": 23918,
+        "originalBodySha256": "29baa55e139bf5b60dd9ec2546a78d85d932dddeffeef6581a119b0d5dee44f8",
+        "portBodySha256": "9e49487855039af31fa2f83c8a7cf465ecd61bd8b9bb9994e7076329cbd51e06"
+      },
+      {
+        "key": "WebGLBindingStates.releaseStatesOfProgram",
+        "index": 0,
+        "originalLine": 22203,
+        "portLine": 23932,
+        "originalBodySha256": "db9fb1a522fa9f9e48a2d7e04f80bf19c05abadc0ed5a160a6e70d3faca56916",
+        "portBodySha256": "34438931d49cfb1ce579c8c162142ad6f8855f2775b04aae85573e47c085bb33"
+      },
+      {
+        "key": "WebGLBufferRenderer",
+        "index": 0,
+        "originalLine": 22239,
+        "portLine": 23972,
+        "originalBodySha256": "9ac1908e825739f2e37840684b7ca8b8d53f3abda3ac4fb7b25be1f562635312",
+        "portBodySha256": "b1f363db2b56136764b165a6c3138f4afbe90b07a57d043cb0aa5a084f699376"
+      },
+      {
+        "key": "WebGLBufferRenderer.renderMultiDraw",
+        "index": 0,
+        "originalLine": 22253,
+        "portLine": 23987,
+        "originalBodySha256": "92332307956782326b0e391ebd1601dfea55fd9fb4096be24b4b9e10e6653427",
+        "portBodySha256": "c9a480a628a9206c7d2181ac0e8029cd5b8d26a5525180ca11456b9e43dd04af"
+      },
+      {
+        "key": "WebGLBufferRenderer.renderMultiDrawInstances",
+        "index": 0,
+        "originalLine": 22263,
+        "portLine": 23998,
+        "originalBodySha256": "9d72059a731511eba6b834300e0038104f9c9e99fe4d5df9fb9e6c622e621d51",
+        "portBodySha256": "c378fc88379c3c5a02e33edd2f4d304e343f37d672a40e822029f1081f7912f8"
+      },
+      {
+        "key": "WebGLCapabilities",
+        "index": 0,
+        "originalLine": 22285,
+        "portLine": 24024,
+        "originalBodySha256": "639544c197ad3a615038ceb913136ad8e7fcb8e110b2ed601b08197b0283988a",
+        "portBodySha256": "cda359e39971f65c6ad00146e7a4c4a04d891f8182064f4093717dddc994d962"
+      },
+      {
+        "key": "WebGLCapabilities.getMaxAnisotropy",
+        "index": 0,
+        "originalLine": 22287,
+        "portLine": 24026,
+        "originalBodySha256": "74b3467ae5d2a4d5199c7a28bf511c2fd2f512a36726e9029dfd618f6999145c",
+        "portBodySha256": "122a5a1e73d4de50b6be743eccb96e9830a3335cb7d82f130f63aa58fd6b4a7f"
+      },
+      {
+        "key": "WebGLCapabilities.textureFormatReadable",
+        "index": 0,
+        "originalLine": 22297,
+        "portLine": 24038,
+        "originalBodySha256": "d5136815bb70b2457a02ccfcb5f60f62b5bc290778b0e2b0f6b97b0bc7722b87",
+        "portBodySha256": "677ddb9ab803f264b95713b7198d70222acf9c8b21e5b5d4d8c681156b171c49"
+      },
+      {
+        "key": "WebGLCapabilities.textureTypeReadable",
+        "index": 0,
+        "originalLine": 22303,
+        "portLine": 24044,
+        "originalBodySha256": "bb81cfe126924102e7d4129a3fe40c04e67dd56603460cb2c2d05ca3d4c51cba",
+        "portBodySha256": "9036fd7a29290390870b0197620985911c7b7dcb5b018c0a3c45bcdcaff05ee4"
+      },
+      {
+        "key": "WebGLCubeMaps",
+        "index": 0,
+        "originalLine": 22457,
+        "portLine": 24194,
+        "originalBodySha256": "04f418e15a8559dc662f74c2f3ab811f77eaf28551d9d52c6b0f8e6be752f8ce",
+        "portBodySha256": "05ba4f7a79c1cf48543cd6c97f3d9be619958ad65547434a2821abe953161e6f"
+      },
+      {
+        "key": "WebGLCubeMaps.get",
+        "index": 0,
+        "originalLine": 22467,
+        "portLine": 24205,
+        "originalBodySha256": "30e5357eb3558a19050089ab3ccf8ad91e3e5e1537a87a9d9fbd2ba421759ed8",
+        "portBodySha256": "0825cc7f25db57de53249ba66c4ed1ebec6c3ac37f2edf03bfd287f9d5140954"
+      },
+      {
+        "key": "WebGLCubeMaps.onTextureDispose",
+        "index": 0,
+        "originalLine": 22490,
+        "portLine": 24230,
+        "originalBodySha256": "59c555aa657b92d3247bae1c007c20ad8e5b55dc6efb9fb4a232b009e71e7b3a",
+        "portBodySha256": "f484bcc4b491bc0d034ba1d19586d26a918ede909c0a751e5b0986522b8741aa"
+      },
+      {
+        "key": "PMREMGenerator._fromTexture",
+        "index": 0,
+        "originalLine": 22605,
+        "portLine": 24348,
+        "originalBodySha256": "8f25f14fe816996662551bf4b0f3aff95600e53de45b1931576b544a297d5df5",
+        "portBodySha256": "cb47e8fac6e8b360dfbf7289ca3450c2224ab54f14982268e0d1305af4e17afe"
+      },
+      {
+        "key": "PMREMGenerator._sceneToCubeUV",
+        "index": 0,
+        "originalLine": 22650,
+        "portLine": 24394,
+        "originalBodySha256": "803ccb6f8315dd6053f124e8979673d2591335471fd737c9746c9d9cb3cd3479",
+        "portBodySha256": "ea7a9feb7f753311eecea703817d57acc60b8d30b97513108b867d38b7127ce0"
+      },
+      {
+        "key": "PMREMGenerator._textureToCubeUV",
+        "index": 0,
+        "originalLine": 22710,
+        "portLine": 24457,
+        "originalBodySha256": "612c19329116c0ecbcb329cb67a030647c2f028abbecd4378a4850824665d1e9",
+        "portBodySha256": "d3b7ec3adb82c3bb8a47acfacd766883120865594f51fa73e3010721f6843dbb"
+      },
+      {
+        "key": "WebGLCubeUVMaps",
+        "index": 0,
+        "originalLine": 23089,
+        "portLine": 24823,
+        "originalBodySha256": "4ad01a495ed2aa4bd1fbda5d325f5cb70c345e6213f4dff61162d3e356d41a2d",
+        "portBodySha256": "c3dc77cd1872049f0f20b048a9efba6357b030608d2e70c31bedf2f95cb8a851"
+      },
+      {
+        "key": "WebGLCubeUVMaps.get",
+        "index": 0,
+        "originalLine": 23092,
+        "portLine": 24826,
+        "originalBodySha256": "6731da8a751722be46253fc1932c2e7b4797150143e19b65aeab2455936e52e0",
+        "portBodySha256": "5c8d750b525392151f12c1c629655d1f6967e8d5fec66f23ec97218ba1c2531d"
+      },
+      {
+        "key": "WebGLCubeUVMaps.isCubeTextureComplete",
+        "index": 0,
+        "originalLine": 23127,
+        "portLine": 24866,
+        "originalBodySha256": "8f5dce92ec50a6a4b805442eee839fea6817a932e3fbe01be1483fc3e8047e1c",
+        "portBodySha256": "bce5303dec0d39a262992ae4064656fca08ab50def230b74b57d0664256b00cd"
+      },
+      {
+        "key": "WebGLCubeUVMaps.onTextureDispose",
+        "index": 0,
+        "originalLine": 23135,
+        "portLine": 24875,
+        "originalBodySha256": "9a41d1240ac3110e81a4a81bf7eb48f0fd03330a6928b88d06f210c4350e3611",
+        "portBodySha256": "4dafea3f180273ecb855422ec96c6b88bb7b157d4815e68fd7e5004699f8f1e2"
+      },
+      {
+        "key": "WebGLGeometries",
+        "index": 0,
+        "originalLine": 23203,
+        "portLine": 24947,
+        "originalBodySha256": "5bbc21c3b3332cfa93003bbf9d8459a3a42dc7ce6f65256e155889ab0f13e646",
+        "portBodySha256": "171c791b6c0bb33c0c38fe3453af8c908df10148861840144982535676b3d082"
+      },
+      {
+        "key": "WebGLGeometries.onGeometryDispose",
+        "index": 0,
+        "originalLine": 23206,
+        "portLine": 24950,
+        "originalBodySha256": "be529b3f12a86b761f2f3229d23603c0f49ca823ad192043686f1ccdbe731192",
+        "portBodySha256": "e3b5fc81ed55c075b4e89f52b9a0c7a830c422523751a1b60b1a55df0d62dce0"
+      },
+      {
+        "key": "WebGLGeometries.updateWireframeAttribute",
+        "index": 0,
+        "originalLine": 23240,
+        "portLine": 24985,
+        "originalBodySha256": "145a180733116b48796f1c69ac1d2b0fd04f33c11d809fc1c58c38423e93d468",
+        "portBodySha256": "ebb4f65d035824d9ac17fe9361e9deb7032a217485b5d543ea27488cfe273da3"
+      },
+      {
+        "key": "WebGLIndexedBufferRenderer",
+        "index": 0,
+        "originalLine": 23292,
+        "portLine": 25043,
+        "originalBodySha256": "3170138fa0cf0ca7ca50fbcd9970566c995e011726dd0be3131cb99053a06533",
+        "portBodySha256": "f825dcd5b498e45294ede00c5fdcfeadf11caf972525597824fb09b71c7affb9"
+      },
+      {
+        "key": "WebGLIndexedBufferRenderer.renderMultiDraw",
+        "index": 0,
+        "originalLine": 23311,
+        "portLine": 25063,
+        "originalBodySha256": "3e76b4e2195a55ece5add7f3c1de421dabf3bfadf58a83693088bcd4456d5831",
+        "portBodySha256": "a95de19c6763d47715927d4343abe356f5e95630b3c6ecc8626c5d84dc01b1d3"
+      },
+      {
+        "key": "WebGLIndexedBufferRenderer.renderMultiDrawInstances",
+        "index": 0,
+        "originalLine": 23321,
+        "portLine": 25074,
+        "originalBodySha256": "fcc9e2972dacd2845915fd23112326015b6d2ef7434a5c87613e148053a667bc",
+        "portBodySha256": "91269e8333db120f27d38b6e31807ffe558b917a9e6c88f3393d9ece088b61d9"
+      },
+      {
+        "key": "WebGLMorphtargets",
+        "index": 0,
+        "originalLine": 23394,
+        "portLine": 25153,
+        "originalBodySha256": "d8f7acb78337a3e0ef920fe383a15403f665a96deb76c000c3240e3447d5cff8",
+        "portBodySha256": "0e704efb2fd900fa67238d9eeb66bdd1be5e720b7a8800fcca35a75461f996e4"
+      },
+      {
+        "key": "WebGLMorphtargets.update",
+        "index": 0,
+        "originalLine": 23397,
+        "portLine": 25156,
+        "originalBodySha256": "ece7e8a444ea47bb9e6ef4e25fd0f7a99f141e457d557dfbfbb197814430bdc8",
+        "portBodySha256": "5d1481dfa2d856dde9341b8b01db72c6750dfed800c1bb547739eef08fb9d9ea"
+      },
+      {
+        "key": "WebGLObjects",
+        "index": 0,
+        "originalLine": 23486,
+        "portLine": 25252,
+        "originalBodySha256": "582cb822ba1b7f0964d6021b7e14648f66d85bf08a9ca46bac75aec7e6daaaed",
+        "portBodySha256": "993da51f4f4964818bca73d00e93989ed56599fa9794507a06aac22bcc49298f"
+      },
+      {
+        "key": "WebGLObjects.update",
+        "index": 0,
+        "originalLine": 23488,
+        "portLine": 25254,
+        "originalBodySha256": "59a35e4646d745f001e7f4a0c465836a84e7c37aff21260737ef47ab3259c570",
+        "portBodySha256": "5bdf6ee9e17a5d36ef4f2c801c724db45074953692f0959c522472e532b13b69"
+      },
+      {
+        "key": "WebGLObjects.onInstancedMeshDispose",
+        "index": 0,
+        "originalLine": 23520,
+        "portLine": 25286,
+        "originalBodySha256": "c7ef67bdb9a02f2620adab71dd05d74c9387c01fafccc6a6c566e19d02f55fa4",
+        "portBodySha256": "7e0694b6a56cdd208a4473dce0803189d603395264e2e940e22a5da0d171253b"
+      },
+      {
+        "key": "flatten",
+        "index": 0,
+        "originalLine": 23541,
+        "portLine": 25309,
+        "originalBodySha256": "1023b2aa7fec3cdd76591d2a191edf71cd7d49f810e71be1d0ddc74c90091d64",
+        "portBodySha256": "d426358f8ae8c9695b851915af9766ecf8b3188de7607085d228e77d9dac2915"
+      },
+      {
+        "key": "arraysEqual",
+        "index": 0,
+        "originalLine": 23559,
+        "portLine": 25329,
+        "originalBodySha256": "5fb52aaefbece75838c83d27ba9e39b822dfb298a07dd218e78345d38640165f",
+        "portBodySha256": "ccb4930af61f4c005dbcd0f83f3a60c42b0ef93d23f9241d7643ae9a42059d47"
+      },
+      {
+        "key": "copyArray",
+        "index": 0,
+        "originalLine": 23566,
+        "portLine": 25339,
+        "originalBodySha256": "02c115376d5ceca66e0a47cfddcb383f4d5b0b6ccff6ce713522e3c3dd4a7387",
+        "portBodySha256": "3bff77bfafd7ace12ef7fc461f90fd53e1125c3d50d7db47152ec75d8dde60f1"
+      },
+      {
+        "key": "setValueV2f",
+        "index": 0,
+        "originalLine": 23588,
+        "portLine": 25363,
+        "originalBodySha256": "1d027100f80861226ea8ab50406ae6fa1d06b8733e09a611449f48fdbf5d8df4",
+        "portBodySha256": "89641983fb8c7bf1166af1f68eb940f2855f22ae0ba8b0ca7798926dfbd3d680"
+      },
+      {
+        "key": "setValueV3f",
+        "index": 0,
+        "originalLine": 23602,
+        "portLine": 25379,
+        "originalBodySha256": "086fb77cab3384cfeb4735961df1dd6a75bcd35634024a46119978a3ab82b6fd",
+        "portBodySha256": "dfa2cd2166e0ddd78f518c9ec0fe85efda61974ba0f7dbae117adafc7b7e943a"
+      },
+      {
+        "key": "setValueV4f",
+        "index": 0,
+        "originalLine": 23624,
+        "portLine": 25404,
+        "originalBodySha256": "2370cda6e2540d168ed3d9bb26a949e15fa25d9102f7f6390cd23f7f23e77d59",
+        "portBodySha256": "10fb61de2320397f818cb6838425238ad3a00aea184aa00211945ccf75ccf0dd"
+      },
+      {
+        "key": "setValueM2",
+        "index": 0,
+        "originalLine": 23640,
+        "portLine": 25422,
+        "originalBodySha256": "c4b6a507dca1ca079ad23d90878f59059761e8f57a5861bb33a321481bf1bb22",
+        "portBodySha256": "80f465444a3226431a846a1a70e50668f45ec72a499aac2f89ac093912de5b45"
+      },
+      {
+        "key": "setValueM3",
+        "index": 0,
+        "originalLine": 23654,
+        "portLine": 25439,
+        "originalBodySha256": "19ed0d9efa046979a54221d97b6f6c99740765393c3bfeb4d46d2393366ee13e",
+        "portBodySha256": "a6671689e668fd7fbd3aa70f7f976c6794bf036c35c40b0563af5ff8563528e5"
+      },
+      {
+        "key": "setValueM4",
+        "index": 0,
+        "originalLine": 23668,
+        "portLine": 25456,
+        "originalBodySha256": "48cec0aa21a7a81dd457794b5a2563bc1d5525ae94e0436a84af2e0b636bf30a",
+        "portBodySha256": "a3b8684f10e886533746d745bfa2b274e30062696d742c44a538c447be3dd87d"
+      },
+      {
+        "key": "setValueV2i",
+        "index": 0,
+        "originalLine": 23688,
+        "portLine": 25480,
+        "originalBodySha256": "1e713bc2ee5db77817d97e8e3e3caf8e9ee716904303d2ca1fa1ee6c047f07a0",
+        "portBodySha256": "a8780b2b518d789a5471c8a189b973fb61d4f3811fbf09a55f939eb8e5873423"
+      },
+      {
+        "key": "setValueV3i",
+        "index": 0,
+        "originalLine": 23702,
+        "portLine": 25496,
+        "originalBodySha256": "4edbda369f03bf107c18b02b82ef278091c9ad7e203a223ad5dec002b4517e1e",
+        "portBodySha256": "91164c9f502059fd9d54e8a51f8ff81d2ccaff63d318bb6db473f0075074bb64"
+      },
+      {
+        "key": "setValueV4i",
+        "index": 0,
+        "originalLine": 23717,
+        "portLine": 25513,
+        "originalBodySha256": "28187f61da7b827b8851d473602e9546d955426a6b4867c309a5d2c7889882a1",
+        "portBodySha256": "4cb717ab10420c8fc6130245f3ca591a158e2b4a7a19e0e62d1b16fd428dde08"
+      },
+      {
+        "key": "setValueV2ui",
+        "index": 0,
+        "originalLine": 23739,
+        "portLine": 25538,
+        "originalBodySha256": "ed78577e2b3fc6f7f9d7c55e297527666ec3b00830e25a6dd02023944bf185d9",
+        "portBodySha256": "059f05361650518f817a91d2f31a201fa1aca9a2599f06c57a22baecb910f390"
+      },
+      {
+        "key": "setValueV3ui",
+        "index": 0,
+        "originalLine": 23753,
+        "portLine": 25554,
+        "originalBodySha256": "7e19ca7c89ae7959dfcc4265f060a5d1dbcc9b0ba73759f2787ce57d4f8cab6e",
+        "portBodySha256": "4b6ae871a045fda4e947ca6082c3923746f2420998aa920a9e97a01ed9a532ca"
+      },
+      {
+        "key": "setValueV4ui",
+        "index": 0,
+        "originalLine": 23768,
+        "portLine": 25571,
+        "originalBodySha256": "0ac592078ac6d3d5009abb3cc9686654a48bdc1e3038feceb9119c1672d74212",
+        "portBodySha256": "dbd27c1174d78baef24a7cefb551b3a3ae37aba6b6e1ae177fd273a52aa86a51"
+      },
+      {
+        "key": "setValueT1",
+        "index": 0,
+        "originalLine": 23784,
+        "portLine": 25589,
+        "originalBodySha256": "b2aefd00ae2a89fdfa9aa48378c2a0e7900651f6fc486fdd88f96da2e21ab182",
+        "portBodySha256": "6ea2e2f5c99e70305981a919cf1d18900b14a4508bab6a4aef61b8e2cf9b6b2b"
+      },
+      {
+        "key": "setValueT3D1",
+        "index": 0,
+        "originalLine": 23800,
+        "portLine": 25607,
+        "originalBodySha256": "24d3c6a4e82c40601ec839d2791e1589b6eb0f2ef035865a218d72447150c27a",
+        "portBodySha256": "e43e764dd13cee8a14498f8a6b54be4c147a7745a03c88962d0bb54a35be5771"
+      },
+      {
+        "key": "setValueT6",
+        "index": 0,
+        "originalLine": 23809,
+        "portLine": 25617,
+        "originalBodySha256": "522466c1e91f9a3da672f321ea629a8b61e110c3d2e830c675ad3de341e9eedc",
+        "portBodySha256": "8b51700834ee8bf462af6bf712dab7a464c74ea88e0aef7eb7446aef24ee722e"
+      },
+      {
+        "key": "setValueT2DArray1",
+        "index": 0,
+        "originalLine": 23818,
+        "portLine": 25627,
+        "originalBodySha256": "c2b891a665c3b64c82bcba955baf89569a7f2d2859e6c18e55a494a2bbb8bfe0",
+        "portBodySha256": "0cd6378d7b67bae21cc31a8d1f012273b7b812a8d68e5e0342b92aa035a97b76"
+      },
+      {
+        "key": "setValueV2fArray",
+        "index": 0,
+        "originalLine": 23869,
+        "portLine": 25683,
+        "originalBodySha256": "2fca0f11ef1d8e69b8039ff4aa31746bd6e00e4a2cd92e057752286257425642",
+        "portBodySha256": "a11db1fb7c8f06ec397c4f74a4d72afe3764e679e1bf814a0e53870264046e72"
+      },
+      {
+        "key": "setValueV3fArray",
+        "index": 0,
+        "originalLine": 23873,
+        "portLine": 25687,
+        "originalBodySha256": "684a367e2c901e7a0acde362d6c6ab0dd58bd8d750e5948d22746738aa8f3d86",
+        "portBodySha256": "0bd3f174225fa5356f469888383b2e812a44fcf270ab645664536a63ef313891"
+      },
+      {
+        "key": "setValueV4fArray",
+        "index": 0,
+        "originalLine": 23877,
+        "portLine": 25691,
+        "originalBodySha256": "d775fff0aded533aded87c163eb10dd8a22645b70ed71e1a44d75865a70f82ba",
+        "portBodySha256": "8109e5f5271e252253bcfe9eb18e9bf60d58439d0efe6c52f7176b5096749c56"
+      },
+      {
+        "key": "setValueM2Array",
+        "index": 0,
+        "originalLine": 23881,
+        "portLine": 25695,
+        "originalBodySha256": "617671a044e6a6842e9ec0a5826fec01551e8c4be712649e5d65995cf8165fe3",
+        "portBodySha256": "8d98444ae779829ba0da1d14b20e4faa0e5a8e65b052bfddbfbf01f08c9cf262"
+      },
+      {
+        "key": "setValueM3Array",
+        "index": 0,
+        "originalLine": 23885,
+        "portLine": 25699,
+        "originalBodySha256": "8c9273ded75a728d819a8e14b12de73951e57a7ba281b322f1cbdc58ed71a1e2",
+        "portBodySha256": "6c15e0c6f9b3e833b9948b79036ec16ab9fe153e03c0940f22a666914ccc55ad"
+      },
+      {
+        "key": "setValueM4Array",
+        "index": 0,
+        "originalLine": 23889,
+        "portLine": 25703,
+        "originalBodySha256": "c600e26f20e38a457bc84b4629f14f1adfc6eaa8510cd1b7347bd664daaed636",
+        "portBodySha256": "f10fa3c4321b5e5cb0145b7a3dd153c500bcf69f7dd06a6a36c6dc71f9c6c991"
+      },
+      {
+        "key": "setValueT1Array",
+        "index": 0,
+        "originalLine": 23917,
+        "portLine": 25731,
+        "originalBodySha256": "644bda3c5a347c980b80c75934c70eb5d8b41fa17d90509a67e1b57c1e5a1c50",
+        "portBodySha256": "2a36fc6446726c43ce6b4931cffdcdb38d2b686b71346ef6e774dc40b95f4b9e"
+      },
+      {
+        "key": "setValueT3DArray",
+        "index": 0,
+        "originalLine": 23929,
+        "portLine": 25744,
+        "originalBodySha256": "8556d727df5be3c965df456cf24ac878cf981fe9c27e0918279c2626ef1c73f0",
+        "portBodySha256": "1f69a73c22e27e4173b143da74d13c98eeffc43ea5cf3926a3397b6cd3115ee1"
+      },
+      {
+        "key": "setValueT6Array",
+        "index": 0,
+        "originalLine": 23941,
+        "portLine": 25757,
+        "originalBodySha256": "202202d581c1fecc89d8d778abf99f78c714f4879f3a7fbc2a700ce3c0a94ce5",
+        "portBodySha256": "c027e36f2c292166ecb3c6ecc28d129c2c7877584d3d3c10a5ebb06e156feedc"
+      },
+      {
+        "key": "setValueT2DArrayArray",
+        "index": 0,
+        "originalLine": 23953,
+        "portLine": 25770,
+        "originalBodySha256": "6e5ab7c4d688b1e2ac0251e429d855f7e258cd778b37d509d5b7477f9dbe8dc4",
+        "portBodySha256": "cb365a2dd1d008195ece73ea06872a8929fca937b1cb8daa8ce02fd13ed87562"
+      },
+      {
+        "key": "StructuredUniform.setValue",
+        "index": 0,
+        "originalLine": 24029,
+        "portLine": 25851,
+        "originalBodySha256": "c65695ced526de14f12d29cc15703e80bfe3c68659263ae01e3d92942b279ba0",
+        "portBodySha256": "e9b30309e851efe74073a6067a360893f73abb9f1720af8b2b80f760f6e2ce8e"
+      },
+      {
+        "key": "parseUniform",
+        "index": 0,
+        "originalLine": 24042,
+        "portLine": 25864,
+        "originalBodySha256": "56c5422533356c5f5ac91db3a470d42dc246f0bcbb0577ec9031e3a902b010e2",
+        "portBodySha256": "64bea580e9613a817a9d50d5a7a2090de54341a4bb03520059632f7328131c85"
+      },
+      {
+        "key": "WebGLUniforms.constructor",
+        "index": 0,
+        "originalLine": 24070,
+        "portLine": 25891,
+        "originalBodySha256": "a95c80f0978f9485c42c525a1c09bee2a3f5f722c07e52a9688e5e32e338a8cf",
+        "portBodySha256": "1c91a0179335632aabd96f51f5509d6371b139ee6942a9fdbedfc4fcaf9419a2"
+      },
+      {
+        "key": "WebGLUniforms.setOptional",
+        "index": 0,
+        "originalLine": 24084,
+        "portLine": 25905,
+        "originalBodySha256": "c12712e89137c65e5efa37fbecd081c9f5f7872480ec4f4091e9c7a1b3908b29",
+        "portBodySha256": "3515c4bbb1be8bc7e6c39ccabca3e387b6eefb67e783c4373b39dd7268716b42"
+      },
+      {
+        "key": "fetchAttributeLocations",
+        "index": 0,
+        "originalLine": 24218,
+        "portLine": 26043,
+        "originalBodySha256": "96f67f24e5173d28f637cba756ae5b2927f47d6da5ab42f672cc1c403f14dbb8",
+        "portBodySha256": "1a9c0807ab0b705e2a0ec4a480417133125b28fdf549a2ffe8465470454e979f"
+      },
+      {
+        "key": "replaceLightNums",
+        "index": 0,
+        "originalLine": 24239,
+        "portLine": 26067,
+        "originalBodySha256": "a909d8553251f50f2c7db751af4c5b4df7e6415163938f24e1b49929ef2be202",
+        "portBodySha256": "789b8a981f9bf33ebf7a1a03bdb12466194dc408669fb688f055cdc55ad7c155"
+      },
+      {
+        "key": "replaceClippingPlaneNums",
+        "index": 0,
+        "originalLine": 24254,
+        "portLine": 26082,
+        "originalBodySha256": "a66eaa0015880213177d53e263a6cae7b06ed8932ccea29c654840c2a29a3b97",
+        "portBodySha256": "eb017f08b7e5964d0afb618832ac4927cfc214a10a261a613b6cdfc742977e6e"
+      },
+      {
+        "key": "loopReplacer",
+        "index": 0,
+        "originalLine": 24281,
+        "portLine": 26110,
+        "originalBodySha256": "0194e4bef14f60faa854dc11f28374c7b34ac7b03946f823b1e0940afce7a1f4",
+        "portBodySha256": "6cec1480c3e52bac0f438d42f5c7857b2b7ffc985c7bb6d06eb90d78b8b47f11"
+      },
+      {
+        "key": "generateCubeUVSize",
+        "index": 0,
+        "originalLine": 24372,
+        "portLine": 26205,
+        "originalBodySha256": "a21793b8f0c5d26e7a38772ff7fe5f67803e27803b201e9cd2df6c2301f0105e",
+        "portBodySha256": "eeb05b18810e7a1c20206e8a11252ab1d79a33dd84636b0db74b209765b55b39"
+      },
+      {
+        "key": "WebGLProgram",
+        "index": 0,
+        "originalLine": 24380,
+        "portLine": 26215,
+        "originalBodySha256": "d5c85fd837f0fd80e541bbbbe7cad08ae75c4b1ca854657ca68eb45cec88b65d",
+        "portBodySha256": "506d1ed1493a7cd45942d032f95544acb8e5343652b56b795578a71f5b3005c1"
+      },
+      {
+        "key": "WebGLProgram.onFirstUse",
+        "index": 0,
+        "originalLine": 24669,
+        "portLine": 26506,
+        "originalBodySha256": "122acf3037f06fbde4a5950a9125c986e0d6ffa079a4cbb2672823fd14814a61",
+        "portBodySha256": "748dbd09565bc9baef94825bf6f3e09593523560f5e37df900d378bf44c7229c"
+      },
+      {
+        "key": "WebGLPrograms",
+        "index": 0,
+        "originalLine": 24821,
+        "portLine": 26662,
+        "originalBodySha256": "8817fefd1cd7f073f2211af3f6da63f377406ed93d72c57d8b934b8588f1c81b",
+        "portBodySha256": "2011d753e4cc7c5470f806d7727cf1725c0b4feebd1f44fe3486fd8cb6fa06c0"
+      },
+      {
+        "key": "WebGLPrograms.getParameters",
+        "index": 0,
+        "originalLine": 24851,
+        "portLine": 26693,
+        "originalBodySha256": "a01cf1f670c906dc1fd204f3b3120f524902525774168b8bf90eaec99665a502",
+        "portBodySha256": "93b118721e61464c1d9ca9d875d9870293f621b9bdea73ff2792c67eea59a1e8"
+      },
+      {
+        "key": "WebGLProperties",
+        "index": 0,
+        "originalLine": 25284,
+        "portLine": 27134,
+        "originalBodySha256": "9f175e733471ff27970d1027460148d68fc7c845af73fcf884f452b9dcbb5902",
+        "portBodySha256": "d37f1e0e43f37ec0f187ff6b996fcf0685856497d1699dbc8f83ac9f62dfb208"
+      },
+      {
+        "key": "WebGLProperties.update",
+        "index": 0,
+        "originalLine": 25300,
+        "portLine": 27150,
+        "originalBodySha256": "b27a9571b88e62ae25cfae050e62265c79cdfc5f5408994a13b9dea3eae54af1",
+        "portBodySha256": "f68e7b93ac0d05aaaeb1b1f7293db79683730378c42ff62da7439d625f3dff50"
+      },
+      {
+        "key": "WebGLRenderList",
+        "index": 0,
+        "originalLine": 25338,
+        "portLine": 27197,
+        "originalBodySha256": "01441829e848dfe4bab7ba98e7fc229027ab7f6f87e424d7fae0e16a0c4cc0df",
+        "portBodySha256": "37b52ad78f76d275fe097b5b8a8f84be6423d469b4e086c54a85944cce4ca4d5"
+      },
+      {
+        "key": "WebGLRenderList.push",
+        "index": 0,
+        "originalLine": 25377,
+        "portLine": 27237,
+        "originalBodySha256": "b84ca1098b4d7e9d2606385c4d95e2b4c48c3ba700282b94be1c73ed70455dd8",
+        "portBodySha256": "8ab332c2112dd2e199656f53c8b09545e8964e375fdb202026421b09aa9792ad"
+      },
+      {
+        "key": "WebGLRenderList.unshift",
+        "index": 0,
+        "originalLine": 25387,
+        "portLine": 27249,
+        "originalBodySha256": "5443867b875d0cac39aaedf3c1b9b56b410d06ec0709693171dd3286f10149f1",
+        "portBodySha256": "f8c35c151e7733b7834e21f00b8484c019399ed4626e6bc56865ea90654dec97"
+      },
+      {
+        "key": "WebGLLights",
+        "index": 0,
+        "originalLine": 25553,
+        "portLine": 27429,
+        "originalBodySha256": "8468f2ac172c0daca3aa1fd49d5559bb956ce49ab0ba9a9c458e9bf362cf2534",
+        "portBodySha256": "9d297706a568b6d2b439a1bb519922fc9ee19c31098ef0c0ddf683c7d8a27f70"
+      },
+      {
+        "key": "WebGLLights.setup",
+        "index": 0,
+        "originalLine": 25596,
+        "portLine": 27473,
+        "originalBodySha256": "e04ae6e7338cbf40633f6f24a3b78192810a47d67c57a57322013cc242d6c708",
+        "portBodySha256": "854be5e7300c9af65230e8e02a675291f9f167593f179f82f8e84c6bf0a8b6ca"
+      },
+      {
+        "key": "WebGLLights.setupView",
+        "index": 0,
+        "originalLine": 25763,
+        "portLine": 27649,
+        "originalBodySha256": "ab1d8792b15766222768b6c2037d9f12f797778ae672d8390080c4964b74579a",
+        "portBodySha256": "4fa568fdfb1055af8ff1b84f9a7bb3e7f406daf8383639758853fdc965067712"
+      },
+      {
+        "key": "WebGLShadowMap",
+        "index": 0,
+        "originalLine": 25885,
+        "portLine": 27783,
+        "originalBodySha256": "bcc0955b015ca41c4a1218a53fb12345991aa5e4f0aa8a022f32980b91f7dad2",
+        "portBodySha256": "d12a7f08b55865d1d480298209319935bd3849f7fed78357c3bec3495b0f41f1"
+      },
+      {
+        "key": "WebGLShadowMap.onMaterialDispose",
+        "index": 0,
+        "originalLine": 26104,
+        "portLine": 27993,
+        "originalBodySha256": "3ddf6e1343d22b4eab46079cde6f8abd5caf937565f75e2f972f082cdcdc69f7",
+        "portBodySha256": "44ccf38461638286129ab25148f1be8a118620b2bfc9d8e0f97bdef12d9a0845"
+      },
+      {
+        "key": "WebGLState",
+        "index": 0,
+        "originalLine": 26128,
+        "portLine": 28019,
+        "originalBodySha256": "afd83cb3f54cda83db058f43a9cbe72b672106e26e9bde900860c8418b93036f",
+        "portBodySha256": "92b3b567ec7a97a8bc2c55b8e3f4ac39f9d12d778e6ce20bbd11a70616f9b129"
+      },
+      {
+        "key": "WebGLState.DepthBuffer",
+        "index": 0,
+        "originalLine": 26161,
+        "portLine": 28057,
+        "originalBodySha256": "6aca387508c52383464a8b5a50e9408d6c82ea7963e6cfe2b766415abe1cf326",
+        "portBodySha256": "67d61258ae9cc98602501a635dcdfab160d54d1fa925fa683538869fd9669057"
+      },
+      {
+        "key": "WebGLState.createTexture",
+        "index": 0,
+        "originalLine": 26364,
+        "portLine": 28268,
+        "originalBodySha256": "c0a47bfed5d804c4e2221e020cc2f6d4d4f0e0e9c9b1b2760de1d0dcdb5ebe26",
+        "portBodySha256": "3ebe689229b0eebb7cd1b13f5e273d345509390a8db14b021ec85201e79254eb"
+      },
+      {
+        "key": "WebGLState.enable",
+        "index": 0,
+        "originalLine": 26393,
+        "portLine": 28298,
+        "originalBodySha256": "5fc5c7a3922df735885d492f8734689958c3b466f9e1de7dab4fcd81299a80f1",
+        "portBodySha256": "bf2022f7fcee26c620b6fbec01a82ea7220bd09d0878a2103d204dc78e31b890"
+      },
+      {
+        "key": "WebGLState.disable",
+        "index": 0,
+        "originalLine": 26399,
+        "portLine": 28304,
+        "originalBodySha256": "f324f276c4b46f4206b961ca2dcbe46ae9ffeebe33ad3fc3143262eaec54a92a",
+        "portBodySha256": "b41ee929aacc2c676ee8b8e57090fa6e4c0af4388bbd369d83a76c66116acb51"
+      },
+      {
+        "key": "WebGLState.bindFramebuffer",
+        "index": 0,
+        "originalLine": 26405,
+        "portLine": 28310,
+        "originalBodySha256": "191b079f2f83e85fbc87a02881611e9289d78cd7483ea8be31d3db50666e8f55",
+        "portBodySha256": "95a48e2f00af7698934da7b3a98bb984e7b27e37bddb0249cddb13557349213f"
+      },
+      {
+        "key": "WebGLState.drawBuffers",
+        "index": 0,
+        "originalLine": 26419,
+        "portLine": 28324,
+        "originalBodySha256": "22ade526687f00b1f455a085441509e2c3650553704b4fcc77363a1e3d130bdc",
+        "portBodySha256": "0690587d355b5cd936086205d6d478cfab54bd81b308bb32f108332fbff3306b"
+      },
+      {
+        "key": "WebGLState.setBlending",
+        "index": 0,
+        "originalLine": 26478,
+        "portLine": 28384,
+        "originalBodySha256": "b6a723a6405cb1a2070a7f0ff056b5f8e53518af6ae19968e65ea4a6a4e3d9f3",
+        "portBodySha256": "0ca87edb6c919880fa68f70d1a80d2a9a083ef44c8be2d1c74a0144ca91d6815"
+      },
+      {
+        "key": "WebGLState.activeTexture",
+        "index": 0,
+        "originalLine": 26646,
+        "portLine": 28561,
+        "originalBodySha256": "c321d08905b7abd4be5b1dbbcb16621bd98f74226dc33350ff6df2a9e2dd0634",
+        "portBodySha256": "a888488afa0675a481cd45f3070f6539d5356d5fc6c3600574ba33563cdb3e6c"
+      },
+      {
+        "key": "WebGLState.bindTexture",
+        "index": 0,
+        "originalLine": 26653,
+        "portLine": 28569,
+        "originalBodySha256": "4b4e86754af35b9fe2ced30eeae6c5372cdb057ee7862f570529f1b800dc3a0b",
+        "portBodySha256": "67670e1917a9b513f08101b8ce4e9266ab007230cf1f87967b935a3e12cbbc88"
+      },
+      {
+        "key": "WebGLState.unbindTexture",
+        "index": 0,
+        "originalLine": 26676,
+        "portLine": 28593,
+        "originalBodySha256": "2a3f5336eff00fab8358bcdbe4c016713fc40be5e62e26985dd0b3e5a6b82a57",
+        "portBodySha256": "e28c97a4c39e43273e34075ec54557fcdf4859719cc2576ff5ef94b6e0dbed11"
+      },
+      {
+        "key": "WebGLState.uniformBlockBinding",
+        "index": 0,
+        "originalLine": 26778,
+        "portLine": 28705,
+        "originalBodySha256": "28268fc5329c29b2e4e33505f8724279353724f508fbcf2c3701f11d3643232b",
+        "portBodySha256": "3955730bc5395af4665c8914199b4a58d43f658b5c538f7132e44068856f780e"
+      },
+      {
+        "key": "WebGLTextures",
+        "index": 0,
+        "originalLine": 26886,
+        "portLine": 28815,
+        "originalBodySha256": "0afb16591b4770ac6589d32618255c284f1ef63813a53d1b707a8a8c51d6e632",
+        "portBodySha256": "b7724cda703ea630cff8711a2b7aac355f2562e02e11e145d05efc1448ad372d"
+      },
+      {
+        "key": "WebGLTextures.resizeImage",
+        "index": 0,
+        "originalLine": 26903,
+        "portLine": 28833,
+        "originalBodySha256": "2f42996684af88417e9d3c5cd414e8a43acd151ab1d810a877be8e0b93d4ae2a",
+        "portBodySha256": "81ec2625688984ed46b175ee22fe9ff70068135b0bc083eaa4da1aea91fa42b4"
+      },
+      {
+        "key": "WebGLTextures.getInternalFormat",
+        "index": 0,
+        "originalLine": 26945,
+        "portLine": 28880,
+        "originalBodySha256": "828a8149299c70db6b90c18970d1fa5bcf75122c38f6651be6a23dd81da5f8bf",
+        "portBodySha256": "439aaf374ad98e6b625b195aef6f6fdc26534bb7a9b660ae95061cd5ca74179e"
+      },
+      {
+        "key": "WebGLTextures.getMipLevels",
+        "index": 0,
+        "originalLine": 27033,
+        "portLine": 29010,
+        "originalBodySha256": "1d1d71e9c8b261c2342a1c23aed8230525a6f554449de6700078c8489937b3b6",
+        "portBodySha256": "2e2afb7b634cf37b5653d98a27cd1ef2d9602cb313f166f6e43da2a64f1f9f98"
+      },
+      {
+        "key": "WebGLTextures.onTextureDispose",
+        "index": 0,
+        "originalLine": 27044,
+        "portLine": 29024,
+        "originalBodySha256": "cb8777dffc1d09478a26d5e1d57680cd37795cde242351f657ccdd07a159b32c",
+        "portBodySha256": "840ea23c432f64cd21a23a80df7a4bc9cdd6a34051748cd33979fe3839c4dfe7"
+      },
+      {
+        "key": "WebGLTextures.onRenderTargetDispose",
+        "index": 0,
+        "originalLine": 27052,
+        "portLine": 29032,
+        "originalBodySha256": "dcdbefab5f0c058e8e78a1ac33a5db6cf067b91b921ce0beb3bca3336b2c0bfe",
+        "portBodySha256": "d7f3aba585b62aaf45dfda5c695f80a0d4f960165feb3961517469b0676e8420"
+      },
+      {
+        "key": "WebGLTextures.deallocateTexture",
+        "index": 0,
+        "originalLine": 27057,
+        "portLine": 29037,
+        "originalBodySha256": "5b560248ea2e362b2cf21b2cfb077f5a7571b50c1528b9e9332a41c930750bef",
+        "portBodySha256": "b259a78d308e0033977e61789a396ddab4f23a80342f2f522a8d301622701de8"
+      },
+      {
+        "key": "WebGLTextures.deleteTexture",
+        "index": 0,
+        "originalLine": 27074,
+        "portLine": 29055,
+        "originalBodySha256": "84b1dc59d0864cae60532541c2e371ccd5d966826f319deb4c4bf9b81b21a78e",
+        "portBodySha256": "106b80d9e2c845aec805b112cc0c8d9b10c438c841f8374ea159626b35aecd01"
+      },
+      {
+        "key": "WebGLTextures.deallocateRenderTarget",
+        "index": 0,
+        "originalLine": 27082,
+        "portLine": 29063,
+        "originalBodySha256": "b29413a9d629544ddbcabdaf750d799ee85757ca87bbcd13163859aec7746118",
+        "portBodySha256": "7a2540fd0c30ea9aebf8f4830408dd300d42de3f2eb2d6828aeab516584337cb"
+      },
+      {
+        "key": "WebGLTextures.allocateTextureUnit",
+        "index": 0,
+        "originalLine": 27127,
+        "portLine": 29118,
+        "originalBodySha256": "f6e39a10858aab702931e00be66aa3575a5751328abc8bcbb9a736391b286cc1",
+        "portBodySha256": "8359254f532b457dc1413f9f84680c09d626d7f39bbc2d898b4591d655379918"
+      },
+      {
+        "key": "WebGLTextures.setTexture2D",
+        "index": 0,
+        "originalLine": 27153,
+        "portLine": 29144,
+        "originalBodySha256": "c80a0cda7e57647483bb88d57b54ab1b869dc1c3495b0dfd39e110bfd1449465",
+        "portBodySha256": "32687629b27ce3af21c63d052be8698baccc8c83ae76a9550d3a03e960376bc3"
+      },
+      {
+        "key": "WebGLTextures.setTexture2DArray",
+        "index": 0,
+        "originalLine": 27169,
+        "portLine": 29163,
+        "originalBodySha256": "ea6eef5dfe971e757fc5981d8c01c4ccb33323dc094e8b5f9b160e1de523ef4c",
+        "portBodySha256": "2bbf77b3b8c4bbc05e64f76207fe3f8d9eb404c9cc7c415ac7da16b5f5daa2ed"
+      },
+      {
+        "key": "WebGLTextures.setTexture3D",
+        "index": 0,
+        "originalLine": 27177,
+        "portLine": 29171,
+        "originalBodySha256": "5bfc54b6365b1977d40a24824f9a592d24f0a6d877661d82b601b2c68400512f",
+        "portBodySha256": "1c99ce1626836acfea62e8d86824f622cd7b5b0fe5b2e3d375a5e9ddd7ceaee3"
+      },
+      {
+        "key": "WebGLTextures.setTextureCube",
+        "index": 0,
+        "originalLine": 27185,
+        "portLine": 29179,
+        "originalBodySha256": "e41bda0a3c60fe2318b11e07397d6bd3fc7c6431dce7dab1f736e2138f452dd2",
+        "portBodySha256": "2bf9f77cfc1f77ed54d54ad675a8f58674a535691b3983b18c118eb2ac4e1094"
+      },
+      {
+        "key": "WebGLTextures.setTextureParameters",
+        "index": 0,
+        "originalLine": 27216,
+        "portLine": 29210,
+        "originalBodySha256": "8e1d1287582b26935c84a905fa07779146dd3de0786fb4a6165a44331073ff31",
+        "portBodySha256": "a2da5b10c42839ca3b3b9fea8d4a175ab1bef5479e31bdeab6fe72a3926f26e0"
+      },
+      {
+        "key": "WebGLTextures.initTexture",
+        "index": 0,
+        "originalLine": 27244,
+        "portLine": 29241,
+        "originalBodySha256": "01ebbfd87e529488a5e2aa21e666638d8b4ecbaf16f19ba19a123e7052a2b6d8",
+        "portBodySha256": "2407165743e3dd00d05b9158cd13f3efdc41ffdb9acd46aee20f203b6eeea563"
+      },
+      {
+        "key": "WebGLTextures.updateTexture",
+        "index": 0,
+        "originalLine": 27282,
+        "portLine": 29279,
+        "originalBodySha256": "307fb0ce4cc07a923352023740b070e0cb86f936a6346464ef8d9cd42de4a9e2",
+        "portBodySha256": "b54b1bce69225b2a567ee6fbb1c66f766df101f8dfb820869e65f924850a70ad"
+      },
+      {
+        "key": "WebGLTextures.uploadTexture",
+        "index": 0,
+        "originalLine": 27333,
+        "portLine": 29327,
+        "originalBodySha256": "353ef52ed9bedae3dd57b4f602d707912248ba4bebdd848415e637dd43537906",
+        "portBodySha256": "9c2a5233290014f1ee222786f7edb28b6ba6f6e26808975bd664a11136d6d976"
+      },
+      {
+        "key": "WebGLTextures.uploadCubeTexture",
+        "index": 0,
+        "originalLine": 27555,
+        "portLine": 29573,
+        "originalBodySha256": "c693542707a6062b1c9fef670dfce68342ac961d7ba7cf522d70a45967c9ca90",
+        "portBodySha256": "aff4416acf6f0b3439537467dc85ddbe33c56ccc70ab49ded8c660b01de9e47c"
+      },
+      {
+        "key": "WebGLTextures.setupFrameBufferTexture",
+        "index": 0,
+        "originalLine": 27678,
+        "portLine": 29707,
+        "originalBodySha256": "60e7ee12f2205331ed7fd575a84b756e5e3b74f6699e35fc97fae81e9d0cbcd0",
+        "portBodySha256": "90a40575c75bd43e1750b6b77b84e0104d63bdaf5f9927d9b76fe237e96f3446"
+      },
+      {
+        "key": "WebGLTextures.setupRenderBufferStorage",
+        "index": 0,
+        "originalLine": 27702,
+        "portLine": 29733,
+        "originalBodySha256": "fe234fd14e12b348bba17438501c184ae6188899f1d7037db455cff3d8858370",
+        "portBodySha256": "cdd94840fdd52aec628c17c2e197d8405b4ff6a015c7f7d53091f96551662015"
+      },
+      {
+        "key": "WebGLTextures.setupDepthTexture",
+        "index": 0,
+        "originalLine": 27738,
+        "portLine": 29774,
+        "originalBodySha256": "47877e00bdbfa171a82414d0997d7fe95b5a171c3f5d78eabc0b4460dd092084",
+        "portBodySha256": "ded7ffe3d1ac0a6c3fce44a56ae4d841718936872fe9ed7bfe0af7ec992868ae"
+      },
+      {
+        "key": "WebGLTextures.setupDepthRenderbuffer",
+        "index": 0,
+        "originalLine": 27773,
+        "portLine": 29814,
+        "originalBodySha256": "60a2bbec8cf1d793169466e1cb58f7e0f3afdd3c085c33baeffff2b6c657d283",
+        "portBodySha256": "cdce9a94e2f2a59b9a98671cc1ef776aa5e391e5aa127ecd62bb0cda2dbec686"
+      },
+      {
+        "key": "WebGLTextures.setupRenderTarget",
+        "index": 0,
+        "originalLine": 27844,
+        "portLine": 29892,
+        "originalBodySha256": "542d96d06e7780d89c4a325ab09d9001f031cb33529771011d2e82c281b0369b",
+        "portBodySha256": "243b796cb9a7095d270c1b78859bc7c9e2b468be0047943cab363bf95bc305a6"
+      },
+      {
+        "key": "WebGLTextures.updateMultisampleRenderTarget",
+        "index": 0,
+        "originalLine": 27978,
+        "portLine": 30033,
+        "originalBodySha256": "f9826b62a21c2450eba6f7e87c5766dd16354faa92299f5477f9ec485a28aab3",
+        "portBodySha256": "f7bfaf9611a98f9ce9099854c0ad5afe1cb51df83b0b777796b5faea2542c5be"
+      },
+      {
+        "key": "WebGLTextures.getRenderTargetSamples",
+        "index": 0,
+        "originalLine": 28046,
+        "portLine": 30105,
+        "originalBodySha256": "4807a171171d3951c45cfd6f16afd1248bdb42dce38e62039f29e2edacd27838",
+        "portBodySha256": "7b76efee2f6deb207a37bc3e87372122777496afaae4ebd3833eee92875cfebe"
+      },
+      {
+        "key": "WebGLUtils",
+        "index": 0,
+        "originalLine": 28103,
+        "portLine": 30168,
+        "originalBodySha256": "2285a2f90ec6094bd5becebfed1a90984b3fca919410c098a0371d5e94cae4da",
+        "portBodySha256": "1ff1c1f5454556988cdfaa374bbd2d1686c98e8ce18bd2fd6eac066a9a00476c"
+      },
+      {
+        "key": "WebGLUtils.convert",
+        "index": 0,
+        "originalLine": 28104,
+        "portLine": 30169,
+        "originalBodySha256": "70e4b3ee784431a6e06f702f3523db6d0827de9e64321ce8b6bc960b2036522c",
+        "portBodySha256": "13574d63b47b54fbb5f25fc6d2fcbcd0cabafde11a20188f2800f677b7721e1f"
+      },
+      {
+        "key": "WebXRManager.constructor",
+        "index": 0,
+        "originalLine": 28294,
+        "portLine": 30425,
+        "originalBodySha256": "8d5ef7c0925b272b2ba6845fb82a1e1a273d42a4ddb88529d9eb29e8d052831a",
+        "portBodySha256": "7cbc375f0f72c55f926dd9afd9546f724f1732179c62a79c2dc2380f640b757d"
+      },
+      {
+        "key": "WebXRManager.constructor.onAnimationFrame",
+        "index": 0,
+        "originalLine": 28668,
+        "portLine": 30803,
+        "originalBodySha256": "dc3240511babd7ab4407e429e943977f121b83bf7489c668a8734faf32f288cd",
+        "portBodySha256": "3b693750cfa51b3950036dc6efe72949197d425b557dd7c1b7fa76151ef9de8c"
+      },
+      {
+        "key": "WebGLMaterials",
+        "index": 0,
+        "originalLine": 28752,
+        "portLine": 30888,
+        "originalBodySha256": "3f6efa66bc5a23c46efc58675aaab293a36c89bc913e5966f36276b595e5e974",
+        "portBodySha256": "d0d09575c53f15a23cff08bc5d2d0bef4144e7d35b12156b0075f20652a39bad"
+      },
+      {
+        "key": "WebGLMaterials.refreshTransformUniform",
+        "index": 0,
+        "originalLine": 28753,
+        "portLine": 30889,
+        "originalBodySha256": "bf37a27c9fa1367f2a732c5531da7f4f178d709f419fc18b8569f814de56a2eb",
+        "portBodySha256": "56524e1ab60350f0049e1a3acc5a9757d61e0351631835007fa1bc84cda4c5fb"
+      },
+      {
+        "key": "WebGLMaterials.refreshFogUniforms",
+        "index": 0,
+        "originalLine": 28759,
+        "portLine": 30895,
+        "originalBodySha256": "686bcb09308e2fdf8981e1361a8de8749040eac506663b7ceda02ccf80d23eeb",
+        "portBodySha256": "fd4f8525bb5d27a04c118bf008d2c1454f93c4e4f284839cb898d3fcb5ee39cd"
+      },
+      {
+        "key": "WebGLMaterials.refreshMaterialUniforms",
+        "index": 0,
+        "originalLine": 28768,
+        "portLine": 30905,
+        "originalBodySha256": "4d48a2976599ffb0034750857df13ccfe127549afcb4f02a5d1a791f6fd46abf",
+        "portBodySha256": "31c049ebfcf2f3f60edeb6330e479dff328f70f074f55daec924380a366e1b3d"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsCommon",
+        "index": 0,
+        "originalLine": 28811,
+        "portLine": 30961,
+        "originalBodySha256": "98c7e6f076903ffcdf75f563abe33a4a7055c746e47ee842a5e4f0c7e2536beb",
+        "portBodySha256": "d218124a4411ab44506d96981557d5bb3cb2a26a3fb05cfb987dab75f6e2a901"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsLine",
+        "index": 0,
+        "originalLine": 28888,
+        "portLine": 31040,
+        "originalBodySha256": "28f324c448bb3a579ea508b76c311300e1d7bcc55f633f4181a5a70674fce91c",
+        "portBodySha256": "4a299629d50aa379ffe9dca162e6a5f32997c94e5e819f1576a949d4de68ecba"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsDash",
+        "index": 0,
+        "originalLine": 28896,
+        "portLine": 31048,
+        "originalBodySha256": "f8706e217ff3b90dfdb2326d53dbc0e63a9c7e6cff800422a067212dd8cc553e",
+        "portBodySha256": "7c09ff1e4632b8a23c11d2860652fce7708c047a41cf167e3c8dc2ac3d160646"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsPoints",
+        "index": 0,
+        "originalLine": 28901,
+        "portLine": 31053,
+        "originalBodySha256": "b0347cd440fe50b806251cc924619de6c7b3bbab00899237668f20d3ec284af0",
+        "portBodySha256": "cc5c9ddfa3613e1fee93e90cccb27a1db064f0de658598ed069884d39189c850"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsSprites",
+        "index": 0,
+        "originalLine": 28918,
+        "portLine": 31070,
+        "originalBodySha256": "fd0a78447e004cab4168fd0857375fe394830e08fd9d26be6e51b8d394ffb515",
+        "portBodySha256": "7fd813d3b2aba96508d3b6b8a31ca9db3873dfae3bcc281131f8c2cdf9c0c79f"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsPhong",
+        "index": 0,
+        "originalLine": 28934,
+        "portLine": 31086,
+        "originalBodySha256": "7e0dce1bcdf0413223b0fe71791b2abbd7584b53bf8ad293aba610dbfabc2dcc",
+        "portBodySha256": "e92e63b0218c48478431da65cdc03e7a75acdcc38400063aea2916d5e21995cb"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsPhysical",
+        "index": 0,
+        "originalLine": 28958,
+        "portLine": 31110,
+        "originalBodySha256": "9ed0de381b0d95b487082a6dd13d3b4901ebf98244270fa0579c74dddd42688c",
+        "portBodySha256": "e4b80f93d4d9a0d4edcf50574078fce7e327bb4e49d4b340435e45e816e50d63"
+      },
+      {
+        "key": "WebGLMaterials.refreshUniformsDistance",
+        "index": 0,
+        "originalLine": 29048,
+        "portLine": 31200,
+        "originalBodySha256": "ab97572fd439a8c6f97449814b48229ebed0219738578a04d820a04c256f7511",
+        "portBodySha256": "f7b4bb24e08876212604fed8faadef9918939edad6266b743377855f46577e92"
+      },
+      {
+        "key": "WebGLUniformsGroups",
+        "index": 0,
+        "originalLine": 29059,
+        "portLine": 31213,
+        "originalBodySha256": "a7622fde287d1c663f916f464a81b8b3431c4cb7c311940a9710065a11e1c06b",
+        "portBodySha256": "04f3f76d8c91bab5351dd25e4013bccc67c188f4e2209bab7c0d2d417a63112d"
+      },
+      {
+        "key": "WebGLUniformsGroups.allocateBindingPointIndex",
+        "index": 0,
+        "originalLine": 29096,
+        "portLine": 31250,
+        "originalBodySha256": "5371806c3f06be719f8a20238822f3972f2664b8fea330356b94fe86bea3f3eb",
+        "portBodySha256": "dd03ae3859841bac0c706691a0a942f1d09accb24d6e11f85ed1d2e41c08de55"
+      },
+      {
+        "key": "WebGLUniformsGroups.updateBufferData",
+        "index": 0,
+        "originalLine": 29106,
+        "portLine": 31260,
+        "originalBodySha256": "317b1feaf1fd8cc4b6af6ccd2bb2cedcdab6871538d04a508c26a2f9473a3a3b",
+        "portBodySha256": "7a17a3154aeffeab3a347363fcf1652a221e8806fab812b9eccea45a0a36a471"
+      },
+      {
+        "key": "WebGLUniformsGroups.hasUniformChanged",
+        "index": 0,
+        "originalLine": 29149,
+        "portLine": 31306,
+        "originalBodySha256": "e68f77f3374e0e020bba6493b6f76eb7776e70e7e3491453f7111c30a7fbf877",
+        "portBodySha256": "440fd516809f8370d297b9b9df3ef22ee8a412678fe7eea8bb0228aff8a78862"
+      },
+      {
+        "key": "WebGLUniformsGroups.prepareUniformsGroup",
+        "index": 0,
+        "originalLine": 29175,
+        "portLine": 31335,
+        "originalBodySha256": "20098e69e2a08134c70af554a1ec37d7ea37e292a9ad3a2cad3c3284eb4a02f6",
+        "portBodySha256": "b30d300f1b58193e82d5b245b772c297300d51725adde4d2d113c651d0bdfd13"
+      },
+      {
+        "key": "WebGLUniformsGroups.getUniformSize",
+        "index": 0,
+        "originalLine": 29206,
+        "portLine": 31368,
+        "originalBodySha256": "1d11413ab244597caf82ac521d1a15184442b423efbf2a33037ef472deaa69a2",
+        "portBodySha256": "1c2ff4854642915ab86f960a669c09827fc4418aad67684a240aa0c0514033f6"
+      },
+      {
+        "key": "WebGLUniformsGroups.onUniformsGroupsDispose",
+        "index": 0,
+        "originalLine": 29236,
+        "portLine": 31405,
+        "originalBodySha256": "8e54b8df83b9ade3dcb0085e604348d3eccf294ee63de4d7ad66fc660d3c5f81",
+        "portBodySha256": "cf3c1bd30d60abb22972f6beecb09a7c28fb92a69fedc13f0eb895bb0b4a0ff8"
+      },
+      {
+        "key": "WebGLRenderer.constructor",
+        "index": 0,
+        "originalLine": 29260,
+        "portLine": 31430,
+        "originalBodySha256": "76687ba7ce577d2038aba80b2d4dc42f326627a86321ee168346f3907cf6e32d",
+        "portBodySha256": "2fb87aa7248c926ad14cfc79ff9449bfc5b77355dc688f9e6e535cfdf078053a"
+      },
+      {
+        "key": "WebGLRenderer.constructor.onContextLost",
+        "index": 0,
+        "originalLine": 29595,
+        "portLine": 31766,
+        "originalBodySha256": "123975d17894faa60ee8db41951c8f558ae7258518b52d7c132104b5392b1a88",
+        "portBodySha256": "8d55fb946cb0d2d19719bd19ca47fa29610af960f980cc6183cdcacf5727db93"
+      },
+      {
+        "key": "WebGLRenderer.constructor.onContextCreationError",
+        "index": 0,
+        "originalLine": 29615,
+        "portLine": 31786,
+        "originalBodySha256": "0dadec8c7cf72afa81ee106dcaf8f8755e56ecf076d7012bc1de917b3005c89d",
+        "portBodySha256": "4d7ce6e9327150d003f32f4e3c9831a4448477065d080f15a13480d3b8ceba81"
+      },
+      {
+        "key": "WebGLRenderer.constructor.onMaterialDispose",
+        "index": 0,
+        "originalLine": 29618,
+        "portLine": 31789,
+        "originalBodySha256": "666d8881e66f5bbdb512039f721f0c36c3b595834164b5178c44e1eb7b856cbd",
+        "portBodySha256": "da99f917e3885feaa60b3dcef90ed4f04c71654c40dfdcd7f1df7b77d1b7788f"
+      },
+      {
+        "key": "WebGLRenderer.constructor.projectObject",
+        "index": 0,
+        "originalLine": 29917,
+        "portLine": 32126,
+        "originalBodySha256": "df3487ebfe1a741cee6fd6a24dc6cb10abce8ad2471dc3b5b34c6c6b273bc628",
+        "portBodySha256": "81dcf079789616d980370aa0595ff3c012919bc112ec09773590976a45b4b307"
+      },
+      {
+        "key": "WebGLRenderer.constructor.setProgram",
+        "index": 0,
+        "originalLine": 30182,
+        "portLine": 32414,
+        "originalBodySha256": "87e156bb6509d70e57e7ae6c24e4c4b1a74d07b0ec83aa077f29f19a40ea6655",
+        "portBodySha256": "613d3b7bdbd3a07cefc1793ade7b59d1ef98b0ff65ec616e141852f00174f0b0"
+      }
+    ]
+  },
+  "fieldAudit": {
+    "classesAndConvertedConstructors": 259,
+    "originalAssignedFields": 1341,
+    "missingDeclarations": 0
+  },
+  "inferredAnyAudit": {
+    "findings": [],
+    "scope": "Variable, parameter, property, binding, and this expression types, including array and map type arguments."
+  },
+  "driverAudit": {
+    "originalStatements": 18,
+    "portedOriginalStatements": 18,
+    "identical": true,
+    "normalization": "Erase TypeScript annotations; map the original Math.random reference to the identical local suite RNG; compare every original top-level driver statement in order, excluding only the factory added return of benchmark handles.",
+    "canonicalSha256": "bd5f9fd3fe9a1b39cda71ad1e7200952f232a51cf8b909270a0b6ac696a17b4b",
+    "mismatches": []
+  },
+  "templateLiterals": {
+    "count": 50,
+    "allOriginalRawSegmentsPreserved": true
+  },
+  "webGLTraceAudit": {
+    "method": "Exact ordered mock WebGL method names and arguments, including argument count, undefined, NaN, negative zero and typed-array kind; original explicit reflection-operation counters",
+    "snapshots": [
+      {
+        "stage": "initialization",
+        "calls": 60,
+        "methods": {
+          "getExtension": 8,
+          "getParameter": 15,
+          "createTexture": 4,
+          "bindTexture": 4,
+          "texParameteri": 8,
+          "texImage3D": 9,
+          "clearColor": 1,
+          "clearDepth": 1,
+          "clearStencil": 1,
+          "enable": 1,
+          "depthFunc": 1,
+          "frontFace": 1,
+          "cullFace": 1,
+          "getContextAttributes": 1,
+          "createFramebuffer": 3,
+          "viewport": 1
+        },
+        "sha256": "f09acf047557a4bd8e76977c6c5b7f0bb33e938587e33d4ea26f904cf04f29f2",
+        "operations": {
+          "defineProperty": 31,
+          "defineProperties": 11,
+          "setPrototypeOf": 0,
+          "getPrototypeOf": 0,
+          "getOwnPropertyDescriptor": 0,
+          "getOwnPropertyDescriptors": 0,
+          "freeze": 3,
+          "create": 0
+        }
+      },
+      {
+        "stage": "frame 1",
+        "calls": 224044,
+        "methods": {
+          "createBuffer": 40000,
+          "bindBuffer": 48000,
+          "bufferData": 40000,
+          "clearColor": 1,
+          "depthMask": 1,
+          "colorMask": 1,
+          "stencilMask": 1,
+          "clear": 1,
+          "getExtension": 16000,
+          "createProgram": 2,
+          "createShader": 4,
+          "shaderSource": 4,
+          "compileShader": 4,
+          "attachShader": 4,
+          "linkProgram": 2,
+          "getProgramInfoLog": 2,
+          "getShaderInfoLog": 4,
+          "getProgramParameter": 6,
+          "deleteShader": 4,
+          "useProgram": 1,
+          "disable": 16001,
+          "createVertexArray": 16000,
+          "bindVertexArray": 16000,
+          "drawElements": 8000,
+          "enable": 16000,
+          "lineWidth": 1,
+          "drawArrays": 8000
+        },
+        "sha256": "f6b25e32069c28a2bd31fb30f2037920940cfc8d9d87d98e3784f4f35ceb7956",
+        "operations": {
+          "defineProperty": 96031,
+          "defineProperties": 24011,
+          "setPrototypeOf": 0,
+          "getPrototypeOf": 0,
+          "getOwnPropertyDescriptor": 0,
+          "getOwnPropertyDescriptors": 0,
+          "freeze": 3,
+          "create": 0
+        }
+      },
+      {
+        "stage": "frame 2",
+        "calls": 64003,
+        "methods": {
+          "enable": 16001,
+          "clear": 1,
+          "disable": 16001,
+          "bindVertexArray": 16000,
+          "drawElements": 8000,
+          "drawArrays": 8000
+        },
+        "sha256": "aa9aad8b27a54a841e161f77d7337c1fdc9814fb664e685cc53e3bd28b39b50c",
+        "operations": {
+          "defineProperty": 96031,
+          "defineProperties": 24011,
+          "setPrototypeOf": 0,
+          "getPrototypeOf": 0,
+          "getOwnPropertyDescriptor": 0,
+          "getOwnPropertyDescriptors": 0,
+          "freeze": 3,
+          "create": 0
+        }
+      },
+      {
+        "stage": "frame 3",
+        "calls": 64003,
+        "methods": {
+          "enable": 16001,
+          "clear": 1,
+          "disable": 16001,
+          "bindVertexArray": 16000,
+          "drawElements": 8000,
+          "drawArrays": 8000
+        },
+        "sha256": "aa9aad8b27a54a841e161f77d7337c1fdc9814fb664e685cc53e3bd28b39b50c",
+        "operations": {
+          "defineProperty": 96031,
+          "defineProperties": 24011,
+          "setPrototypeOf": 0,
+          "getPrototypeOf": 0,
+          "getOwnPropertyDescriptor": 0,
+          "getOwnPropertyDescriptors": 0,
+          "freeze": 3,
+          "create": 0
+        }
+      }
+    ]
+  },
+  "additionalDifferentials": {
+    "geometry": {
+      "characters": 913822,
+      "sha256": "da2cf1ed89b886f49aac0e4cad184c71ad176fcc397a4060d777aa611c034120",
+      "scenarios": [
+        "22 geometry variants: complete attributes, indices and groups",
+        "shape hole triangulation and bevel/path extrusion",
+        "geometry JSON round trips",
+        "six 2D/3D curve variants: points, spaced points, tangents, lengths, clone and JSON",
+        "composite curve paths"
+      ]
+    },
+    "animation": {
+      "characters": 1879,
+      "sha256": "8efd9e2b681af6b7d03372ff6ea27ffd1dedee2e99052de5415c3a219ee5e839",
+      "scenarios": [
+        "numeric, boolean, string and quaternion tracks",
+        "cubic vector interpolation",
+        "clip clone and serialization",
+        "actions, stop/restore and grouped bindings",
+        "subclip and additive tracks",
+        "legacy string keyframe parse"
+      ]
+    },
+    "coreSerialization": {
+      "characters": 10877,
+      "sha256": "3d8ae3fa2aec46378852eb464c9f0af1d06e0e0945de537920bdf03a85765a0f",
+      "scenarios": [
+        "material, geometry and scene JSON round trips",
+        "directional, spot, point and probe lights; shadow clones and JSON",
+        "camera false metadata forwarding",
+        "typed-array, raw-buffer and DataView image serialization",
+        "original image-setter undefined default",
+        "image color conversion and raw-buffer fallback",
+        "two-argument video size retains undefined z",
+        "Euler matrix decomposition",
+        "scalar/vector uniforms and grouped cloning",
+        "batched geometry, matrix and color storage",
+        "exact default shader callback function text / program cache key"
+      ]
+    }
+  },
+  "localValidation": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2",
+    "strictDiagnostics": 0,
+    "sharedTests": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "command": "node node_modules/typescript/lib/tsc.js --ignoreConfig --strict --noEmit --skipLibCheck --target es2024 --lib es2024,dom,esnext.float16 --module nodenext --allowImportingTsExtensions benchmarks/cases/jetstream-threejs/case.ts"
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "method": "unchanged benchmarks/common/bench.mjs, five sequential fresh processes",
+    "processes": [
+      {
+        "process": 1,
+        "nsPerWork": 95497246.0,
+        "msPerWork": 95.497246,
+        "checksumBits": "41ae0f2f80000000"
+      },
+      {
+        "process": 2,
+        "nsPerWork": 94659240.0,
+        "msPerWork": 94.65924,
+        "checksumBits": "41ae0f2f80000000"
+      },
+      {
+        "process": 3,
+        "nsPerWork": 96437004.0,
+        "msPerWork": 96.437004,
+        "checksumBits": "41ae0f2f80000000"
+      },
+      {
+        "process": 4,
+        "nsPerWork": 96307574.0,
+        "msPerWork": 96.307574,
+        "checksumBits": "41ae0f2f80000000"
+      },
+      {
+        "process": 5,
+        "nsPerWork": 94389965.0,
+        "msPerWork": 94.389965,
+        "checksumBits": "41ae0f2f80000000"
+      }
+    ],
+    "bestMs": 94.389965,
+    "exception": "A complete original 8000-particle scene update and render exceeds 10 ms; full input retained."
+  }
+}
