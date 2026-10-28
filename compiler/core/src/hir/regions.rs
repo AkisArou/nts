@@ -86,6 +86,12 @@ enum Helper {
     Reads,
     /// Reads its arguments, keeps none, and answers a fresh allocation.
     Makes,
+    /// Reads its arguments, keeps none of them anywhere else, may allocate,
+    /// and answers an owned (+1) result that is either fresh or exactly
+    /// argument `from`, retained. Case conversion answering its input when
+    /// nothing changed. Not a borrowed answer: the caller owns a count
+    /// either way, so this is not `own::RUNTIME_HANDS_BACK`.
+    MakesOrRetains { from: usize },
     /// Makes a shallow copy, including the source container's references.
     Copies { from: usize },
     /// Writes into argument `into` and keeps its other reference arguments
@@ -153,8 +159,6 @@ fn helper(name: &str) -> Option<Helper> {
         | "nts_str_repeat"
         | "nts_str_pad_start"
         | "nts_str_pad_end"
-        | "nts_str_to_lower_case"
-        | "nts_str_to_upper_case"
         | "nts_str_to_well_formed"
         | "nts_string_from_char_code"
         | "nts_string_from_code_point"
@@ -167,6 +171,7 @@ fn helper(name: &str) -> Option<Helper> {
         | "nts_array_new"
         | "nts_array_new_uninitialized"
         | "nts_array_join_str" => Helper::Makes,
+        "nts_str_to_lower_case" | "nts_str_to_upper_case" => Helper::MakesOrRetains { from: 0 },
         "nts_array_slice" => Helper::Copies { from: 0 },
         "nts_array_push_ref"
         | "nts_array_push_value"
@@ -358,6 +363,10 @@ enum Scope<'s> {
 
 /// The facts of one scope, refined round by round.
 struct Facts<'p, 's> {
+    /// Whether these facts judge bodies inside a region's call, where the
+    /// clone runs uncounted. (The `Scope` itself borrows the member list,
+    /// which outlives construction but is not stored.)
+    in_region: bool,
     shared: &'s Shared<'p>,
     program: &'p Program,
     members: Vec<usize>,
@@ -434,6 +443,7 @@ impl<'p, 's> Facts<'p, 's> {
                 .collect(),
         };
         Self {
+            in_region: matches!(scope, Scope::Region { .. }),
             shared,
             program,
             members,
@@ -549,6 +559,7 @@ impl<'p, 's> Facts<'p, 's> {
                     helper(name),
                     Some(
                         Helper::Makes
+                            | Helper::MakesOrRetains { .. }
                             | Helper::Copies { .. }
                             | Helper::Fills { .. }
                             | Helper::Grows { .. }
@@ -607,6 +618,11 @@ impl<'p, 's> Facts<'p, 's> {
                 args,
                 ..
             } => match helper(name) {
+                // The answer is fresh or the retained input itself: fresh
+                // (region-relative) exactly when the input is.
+                Some(Helper::MakesOrRetains { from }) => {
+                    args.get(from).is_some_and(|arg| fresh.contains(arg))
+                }
                 Some(Helper::Fills { into } | Helper::Grows { into }) => {
                     args.get(into).is_some_and(|arg| fresh.contains(arg))
                 }
@@ -808,6 +824,9 @@ impl<'p, 's> Facts<'p, 's> {
                 ..
             } => match helper(name) {
                 Some(Helper::Reads) => Ok(true),
+                // The answer may be the value itself, retained: what is
+                // read out of the answer is read out of the value.
+                Some(Helper::MakesOrRetains { from }) if args.get(from) == Some(&value) => Ok(true),
                 Some(Helper::Copies { from })
                     if args.get(from) == Some(&value)
                         && matches!(&func.values[value.0 as usize].ty,
@@ -823,6 +842,7 @@ impl<'p, 's> Facts<'p, 's> {
                 Some(Helper::Fills { .. }) => Err("stores part of the result".to_owned()),
                 Some(
                     Helper::Makes
+                    | Helper::MakesOrRetains { .. }
                     | Helper::Copies { .. }
                     | Helper::Grows { .. }
                     | Helper::Takes { .. },
@@ -951,6 +971,7 @@ impl<'p, 's> Facts<'p, 's> {
                     helper(name),
                     Some(
                         Helper::Makes
+                            | Helper::MakesOrRetains { .. }
                             | Helper::Copies { .. }
                             | Helper::Fills { .. }
                             | Helper::Grows { .. }
@@ -1116,6 +1137,24 @@ impl Judged<'_> {
             Callee::External(name) => match helper(name) {
                 Some(Helper::Reads) => {}
                 Some(Helper::Makes) => self.allocates = true,
+                Some(Helper::MakesOrRetains { from }) => {
+                    self.allocates = true;
+                    // A region clone runs uncounted: the retained-input
+                    // path would acquire a count no generated release
+                    // balances. So inside a region the input must be made
+                    // in the call or immortal (both are `fresh` here) --
+                    // refused even if the result is only read and dropped,
+                    // until an external-edge ownership protocol exists.
+                    if facts.in_region
+                        && let Some(input) = args.get(from)
+                        && self.func.values[input.0 as usize].ty.is_counted()
+                        && !self.fresh.contains(input)
+                    {
+                        self.refuse(format!(
+                            "may retain through `{name}` a reference not made in the call"
+                        ));
+                    }
+                }
                 Some(Helper::Copies { from }) => {
                     self.allocates = true;
                     if let Some(source) = args.get(from)

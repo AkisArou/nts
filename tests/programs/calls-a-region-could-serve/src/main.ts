@@ -164,6 +164,84 @@ export function readsOneCell(count: number): number {
   return cell.value;
 }
 
+class Text {
+  constructor(
+    public text: string,
+    public next: Text | null,
+  ) {}
+}
+
+function textTotal(list: Text | null): number {
+  let sum = 0;
+  for (let at = list; at !== null; at = at.next) {
+    sum += at.text.length;
+  }
+  return sum;
+}
+
+// Refused (the retained input): `toLowerCase` may answer its input retained
+// (unchanged text), and a region clone runs uncounted, so that count would
+// never be balanced -- even here, where the answer is only read and dropped.
+// The word comes from outside the candidate call.
+function lowerOfArgument(count: number, word: string): Text | null {
+  let head: Text | null = null;
+  let length = 0;
+  for (let index = 0; index < count; index++) {
+    length += word.toLowerCase().length;
+    head = new Text("x", head);
+  }
+  return length < 0 ? null : head;
+}
+export function lowersAnArgument(count: number): number {
+  const word = "Ab" + count;
+  const list = lowerOfArgument(bounded(count), word);
+  return textTotal(list) + word.length;
+}
+
+// Site (control, differing in one thing): the lowered text is made inside
+// the call, so there is no external count to unbalance.
+function lowerOfMade(count: number): Text | null {
+  let head: Text | null = null;
+  let length = 0;
+  for (let index = 0; index < count; index++) {
+    length += "Ab".repeat(index + 1).toLowerCase().length;
+    head = new Text("x", head);
+  }
+  return length < 0 ? null : head;
+}
+export function lowersMadeText(count: number): number {
+  const list = lowerOfMade(bounded(count));
+  return textTotal(list);
+}
+
+// Site (control): the lowered text is an immortal literal; retaining it is a
+// no-op everywhere.
+function lowerOfLiteral(count: number): Text | null {
+  let head: Text | null = null;
+  let length = 0;
+  for (let index = 0; index < count; index++) {
+    length += "AbC".toLowerCase().length;
+    head = new Text("x", head);
+  }
+  return length < 0 ? null : head;
+}
+export function lowersALiteral(count: number): number {
+  const list = lowerOfLiteral(bounded(count));
+  return textTotal(list);
+}
+
+// Refused (the retained input, through an outer call): `word` is made inside
+// `buildAndLower`'s call, but it is still outside `lowerOfArgument`'s call,
+// and that inner candidate is the one whose clone would retain it uncounted.
+function buildAndLower(count: number): Text | null {
+  const word = "Ab" + count;
+  return lowerOfArgument(count, word);
+}
+export function lowersThroughAnOuterCall(count: number): number {
+  const list = buildAndLower(bounded(count));
+  return textTotal(list);
+}
+
 // Refused (fact 1): the callee stores into its argument.
 function appendTo(into: Cell[], count: number): Cell[] {
   for (let index = 0; index < count; index++) {

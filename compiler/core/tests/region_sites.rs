@@ -143,6 +143,27 @@ fn a_function_only_regions_call_is_left_as_its_clone() {
     );
 }
 
+/// Case conversion may answer its input retained (`Helper::MakesOrRetains`).
+/// A region clone runs uncounted, so inside a region the input must be made
+/// in the call or immortal -- refused even when the answer is only read and
+/// dropped, which is what every fixture body below does with it.
+#[test]
+fn case_conversion_of_an_outside_input_is_refused_inside_a_region() {
+    let report = report("calls-a-region-could-serve");
+    // A dynamic heap string from outside the candidate call.
+    let refused = verdict(&report, "lowersAnArgument", "lowerOfArgument")
+        .expect_err("an outside input is refused");
+    assert!(refused.contains("may retain"), "{refused:?}");
+    // Made inside the candidate call (control): a site.
+    assert_eq!(verdict(&report, "lowersMadeText", "lowerOfMade"), Ok(()));
+    // An immortal literal (control): a site.
+    assert_eq!(verdict(&report, "lowersALiteral", "lowerOfLiteral"), Ok(()));
+    // Made inside an outer call is still outside the inner candidate call.
+    let refused = verdict(&report, "buildAndLower", "lowerOfArgument")
+        .expect_err("an outer-call input is refused");
+    assert!(refused.contains("may retain"), "{refused:?}");
+}
+
 #[test]
 fn the_counts_add_up() {
     let report = report("calls-a-region-could-serve");
