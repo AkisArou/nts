@@ -100,6 +100,28 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN VALIDATORJS: complete original workload checks.
+{
+  const name = "jetstream-validatorjs";
+  if (modules.has(name)) {
+    checked.add(name);
+    // Proposed addition to the parent-owned shared JetStream benchmark test.
+    const {EXPECTED_ASSERTION_COUNT, originalIterations, render, seed, work} = await import("./cases/jetstream-validatorjs/case.ts");
+
+    test('JetStream validatorjs runs all original 10,114 assertions', () => {
+      assert.equal(seed, 1);
+      assert.equal(originalIterations, 120);
+      assert.equal(EXPECTED_ASSERTION_COUNT, 10114);
+      assert.equal(work(1), 10114);
+      assert.equal(work(2), 323648);
+      assert.deepEqual(render(2), {assertionCount: 10114, iterations: [10114, 10114]});
+      assert.throws(() => work(0), /Expected 10114 assertions, but got 0/);
+      assert.equal(work(1), 10114);
+    });
+  }
+}
+// END VALIDATORJS.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
