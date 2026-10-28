@@ -1,0 +1,17 @@
+/*
+ * The Computer Language Benchmarks Game -- BSD-3-Clause.
+ * Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+ * All rights reserved. See ../LICENSE-benchmarks-game for the licence.
+ *
+ * Published binary-trees output, N = 10.
+ * https://benchmarksgame-team.pages.debian.net/benchmarksgame/download/binarytrees-output.txt
+ * Program contributed by Léo Sarrazin; multi thread by Andrey Filatkin;
+ * sequential by Isaac Gouy.
+ * https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/binarytrees-node-7.html
+ */
+stretch tree of depth 11	 check: 4095
+1024	 trees of depth 4	 check: 31744
+256	 trees of depth 6	 check: 32512
+64	 trees of depth 8	 check: 32704
+16	 trees of depth 10	 check: 32752
+long lived tree of depth 10	 check: 2047
