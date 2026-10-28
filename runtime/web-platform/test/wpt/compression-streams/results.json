@@ -2,9 +2,9 @@
   "revision": "ae05f5cb53d3e290b91ae1e92069baa188292880",
   "totals": {
     "registered": 318,
-    "pass": 243,
+    "pass": 316,
     "fail": 0,
-    "blocked": 75,
+    "blocked": 2,
     "notRunFiles": 1,
     "harnessFailures": 0
   },
@@ -12,9 +12,9 @@
     {
       "path": "compression/compression-bad-chunks.any.js",
       "registered": 28,
-      "pass": 21,
+      "pass": 28,
       "fail": 0,
-      "blocked": 7,
+      "blocked": 0,
       "cases": [
         {
           "name": "chunk of type undefined should error the stream for deflate",
@@ -102,38 +102,31 @@
         },
         {
           "name": "chunk of type undefined should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type null should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type numeric should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type object, not BufferSource should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type array should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type SharedArrayBuffer should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type shared Uint8Array should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
@@ -161,9 +154,9 @@
     {
       "path": "compression/compression-including-empty-chunk.any.js",
       "registered": 12,
-      "pass": 9,
+      "pass": 12,
       "fail": 0,
-      "blocked": 3,
+      "blocked": 0,
       "cases": [
         {
           "name": "the result of compressing [,Hello,Hello] with deflate should be 'HelloHello'",
@@ -203,27 +196,24 @@
         },
         {
           "name": "the result of compressing [,Hello,Hello] with brotli should be 'HelloHello'",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "the result of compressing [Hello,,Hello] with brotli should be 'HelloHello'",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "the result of compressing [Hello,Hello,] with brotli should be 'HelloHello'",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/compression-large-flush-output.any.js",
       "registered": 4,
-      "pass": 3,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1,
+      "blocked": 0,
       "cases": [
         {
           "name": "deflate compression with large flush output",
@@ -239,17 +229,16 @@
         },
         {
           "name": "brotli compression with large flush output",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/compression-multiple-chunks.any.js",
       "registered": 60,
-      "pass": 45,
+      "pass": 60,
       "fail": 0,
-      "blocked": 15,
+      "blocked": 0,
       "cases": [
         {
           "name": "compressing 2 chunks with deflate should work",
@@ -433,87 +422,72 @@
         },
         {
           "name": "compressing 2 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 3 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 4 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 5 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 6 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 7 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 8 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 9 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 10 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 11 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 12 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 13 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 14 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 15 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "compressing 16 chunks with brotli should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/compression-output-length.any.js",
       "registered": 4,
-      "pass": 3,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1,
+      "blocked": 0,
       "cases": [
         {
           "name": "the length of deflate data should be shorter than that of the original data",
@@ -529,17 +503,16 @@
         },
         {
           "name": "the length of brotli data should be shorter than that of the original data",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/compression-stream.any.js",
       "registered": 13,
-      "pass": 10,
+      "pass": 13,
       "fail": 0,
-      "blocked": 3,
+      "blocked": 0,
       "cases": [
         {
           "name": "CompressionStream constructor should throw on invalid format",
@@ -583,18 +556,15 @@
         },
         {
           "name": "brotli empty data should be reinflated back to its origin",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "brotli small amount data should be reinflated back to its origin",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "brotli large amount data should be reinflated back to its origin",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
@@ -615,9 +585,9 @@
     {
       "path": "compression/decompression-bad-chunks.any.js",
       "registered": 36,
-      "pass": 27,
+      "pass": 36,
       "fail": 0,
-      "blocked": 9,
+      "blocked": 0,
       "cases": [
         {
           "name": "chunk of type undefined should error the stream for deflate",
@@ -729,57 +699,48 @@
         },
         {
           "name": "chunk of type undefined should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type null should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type numeric should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type object, not BufferSource should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type array should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type SharedArrayBuffer should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type shared Uint8Array should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type invalid deflate bytes should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type invalid gzip bytes should error the stream for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/decompression-buffersource.any.js",
       "registered": 48,
-      "pass": 36,
+      "pass": 48,
       "fail": 0,
-      "blocked": 12,
+      "blocked": 0,
       "cases": [
         {
           "name": "chunk of type ArrayBuffer should work for deflate",
@@ -927,63 +888,51 @@
         },
         {
           "name": "chunk of type ArrayBuffer should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Int8Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Uint8Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Uint8ClampedArray should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Int16Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Uint16Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Int32Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Uint32Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Float16Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Float32Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type Float64Array should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "chunk of type DataView should work for brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
@@ -1011,9 +960,9 @@
     {
       "path": "compression/decompression-correct-input.any.js",
       "registered": 4,
-      "pass": 3,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1,
+      "blocked": 0,
       "cases": [
         {
           "name": "decompressing deflate input should work",
@@ -1029,17 +978,16 @@
         },
         {
           "name": "decompressing brotli input should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/decompression-corrupt-input.any.js",
       "registered": 29,
-      "pass": 26,
+      "pass": 29,
       "fail": 0,
-      "blocked": 3,
+      "blocked": 0,
       "cases": [
         {
           "name": "the unchanged input for 'deflate' should decompress successfully",
@@ -1143,18 +1091,15 @@
         },
         {
           "name": "the unchanged input for 'brotli' should decompress successfully",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "truncating the input for 'brotli' should give an error",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "trailing junk for 'brotli' should give an error",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "the deflate input compressed with dictionary should give an error",
@@ -1165,9 +1110,9 @@
     {
       "path": "compression/decompression-empty-input.any.js",
       "registered": 4,
-      "pass": 3,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1,
+      "blocked": 0,
       "cases": [
         {
           "name": "decompressing gzip empty input should work",
@@ -1183,17 +1128,16 @@
         },
         {
           "name": "decompressing brotli empty input should work",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/decompression-extra-input.any.js",
       "registered": 4,
-      "pass": 3,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1,
+      "blocked": 0,
       "cases": [
         {
           "name": "decompressing deflate input with extra pad should still give the output",
@@ -1209,17 +1153,16 @@
         },
         {
           "name": "decompressing brotli input with extra pad should still give the output",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/decompression-split-chunk.any.js",
       "registered": 60,
-      "pass": 45,
+      "pass": 60,
       "fail": 0,
-      "blocked": 15,
+      "blocked": 0,
       "cases": [
         {
           "name": "decompressing splitted chunk into pieces of size 1 should work in deflate",
@@ -1403,87 +1346,72 @@
         },
         {
           "name": "decompressing splitted chunk into pieces of size 1 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 2 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 3 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 4 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 5 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 6 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 7 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 8 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 9 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 10 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 11 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 12 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 13 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 14 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         },
         {
           "name": "decompressing splitted chunk into pieces of size 15 should work in brotli",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },
     {
       "path": "compression/decompression-uint8array-output.any.js",
       "registered": 4,
-      "pass": 3,
+      "pass": 4,
       "fail": 0,
-      "blocked": 1,
+      "blocked": 0,
       "cases": [
         {
           "name": "decompressing deflate output should give Uint8Array chunks",
@@ -1499,8 +1427,7 @@
         },
         {
           "name": "decompressing brotli output should give Uint8Array chunks",
-          "status": "blocked",
-          "reason": "format outside approved scope: Brotli is present in the unchanged upstream corpus but is outside the approved gzip, deflate and deflate-raw capability and implementation scope."
+          "status": "pass"
         }
       ]
     },

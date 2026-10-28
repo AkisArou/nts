@@ -1,3 +1,9 @@
+/**
+ * Compression Standard §§3–5: formats and their shared stream algorithms.
+ * https://compression.spec.whatwg.org/#supported-formats
+ * Brotli encoding and RFC 7932 validation belong to the native capability.
+ * https://www.rfc-editor.org/rfc/rfc7932#section-1.4
+ */
 import { coerceToDOMString, requireArguments } from "../core/webidl.ts";
 import { currentWebPlatformRuntime, hasWebPlatformRuntime } from "../provider/environment.ts";
 import type {
@@ -20,10 +26,10 @@ function currentCompressionProvider(): CompressionProvider | undefined {
   return hasWebPlatformRuntime() ? currentWebPlatformRuntime().compression : undefined;
 }
 
-/** Web IDL enum conversion; format names are case-sensitive. */
+/** Compression §4 and Web IDL enum conversion; format names are case-sensitive. */
 function compressionFormat(value: unknown): CompressionFormat {
   const format = coerceToDOMString(value);
-  if (format !== "gzip" && format !== "deflate" && format !== "deflate-raw") {
+  if (format !== "gzip" && format !== "deflate" && format !== "deflate-raw" && format !== "brotli") {
     throw new TypeError("Unsupported compression format");
   }
   return format;

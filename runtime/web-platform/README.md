@@ -58,10 +58,13 @@ explicitly. A coding must not be advertised unless the provider's decoder valida
 its format, checksum, and trailer as applicable.
 
 `src/provider/compression.ts` defines the synchronous native streaming capability
-for `gzip`, `deflate`, and `deflate-raw`. Its contexts consume a whole input chunk
-per call and support normal processing, synchronous flush, finish, reset, and
-bounded output. Framing, DEFLATE, CRC-32, Adler-32, and gzip header/trailer
-validation belong to the provider. It returns failures as values and reports
+for `gzip`, `deflate`, `deflate-raw`, and `brotli`. Its contexts consume a whole
+input chunk per call and support normal processing, synchronous flush, finish,
+reset, and bounded output. Brotli, DEFLATE, framing, CRC-32, Adler-32, and gzip
+header/trailer validation belong to the provider. Brotli conforms to
+[RFC 7932](https://www.rfc-editor.org/rfc/rfc7932#section-1.4); its native window
+settings are independent of the capability's DEFLATE-only `windowBits` argument.
+The provider returns failures as values and reports
 unconsumed trailing input so shared code can deliver valid output before the
 specified error. The same raw-DEFLATE mode supports RFC 7692 without moving
 WebSocket negotiation, tail handling, or context-takeover policy into native code.
@@ -76,8 +79,8 @@ the context created by its constructor. Existing streams retain that context
 when the active runtime changes. Missing capability produces a `TypeError`.
 The public barrel exports the canonical classes, and the provider barrel exports
 the capability types. Provider bootstrap owns global exposure. Internal embedding
-factories remain outside both barrels. Brotli is outside this implementation's
-three-format scope.
+factories remain outside both barrels. The four formats share these stream and
+lifetime algorithms; their encoding, validation and finish operations stay native.
 
 The compression test provider lives only in `test/node-compression-provider.ts`
 and calls `node:zlib`'s synchronous native streaming handle on the pinned Node 24
@@ -85,7 +88,8 @@ host. Native strict end handling prevents concatenated gzip members and ignored
 trailing bytes. No compression primitive or checksum is implemented in shared
 TypeScript. Focused tests cover both the stream algorithms and the reusable
 capability and public runtime integration; the unedited WPT `compression/` import
-awaits the canonical shared versions table on main. Descriptor-only and
+is registered in the canonical shared versions table, with per-file results and
+limitations in [its README](test/wpt/compression-streams/README.md). Descriptor-only and
 patched-intrinsic-accessor cases are left out under the cloud-agent rules.
 Migrating WebSocket's existing provider is a separate change after the realtime
 stack lands.

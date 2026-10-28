@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  brotliCompressSync,
+  brotliDecompressSync,
   deflateRawSync,
   deflateSync,
   gzipSync,
@@ -30,6 +32,7 @@ import { NodeCompressionProvider } from "./node-compression-provider.ts";
 
 // Original specification controls, not imported or edited WPT fixtures.
 // Compression §§2–5: https://compression.spec.whatwg.org/
+// Brotli compliance: https://www.rfc-editor.org/rfc/rfc7932#section-1.4
 // Web IDL enum conversion: https://webidl.spec.whatwg.org/#es-enumeration
 // Streams transform setup: https://streams.spec.whatwg.org/#transformstream-set-up
 // Descriptor-only and intrinsic-prototype-spoofing cases are outside nts's layout.
@@ -85,7 +88,7 @@ class RecordingProvider implements CompressionProvider {
   }
 }
 
-const formats: readonly CompressionFormat[] = ["gzip", "deflate", "deflate-raw"];
+const formats: readonly CompressionFormat[] = ["gzip", "deflate", "deflate-raw", "brotli"];
 const directions = [
   { name: "CompressionStream", direction: "compress", create: createCompressionStream },
   { name: "DecompressionStream", direction: "decompress", create: createDecompressionStream },
@@ -108,6 +111,7 @@ function nativeCompress(format: CompressionFormat, bytes: Uint8Array): Uint8Arra
     case "gzip": return gzipSync(bytes);
     case "deflate": return deflateSync(bytes);
     case "deflate-raw": return deflateRawSync(bytes);
+    case "brotli": return brotliCompressSync(bytes);
   }
 }
 
@@ -116,6 +120,7 @@ function nativeDecompress(format: CompressionFormat, bytes: Uint8Array): Uint8Ar
     case "gzip": return gunzipSync(bytes);
     case "deflate": return inflateSync(bytes);
     case "deflate-raw": return inflateRawSync(bytes);
+    case "brotli": return brotliDecompressSync(bytes);
   }
 }
 
@@ -208,7 +213,7 @@ test("compression classes keep canonical identity and reject public construction
 });
 
 for (const direction of directions) {
-  test(direction.name + " converts the format once and selects a full native window", async () => {
+  test(direction.name + " converts the format once and forwards the capability arguments", async () => {
     for (const format of formats) {
       const provider = new RecordingProvider();
       let calls = 0;
@@ -227,7 +232,7 @@ for (const direction of directions) {
 
   test(direction.name + " rejects unsupported formats and preserves conversion exceptions before native creation", () => {
     const provider = new RecordingProvider();
-    for (const value of [undefined, null, "", "GZIP", " gzip", "gzip ", "zlib", "br", "brotli", 1, Symbol("gzip")]) {
+    for (const value of [undefined, null, "", "GZIP", " gzip", "gzip ", "zlib", "br", "BROTLI", " brotli", "brotli ", 1, Symbol("gzip")]) {
       assert.throws(() => direction.create(value, provider), TypeError);
     }
     const sentinel = new Error("format conversion");
@@ -236,12 +241,14 @@ for (const direction of directions) {
   });
 
   test(direction.name + " turns native creation failures into TypeError", () => {
-    for (const failure of ["invalid-data", "output-limit", "unsupported", "operation"] as const) {
-      const provider = new RecordingProvider();
-      provider.failure = { failure };
-      assert.throws(() => direction.create("gzip", provider), TypeError);
-      assert.equal(provider.creations.length, 1);
-      assert.equal(provider.context.closeCount, 0);
+    for (const format of formats) {
+      for (const failure of ["invalid-data", "output-limit", "unsupported", "operation"] as const) {
+        const provider = new RecordingProvider();
+        provider.failure = { failure };
+        assert.throws(() => direction.create(format, provider), TypeError);
+        assert.equal(provider.creations.length, 1);
+        assert.equal(provider.context.closeCount, 0);
+      }
     }
   });
 
@@ -313,33 +320,35 @@ for (const direction of directions) {
   });
 
   test(direction.name + " holds native work behind readable backpressure", async () => {
-    const provider = new RecordingProvider();
-    provider.context.produce = (input, flush) => ({
-      chunks: flush === "none" ? [input.slice()] : [],
-      consumed: input.byteLength,
-    });
-    const stream = direction.create("gzip", provider);
-    const writer = stream.writable.getWriter();
-    const reader = stream.readable.getReader();
-    const input = new Uint8Array([1, 2, 3]);
-    const firstWrite = writer.write(input);
-    await Promise.resolve();
-    await Promise.resolve();
-    assert.equal(provider.context.calls.length, 0);
-    input[0] = 7;
-    assert.deepEqual((await reader.read()).value, new Uint8Array([7, 2, 3]));
-    await firstWrite;
-    assert.equal(provider.context.calls.length, 1);
-    const secondWrite = writer.write(new Uint8Array([4, 5]));
-    await Promise.resolve();
-    await Promise.resolve();
-    assert.equal(provider.context.calls.length, 1, "each next write waits for demand");
-    assert.deepEqual((await reader.read()).value, new Uint8Array([4, 5]));
-    await secondWrite;
-    await writer.close();
-    assert.equal((await reader.read()).done, true);
-    assert.deepEqual(provider.context.calls.map((call) => call.flush), ["none", "none", "finish"]);
-    assert.equal(provider.context.closeCount, 1);
+    for (const format of formats) {
+      const provider = new RecordingProvider();
+      provider.context.produce = (input, flush) => ({
+        chunks: flush === "none" ? [input.slice()] : [],
+        consumed: input.byteLength,
+      });
+      const stream = direction.create(format, provider);
+      const writer = stream.writable.getWriter();
+      const reader = stream.readable.getReader();
+      const input = new Uint8Array([1, 2, 3]);
+      const firstWrite = writer.write(input);
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.equal(provider.context.calls.length, 0);
+      input[0] = 7;
+      assert.deepEqual((await reader.read()).value, new Uint8Array([7, 2, 3]));
+      await firstWrite;
+      assert.equal(provider.context.calls.length, 1);
+      const secondWrite = writer.write(new Uint8Array([4, 5]));
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.equal(provider.context.calls.length, 1, "each next write waits for demand");
+      assert.deepEqual((await reader.read()).value, new Uint8Array([4, 5]));
+      await secondWrite;
+      await writer.close();
+      assert.equal((await reader.read()).done, true);
+      assert.deepEqual(provider.context.calls.map((call) => call.flush), ["none", "none", "finish"]);
+      assert.equal(provider.context.closeCount, 1);
+    }
   });
 
   test(direction.name + " errors both sides and releases its context on native process failure", async () => {
@@ -549,17 +558,19 @@ test("gzip permits one member and delivers its output before rejecting a second"
 });
 
 test("decompression enqueues the native finish prefix before reporting incomplete input", async () => {
-  const provider = new RecordingProvider();
-  const prefix = new Uint8Array([17, 18, 19]);
-  provider.context.produce = (input, flush) => flush === "finish"
-    ? { failure: "incomplete", chunks: [prefix] }
-    : { chunks: [], consumed: input.byteLength };
-  const stream = createDecompressionStream("gzip", provider);
-  const writer = stream.writable.getWriter();
-  const reader = stream.readable.getReader();
-  const first = reader.read();
-  const close = assert.rejects(writer.close(), TypeError);
-  assert.equal((await first).value, prefix);
-  await Promise.all([close, assert.rejects(reader.read(), TypeError)]);
-  assert.equal(provider.context.closeCount, 1);
+  for (const format of formats) {
+    const provider = new RecordingProvider();
+    const prefix = new Uint8Array([17, 18, 19]);
+    provider.context.produce = (input, flush) => flush === "finish"
+      ? { failure: "incomplete", chunks: [prefix] }
+      : { chunks: [], consumed: input.byteLength };
+    const stream = createDecompressionStream(format, provider);
+    const writer = stream.writable.getWriter();
+    const reader = stream.readable.getReader();
+    const first = reader.read();
+    const close = assert.rejects(writer.close(), TypeError);
+    assert.equal((await first).value, prefix);
+    await Promise.all([close, assert.rejects(reader.read(), TypeError)]);
+    assert.equal(provider.context.closeCount, 1);
+  }
 });

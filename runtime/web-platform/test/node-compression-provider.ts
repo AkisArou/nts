@@ -1,5 +1,7 @@
 import {
   constants,
+  createBrotliCompress,
+  createBrotliDecompress,
   createDeflate,
   createDeflateRaw,
   createGunzip,
@@ -25,6 +27,9 @@ import type {
  *
  * Node 24.20.0 (the repository pin) provides rejectGarbageAfterEnd to prevent its
  * native gunzip wrapper from automatically consuming a second gzip member.
+ * Brotli's native decoder already stops at the first stream end; its unused
+ * input offsets let the shared caller enqueue output before rejecting trailers.
+ * Its PROCESS/FLUSH/FINISH operations use a different enum from zlib's flushes.
  * https://github.com/nodejs/node/blob/v24.20.0/lib/zlib.js
  * https://github.com/nodejs/node/blob/v24.20.0/src/node_zlib.cc
  */
@@ -55,26 +60,32 @@ const outputBlockSize = 16 * 1024;
 class NodeCompressionContext implements CompressionContext {
   private readonly stream: NativeZlibStream;
   private readonly decompress: boolean;
+  private readonly brotli: boolean;
   private scratch: Uint8Array = new Uint8Array(outputBlockSize);
   private error: CompressionFailure | null = null;
-  private nativeErrno: number | null = null;
+  private nativeCode: string | null = null;
   private closed: boolean = false;
   private finished: boolean = false;
 
-  constructor(stream: NativeZlibStream, decompress: boolean) {
+  constructor(stream: NativeZlibStream, decompress: boolean, brotli: boolean = false) {
     this.stream = stream;
     this.decompress = decompress;
+    this.brotli = brotli;
     const handle = stream._handle;
     if (handle === null) throw new Error("node:zlib did not create a native context");
     // writeSync invokes this callback synchronously. Replacing Node's default
     // event-emitting callback keeps native errors as values at the capability.
-    handle.onerror = (_message, errno, _code) => {
-      this.nativeErrno = errno;
+    handle.onerror = (_message, errno, code) => {
+      this.nativeCode = code;
+      // Brotli's negative format errors overlap zlib's unrelated errno values.
+      // Its allocation/state errors remain operation failures, not bad input.
+      const invalidData = brotli ? decompress && (code === "Z_BUF_ERROR" ||
+        errno <= constants.BROTLI_DECODER_ERROR_FORMAT_EXUBERANT_NIBBLE &&
+        errno >= constants.BROTLI_DECODER_ERROR_FORMAT_DISTANCE) :
+        errno === constants.Z_DATA_ERROR ||
+        errno === constants.Z_NEED_DICT || errno === constants.Z_BUF_ERROR;
       this.error = {
-        failure: errno === constants.Z_DATA_ERROR ||
-          errno === constants.Z_NEED_DICT || errno === constants.Z_BUF_ERROR
-          ? "invalid-data"
-          : "operation",
+        failure: invalidData ? "invalid-data" : "operation",
       };
     };
   }
@@ -92,8 +103,11 @@ class NodeCompressionContext implements CompressionContext {
     const handle = this.stream._handle;
     if (handle === null) return this.fail({ failure: "operation" });
     const drainBeforeFinish = this.decompress && flush === "finish";
-    let flag = flush === "none" || drainBeforeFinish ? constants.Z_NO_FLUSH :
-      flush === "sync" ? constants.Z_SYNC_FLUSH : constants.Z_FINISH;
+    const processFlag = this.brotli ? constants.BROTLI_OPERATION_PROCESS : constants.Z_NO_FLUSH;
+    const syncFlag = this.brotli ? constants.BROTLI_OPERATION_FLUSH : constants.Z_SYNC_FLUSH;
+    const finishFlag = this.brotli ? constants.BROTLI_OPERATION_FINISH : constants.Z_FINISH;
+    let flag = flush === "none" || drainBeforeFinish ? processFlag :
+      flush === "sync" ? syncFlag : finishFlag;
     let finishing = false;
     const chunks: Uint8Array[] = [];
     let outputBytes = 0;
@@ -108,7 +122,7 @@ class NodeCompressionContext implements CompressionContext {
         const outputCapacity = Math.min(output.length, maxOutputBytes - outputBytes + 1);
         handle.writeSync(flag, input, offset, remaining, output, 0, outputCapacity);
         if (this.error !== null) {
-          if (finishing && this.nativeErrno === constants.Z_BUF_ERROR) {
+          if (finishing && this.nativeCode === "Z_BUF_ERROR") {
             return this.fail({ failure: "incomplete", chunks });
           }
           return this.fail(this.error);
@@ -143,7 +157,7 @@ class NodeCompressionContext implements CompressionContext {
             // available output first so an incomplete stream can return it to
             // the shared flush algorithm before that algorithm raises TypeError.
             finishing = true;
-            flag = constants.Z_FINISH;
+            flag = finishFlag;
             continue;
           }
           if (flush === "finish") this.finished = true;
@@ -159,7 +173,7 @@ class NodeCompressionContext implements CompressionContext {
     if (this.closed) return { failure: "operation" };
     try {
       this.error = null;
-      this.nativeErrno = null;
+      this.nativeCode = null;
       this.stream.reset();
       if (this.error !== null) return this.fail(this.error);
       this.finished = false;
@@ -189,6 +203,15 @@ export class NodeCompressionProvider implements CompressionProvider {
     format: CompressionFormat,
     windowBits: number,
   ): CompressionContext | CompressionFailure {
+    // windowBits negotiates DEFLATE only. Brotli uses native RFC 7932 defaults,
+    // including the standard window range rather than the Large Window extension.
+    if (format === "brotli") {
+      try {
+        return new NodeCompressionContext(createBrotliCompress() as NativeZlibStream, false, true);
+      } catch {
+        return { failure: "operation" };
+      }
+    }
     // zlib silently promotes an 8-bit compressor window to 9; an RFC 7692
     // provider must decline that request instead of violating the negotiated cap.
     if (!Number.isInteger(windowBits) || windowBits < 9 || windowBits > 15) {
@@ -210,6 +233,13 @@ export class NodeCompressionProvider implements CompressionProvider {
     format: CompressionFormat,
     windowBits: number,
   ): CompressionContext | CompressionFailure {
+    if (format === "brotli") {
+      try {
+        return new NodeCompressionContext(createBrotliDecompress() as NativeZlibStream, true, true);
+      } catch {
+        return { failure: "operation" };
+      }
+    }
     if (!Number.isInteger(windowBits) || windowBits < 8 || windowBits > 15) {
       return { failure: "unsupported" };
     }
