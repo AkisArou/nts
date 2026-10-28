@@ -106,7 +106,12 @@ export async function runWptFixtures(
         "Unsupported WPT timeout metadata");
       let harness: WptHarness;
       const environment = createEnvironment((error) => harness.reportError(error));
-      file.after(() => environment.close());
+      file.after(async () => {
+        await environment.close();
+        // Provider callbacks can report a failure during close without throwing.
+        // Node waits for this hook before it completes the file successfully.
+        if (harness !== undefined) harness.assertNoErrors();
+      });
       // WPT resources/testharness.js uses 10 seconds normally and 60 for long tests.
       harness = new WptHarness(environment.globals, fixture.blockedTests,
         timeouts.length === 0 ? 10000 : 60000, {
