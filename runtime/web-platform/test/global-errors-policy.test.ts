@@ -198,6 +198,116 @@ test("global handler invocation can skip an inactive callback without changing i
   assert.deepEqual(d.errors, ["inactive"]);
 });
 
+test("global handler context is captured at assignment and retained across later invocation contexts", (t) => {
+  const d = driver(t);
+  const assignment = {};
+  const firstDispatch = {};
+  const secondDispatch = {};
+  const handler = () => true;
+  d.incumbentContext = assignment;
+  d.runtime.onerror = handler;
+  d.incumbentContext = firstDispatch;
+  d.report("first");
+  d.incumbentContext = secondDispatch;
+  d.report("second");
+  assert.deepEqual(d.capturedContexts, [assignment]);
+  assert.equal(d.invocations[0]?.context, assignment);
+  assert.equal(d.invocations[1]?.context, assignment);
+  assert.notEqual(d.invocations[0]?.context, firstDispatch);
+  assert.notEqual(d.invocations[1]?.context, secondDispatch);
+  assert.deepEqual(d.reads, ["onerror", "onerror"]);
+});
+
+test("global handler context is independent when the same callback is assigned to different attributes", (t) => {
+  const d = driver(t);
+  const errorAssignment = {};
+  const rejectionAssignment = {};
+  const dispatchContext = {};
+  const handler = () => undefined;
+  d.incumbentContext = errorAssignment;
+  d.runtime.onerror = handler;
+  d.incumbentContext = rejectionAssignment;
+  d.runtime.onunhandledrejection = handler;
+  d.incumbentContext = dispatchContext;
+  d.report("error");
+  d.runtime.hostPromiseRejectionTracker(d.promise("rejection"), "reject");
+  d.runtime.notifyRejectedPromises();
+  d.task();
+  assert.equal(d.invocations[0]?.callback, handler);
+  assert.equal(d.invocations[1]?.callback, handler);
+  assert.equal(d.invocations[0]?.context, errorAssignment);
+  assert.equal(d.invocations[1]?.context, rejectionAssignment);
+  assert.deepEqual(d.capturedContexts, [errorAssignment, rejectionAssignment]);
+});
+
+test("global handler context is recaptured on identical assignment without moving its listener", (t) => {
+  const d = driver(t);
+  const firstAssignment = {};
+  const replacementAssignment = {};
+  const reactivationAssignment = {};
+  const order: string[] = [];
+  const handler = () => { order.push("handler"); return true; };
+  d.addGlobalEventListener("error", () => { order.push("before"); });
+  d.incumbentContext = firstAssignment;
+  d.runtime.onerror = handler;
+  d.addGlobalEventListener("error", () => { order.push("after"); });
+  d.incumbentContext = replacementAssignment;
+  d.runtime.onerror = handler;
+  d.report("replacement");
+  assert.deepEqual(order, ["before", "handler", "after"]);
+  assert.equal(d.invocations[0]?.context, replacementAssignment);
+  assert.deepEqual(d.capturedContexts, [firstAssignment, replacementAssignment]);
+  order.length = 0;
+  d.runtime.onerror = null;
+  d.incumbentContext = reactivationAssignment;
+  d.runtime.onerror = handler;
+  d.report("reactivation");
+  assert.deepEqual(order, ["before", "after", "handler"]);
+  assert.equal(d.invocations[1]?.context, reactivationAssignment);
+  assert.deepEqual(d.capturedContexts, [firstAssignment, replacementAssignment, reactivationAssignment]);
+});
+
+test("global handler context captures non-callable objects but not nullable primitive conversions", (t) => {
+  const d = driver(t);
+  const assignment = {};
+  const object = {};
+  d.incumbentContext = assignment;
+  d.runtime.onerror = object;
+  assert.equal(d.runtime.onerror, object);
+  assert.deepEqual(d.capturedContexts, [assignment]);
+  d.report("non-callable");
+  assert.equal(d.invocations.length, 0);
+  for (const value of [null, undefined, false, 0, "handler", Symbol("handler")]) {
+    d.runtime.onerror = value as object | null;
+    assert.equal(d.runtime.onerror, null);
+  }
+  assert.deepEqual(d.capturedContexts, [assignment]);
+  assert.equal(d.listeners.filter((listener) => !listener.removed).length, 0);
+});
+
+test("global handler context survives self-reassignment for the invocation already in progress", (t) => {
+  const d = driver(t);
+  const firstAssignment = {};
+  const nextAssignment = {};
+  const cleanedContexts: object[] = [];
+  const handler = () => {
+    if (d.invocations.length === 1) {
+      d.incumbentContext = nextAssignment;
+      d.runtime.onerror = handler;
+    }
+    return true;
+  };
+  d.invocationCleanup = () => { cleanedContexts.push(d.invocations.at(-1)!.context); };
+  d.incumbentContext = firstAssignment;
+  d.runtime.onerror = handler;
+  d.report("first");
+  d.report("next");
+  assert.equal(cleanedContexts[0], firstAssignment);
+  assert.equal(cleanedContexts[1], nextAssignment);
+  assert.deepEqual(d.capturedContexts, [firstAssignment, nextAssignment]);
+  assert.equal(d.listeners.filter((listener) => !listener.removed).length, 1);
+});
+
 test("an ErrorEvent dispatched as unhandledrejection still uses ordinary handler processing", (t) => {
   const d = driver(t);
   const event = new ErrorEvent("unhandledrejection", { cancelable: true });

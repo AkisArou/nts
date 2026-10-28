@@ -16,6 +16,9 @@ The relevant HTML Living Standard algorithms are:
 - [Event handlers](https://html.spec.whatwg.org/multipage/webappapis.html#event-handlers),
   including registration position, deactivation, and the event handler
   processing algorithm.
+- [Web IDL callback conversion](https://webidl.spec.whatwg.org/#es-callback-function),
+  including the incumbent settings stored when an object is assigned to a
+  nullable event-handler attribute.
 - [Unhandled promise rejections](https://html.spec.whatwg.org/multipage/webappapis.html#unhandled-promise-rejections)
   and [HostPromiseRejectionTracker](https://html.spec.whatwg.org/multipage/webappapis.html#hostpromiserejectiontracker).
 
@@ -34,8 +37,15 @@ arguments; exactly `true` cancels. Ordinary events use one argument; exactly
 `false` cancels. Callback exceptions re-enter the reporting algorithm, whose
 per-global guard suppresses recursive error-event dispatch.
 
-The actual handler is invoked through `invokeGlobalHandler`, with its receiver
-and the typed one- or five-argument list. Web IDL callback/script cleanup must
+Every object assignment captures the assigning script's incumbent settings
+through `captureGlobalHandlerContext`, even when the same function replaces
+itself or is assigned to another handler attribute. Each slot retains its
+opaque context independently; conversion to null clears it. The handler's
+creation realm and the invocation-time context cannot supply this assignment
+context afterward.
+
+The actual handler is invoked through `invokeGlobalHandler`, with its receiver,
+typed one- or five-argument list, and stored assignment context. Web IDL callback/script cleanup must
 finish before that operation returns a success value or an exception value.
 Only then does source apply HTML's exact-boolean cancellation rule or rethrow
 the returned exception to dispatch. An inactive callback returns a successful
@@ -59,7 +69,8 @@ Construct one `GlobalErrorRuntime` per provider global. It needs:
 | `globalObject`, `resolveGlobalReporter` | Identify the actual global or WindowProxy and resolve a borrowed global method's receiver. |
 | `extractErrorInformation` | Supply implementation-defined message, filename, line, column and the selected script's muted-errors flag without script-visible input reads or coercion. |
 | `addGlobalEventListener`, `removeGlobalEventListener` | Add and remove internal non-capture listeners in the actual global's listener list. |
-| `invokeGlobalHandler` | Invoke the actual IDL handler with the supplied receiver and arguments. Apply callback-realm runnability, relevant/captured settings, and Web IDL callback/script cleanup before returning `{ ok: true, value }` or `{ ok: false, error }`. An inactive handler returns success with undefined. |
+| `captureGlobalHandlerContext` | Capture the assigning script's incumbent settings on every object-to-callback conversion and return an opaque retained token. Source implementation frames must not replace the assigning script's context. |
+| `invokeGlobalHandler` | Invoke the actual IDL handler with the supplied receiver, arguments, and assignment-time context token. Apply callback-realm runnability, the callback's relevant settings and the supplied stored settings, and Web IDL callback/script cleanup before returning `{ ok: true, value }` or `{ ok: false, error }`. An inactive handler returns success with undefined. |
 | `dispatchGlobalEvent` | Dispatch a trusted canonical event at that actual global; preserve target/currentTarget identity, ordinary-listener callback cleanup and listener-exception reporting. Internal handler wrappers use the separate invocation boundary before processing their result. Apply scripting and active-document checks when relevant. |
 | `enqueueGlobalTask` | Queue the DOM manipulation task source; never run the task inline. |
 | `promiseIsHandled`, `promiseResult` | Read real Promise internal slots; never public properties or a thenable. |
@@ -81,7 +92,8 @@ object as its receiver and is not how the global API is exposed.
 Bootstrap's handler accessors must forward to the runtime's backing accessors
 (`runtime.onerror`, `runtime.onunhandledrejection` and
 `runtime.onrejectionhandled`). Those backing getters do not read `globalThis`,
-so the forwarders do not recurse. Source code never assigns to `globalThis`.
+so the forwarders do not recurse. Setters perform callback-context capture at
+assignment, not during later dispatch. Source code never assigns to `globalThis`.
 The actual handler callback must execute in the owning global's environment;
 an imported source function in a different Node VM does not acquire a new
 lexical global merely by changing its `this` value.
@@ -130,8 +142,9 @@ are included in that path count; it is not a count of failed test cases.
 
 Measurements use Node `v24.20.0`. The initial measurements below apply to source
 commit `308e3cc5c8c339464afd3ea1cf201cc3fff83b3a` and its recorded adapter hashes.
-The subsequent callback-boundary fix has separate final-source hashes and
-fresh measurements in `global-errors-results.json` and the subsection below.
+The subsequent callback-boundary and assignment-context fixes each have their
+own source hashes and fresh measurements in `global-errors-results.json` and
+the subsections below. Earlier measurements remain tied to their source.
 
 | Per-file WPT run | Pass | Fail | Named blocks |
 | --- | ---: | ---: | ---: |
@@ -202,6 +215,43 @@ Node totals are **73 entries: 70 pass, 0 fail, 3 skipped**, including wrappers.
 Both strict TypeScript projects pass again. The original metadata-getter
 sabotage hashes remain historical evidence for their original source; they are
 not relabeled as measurements of this callback-boundary fix.
+
+### Assignment-time callback-context review and fix
+
+Follow-up review found that the invocation boundary's settings promise was
+incomplete: a raw function does not record the incumbent settings of each
+assignment. [Web IDL callback conversion](https://webidl.spec.whatwg.org/#es-callback-function)
+stores the incumbent settings as callback context when converting the assigned
+object. [Nullable conversion](https://webidl.spec.whatwg.org/#es-nullable-type)
+also determines which assignments clear a legacy nullable handler. The
+callback's relevant realm is distinct from these stored settings, as described
+by [callback invocation](https://webidl.spec.whatwg.org/#invoke-a-callback-function).
+
+`captureGlobalHandlerContext()` now makes that native requirement explicit.
+Every object assignment captures a context token, including a non-callable
+object or the same function assigned again. A slot stores the raw object and
+its context separately, and passes the context as the fourth argument to
+`invokeGlobalHandler`. Source never inspects the token. Replacing a non-null
+handler retains its listener position, while clearing it removes both the
+value and context. An in-progress invocation retains its own context even if
+the callback reassigns its handler.
+
+Five new controls cover retained assignment context across later dispatch
+contexts, independent contexts for the same callback on different attributes,
+same-function replacement and reactivation order, non-callable objects and
+nullable conversions, and self-reassignment during callback execution. With
+the preceding `a85dc479ffb4f9c80f9e0666baeb494cef249da7` core source temporarily
+restored, all five controls failed. Restoring the new source byte-for-byte
+made all five pass. The driver's context values are opaque identity tags;
+these controls prove source retention and forwarding, not native settings
+capture or realm behavior.
+
+The complete focused command now passes **44 source-policy controls**, **five
+adapter controls**, and **22 unchanged adapter controls**. The unchanged WPT
+file remains **2 pass / 0 fail / 3 named blocks**. Node reports **78 entries:
+75 pass, 0 fail, 3 skipped**, including wrappers. Both strict TypeScript
+projects pass. Native incumbent-settings capture and callback setup/cleanup,
+actual-global integration, and automatic Promise hooks remain **not verified**.
 
 ### Shared adapter changes
 

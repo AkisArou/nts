@@ -19,6 +19,9 @@ export type GlobalHandlerArguments =
   | [message: string, filename: string, lineno: number, colno: number, error: unknown];
 export type GlobalHandlerCallback = (this: object, ...args: GlobalHandlerArguments) => unknown;
 
+/** Opaque provider-owned callback context; source retains it without inspection. */
+export type GlobalHandlerContext = object;
+
 /** Web IDL's callback completion crosses the native binding as a value. */
 export type GlobalHandlerInvocationResult =
   | { readonly ok: true; readonly value: unknown }
@@ -53,10 +56,21 @@ export interface GlobalErrorCapabilities {
   removeGlobalEventListener(type: GlobalErrorEventType, callback: GlobalErrorListener): void;
 
   /**
+   * Capture the assigning script's incumbent settings during Web IDL callback
+   * conversion. This infallible operation runs for every object assignment,
+   * even when the same callback is assigned again. The token must retain that
+   * conversion-time context, not derive it later from the callback's realm or
+   * the invocation context. Internal source frames are implementation steps,
+   * not a replacement for the assigning script's incumbent settings.
+   */
+  captureGlobalHandlerContext(): GlobalHandlerContext;
+
+  /**
    * Invoke the actual IDL handler, not the source's internal listener wrapper.
    * Apply HTML's scripting-enabled and callback-realm fully-active checks; an
    * inactive handler returns { ok: true, value: undefined } without invocation.
-   * Use Web IDL callback preparation, the callback's relevant/captured settings,
+   * Use Web IDL callback preparation, the callback's relevant settings and the
+   * supplied assignment-time context as its stored settings,
    * and cleanup after running callback/script before returning its completion.
    * Cleanup includes a microtask checkpoint when HTML requires one. A thrown
    * callback value is returned as { ok: false, error }, never thrown by native
@@ -64,6 +78,7 @@ export interface GlobalErrorCapabilities {
    */
   invokeGlobalHandler(
     callback: GlobalHandlerCallback, receiver: object, args: GlobalHandlerArguments,
+    context: GlobalHandlerContext,
   ): GlobalHandlerInvocationResult;
 
   /**

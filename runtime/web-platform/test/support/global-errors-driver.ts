@@ -9,12 +9,14 @@ import type {
   GlobalErrorCapabilities, GlobalErrorEventType, GlobalErrorInformation,
   GlobalErrorListener, GlobalExceptionReporter, GlobalWorkerErrorOwner,
   GlobalHandlerArguments, GlobalHandlerCallback, GlobalHandlerInvocationResult,
+  GlobalHandlerContext,
 } from "../../src/provider/global-errors.ts";
 
 interface HandlerInvocation {
   readonly callback: GlobalHandlerCallback;
   readonly receiver: object;
   readonly args: GlobalHandlerArguments;
+  readonly context: GlobalHandlerContext;
 }
 
 class Listener {
@@ -43,6 +45,8 @@ export class ErrorDriver implements GlobalErrorCapabilities {
   readonly extractions: unknown[] = [];
   readonly reads: string[] = [];
   readonly invocations: HandlerInvocation[] = [];
+  readonly capturedContexts: GlobalHandlerContext[] = [];
+  incumbentContext: GlobalHandlerContext = {};
   readonly inactiveHandlers = new WeakSet<GlobalHandlerCallback>();
   invocationCleanup: (() => void) | undefined = undefined;
   readonly globalDestinations = new WeakMap<object, GlobalExceptionReporter>();
@@ -69,10 +73,18 @@ export class ErrorDriver implements GlobalErrorCapabilities {
       if (listener.type === type && listener.callback === callback) listener.removed = true;
     }
   }
+  captureGlobalHandlerContext(): GlobalHandlerContext {
+    // Opaque identity tags exercise source retention only. This driver does not
+    // implement HTML settings objects or infer context from an actual JS realm.
+    const context = this.incumbentContext;
+    this.capturedContexts.push(context);
+    return context;
+  }
   invokeGlobalHandler(
     callback: GlobalHandlerCallback, receiver: object, args: GlobalHandlerArguments,
+    context: GlobalHandlerContext,
   ): GlobalHandlerInvocationResult {
-    this.invocations.push({ callback, receiver, args });
+    this.invocations.push({ callback, receiver, args, context });
     if (this.inactiveHandlers.has(callback)) return { ok: true, value: undefined };
     let result: GlobalHandlerInvocationResult;
     try { result = { ok: true, value: Reflect.apply(callback, receiver, args) }; }
