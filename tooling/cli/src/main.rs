@@ -2934,6 +2934,13 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
             counting.move_budget_exhaustions
         );
         println!("rc.borrows {}", counting.borrows);
+        println!("contents.visits {}", prepared.contents.visits);
+        println!(
+            "contents.budget_exhaustions {}",
+            prepared.contents.budget_exhaustions
+        );
+        println!("contents.reads {}", prepared.contents.reads.len());
+        println!("contents.elisions {}", prepared.contents.elisions.len());
         let regions = &prepared.regions;
         println!("regions.candidates {}", regions.candidates);
         println!("regions.sites {}", regions.sites);
@@ -3016,6 +3023,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     let (program, diagnostics) = if want_passes {
         let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
         println!("{header}");
+        print_contents(&prepared.contents, &mut locations);
         if let Some(invalid) = invalid {
             eprintln!("{invalid}");
         }
@@ -3073,6 +3081,25 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn print_contents(report: &hir::contents::Report, locations: &mut SourceLocations<'_>) {
+    println!(
+        "// contents: {} read(s), {} inert cleanup elision(s), {} operation visit(s), {} budget exhaustion(s)",
+        report.reads.len(),
+        report.elisions.len(),
+        report.visits,
+        report.budget_exhaustions
+    );
+    for read in &report.reads {
+        println!(
+            "// contents {} %{} @ {}: {}",
+            read.function,
+            read.value.0,
+            locations.where_it_spans(&read.origin.location),
+            read.fact
+        );
+    }
 }
 
 fn render(ty: &HirType) -> String {

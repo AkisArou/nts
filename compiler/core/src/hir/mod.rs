@@ -29,6 +29,7 @@ pub mod bounds;
 mod boxing;
 pub mod builtin;
 mod class_sets;
+pub mod contents;
 pub mod dce;
 mod destinations;
 pub mod elements;
@@ -5147,6 +5148,19 @@ pub(super) fn erased_entry_absent(program: &Program, class: TypeId) -> Absent {
         .unwrap_or(Absent::Impossible)
 }
 
+/// A single identity-preserving view edge. Joins use their incoming edges;
+/// runtime return aliases use `own::runtime_hands_back`.
+pub(super) fn carried_source(kind: &OpKind) -> Option<ValueId> {
+    match *kind {
+        OpKind::Erase { value, .. }
+        | OpKind::Unerase { value, .. }
+        | OpKind::Convert(value)
+        | OpKind::NativeStringView { string: value }
+        | OpKind::FieldView { value, .. } => Some(value),
+        _ => None,
+    }
+}
+
 /// Values carried through boxing and control-flow joins. These operations
 /// preserve reference identity; escape, callback reachability and exposure
 /// follow the same graph. Visited values make loop-carried joins terminate.
@@ -5189,33 +5203,25 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
         if at != value {
             values.push(at);
         }
-        match op.kind {
-            OpKind::Erase { value, .. }
-            | OpKind::Unerase { value, .. }
-            | OpKind::Convert(value)
-            | OpKind::NativeStringView { string: value }
-            | OpKind::FieldView { value, .. } => {
-                pending.push(value);
-            }
-            OpKind::BlockParam(_) => {
-                let Some((block, slot)) =
-                    func.blocks.iter().enumerate().find_map(|(block, body)| {
-                        body.params
-                            .iter()
-                            .position(|param| *param == at)
-                            .map(|slot| (block, slot))
-                    })
-                else {
-                    continue;
-                };
-                let incoming = incoming.get_or_insert_with(|| loops::predecessors(func));
-                for (_, args) in &incoming[block] {
-                    if let Some(arg) = args.get(slot) {
-                        pending.push(*arg);
-                    }
+        if let Some(value) = carried_source(&op.kind) {
+            pending.push(value);
+            continue;
+        }
+        if let OpKind::BlockParam(_) = op.kind {
+            let Some((block, slot)) = func.blocks.iter().enumerate().find_map(|(block, body)| {
+                body.params
+                    .iter()
+                    .position(|param| *param == at)
+                    .map(|slot| (block, slot))
+            }) else {
+                continue;
+            };
+            let incoming = incoming.get_or_insert_with(|| loops::predecessors(func));
+            for (_, args) in &incoming[block] {
+                if let Some(arg) = args.get(slot) {
+                    pending.push(*arg);
                 }
             }
-            _ => {}
         }
     }
     std::iter::once(value).chain(values)
@@ -5235,6 +5241,9 @@ pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {
 /// checked. Both have happened; neither is visible in the output.
 #[derive(Debug)]
 pub struct Prepared {
+    /// Identity-based payload proofs and inert cleanup elisions, independent
+    /// of written container element types.
+    pub contents: contents::Report,
     pub program: Program,
     /// What could not be lowered. Reported, not fatal: a program may have one
     /// unsupported function and many supported ones.
@@ -7775,12 +7784,19 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 /// What the provider inserts: reference counting's retains and releases, or,
 /// without counting, the sink that keeps a floating `GObject` the program's
 /// rather than the first container's (`floating`).
-fn provide(program: &mut Program, provider: Provider) -> rc::Report {
+fn provide(program: &mut Program, provider: Provider) -> (rc::Report, contents::Report) {
     match provider {
-        Provider::ReferenceCounting => rc::insert(program),
+        Provider::ReferenceCounting => {
+            let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
+            let mut counted = rc::insert(program);
+            let contents = contents::elide(program, &old_lengths);
+            counted.retains -= contents.inserted_retains_removed;
+            counted.releases -= contents.inserted_releases_removed;
+            (counted, contents)
+        }
         Provider::NoGc => {
             floating::sink(program);
-            rc::Report::default()
+            (rc::Report::default(), contents::Report::default())
         }
         Provider::HostGc => {
             // Lowering also records native frame lifetimes (`for await`).
@@ -7799,7 +7815,7 @@ fn provide(program: &mut Program, provider: Provider) -> rc::Report {
                     });
                 }
             }
-            rc::Report::default()
+            (rc::Report::default(), contents::Report::default())
         }
     }
 }
@@ -8082,7 +8098,7 @@ fn prepare_lowered(
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
-    let counting = provide(&mut program, options.provider);
+    let (counting, contents) = provide(&mut program, options.provider);
     // Recorded on the program rather than left in the options, because a
     // backend is handed the program alone and one of them has to act on this.
     // Set here, beside the pass it describes, so the two cannot drift.
@@ -8142,6 +8158,7 @@ fn prepare_lowered(
     }
 
     Prepared {
+        contents,
         cloned,
         copied,
         devirtualized,
