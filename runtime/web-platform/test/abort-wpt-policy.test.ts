@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import { AbortController, AbortSignal } from "../src/core/abort.ts";
+import { abortSignalBrand, abortSignalSubscribe } from "../src/core/abort-brand.ts";
+import { Event, EventTarget } from "../src/core/events.ts";
 
 const runtime = createHostNodeWebPlatform();
 test.after(() => runtime.close());
@@ -257,3 +259,165 @@ for (const accessor of [false, true]) {
     assert.equal(combined.reason, "actual reason");
   });
 }
+
+// Interface conversion tests identity, not script-visible properties. The add an
+// event listener algorithm then reads abort state and installs an internal step.
+// https://webidl.spec.whatwg.org/#es-interface
+// https://webidl.spec.whatwg.org/#es-dictionary
+// https://dom.spec.whatwg.org/#add-an-event-listener
+test("EventTarget cancellation accepts a real signal and an omitted signal", () => {
+  const controller = new AbortController();
+  const target = new EventTarget();
+  let withSignal = 0;
+  let withoutSignal = 0;
+  target.addEventListener("test", () => withSignal++, { signal: controller.signal });
+  target.addEventListener("test", () => withoutSignal++, { signal: undefined });
+  target.dispatchEvent(new Event("test"));
+  controller.abort();
+  target.dispatchEvent(new Event("test"));
+  assert.equal(withSignal, 1);
+  assert.equal(withoutSignal, 2);
+});
+
+test("EventTarget rejects structural and prototype-only signal forgeries", () => {
+  const target = new EventTarget();
+  const structural = {
+    [abortSignalBrand]: true,
+    aborted: false,
+    [abortSignalSubscribe]: () => () => {},
+  };
+  const prototypeOnly = Object.create(AbortSignal.prototype) as object;
+  for (const value of [null, false, 0, "signal", {}, prototypeOnly, structural]) {
+    assert.throws(
+      () => target.addEventListener("test", () => {}, { signal: value as AbortSignal }),
+      TypeError,
+    );
+  }
+});
+
+test("EventTarget converts signal even for a null callback", () => {
+  const target = new EventTarget();
+  const signal = {
+    [abortSignalBrand]: true,
+    aborted: false,
+    [abortSignalSubscribe]: () => () => {},
+  };
+  assert.throws(
+    () => target.addEventListener("test", null, { signal: signal as unknown as AbortSignal }),
+    TypeError,
+  );
+});
+
+test("EventTarget does not read properties while rejecting an invalid signal", () => {
+  const target = new EventTarget();
+  const signal = {
+    get [abortSignalBrand](): true {
+      throw new Error("the supplied brand property must not be read");
+    },
+    get aborted(): boolean {
+      throw new Error("the supplied aborted property must not be read");
+    },
+    get [abortSignalSubscribe](): unknown {
+      throw new Error("the supplied subscription property must not be read");
+    },
+  };
+  assert.throws(
+    () => target.addEventListener("test", () => {}, { signal: signal as AbortSignal }),
+    TypeError,
+  );
+});
+
+test("EventTarget ignores an active signal's public aborted getter", () => {
+  const controller = new AbortController();
+  const target = new EventTarget();
+  const prototype = {
+    get aborted(): boolean {
+      throw new Error("the public aborted getter must not be read");
+    },
+  };
+  Object.setPrototypeOf(prototype, AbortSignal.prototype);
+  Object.setPrototypeOf(controller.signal, prototype);
+  let calls = 0;
+  target.addEventListener("test", () => calls++, { signal: controller.signal });
+  target.dispatchEvent(new Event("test"));
+  controller.abort();
+  target.dispatchEvent(new Event("test"));
+  assert.equal(calls, 1);
+});
+
+test("EventTarget uses an already-aborted signal's internal state", () => {
+  const signal = AbortSignal.abort();
+  const target = new EventTarget();
+  let reads = 0;
+  const prototype = {
+    get aborted(): boolean {
+      reads++;
+      return false;
+    },
+  };
+  Object.setPrototypeOf(prototype, AbortSignal.prototype);
+  Object.setPrototypeOf(signal, prototype);
+  let calls = 0;
+  target.addEventListener("test", () => calls++, { signal });
+  target.dispatchEvent(new Event("test"));
+  assert.equal(reads, 0);
+  assert.equal(calls, 0);
+});
+
+test("EventTarget ignores a genuine signal's shadowed symbol brand", () => {
+  const controller = new AbortController();
+  Object.assign(controller.signal, { [abortSignalBrand]: false });
+  const target = new EventTarget();
+  let calls = 0;
+  target.addEventListener("test", () => calls++, { signal: controller.signal });
+  target.dispatchEvent(new Event("test"));
+  controller.abort();
+  target.dispatchEvent(new Event("test"));
+  assert.equal(calls, 1);
+});
+
+for (const accessor of [false, true]) {
+  test(`EventTarget ignores a signal's subscription ${accessor ? "getter" : "method override"}`, () => {
+    const controller = new AbortController();
+    const target = new EventTarget();
+    if (accessor) {
+      const prototype = {
+        get [abortSignalSubscribe](): unknown {
+          throw new Error("the subscription getter must not be read");
+        },
+      };
+      Object.setPrototypeOf(prototype, AbortSignal.prototype);
+      Object.setPrototypeOf(controller.signal, prototype);
+    } else {
+      Object.assign(controller.signal, {
+        [abortSignalSubscribe](): never {
+          throw new Error("the subscription override must not be invoked");
+        },
+      });
+    }
+    let calls = 0;
+    target.addEventListener("test", () => calls++, { signal: controller.signal });
+    target.dispatchEvent(new Event("test"));
+    controller.abort();
+    target.dispatchEvent(new Event("test"));
+    assert.equal(calls, 1);
+  });
+}
+
+test("EventTarget accepts and unsubscribes a signal after its prototype is removed", () => {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const target = new EventTarget();
+  let calls = 0;
+  const listener = (): void => { calls++; };
+  Object.setPrototypeOf(signal, null);
+  target.addEventListener("test", listener, { signal });
+  target.dispatchEvent(new Event("test"));
+  target.removeEventListener("test", listener);
+  // Controller dispatch uses separate internal operations; restore their prototype
+  // after checking that registration and unsubscription use only private state.
+  Object.setPrototypeOf(signal, AbortSignal.prototype);
+  controller.abort();
+  target.dispatchEvent(new Event("test"));
+  assert.equal(calls, 1);
+});

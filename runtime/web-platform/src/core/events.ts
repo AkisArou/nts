@@ -3,7 +3,7 @@ import {
   currentWebPlatformRuntime,
   hasWebPlatformRuntime,
 } from "../provider/environment.ts";
-import { abortSignalBrand } from "./abort-brand.ts";
+import { isAbortSignal, isAbortSignalAborted, subscribeAbortSignal } from "./abort-brand.ts";
 import type { AbortSignalOperations } from "./abort-brand.ts";
 import { DOMException } from "./errors.ts";
 import {
@@ -14,7 +14,6 @@ import {
   toUnsignedLong,
   toUnsignedShort,
 } from "./webidl.ts";
-import { abortSignalSubscribe } from "./abort-brand.ts";
 
 export interface EventInit {
   bubbles?: boolean;
@@ -566,23 +565,10 @@ function convertListenerSignal(signal: unknown): AbortSignalOperations | undefin
   if (signal === undefined) {
     return undefined;
   }
-  if (isEventListenerSignal(signal)) {
+  if (isAbortSignal(signal)) {
     return signal;
   }
   throw new TypeError("signal must be an AbortSignal");
-}
-
-function isEventListenerSignal(signal: unknown): signal is AbortSignalOperations {
-  return (
-    signal !== null &&
-    typeof signal === "object" &&
-    abortSignalBrand in signal &&
-    signal[abortSignalBrand] === true &&
-    "aborted" in signal &&
-    typeof signal.aborted === "boolean" &&
-    abortSignalSubscribe in signal &&
-    typeof signal[abortSignalSubscribe] === "function"
-  );
 }
 
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
@@ -688,7 +674,7 @@ export class EventTarget {
       }
     }
     if (convertedCallback === null) return;
-    if (signal?.aborted) return;
+    if (signal !== undefined && isAbortSignalAborted(signal)) return;
     if (
       listeners.some(
         (item) =>
@@ -713,7 +699,7 @@ export class EventTarget {
     listeners.push(listener);
     this.#listenerObserver?.(convertedType, true);
     if (signal !== undefined) {
-      listener.unsubscribeAbort = signal[abortSignalSubscribe](() => this.#removeRecord(listener));
+      listener.unsubscribeAbort = subscribeAbortSignal(signal, () => this.#removeRecord(listener));
     }
   }
 
