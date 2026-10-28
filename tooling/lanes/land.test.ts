@@ -1033,3 +1033,25 @@ test("a dirty docs ready entry is retained without blocking the next product tra
   const result=completed!;assert.equal(result.status,0,result.out);
   assert.equal(run(s,s.root,["show","main:docs/page.md"]),"ready");
 });
+
+test("selector infrastructure holds the train with all submissions still queued",async()=>{
+ const s=scratch(),a=lane(s,"selector-hold-a",{a:"a\n"}),b=lane(s,"selector-hold-b",{b:"b\n"}),c=lane(s,"selector-hold-c",{c:"c\n"});
+ const actual=spawnTest("sh",["-c","command -v git"],{encoding:"utf8"}).stdout.trim(),bin=join(s.home,"bin"),go=join(s.home,"selector-ready");mkdirSync(bin);
+ const quote=(v:string)=>"'"+v.replaceAll("'","'\\''")+"'";
+ writeFileSync(join(bin,"git"),`#!/bin/sh
+if [ "\${NTS_LAND_LOCKED:-}" = 1 ] && [ "$1" = worktree ] && [ "$2" = add ]; then
+ case "$*" in *nts-owed-range*) if [ ! -f ${quote(go)} ]; then echo 'range checkout resource unavailable' >&2; exit 75; fi;; esac
+fi
+exec ${quote(actual)} "$@"
+`);chmodSync(join(bin,"git"),0o755);s.env.PATH=`${bin}:${s.env.PATH}`;
+ const results=landTogether(s,[a,b,c]);
+ try {
+  const state=join(s.home,".cache/nts-land/status.json");
+  await until("the selector infrastructure hold",()=>existsSync(state)&&JSON.parse(readFileSync(state,"utf8")).resource==="selector");
+  assert.equal(readdirSync(join(s.home,".cache/nts-land/queue")).filter(n=>n.endsWith(".json")).length,3);
+  assert.equal(gates(s),0);
+ }finally{writeFileSync(go,"restored\n");}
+ for(const result of await results)assert.equal(result.status,0,result.out);
+ assert.equal(gates(s),1);
+ for(const path of ["a","b","c"])assert.ok(onMain(s,path));
+});

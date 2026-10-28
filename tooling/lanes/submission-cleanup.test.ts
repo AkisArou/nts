@@ -4,7 +4,7 @@ import {execFileSync} from "node:child_process";
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {cleanupSubmission,collectSubmissions,type SubmissionManifest} from "./submission-cleanup.ts";
+import {cleanupSubmission,collectSubmissions,collectRangeTrees,type SubmissionManifest} from "./submission-cleanup.ts";
 
 function fixture(t:{after(fn:()=>void):void}) {
  const home=mkdtempSync(join(tmpdir(),"submission-cleanup-"));t.after(()=>rmSync(home,{recursive:true,force:true}));
@@ -76,4 +76,22 @@ test("ExecStopPost may clean its own deactivating unit after every process exits
  const f=fixture(t),s=f.add("stopped");
  assert.equal(cleanupSubmission(f.repo,s.directory,{home:f.home,unitState:()=>"deactivating"}).state,"kept");
  assert.equal(cleanupSubmission(f.repo,s.directory,{home:f.home,postStopUnit:s.unit,unitState:()=>"deactivating"}).state,"removed");
+});
+
+test("range collection removes only dead recorded owners older than one hour",t=>{
+ const f=fixture(t),parent=join(f.home,".cache/nts-owed-range");mkdirSync(parent);
+ const add=(name:string,pid:number,created:number,record=true)=>{
+  const directory=join(parent,`range-${name}`);mkdirSync(directory);
+  f.git("worktree","add","-q","--detach",join(directory,"0"),f.sha);
+  if(record)writeFileSync(join(directory,"owner.json"),JSON.stringify({version:1,repo:f.repo,pid,created}));
+  return directory;
+ };
+ const old=add("old",2147483647,0),young=add("young",2147483647,7_100_000),live=add("live",process.pid,0),unknown=add("unknown",2147483647,0,false);
+ const results=collectRangeTrees(f.repo,{home:f.home,now:()=>7_200_000});
+ assert.equal(results.find(r=>r.name==="range-old")?.state,"removed",JSON.stringify(results));
+ assert.equal(existsSync(old),false);assert.equal(f.git("rev-parse","refs/archive/owed-ranges/range-old-0"),f.sha);
+ for(const path of [young,live,unknown])assert.ok(existsSync(path));
+ assert.match(results.find(r=>r.name==="range-young")!.reason!,/younger/);
+ assert.match(results.find(r=>r.name==="range-live")!.reason!,/still alive/);
+ assert.match(results.find(r=>r.name==="range-unknown")!.reason!,/unknown/);
 });

@@ -1,7 +1,7 @@
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,9 +14,16 @@ export type RuleView = { revision: string; checks: Checks; catalogue: string[]; 
 export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[] };
 const SELF = fileURLToPath(import.meta.url);
 const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
+export class SelectionInfrastructureError extends Error {}
+export function selectionInfrastructure(error:unknown):boolean {
+  return error instanceof SelectionInfrastructureError || error instanceof AggregateError&&error.errors.some(selectionInfrastructure);
+}
+function infrastructure<T>(operation:string,run:()=>T):T {
+  try{return run();}catch(error){throw new SelectionInfrastructureError(`${operation}: ${String(error)}`,{cause:error});}
+}
 
 function git(repo: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim();
+  return infrastructure(`selector git ${args[0]}`,()=>execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim());
 }
 
 function endpoints(repo: string, range: string): [string, string] {
@@ -52,27 +59,30 @@ export function selectRange(repo: string, range: string): RangeSelection {
   const [base, tip] = endpoints(repo, range);
   const changes=committedChanges(repo,base,tip);
   const parent = join(homedir(), ".cache/nts-owed-range");
-  mkdirSync(parent, { recursive: true });
-  const directory = mkdtempSync(join(parent, "range-"));
+  const shared=dirname(git(repo,"rev-parse","--path-format=absolute","--git-common-dir"));
+  infrastructure("selector directory",()=>mkdirSync(parent,{recursive:true}));
+  const directory=infrastructure("selector directory",()=>mkdtempSync(join(parent,"range-")));
   const added: string[] = [];
   const views: RuleView[] = [];
   let result: RangeSelection | undefined;
   const errors: unknown[] = [];
   let cleanupFailed = false;
   try {
-    const shared = dirname(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"));
+    infrastructure("selector owner record",()=>writeFileSync(join(directory,"owner.json"),JSON.stringify({version:1,pid:process.pid,created:Date.now(),repo:shared})+"\n"));
     for (const [index, revision] of [base, tip].entries()) {
       const tree = join(directory, String(index));
       git(repo, "worktree", "add", "--quiet", "--detach", tree, revision);
       added.push(tree);
       if (existsSync(join(tree, "pnpm-lock.yaml"))) {
-        execFileSync("sh", [INPUTS, "lane", shared, tree], { cwd: tree, stdio: ["ignore", "pipe", "pipe"] });
+        infrastructure("selector inputs",()=>execFileSync("sh", [INPUTS, "lane", shared, tree], { cwd: tree, stdio: ["ignore", "pipe", "pipe"] }));
       }
       try {
         const text = execFileSync(process.execPath, [SELF, "--endpoint", tree, revision],
           { cwd: tree, input:JSON.stringify(changes),encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], maxBuffer: 64 << 20 });
         views.push(readView(text, revision));
       } catch (error) {
+        const command=error as NodeJS.ErrnoException&{signal?:string;status?:number};
+        if(command.signal || typeof command.code==="string")throw new SelectionInfrastructureError(`selector worker interrupted at ${revision}: ${String(error)}`,{cause:error});
         throw new Error(`cannot evaluate owed rules at ${revision}: ${String(error)}`, { cause: error });
       }
     }
@@ -83,7 +93,7 @@ export function selectRange(repo: string, range: string): RangeSelection {
       try { git(repo, "worktree", "remove", "--force", tree); }
       catch (error) { cleanupFailed = true; errors.push(error); }
     }
-    if (!cleanupFailed) rmSync(directory, { recursive: true, force: true });
+    if (!cleanupFailed)try{infrastructure("selector cleanup",()=>rmSync(directory,{recursive:true,force:true}));}catch(error){errors.push(error);}
   }
   if (errors.length) throw new AggregateError(errors, `range selection failed; no owed scope was granted: ${errors.map(String).join("; ")}`);
   return result!;

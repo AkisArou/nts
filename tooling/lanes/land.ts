@@ -1,5 +1,5 @@
 import {pruneRunTemporaries} from "../gate/run-temporary.ts";
-import {selectRange} from "../gate/owed-range.ts";
+import {selectRange,selectionInfrastructure} from "../gate/owed-range.ts";
 import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Land a commit on main: the owed gate steps, one gate at a time, then a
 // fast-forward. What every lane did by hand, which is how main went red.
@@ -61,6 +61,7 @@ import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import {compose} from "./composition.ts";
 import {rootTrial} from "./root-trial.ts";
 import {publishReady,removeReady,snapshotReady,type ReadyEntry,type ReadyProof} from "./ready.ts";
+import {admitted} from "./admission-hold.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -162,7 +163,15 @@ function environmentProblem(tree: string, owed: Owed): string | null {
 }
 
 function owedSteps(tree: string, range: string): Owed {
-  return selectRange(tree, range).checks;
+  const read=()=>selectRange(tree,range).checks;
+  if(!holdsLandingLock())return read();
+  return admitted("selector",()=>{
+    try{return {value:read()};}
+    catch(error){if(!selectionInfrastructure(error))throw error;return {hold:String(error)};}
+  },held=>{
+    status({...held,selection_range:range});
+    say(`selector admission held ${held.age_s} s: ${held.reason}; queued submissions are kept`);
+  },{recovered:seconds=>say(`selector admission recovered after ${seconds} s`)});
 }
 
 /**
@@ -652,23 +661,15 @@ function checkGateTarget(root: string, context: {commit:string;base:string;train
   }
   let diskPath = GATE_TARGET;
   while (!existsSync(diskPath)) diskPath = dirname(diskPath);
-  let heldSince: number | null = null;
-  for (;;) {
+  admitted("disk",()=>{
     pruneRunTemporaries(process.env.HOME ?? homedir(),{minimumFreeBytes:TEST_DISK_FLOOR_BYTES+Math.max(TEST_BUILD_WORKING_BYTES,cacheBytes)});
     const disk = statfsSync(diskPath);
     const problem = testBuildAdmissionProblem(cacheBytes, disk.bavail * disk.bsize);
-    if (!problem) {
-      if (heldSince !== null) say(`disk admission recovered after ${Math.floor((Date.now()-heldSince)/1000)} s; continuing the queued train`);
-      return;
-    }
-    heldSince ??= Date.now();
-    const age_s = Math.floor((Date.now()-heldSince)/1000);
-    status({state:"held",resource:"disk",reason:problem,since:new Date(heldSince).toISOString(),age_s,pid:process.pid,...context});
-    say(`disk admission held ${age_s} s: ${problem}; queued submissions are kept`);
-    // The landing and gate-resource locks remain held. Resource availability
-    // is an admission event, never a candidate verdict or a wait deadline.
-    execFileSync("sleep", ["5"]);
-  }
+    return problem?{hold:problem}:{value:undefined};
+  },held=>{
+    status({...held,...context});
+    say(`disk admission held ${held.age_s} s: ${held.reason}; queued submissions are kept`);
+  },{recovered:seconds=>say(`disk admission recovered after ${seconds} s; continuing the queued train`)});
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */

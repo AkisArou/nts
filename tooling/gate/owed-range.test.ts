@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { selectRange, unionViews, type RuleView } from "./owed-range.ts";
+import { selectRange, selectionInfrastructure, unionViews, type RuleView } from "./owed-range.ts";
 import {committedChanges} from "./change-paths.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -101,4 +101,17 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   git("add", "tooling/gate/owed.mjs");
   git("commit", "-qm", "break the rule self-check");
   assert.throws(() => selectRange(repo, `${tip}..HEAD`), /broken rule control/);
+});
+
+test("a failed range worktree creation is identified as infrastructure",t=>{
+ const repo=mkdtempSync(join(tmpdir(),"range-machine-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
+ const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+ const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+ git("init","-qb","main");writeFileSync(join(repo,"base"),"base");git("add","base");git("commit","-qm","base");const base=git("rev-parse","HEAD");
+ writeFileSync(join(repo,"next"),"next");git("add","next");git("commit","-qm","next");
+ const actual=execFileSync("sh",["-c","command -v git"],{encoding:"utf8"}).trim(),bin=join(repo,"bin");mkdirSync(bin);
+ const quote=(s:string)=>"'"+s.replaceAll("'","'\\''")+"'";
+ writeFileSync(join(bin,"git"),`#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = add ]; then echo 'resource unavailable' >&2; exit 75; fi\nexec ${quote(actual)} "$@"\n`);chmodSync(join(bin,"git"),0o755);
+ const prior=process.env.PATH;t.after(()=>{process.env.PATH=prior;});process.env.PATH=`${bin}:${prior}`;
+ assert.throws(()=>selectRange(repo,`${base}..HEAD`),error=>selectionInfrastructure(error)&&String(error).includes("resource unavailable"));
 });
