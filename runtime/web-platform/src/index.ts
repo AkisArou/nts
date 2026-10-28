@@ -8,6 +8,8 @@ export type {
   URLPatternComponentResult,
   URLPatternResult,
 } from "./urlpattern/types.ts";
+export { QuotaExceededError } from "./core/quota-exceeded-error.ts";
+export type { QuotaExceededErrorOptions } from "./core/quota-exceeded-error.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
 export type {
