@@ -7,14 +7,17 @@ and [`workflow.md`](workflow.md); this page is what differs.
 
 ## What a cloud agent works on
 
-Plain TypeScript in `runtime/web-platform`, and the conformance tests that
-hold it to its specifications:
+Plain TypeScript, and the tests that hold it to its specification:
 
-- the specification-defined API surfaces and policy of features whose
-  provider is source code ([which kind of provider](../foundations/builtins.md#which-kind-of-provider));
-- the TypeScript surface of a native feature over its capability, where a
-  maintainer's handoff assigns it: the Web Cryptography API over
-  `host:crypto`'s primitives.
+- in `runtime/web-platform`, the specification-defined API surfaces and
+  policy of features whose provider is source code ([which kind of provider](../foundations/builtins.md#which-kind-of-provider));
+- in `runtime/web-platform`, the TypeScript surface of a native feature over
+  its capability, where a maintainer's handoff assigns it: the Web
+  Cryptography API over `host:crypto`'s primitives;
+- in `benchmarks/cases/`, programs ported from an established benchmark
+  suite, each with its C++ reference (and a Java one where the suite has
+  it), where a handoff assigns them. A port is transcribed, not rewritten,
+  and a program nts refuses is kept as it is: the refusal is the finding.
 
 Never the work the compiler or native code does: whatever depends on the
 layout of the values it is given (`structuredClone`, string conversions) and
