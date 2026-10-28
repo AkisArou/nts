@@ -108,63 +108,10 @@ pub(super) const OMITTED: &[(&str, &str)] = &[
     ("stack", "a compiled binary keeps no record of its frames"),
 ];
 
-/// The library's globals this compiler provides in some form, by name.
-///
-/// Where a name in this list reaches a refusal, what the program did with it
-/// is what has no lowering -- `console.log` read as a value, `Array` handed on
-/// as one -- and the refusal is NTS1001. A name *not* in it is a builtin no
-/// provider here supplies: NTS1100. A member is told apart by how it is
-/// reached: a *call* of a provided global's member falls through only when
-/// the member itself has no lowering (`Math.acosh(x)`), which is NTS1100 too.
-///
-/// Every name lowering recognises: the conversions and `Symbol`
-/// (`primitive_builtin`), the numeric predicates and `parseInt`/`parseFloat`,
-/// the URI functions and the timers (`lower_provided_builtin`), `Math`,
-/// `Number`'s and `String`'s statics (`intrinsic_of`), `console`
-/// (`console_method`), `JSON.stringify` (`lower/json.rs`), the classes with a representation (`Date`, `Map`,
-/// `Set`, `Promise`, `Array`, `Object`'s statics, `ArrayBuffer`, `DataView`,
-/// the typed arrays, the errors), and the constants. Builtins stage 2 turns
-/// this into the compiler's provider table, with members.
-const PROVIDED_GLOBALS: &[&str] = &[
-    "Array",
-    "ArrayBuffer",
-    "BigInt",
-    "Boolean",
-    "DataView",
-    "Date",
-    "Infinity",
-    "JSON",
-    "Map",
-    "Math",
-    "NaN",
-    "Number",
-    "Object",
-    "Promise",
-    "Set",
-    "String",
-    "Symbol",
-    "clearInterval",
-    "clearTimeout",
-    "console",
-    "decodeURI",
-    "decodeURIComponent",
-    "encodeURI",
-    "encodeURIComponent",
-    "isFinite",
-    "isNaN",
-    "parseFloat",
-    "parseInt",
-    "setInterval",
-    "setTimeout",
-    "undefined",
-];
-
-/// Whether `name` is a library global this compiler provides in some form
-/// ([`PROVIDED_GLOBALS`], the errors, the typed arrays).
+/// Whether this compiler has a lowering entry point for the library global.
+/// Member and call-shape restrictions live in the compiler provider table.
 pub(super) fn provides_global(name: &str) -> bool {
-    PROVIDED_GLOBALS.binary_search(&name).is_ok()
-        || is_error(name)
-        || typed_array_element(name).is_some()
+    super::features::compiler_global(name) || is_error(name) || typed_array_element(name).is_some()
 }
 
 /// Whether a name is one of the provided error classes.
@@ -375,20 +322,31 @@ pub(super) fn error_fields(class: &str) -> Vec<Field> {
 /// `[0, 255]` where the others wrap, and giving it the wrapping conversion
 /// would be silently wrong for exactly the inputs anyone would notice.
 /// `BigInt64Array` and `BigUint64Array` are absent because `bigint` is.
-#[must_use]
-pub fn typed_array_element(name: &str) -> Option<HirType> {
-    let int = |bits, signed| HirType::Int { bits, signed };
-    Some(match name {
-        "Int8Array" => int(8, true),
-        "Uint8Array" => int(8, false),
-        "Int16Array" => int(16, true),
-        "Uint16Array" => int(16, false),
-        "Int32Array" => int(32, true),
-        "Uint32Array" => int(32, false),
-        "Float32Array" => HirType::Float { bits: 32 },
-        "Float64Array" => HirType::Float { bits: 64 },
-        _ => return None,
-    })
+macro_rules! typed_arrays {
+    ($($name:literal => $ty:expr),+ $(,)?) => {
+        /// Names and element representations come from the same enumeration.
+        pub const TYPED_ARRAYS: &[&str] = &[$($name),+];
+
+        /// The element representation of a compiler-provided typed array.
+        #[must_use]
+        pub fn typed_array_element(name: &str) -> Option<HirType> {
+            Some(match name {
+                $($name => $ty,)+
+                _ => return None,
+            })
+        }
+    };
+}
+
+typed_arrays! {
+    "Int8Array" => HirType::Int { bits: 8, signed: true },
+    "Uint8Array" => HirType::Int { bits: 8, signed: false },
+    "Int16Array" => HirType::Int { bits: 16, signed: true },
+    "Uint16Array" => HirType::Int { bits: 16, signed: false },
+    "Int32Array" => HirType::Int { bits: 32, signed: true },
+    "Uint32Array" => HirType::Int { bits: 32, signed: false },
+    "Float32Array" => HirType::Float { bits: 32 },
+    "Float64Array" => HirType::Float { bits: 64 },
 }
 
 /// Which of the runtime's nine element kinds an element type is.
@@ -579,16 +537,4 @@ pub fn approximating(program: &super::Program) -> std::collections::HashSet<Stri
         }
     }
     approximate
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn the_provided_globals_are_sorted_for_their_search() {
-        assert!(
-            super::PROVIDED_GLOBALS
-                .windows(2)
-                .all(|pair| pair[0] < pair[1])
-        );
-    }
 }

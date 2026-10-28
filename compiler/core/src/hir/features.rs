@@ -23,6 +23,11 @@
 //! branch with it, and the arm a target cannot run is pruned before anything
 //! that target emits could see the call.
 
+mod compiler;
+
+pub(super) use compiler::compiler_global;
+pub use compiler::{CompilerProvider, ProviderKind, Use, compiler_providers};
+
 use super::{OpKind, Program};
 
 /// Which runtime helpers a backend provides, asked by name.

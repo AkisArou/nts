@@ -1,0 +1,708 @@
+{
+  "nts": {
+    "provides": {
+      "es:AggregateError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:Array": {
+        "compiler": true,
+        "limits": "Callbacks, element representations and argument counts are checked at each use; iterator-producing methods are not general values.",
+        "members": [
+          "from",
+          "isArray",
+          "prototype.at",
+          "prototype.concat",
+          "prototype.every",
+          "prototype.fill",
+          "prototype.filter",
+          "prototype.find",
+          "prototype.findIndex",
+          "prototype.findLast",
+          "prototype.findLastIndex",
+          "prototype.forEach",
+          "prototype.includes",
+          "prototype.indexOf",
+          "prototype.join",
+          "prototype.lastIndexOf",
+          "prototype.length",
+          "prototype.map",
+          "prototype.pop",
+          "prototype.push",
+          "prototype.reduce",
+          "prototype.reduceRight",
+          "prototype.reverse",
+          "prototype.shift",
+          "prototype.slice",
+          "prototype.some",
+          "prototype.sort",
+          "prototype.splice",
+          "prototype.toReversed",
+          "prototype.toSorted",
+          "prototype.toString",
+          "prototype.unshift",
+          "prototype.with"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:ArrayBuffer": {
+        "compiler": true,
+        "limits": "",
+        "members": [
+          "isView",
+          "prototype.byteLength",
+          "prototype.detached",
+          "prototype.maxByteLength",
+          "prototype.resizable",
+          "prototype.resize",
+          "prototype.slice",
+          "prototype.transfer",
+          "prototype.transferToFixedLength"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:BigInt": {
+        "compiler": true,
+        "limits": "Machine bigint representation; no boxed BigInt construction.",
+        "members": [
+          "asIntN",
+          "asUintN"
+        ],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:Boolean": {
+        "compiler": true,
+        "limits": "Primitive conversion; no boxed Boolean construction.",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:DataView": {
+        "compiler": true,
+        "limits": "",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.getBigInt64",
+          "prototype.getBigUint64",
+          "prototype.getFloat32",
+          "prototype.getFloat64",
+          "prototype.getInt16",
+          "prototype.getInt32",
+          "prototype.getInt8",
+          "prototype.getUint16",
+          "prototype.getUint32",
+          "prototype.getUint8",
+          "prototype.setBigInt64",
+          "prototype.setBigUint64",
+          "prototype.setFloat32",
+          "prototype.setFloat64",
+          "prototype.setInt16",
+          "prototype.setInt32",
+          "prototype.setInt8",
+          "prototype.setUint16",
+          "prototype.setUint32",
+          "prototype.setUint8"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Date": {
+        "compiler": true,
+        "limits": "Explicit numeric time only; no clock, local calendar, Date.now or Date.parse.",
+        "members": [
+          "prototype.getTime",
+          "prototype.valueOf"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Error": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:EvalError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:Float32Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Float64Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Infinity": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "value"
+        ]
+      },
+      "es:Int16Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Int32Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Int8Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:JSON": {
+        "compiler": true,
+        "limits": "Compiler-generated stringify for representable typed or erased values; parse has no compiler provider yet.",
+        "members": [
+          "stringify"
+        ],
+        "uses": []
+      },
+      "es:Map": {
+        "compiler": true,
+        "limits": "keys/values/entries only as recognised iterable walks; forEach requires an inline callback.",
+        "members": [
+          "prototype.clear",
+          "prototype.delete",
+          "prototype.entries",
+          "prototype.forEach",
+          "prototype.get",
+          "prototype.has",
+          "prototype.keys",
+          "prototype.set",
+          "prototype.size",
+          "prototype.values"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Math": {
+        "compiler": true,
+        "limits": "No random or unlisted Math members; arities and numeric coercions are checked at the call.",
+        "members": [
+          "E",
+          "LN10",
+          "LN2",
+          "LOG10E",
+          "LOG2E",
+          "PI",
+          "SQRT1_2",
+          "SQRT2",
+          "abs",
+          "acos",
+          "asin",
+          "atan",
+          "atan2",
+          "cbrt",
+          "ceil",
+          "cos",
+          "cosh",
+          "exp",
+          "expm1",
+          "floor",
+          "fround",
+          "hypot",
+          "imul",
+          "log",
+          "log10",
+          "log1p",
+          "log2",
+          "max",
+          "min",
+          "pow",
+          "round",
+          "sign",
+          "sin",
+          "sinh",
+          "sqrt",
+          "tan",
+          "tanh",
+          "trunc"
+        ],
+        "uses": []
+      },
+      "es:NaN": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "value"
+        ]
+      },
+      "es:Number": {
+        "compiler": true,
+        "limits": "Primitive numeric conversion and formatting; no boxed Number construction.",
+        "members": [
+          "EPSILON",
+          "MAX_SAFE_INTEGER",
+          "MAX_VALUE",
+          "MIN_SAFE_INTEGER",
+          "MIN_VALUE",
+          "NEGATIVE_INFINITY",
+          "NaN",
+          "POSITIVE_INFINITY",
+          "isFinite",
+          "isInteger",
+          "isNaN",
+          "isSafeInteger",
+          "prototype.toFixed",
+          "prototype.toString"
+        ],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:Object": {
+        "compiler": true,
+        "limits": "create accepts null; keys/values/entries and assign depend on the represented object or dictionary shape.",
+        "members": [
+          "assign",
+          "create",
+          "entries",
+          "hasOwn",
+          "is",
+          "keys",
+          "values"
+        ],
+        "uses": []
+      },
+      "es:Promise": {
+        "compiler": true,
+        "limits": "Representable payloads; all/race take arrays of promises, not arbitrary thenables or iterables.",
+        "members": [
+          "all",
+          "prototype.catch",
+          "prototype.finally",
+          "prototype.then",
+          "race",
+          "reject",
+          "resolve",
+          "withResolvers"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:RangeError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:ReferenceError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:Set": {
+        "compiler": true,
+        "limits": "keys/values/entries only as recognised iterable walks; forEach requires an inline callback.",
+        "members": [
+          "prototype.add",
+          "prototype.clear",
+          "prototype.delete",
+          "prototype.entries",
+          "prototype.forEach",
+          "prototype.has",
+          "prototype.keys",
+          "prototype.size",
+          "prototype.values"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:String": {
+        "compiler": true,
+        "limits": "Primitive strings; string separators and patterns, no RegExp or locale overloads; no boxed String construction.",
+        "members": [
+          "fromCharCode",
+          "fromCodePoint",
+          "prototype.at",
+          "prototype.charAt",
+          "prototype.charCodeAt",
+          "prototype.codePointAt",
+          "prototype.concat",
+          "prototype.endsWith",
+          "prototype.includes",
+          "prototype.indexOf",
+          "prototype.isWellFormed",
+          "prototype.lastIndexOf",
+          "prototype.length",
+          "prototype.padEnd",
+          "prototype.padStart",
+          "prototype.repeat",
+          "prototype.replace",
+          "prototype.replaceAll",
+          "prototype.slice",
+          "prototype.split",
+          "prototype.startsWith",
+          "prototype.substring",
+          "prototype.toLowerCase",
+          "prototype.toUpperCase",
+          "prototype.toWellFormed",
+          "prototype.trim",
+          "prototype.trimEnd",
+          "prototype.trimStart"
+        ],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:Symbol": {
+        "compiler": true,
+        "limits": "Symbol creation and registry; well-known symbols are recognised at their specific protocol sites.",
+        "members": [
+          "for",
+          "keyFor"
+        ],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:SyntaxError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:TypeError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:URIError": {
+        "compiler": true,
+        "limits": "Compiler error layout; stack is absent and AggregateError.errors is stored but not readable. Calling without new is not supplied.",
+        "members": [
+          "prototype.cause",
+          "prototype.message",
+          "prototype.name"
+        ],
+        "uses": [
+          "construct",
+          "value"
+        ]
+      },
+      "es:Uint16Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Uint32Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:Uint8Array": {
+        "compiler": true,
+        "limits": "Numeric typed-array views; copyWithin is supported as a statement, not a returned view. No clamped or bigint element arrays, general callback methods, or static from/of.",
+        "members": [
+          "prototype.buffer",
+          "prototype.byteLength",
+          "prototype.byteOffset",
+          "prototype.copyWithin",
+          "prototype.fill",
+          "prototype.join",
+          "prototype.length",
+          "prototype.set",
+          "prototype.slice",
+          "prototype.subarray"
+        ],
+        "uses": [
+          "construct"
+        ]
+      },
+      "es:decodeURI": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:decodeURIComponent": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:encodeURI": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:encodeURIComponent": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:isFinite": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:isNaN": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:parseFloat": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:parseInt": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "es:undefined": {
+        "compiler": true,
+        "limits": "",
+        "members": [],
+        "uses": [
+          "value"
+        ]
+      },
+      "web:clearInterval": {
+        "compiler": true,
+        "limits": "Compiler timer lowering; the selected loop host must supply the runtime. Clock provider resolution is not implemented here.",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "web:clearTimeout": {
+        "compiler": true,
+        "limits": "Compiler timer lowering; the selected loop host must supply the runtime. Clock provider resolution is not implemented here.",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "web:console": {
+        "compiler": true,
+        "limits": "Direct calls with representable arguments; object inspection, formatting directives and extracted methods have restrictions.",
+        "members": [
+          "debug",
+          "error",
+          "info",
+          "log",
+          "warn"
+        ],
+        "uses": []
+      },
+      "web:setInterval": {
+        "compiler": true,
+        "limits": "Compiler timer lowering; the selected loop host must supply the runtime. Clock provider resolution is not implemented here.",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      },
+      "web:setTimeout": {
+        "compiler": true,
+        "limits": "Compiler timer lowering; the selected loop host must supply the runtime. Clock provider resolution is not implemented here.",
+        "members": [],
+        "uses": [
+          "call"
+        ]
+      }
+    }
+  }
+}
