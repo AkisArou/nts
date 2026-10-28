@@ -288,7 +288,7 @@ export type {
   CryptoOkpComponents, CryptoKeyComponents, CryptoRawSecretImport, CryptoRawEcImport,
   CryptoRawOkpImport, CryptoDerImport, CryptoComponentsImport, CryptoKeyImport,
   CryptoRsaGeneration, CryptoEcGeneration, CryptoOkpGeneration, CryptoKeyPairGeneration,
-  CryptoAesCtrParameters, CryptoAesCbcParameters, CryptoAesGcmParameters, CryptoAesKwParameters,
+  CryptoAesCtrParameters, CryptoAesCbcParameters, CryptoAesGcmParameters, CryptoAeadParameters, CryptoAesKwParameters,
   CryptoRsaOaepParameters, CryptoCipherParameters, CryptoCiphertext, CryptoHashSignatureParameters,
   CryptoRsaPssParameters, CryptoEd25519Parameters, CryptoEd448Parameters, CryptoSignatureParameters,
   CryptoByteSignature, CryptoEcdsaSignature, CryptoSignature, CryptoAgreementParameters,

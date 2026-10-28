@@ -20,7 +20,7 @@ import {
   timingSafeEqual,
   verify,
 } from "node:crypto";
-import type { CipherGCMTypes, KeyObject } from "node:crypto";
+import type { CipherGCMTypes, CipherOCBTypes, KeyObject } from "node:crypto";
 import type {
   CryptoAesCtrParameters,
   CryptoCipherParameters,
@@ -597,6 +597,17 @@ export class NodeCryptoProvider implements CryptoProvider {
       if (parameters.name === "AES-CTR") {
         return { bytes: ctr(parameters, nativeKey, data), tag: null };
       }
+      if (parameters.name === "AES-OCB" || parameters.name === "ChaCha20-Poly1305") {
+        const options = { authTagLength: parameters.tagLength / 8 };
+        // Node 24.20/OpenSSL rejects an empty OCB IV, although the proposal's
+        // shared validation permits it. Keep that native limitation as a failure
+        // value; do not add a narrower bound to the package algorithm.
+        const cipher = parameters.name === "AES-OCB"
+          ? createCipheriv(`aes-${secretBits(nativeKey)}-ocb` as CipherOCBTypes, nativeKey, parameters.iv, options)
+          : createCipheriv("chacha20-poly1305", nativeKey, parameters.iv, options);
+        cipher.setAAD(parameters.additionalData, { plaintextLength: byteLength(data) });
+        return { bytes: owned(Buffer.concat([cipher.update(data), cipher.final()])), tag: owned(cipher.getAuthTag()) };
+      }
       if (parameters.name === "AES-GCM") {
         const name = `aes-${secretBits(nativeKey)}-gcm` as CipherGCMTypes;
         const cipher = createCipheriv(name, nativeKey, parameters.iv, {
@@ -638,6 +649,17 @@ export class NodeCryptoProvider implements CryptoProvider {
         }, data.bytes));
       }
       if (parameters.name === "AES-CTR") return ctr(parameters, nativeKey, data.bytes);
+      if (parameters.name === "AES-OCB" || parameters.name === "ChaCha20-Poly1305") {
+        if (data.tag === null) return { failure: "operation" };
+        const options = { authTagLength: parameters.tagLength / 8 };
+        const cipher = parameters.name === "AES-OCB"
+          ? createDecipheriv(`aes-${secretBits(nativeKey)}-ocb` as CipherOCBTypes, nativeKey, parameters.iv, options)
+          : createDecipheriv("chacha20-poly1305", nativeKey, parameters.iv, options);
+        cipher.setAAD(parameters.additionalData, { plaintextLength: byteLength(data.bytes) });
+        cipher.setAuthTag(data.tag);
+        // No plaintext crosses the capability unless native final() authenticates it.
+        return owned(Buffer.concat([cipher.update(data.bytes), cipher.final()]));
+      }
       if (parameters.name === "AES-GCM") {
         if (data.tag === null) return { failure: "operation" };
         const name = `aes-${secretBits(nativeKey)}-gcm` as CipherGCMTypes;

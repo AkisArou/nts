@@ -299,8 +299,7 @@
       "harnessScripts": [],
       "expectedTests": 277,
       "blockedTestFiles": [
-        "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-001.json",
-        "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-002.json"
+        "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-001.json"
       ]
     },
     {
@@ -311,9 +310,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 28,
-      "blockedTestFiles": [
-        "exclusions/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
@@ -382,11 +379,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 774,
-      "blockedTestFiles": [
-        "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-001.json",
-        "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-002.json",
-        "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-003.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
@@ -537,9 +530,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 500,
-      "blockedTestFiles": [
-        "exclusions/generateKey/failures_chacha20_poly1305.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
@@ -613,10 +604,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 288,
-      "blockedTestFiles": [
-        "exclusions/generateKey/successes_AES-OCB.tentative.https.any.js.part-001.json",
-        "exclusions/generateKey/successes_AES-OCB.tentative.https.any.js.part-002.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
@@ -779,10 +767,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 192,
-      "blockedTestFiles": [
-        "exclusions/generateKey/successes_chacha20_poly1305.tentative.https.any.js.part-001.json",
-        "exclusions/generateKey/successes_chacha20_poly1305.tentative.https.any.js.part-002.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
@@ -837,9 +822,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 72,
-      "blockedTestFiles": [
-        "exclusions/import_export/AES-OCB_importKey.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
@@ -863,9 +846,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 24,
-      "blockedTestFiles": [
-        "exclusions/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
@@ -1519,7 +1500,7 @@
         "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey_vectors.js"
       ],
       "harnessScripts": [],
-      "expectedTests": 357,
+      "expectedTests": 472,
       "blockedTestFiles": []
     }
   ],

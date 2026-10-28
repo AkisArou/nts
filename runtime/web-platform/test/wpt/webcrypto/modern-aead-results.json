@@ -1,0 +1,312 @@
+{
+  "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
+  "base": "58e563fb44037a3eae58261ba425467cd150f67e",
+  "note": "AEAD family evidence in isolation before stacking SHA-3/cSHAKE/KMAC. Every source is the existing unedited WPT original. The shared wrapping fixture registered115 additional cases after AEAD key imports succeeded; its follow-up run validates the updated472 expectation. The parent stack gate records combined totals.",
+  "files": [
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+      "pass": 241,
+      "fail": 0,
+      "blocked": 36
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+      "pass": 28,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+      "pass": 500,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+      "pass": 192,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+      "pass": 24,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    }
+  ],
+  "totals": {
+    "pass": 2119,
+    "fail": 0,
+    "blocked": 41
+  },
+  "restoredExclusions": 1398,
+  "reclassifiedNormalizationCases": 36,
+  "reclassifiedNativeCloneCases": 5,
+  "wrapping": {
+    "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+    "pass": 472,
+    "fail": 0,
+    "blocked": 0
+  },
+  "rawAesOcb": {
+    "pass": 241,
+    "fail": 36,
+    "blocked": 0,
+    "failures": [
+      {
+        "name": "AES-OCB 128-bit key, 64-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 128-bit key, no additional data, 64-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, no additional data, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, no additional data, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 128-bit key, 96-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 128-bit key, no additional data, 96-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, no additional data, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, no additional data, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 128-bit key, 128-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 128-bit key, no additional data, 128-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, no additional data, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 128-bit key, no additional data, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 192-bit key, 64-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 192-bit key, no additional data, 64-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, no additional data, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, no additional data, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 192-bit key, 96-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 192-bit key, no additional data, 96-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, no additional data, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, no additional data, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 192-bit key, 128-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 192-bit key, no additional data, 128-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, no additional data, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 192-bit key, no additional data, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 256-bit key, 64-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 256-bit key, no additional data, 64-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, no additional data, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, no additional data, 64-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 256-bit key, 96-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 256-bit key, no additional data, 96-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, no additional data, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, no additional data, 96-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 256-bit key, 128-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 256-bit key, no additional data, 128-bit tag, 120-bit iv with transferred plaintext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, no additional data, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+        "stack": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-OCB 256-bit key, no additional data, 128-bit tag, 120-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n    at assert_unreached (file:///workspace/scratch/55aa11d9dca7/nts-webcrypto-aead/runtime/web-platform/test/wpt/harness.ts:432:54)\n    at WebCryptoAPI/encrypt_decrypt/aes.js:116:21"
+      },
+      {
+        "name": "AES-OCB 128-bit key, 64-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 128-bit key, no additional data, 64-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 128-bit key, 96-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 128-bit key, no additional data, 96-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 128-bit key, 128-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 128-bit key, no additional data, 128-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 192-bit key, 64-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 192-bit key, no additional data, 64-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 192-bit key, 96-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 192-bit key, no additional data, 96-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 192-bit key, 128-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 192-bit key, no additional data, 128-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 256-bit key, 64-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 256-bit key, no additional data, 64-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 256-bit key, 96-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 256-bit key, no additional data, 96-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 256-bit key, 128-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      },
+      {
+        "name": "AES-OCB 256-bit key, no additional data, 128-bit tag, 120-bit iv decryption with transferred ciphertext during call",
+        "status": "fail",
+        "error": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+        "stack": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n\n    at WebCryptoAPI/encrypt_decrypt/aes.js:261:25"
+      }
+    ]
+  },
+  "evidence": {
+    "aead-focused-final.log": "5bbd679f65761963b56b9d58106d56118dba802de1c4c439afc3428a6c6b022e",
+    "aead-regression.log": "201b06a9bd8a7920ed58b4fe15a63317580a409ba0872e8b6a9df752e6382ed2",
+    "aead-scoped.jsonl": "014b9450de05f52a386f51282c46feb6788678df89a383bb836ff5ed2e856485",
+    "aead-ocb-raw.jsonl": "270814001799d4d25d62c5360a8dd52954be67a00acdf86f15042861ca617fa0",
+    "aead-chacha-raw.jsonl": "320e6865fbcee067c894e957e3403dded585b524fe897851063d04618b769b16",
+    "aead-wrap-scoped.jsonl": "bd9f927028e523e33ce7332758ea0a6e1b68696744d27d367f739df3d07e9fac"
+  }
+}

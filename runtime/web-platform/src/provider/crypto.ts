@@ -228,6 +228,16 @@ export interface CryptoAesGcmParameters {
   readonly tagLength: number;
 }
 
+/** Modern Algorithms §§10–11. Encryption and tag authentication stay native. */
+export interface CryptoAeadParameters {
+  readonly name: "AES-OCB" | "ChaCha20-Poly1305";
+  /** AES-OCB: at most 15 octets; ChaCha20-Poly1305: exactly 12 octets. */
+  readonly iv: Uint8Array;
+  readonly additionalData: Uint8Array;
+  /** Bits: AES-OCB accepts 64/96/128; ChaCha20-Poly1305 requires 128. */
+  readonly tagLength: number;
+}
+
 export interface CryptoAesKwParameters {
   /** RFC 3394 with its standard fixed initial value. */
   readonly name: "AES-KW";
@@ -243,10 +253,11 @@ export type CryptoCipherParameters =
   | CryptoAesCtrParameters
   | CryptoAesCbcParameters
   | CryptoAesGcmParameters
+  | CryptoAeadParameters
   | CryptoAesKwParameters
   | CryptoRsaOaepParameters;
 
-/** GCM's tag is separate so its concatenation/splitting remains shared policy. */
+/** AEAD tags are separate so concatenation/splitting remains shared policy. */
 export interface CryptoCiphertext {
   readonly bytes: Uint8Array;
   readonly tag: Uint8Array | null;
@@ -387,7 +398,7 @@ export interface CryptoProvider extends CryptoDigestProvider {
 
   generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure;
 
-  /** CBC input is already padded; GCM returns its tag separately, others use null. */
+  /** CBC input is already padded; AEAD returns its tag separately, others use null. */
   encrypt(parameters: CryptoCipherParameters, key: CryptoKeyHandle, data: Uint8Array): CryptoCiphertext | CryptoFailure;
 
   /** CBC output remains padded. Authentication failure must not return plaintext. */
