@@ -654,6 +654,7 @@ export class EventTarget {
     if (convertedCallback === null) return;
     for (const item of this.listeners) {
       if (
+        !item.removed &&
         item.type === convertedType &&
         item.callback === convertedCallback &&
         item.capture === capture
