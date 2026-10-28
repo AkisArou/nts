@@ -1,5 +1,8 @@
 # URLPattern source implementation and conformance
 
+Item B9 is stacked on [Navigator PR #40](https://github.com/AkisArou/nts/pull/40),
+`chatgpt/navigator-user-agent` at `ab880bac9d55b43a72f8bc83e781cc006cf8fa0b`.
+
 The package's source `URLPattern` passes all **745 registered cases** in the
 selected, unedited corpus on Node **v24.20.0**. No registered case is skipped.
 The native URL component capability and provider bootstrap are still integration
@@ -317,3 +320,32 @@ Both strict TypeScript checks exited zero without diagnostics at the original te
 pin; the WPT project was checked again after the integrity fixes. The full project
 gate and nts compiled axis were not run in this source-area task. The compiler-side
 validation and final stacked-branch integration remain with the maintainers.
+
+## Final stack validation and overlap
+
+The public barrel now exports the canonical URLPattern and public input/result
+types; the provider barrel exports the explicit installation operation and
+capability contract. Existing URL code and the bootstrap file remain unchanged.
+
+Both strict TypeScript projects pass on the complete stack. After both adapter
+integrity repairs, the full ordinary-node gate exits zero: **5,075 tests; 4,753
+passed, 0 failed, 322 skipped**. The broader upstream runner records **2,772
+passed, 0 failed, 45 not applicable**. The selected URLPattern corpus still
+reports **745 passed, 0 failed, 0 blocked**. The compiler is absent and that
+axis explicitly skips. These measurements belong to the integrated source
+commit recorded separately in the evidence JSON; earlier measurements retain
+their historical source and adapter pins.
+
+Shared overlap with PR #10 and other conformance work is additive: the
+`assert_implements` assertion; waiting for implicit asynchronous registrations;
+the per-file registration inventory bound; persistent registration-guard
+failures; checking recorded errors after awaited provider teardown; and three
+strict-test/check.sh registrations. The later global-error PR adds an independent
+uncaught-exception channel. Its permission to accept expected global exceptions
+must not erase registration or teardown integrity failures.
+
+The adapter retains a pre-existing stricter behavior for `explicit_done`: calling
+`done()` closes registration immediately, while upstream can permit registration
+from already pending tests before completion. None of this selected corpus needs
+that combination. This is a named adapter limitation, not a skipped URLPattern
+case or a claim of a complete replacement for upstream testharness.js.

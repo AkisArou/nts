@@ -398,5 +398,24 @@
     "expectationStatus": "Source expectations verified by following linked standard algorithms; native nts state-override binding remains not verified.",
     "testCapabilityCommit": "a01743e0a7b7a9700242be4c51bf2706fdc6b890",
     "testCapabilitySHA256": "742c73161434695b46eea6555837f0da80fa9602f9deeba25a4d0c339855e740"
+  },
+  "stackValidation": {
+    "basePullRequest": 40,
+    "baseCommit": "ab880bac9d55b43a72f8bc83e781cc006cf8fa0b",
+    "sourceCommit": "820b6050ba9fe88571806938772ca57b91e0729b",
+    "sourceTree": "6b9c4a4c16ff13fda7ce6676f842a1f4e945242a",
+    "fullGate": {
+      "exitCode": 0,
+      "tests": 5075,
+      "pass": 4753,
+      "fail": 0,
+      "skipped": 322,
+      "upstreamPass": 2772,
+      "upstreamFail": 0,
+      "upstreamNotApplicable": 45
+    },
+    "strictProjects": "source and WPT pass",
+    "compiled": "not verified; compiler absent",
+    "logSHA256": "b2e40b0dc54d1a487797107ad836ff231b634a717d1afad7f940f8696da0a49e"
   }
 }
