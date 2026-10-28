@@ -177,6 +177,8 @@ export interface WptBlock {
 }
 
 export interface WptHarnessOptions {
+  /** Inventory bound, so a recursively generated promise chain cannot starve timers. */
+  maxTests?: number;
   exposeSelf?: boolean;
   defaultTestName?: string;
 }
@@ -417,6 +419,7 @@ export class WptHarness {
   private readonly timeout: number;
   private readonly globalTimers = new Set<ReturnType<typeof setTimeout>>();
   private readonly defaultTestName: string | undefined;
+  private readonly maxTests: number;
   private defaultNameCount = 0;
 
   constructor(
@@ -429,6 +432,9 @@ export class WptHarness {
     assert.ok(options.defaultTestName === undefined || typeof options.defaultTestName === "string",
       "WPT defaultTestName must be a string");
     this.defaultTestName = options.defaultTestName;
+    this.maxTests = options.maxTests ?? 100000;
+    assert.ok(Number.isSafeInteger(this.maxTests) && this.maxTests > 0,
+      "WPT maxTests must be a positive safe integer");
     assert.ok(Number.isSafeInteger(timeout) && timeout > 0, "WPT timeout must be positive integer milliseconds");
     this.timeout = timeout;
     this.context = createContext({ ...globals });
@@ -515,6 +521,8 @@ export class WptHarness {
     Object.assign(this.context, hostErrors, {
       assert_equals: assert.strictEqual,
       assert_not_equals: assert.notStrictEqual,
+      // WPT capability assertions fail normally; they do not mark a test skipped.
+      assert_implements: (value: unknown, message?: string) => assert.ok(value, message),
       assert_true: (value: unknown, message?: string) => assert.equal(value, true, message),
       assert_false: (value: unknown, message?: string) => assert.equal(value, false, message),
       assert_approx_equals: (actual: unknown, expected: number, epsilon: number, message?: string) => {
@@ -636,6 +644,12 @@ export class WptHarness {
   private register(explicitName: string | undefined, kind: TestKind): WptTest {
     assert.equal(this.registrationClosed, false, "test registered after done()");
     assert.equal(this.cleanupErrors.length, 0, "test registered after cleanup failure");
+    if (this.tests.length >= this.maxTests) {
+      const error = new Error("WPT test registration exceeded the declared inventory limit");
+      this.recordError(error);
+      this.closeRegistration();
+      throw error;
+    }
     let name = explicitName;
     if (name === undefined) {
       if (this.defaultTestName === undefined) name = `unnamed test ${this.tests.length + 1}`;
@@ -690,13 +704,27 @@ export class WptHarness {
   }
 
   async finish(): Promise<WptResult[]> {
-    if (!this.explicitDone || this.errors.length !== 0) this.closeRegistration();
+    if (this.errors.length !== 0) this.closeRegistration();
     const registrationTimeout = setTimeout(() => {
-      this.recordError(new Error("WPT explicit_done setup requires a call to done()"));
+      this.recordError(new Error(this.explicitDone
+        ? "WPT explicit_done setup requires a call to done()"
+        : "WPT pending tests did not complete before timeout"));
       this.closeRegistration();
     }, this.timeout);
     try {
-      await this.registrationDone.promise;
+      if (this.explicitDone) await this.registrationDone.promise;
+      else {
+        // An outstanding upstream test may register further tests, for example
+        // after loading a JSON corpus. Implicit completion waits for that work;
+        // explicit done() still closes registration immediately when called.
+        while (!this.registrationClosed) {
+          const queue = this.promiseQueue;
+          const count = this.tests.length;
+          await queue;
+          await Promise.all(this.tests.map((test) => test.completed));
+          if (queue === this.promiseQueue && count === this.tests.length) this.closeRegistration();
+        }
+      }
       clearTimeout(registrationTimeout);
       await this.promiseQueue;
       await Promise.all(this.tests.map((test) => test.completed));

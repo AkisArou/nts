@@ -112,6 +112,7 @@ export async function runWptFixtures(
         timeouts.length === 0 ? 10000 : 60000, {
           exposeSelf: environment.exposeSelf,
           defaultTestName: fixture.defaultTestName,
+          maxTests: fixture.expectedTests,
         });
       const scripts = [...source.matchAll(/^\/\/ META: script=(.+)$/gm)].map((match) => {
         const reference = match[1];

@@ -37,6 +37,8 @@
     "../wpt-performance-adapter.test.ts",
     "../performance-policy.test.ts",
     "../wpt-performance.test.ts",
-    "../navigator-user-agent-policy.test.ts"
+    "../navigator-user-agent-policy.test.ts",
+    "../wpt-urlpattern.test.ts",
+    "../urlpattern-policy.test.ts"
   ]
 }
