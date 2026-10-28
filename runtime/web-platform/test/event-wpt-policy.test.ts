@@ -3,6 +3,7 @@ import test from "node:test";
 import { AbortController } from "../src/core/abort.ts";
 
 import {
+  CustomEvent,
   Event,
   EventTarget,
   addInternalEventListener,
@@ -144,4 +145,118 @@ test("initEvent preserves trust while the event is dispatching", () => {
   });
   controller.abort();
   assert.equal(calls, 1);
+});
+
+// Web IDL attributes and operations require an object implementing the interface.
+// The corresponding DOM algorithms use internal state, not overridable accessors.
+// https://webidl.spec.whatwg.org/#es-attributes
+// https://webidl.spec.whatwg.org/#es-operations
+test("Event getters reject receivers without Event internal state", () => {
+  const event = new Event("x");
+  for (const name of [
+    "type", "target", "srcElement", "currentTarget", "eventPhase", "bubbles",
+    "cancelable", "returnValue", "defaultPrevented", "composed", "timeStamp", "cancelBubble",
+  ] as const) {
+    const get = Object.getOwnPropertyDescriptor(Event.prototype, name)?.get;
+    assert.ok(get !== undefined, name);
+    assert.equal(get.call(event), event[name]);
+    assert.throws(() => get.call({}), TypeError, name);
+    assert.throws(() => get.call(Object.create(Event.prototype)), TypeError, name);
+  }
+  const trusted = Object.getOwnPropertyDescriptor(event, "isTrusted")?.get;
+  assert.ok(trusted !== undefined);
+  assert.equal(trusted.call(event), false);
+  assert.throws(() => trusted.call({}), TypeError);
+});
+
+test("Event setters reject an invalid receiver even when their value is a no-op", () => {
+  const returnValue = Object.getOwnPropertyDescriptor(Event.prototype, "returnValue")?.set;
+  const cancelBubble = Object.getOwnPropertyDescriptor(Event.prototype, "cancelBubble")?.set;
+  assert.ok(returnValue !== undefined && cancelBubble !== undefined);
+  assert.throws(() => returnValue.call({}, true), TypeError);
+  assert.throws(() => cancelBubble.call({}, false), TypeError);
+});
+
+test("Event and EventTarget validate the receiver before argument conversion", () => {
+  const wrongEvent = {} as Event;
+  const wrongTarget = {} as EventTarget;
+  let conversions = 0;
+  const type = {
+    toString(): string {
+      conversions++;
+      return "x";
+    },
+  } as unknown as string;
+  assert.throws(() => Event.prototype.initEvent.call(wrongEvent, type), TypeError);
+  assert.throws(() => EventTarget.prototype.addEventListener.call(wrongTarget, type, null), TypeError);
+  assert.throws(() => EventTarget.prototype.removeEventListener.call(wrongTarget, type, null), TypeError);
+  assert.equal(conversions, 0);
+});
+
+test("dispatchEvent rejects an Event prototype without initialized internal state", () => {
+  const target = new EventTarget();
+  assert.equal(target.dispatchEvent(new Event("x")), true);
+  assert.throws(() => target.dispatchEvent(Object.create(Event.prototype)), TypeError);
+});
+
+test("CustomEvent requires its own brand for detail and initCustomEvent", () => {
+  const get = Object.getOwnPropertyDescriptor(CustomEvent.prototype, "detail")?.get;
+  assert.ok(get !== undefined);
+  const custom = new CustomEvent("x", { detail: 42 });
+  assert.equal(get.call(custom), 42);
+  assert.throws(() => get.call(new Event("x")), TypeError);
+  assert.throws(() => CustomEvent.prototype.initCustomEvent.call({} as CustomEvent, "x"), TypeError);
+  const ordinary = new Event("original");
+  assert.throws(() => CustomEvent.prototype.initCustomEvent.call(ordinary as CustomEvent, "changed"), TypeError);
+  assert.equal(ordinary.type, "original");
+});
+
+test("event and target expandos cannot replace their internal state", () => {
+  const event = new Event("x", { cancelable: true });
+  const eventProperties = event as unknown as Record<string, unknown>;
+  eventProperties.eventType = "forged";
+  eventProperties.eventCancelable = false;
+  eventProperties.canceled = true;
+  eventProperties.dispatching = true;
+  const target = new EventTarget();
+  let calls = 0;
+  target.addEventListener("x", () => { calls++; });
+  const targetProperties = target as unknown as Record<string, unknown>;
+  targetProperties.listeners = [];
+
+  assert.equal(event.type, "x");
+  assert.equal(event.cancelable, true);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(target.dispatchEvent(event), true);
+  assert.equal(calls, 1);
+});
+
+test("dispatch uses event state even when public accessors are overridden", () => {
+  class OverriddenEvent extends Event {
+    override get type(): string { return "shadow"; }
+    override get defaultPrevented(): boolean { return true; }
+  }
+  const event = new OverriddenEvent("actual");
+  const target = new EventTarget();
+  const order: string[] = [];
+  target.addEventListener("actual", () => { order.push("actual"); });
+  target.addEventListener("shadow", () => { order.push("shadow"); });
+
+  assert.equal(target.dispatchEvent(event), true);
+  assert.deepEqual(order, ["actual"]);
+  assert.equal(event.type, "shadow", "the script accessor remains observable to script");
+  assert.equal(event.defaultPrevented, true);
+});
+
+test("the returnValue setter sets the canceled flag without calling preventDefault", () => {
+  let calls = 0;
+  class OverriddenEvent extends Event {
+    override preventDefault(): void { calls++; }
+  }
+  const event = new OverriddenEvent("x", { cancelable: true });
+  event.returnValue = false;
+
+  assert.equal(calls, 0);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(new EventTarget().dispatchEvent(event), false);
 });
