@@ -1,0 +1,388 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "license": "BSD-3-Clause (server/LICENSE.wpt.md; individual notices retained unedited)",
+  "notes": [
+    "All listed files are byte-for-byte copies from this revision.",
+    "Python files are reference source only; the Node server implements their routes in TypeScript and never executes Python.",
+    "This manifest covers server resources; WPT test cases are added by the following API-specific pull requests.",
+    "Upstream LICENSE.md is stored as server/LICENSE.wpt.md to avoid the shared adapter's independently owned root licence file."
+  ],
+  "files": [
+    {
+      "source": "LICENSE.md",
+      "local": "server/LICENSE.wpt.md",
+      "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570"
+    },
+    {
+      "source": "common/blank.html",
+      "local": "common/blank.html",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "common/gc.js",
+      "local": "common/gc.js",
+      "sha256": "186144288438fb6d520defdc16a6a86fff193184a30fe04e901fe93febe3f8c4"
+    },
+    {
+      "source": "common/get-host-info.sub.js",
+      "local": "common/get-host-info.sub.js",
+      "sha256": "9fa3d3004fbe6d0d6c1f46b8c8824afd8b84d72aade671b78e7bd964678cb9ca"
+    },
+    {
+      "source": "common/get-host-info.sub.js.headers",
+      "local": "common/get-host-info.sub.js.headers",
+      "sha256": "0c458ff2f1fd1e3318475993bba7600a3d6fddc1de06905192cc9de8b60244f0"
+    },
+    {
+      "source": "common/redirect.py",
+      "local": "common/redirect.py",
+      "sha256": "793e73f77283c37162861cf083cdeae4b8970c7ff0179d9af8219052e698766d"
+    },
+    {
+      "source": "common/utils.js",
+      "local": "common/utils.js",
+      "sha256": "8dd4c32ad80d3c332d62197595ca5bf57f63e6a1bd93117cf0b9dbc6a9468aca"
+    },
+    {
+      "source": "common/utils.js.headers",
+      "local": "common/utils.js.headers",
+      "sha256": "0c458ff2f1fd1e3318475993bba7600a3d6fddc1de06905192cc9de8b60244f0"
+    },
+    {
+      "source": "eventsource/resources/accept.event_stream",
+      "local": "eventsource/resources/accept.event_stream",
+      "sha256": "e269f5fc804289172b762094e588486a4568052313a726f637d2c2df05960726"
+    },
+    {
+      "source": "eventsource/resources/cache-control.event_stream",
+      "local": "eventsource/resources/cache-control.event_stream",
+      "sha256": "b01b84ad12d200761d190e332db8d4624a17f7943bded2617205a0463e0b11d2"
+    },
+    {
+      "source": "eventsource/resources/cors-cookie.py",
+      "local": "eventsource/resources/cors-cookie.py",
+      "sha256": "0c3832d71021b6129177597c3a691278fbf282ca7754224393fa1af4020d90f4"
+    },
+    {
+      "source": "eventsource/resources/cors.py",
+      "local": "eventsource/resources/cors.py",
+      "sha256": "39064d13f38801c4bab9295946003ccc57d24a836d2224753f528206944e2b31"
+    },
+    {
+      "source": "eventsource/resources/eventsource-onmessage-realm.htm",
+      "local": "eventsource/resources/eventsource-onmessage-realm.htm",
+      "sha256": "debc1315adb63834c7d3f70b2a231fa4f36e9146c53f7ef7604f0ef20a71afc8"
+    },
+    {
+      "source": "eventsource/resources/init.htm",
+      "local": "eventsource/resources/init.htm",
+      "sha256": "757ad2e8e6d97d59cafece4d03976ca2355c1df824e29fbdf0bfafc1afb79c06"
+    },
+    {
+      "source": "eventsource/resources/last-event-id.py",
+      "local": "eventsource/resources/last-event-id.py",
+      "sha256": "e0fa6ac8a28bfd6c1a89100e9da493f4de666f0e862b3456f0ed7b2bf6079ee1"
+    },
+    {
+      "source": "eventsource/resources/last-event-id2.py",
+      "local": "eventsource/resources/last-event-id2.py",
+      "sha256": "ae60e490fb0c2740741bd647a39856a2642aab30c17b79b702648cea4e4d4a2e"
+    },
+    {
+      "source": "eventsource/resources/message.py",
+      "local": "eventsource/resources/message.py",
+      "sha256": "599e09bbdc6e1c14e27ab1b55255684b7a8ee30333c4afff2bc423b29b2ef82b"
+    },
+    {
+      "source": "eventsource/resources/message2.py",
+      "local": "eventsource/resources/message2.py",
+      "sha256": "4c285e861eef6ebe3458ed2342487b611e14fcbdcf78857a05a19d0ac83fb154"
+    },
+    {
+      "source": "eventsource/resources/reconnect-fail.py",
+      "local": "eventsource/resources/reconnect-fail.py",
+      "sha256": "abdf53aeed9c21b8bc0dcdd6e3b3f3719e8de4b3c9035da6c66e1bb573ab5bfe"
+    },
+    {
+      "source": "eventsource/resources/status-error.py",
+      "local": "eventsource/resources/status-error.py",
+      "sha256": "c6ce87f85380e33e673e9504d7fb61f1a3183543eaabf2a1daf4758c9f82bf72"
+    },
+    {
+      "source": "eventsource/resources/status-reconnect.py",
+      "local": "eventsource/resources/status-reconnect.py",
+      "sha256": "f4211d7a8dd585c3c2de7b992890616e8e449d8d5836eef5d1489da7dbd0469a"
+    },
+    {
+      "source": "fetch/api/resources/stash-put.py",
+      "local": "fetch/api/resources/stash-put.py",
+      "sha256": "f94e68dfe3fce5d70652b738196a6468c355d39f83cf21a2a5f60316059c11e3"
+    },
+    {
+      "source": "fetch/api/resources/stash-take.py",
+      "local": "fetch/api/resources/stash-take.py",
+      "sha256": "77644d5446f323e8bc57a5ba0beb110a1d15924f42bee3c9c8e9803ed82d8ffc"
+    },
+    {
+      "source": "tools/certs/README.md",
+      "local": "tools/certs/README.md",
+      "sha256": "05ef2ff20cad286ac53fcddf0b9ac505815fe0539e4fb768f9ee39eecb462fb1"
+    },
+    {
+      "source": "tools/certs/cacert.key",
+      "local": "tools/certs/cacert.key",
+      "sha256": "3bfa9c56c511e674279685f2771ad8ba6630e7251d113e24665e475a88a2ca3f"
+    },
+    {
+      "source": "tools/certs/cacert.pem",
+      "local": "tools/certs/cacert.pem",
+      "sha256": "6760c932218bfe2703b10f2ea89a54b409f04d94dc5a1c9cf0f1fe7da8b30b52"
+    },
+    {
+      "source": "tools/certs/config.json",
+      "local": "tools/certs/config.json",
+      "sha256": "4ebea0fc5bf3bd86c3b1ab0a5674094cbbd09e577804e6999f3f7e09adac5d18"
+    },
+    {
+      "source": "tools/certs/web-platform.test.key",
+      "local": "tools/certs/web-platform.test.key",
+      "sha256": "9393531e76b8e347ce4ecfec85379c3cab0e04badecf90aca379d256eda27ce1"
+    },
+    {
+      "source": "tools/certs/web-platform.test.pem",
+      "local": "tools/certs/web-platform.test.pem",
+      "sha256": "672f5518b6e7dd3ee2878bdb10518ab71fbdbf2276b1a6e3e80325412c5fa4dc"
+    },
+    {
+      "source": "websockets/constants.sub.js",
+      "local": "websockets/constants.sub.js",
+      "sha256": "676e20ac136832faf9b5d20c702cad1cbfc2b90aad3f8634febe542af540b008"
+    },
+    {
+      "source": "websockets/cookies/support/set-cookie.py",
+      "local": "websockets/cookies/support/set-cookie.py",
+      "sha256": "9a715e578010220e107d3d722abed072fce016d1cdb660a6cea9b5460c57d085"
+    },
+    {
+      "source": "websockets/cookies/support/websocket-cookies-helper.sub.js",
+      "local": "websockets/cookies/support/websocket-cookies-helper.sub.js",
+      "sha256": "5a507dc97aa3728c24b408cf84c6aab4b07ee458a9a6928f8eb710177d646b1f"
+    },
+    {
+      "source": "websockets/handlers/basic_auth_wsh.py",
+      "local": "websockets/handlers/basic_auth_wsh.py",
+      "sha256": "15f5980ad21a5ddcd0dd41ee9ab09cb8bf97f582a4229a6a89e8bae92740500c"
+    },
+    {
+      "source": "websockets/handlers/delayed-passive-close_wsh.py",
+      "local": "websockets/handlers/delayed-passive-close_wsh.py",
+      "sha256": "57161ba3f2579de1b2f2f427e373d401491ef2d2a844ee8aa05ba013961a4bdb"
+    },
+    {
+      "source": "websockets/handlers/echo-cookie_wsh.py",
+      "local": "websockets/handlers/echo-cookie_wsh.py",
+      "sha256": "3445f74bada5fb1ec32f475f482c6362ecf5203477ab738374f25d8bbdd5c430"
+    },
+    {
+      "source": "websockets/handlers/echo-query_v13_wsh.py",
+      "local": "websockets/handlers/echo-query_v13_wsh.py",
+      "sha256": "96267ce3d97c5ec9a492ed371e6f5ffd17e084a965f33dbc72e26d529249dae9"
+    },
+    {
+      "source": "websockets/handlers/echo-query_wsh.py",
+      "local": "websockets/handlers/echo-query_wsh.py",
+      "sha256": "122b0e98e81c611a1e63699c2b408cf293eb8a3ce6ad6e60ee38b0c92cc43615"
+    },
+    {
+      "source": "websockets/handlers/echo_close_data_wsh.py",
+      "local": "websockets/handlers/echo_close_data_wsh.py",
+      "sha256": "2d2353ede12c45ca30da5b083dde39c83a5703ff72c48b532671a6aa8243234b"
+    },
+    {
+      "source": "websockets/handlers/echo_exit_wsh.py",
+      "local": "websockets/handlers/echo_exit_wsh.py",
+      "sha256": "b417cba70a8927a1bf01c12dc0cd10b1d77b21f02a3804ad9b46b08316fe9417"
+    },
+    {
+      "source": "websockets/handlers/echo_raw_wsh.py",
+      "local": "websockets/handlers/echo_raw_wsh.py",
+      "sha256": "cf45392bebcb4594c1229c8c2678ee5e8dbedb80718265f81321e30b1ede3860"
+    },
+    {
+      "source": "websockets/handlers/echo_wsh.py",
+      "local": "websockets/handlers/echo_wsh.py",
+      "sha256": "93ba5c7c13ac34742800a15b405d916b08e73abbf6150f0aa148113fd594d963"
+    },
+    {
+      "source": "websockets/handlers/empty-message_wsh.py",
+      "local": "websockets/handlers/empty-message_wsh.py",
+      "sha256": "f20ce08f087d0ab2ff9a3708af79d63513a61d4c949e7e00e4b4dfc678b0dcce"
+    },
+    {
+      "source": "websockets/handlers/handshake_no_extensions_wsh.py",
+      "local": "websockets/handlers/handshake_no_extensions_wsh.py",
+      "sha256": "a54b78a107725d550d4c07fdbb945ecbaaf0ccabe7525e2a8c1b5d181959713c"
+    },
+    {
+      "source": "websockets/handlers/handshake_no_protocol_wsh.py",
+      "local": "websockets/handlers/handshake_no_protocol_wsh.py",
+      "sha256": "f852a131fa10b6448de04530461ac624fba512842b20ecba44d5da635a2945c9"
+    },
+    {
+      "source": "websockets/handlers/handshake_protocol_wsh.py",
+      "local": "websockets/handlers/handshake_protocol_wsh.py",
+      "sha256": "b933d10e97c93af758d6b554f4c523e4a8a88627e3ecf62a7198e0215321db03"
+    },
+    {
+      "source": "websockets/handlers/handshake_sleep_2_wsh.py",
+      "local": "websockets/handlers/handshake_sleep_2_wsh.py",
+      "sha256": "08ebfbf07d86c65b4f900e80c441bee1cc14dc052d6b523536d581fee950c15f"
+    },
+    {
+      "source": "websockets/handlers/invalid_wsh.py",
+      "local": "websockets/handlers/invalid_wsh.py",
+      "sha256": "f2e7e375fc57c0a7faef7bd07a908d42d829f3db10d2032da70295c017d47d2f"
+    },
+    {
+      "source": "websockets/handlers/msg_channel_wsh.py",
+      "local": "websockets/handlers/msg_channel_wsh.py",
+      "sha256": "af604fab439277b7ff6945df24050ec68c091ebf994d22ccd323921f286b7a9a"
+    },
+    {
+      "source": "websockets/handlers/origin_wsh.py",
+      "local": "websockets/handlers/origin_wsh.py",
+      "sha256": "3f35684090c062a182d3394d330d8c49d863966c20a8bbb9cc161ebcc3af0cd9"
+    },
+    {
+      "source": "websockets/handlers/passive-close-abort_wsh.py",
+      "local": "websockets/handlers/passive-close-abort_wsh.py",
+      "sha256": "23b213b1322b3dd20b2e0d7639e66d0146353f11a6969963cd995bd5bb1f6a55"
+    },
+    {
+      "source": "websockets/handlers/protocol_array_wsh.py",
+      "local": "websockets/handlers/protocol_array_wsh.py",
+      "sha256": "c8bae3fd523e38b5a1f1be2c6a13c6726690af266e5d5ab4e80bfb00cb407e23"
+    },
+    {
+      "source": "websockets/handlers/protocol_wsh.py",
+      "local": "websockets/handlers/protocol_wsh.py",
+      "sha256": "7af7c3e45ae449bad6d03181fe6640d79231f40e17d1d9e49c3a9b3206dd901e"
+    },
+    {
+      "source": "websockets/handlers/receive-backpressure_wsh.py",
+      "local": "websockets/handlers/receive-backpressure_wsh.py",
+      "sha256": "54d49712c7aee5e24889d231e57906e0fe4188b0eceb179227e5d375add7bb1f"
+    },
+    {
+      "source": "websockets/handlers/receive-many-with-backpressure_wsh.py",
+      "local": "websockets/handlers/receive-many-with-backpressure_wsh.py",
+      "sha256": "be7c8b7062149b1b3de705a34c8d6b978e1417222e5f8d97756e6995446e8ead"
+    },
+    {
+      "source": "websockets/handlers/referrer_wsh.py",
+      "local": "websockets/handlers/referrer_wsh.py",
+      "sha256": "2b1fe3ad292af36b4872ce598e3184a139fa3f8f5cac3010daa7d6b036016068"
+    },
+    {
+      "source": "websockets/handlers/remote-close_wsh.py",
+      "local": "websockets/handlers/remote-close_wsh.py",
+      "sha256": "dd462f7308ec551eaa79ebf3944e26a489fd98b395203a2c4c38e9bb83de7820"
+    },
+    {
+      "source": "websockets/handlers/send-backpressure_wsh.py",
+      "local": "websockets/handlers/send-backpressure_wsh.py",
+      "sha256": "e7f5e25d18e37abf0cf386d5b6e8a28ece7fc76cd728511706ecf90c01bf3185"
+    },
+    {
+      "source": "websockets/handlers/set-cookie-secure_wsh.py",
+      "local": "websockets/handlers/set-cookie-secure_wsh.py",
+      "sha256": "f3913b785528f00d920edcc96ecc5fb6b060b0948b3e080c15d9eea2441a1daa"
+    },
+    {
+      "source": "websockets/handlers/set-cookie_http_wsh.py",
+      "local": "websockets/handlers/set-cookie_http_wsh.py",
+      "sha256": "4c150ca483e3a070a7dd56e3d6a09c3f9f156f71d0d818c6ed1412a4011fce3f"
+    },
+    {
+      "source": "websockets/handlers/set-cookie_wsh.py",
+      "local": "websockets/handlers/set-cookie_wsh.py",
+      "sha256": "e24edf63b1ab3ff1685fa1ed999d4481ab1f318338d01d97edd98810aa58514a"
+    },
+    {
+      "source": "websockets/handlers/set-cookies-samesite_wsh.py",
+      "local": "websockets/handlers/set-cookies-samesite_wsh.py",
+      "sha256": "bea3992a5f97467e33c455ec6ff40446fd65b6b63ad1662fd6d8a658dfb97885"
+    },
+    {
+      "source": "websockets/handlers/simple_handshake_wsh.py",
+      "local": "websockets/handlers/simple_handshake_wsh.py",
+      "sha256": "2d06df01b544903317abb71fdc5f16fa697294184729f230a523c9f455b2163f"
+    },
+    {
+      "source": "websockets/handlers/sleep_10_v13_wsh.py",
+      "local": "websockets/handlers/sleep_10_v13_wsh.py",
+      "sha256": "74c727344ef74069755c221077cb78f488fa2fb0254753f426db7e977b195b18"
+    },
+    {
+      "source": "websockets/handlers/stash_responder_blocking_wsh.py",
+      "local": "websockets/handlers/stash_responder_blocking_wsh.py",
+      "sha256": "353d8a9c7b39b61d9a2462bc92cd7174308ac8ac43912bf8f2301b107d828a41"
+    },
+    {
+      "source": "websockets/handlers/stash_responder_wsh.py",
+      "local": "websockets/handlers/stash_responder_wsh.py",
+      "sha256": "a8e125d37f841b5c221cf2f39f76c9604708df503c902976349b7239011302aa"
+    },
+    {
+      "source": "websockets/handlers/wrong_accept_key_wsh.py",
+      "local": "websockets/handlers/wrong_accept_key_wsh.py",
+      "sha256": "9566c78f95dd04a7299e7bf6645978d755f2d4a6444159d676f84c298ce206da"
+    },
+    {
+      "source": "websockets/multi-globals/support/incumbent.sub.html",
+      "local": "websockets/multi-globals/support/incumbent.sub.html",
+      "sha256": "1e3cd87c3e2b32cd92a8898db520b7edbc72a64dc54dd28349f5ea4a4f4b5c1f"
+    },
+    {
+      "source": "websockets/multi-globals/support/relevant.html",
+      "local": "websockets/multi-globals/support/relevant.html",
+      "sha256": "27d1f5f0dbdb56308acfb52f58058d07feadc4f8686f756ee80f2dfe53a5be45"
+    },
+    {
+      "source": "websockets/opening-handshake/resources/redirect_response.py",
+      "local": "websockets/opening-handshake/resources/redirect_response.py",
+      "sha256": "ef7006f6af90149175d3bf6f535b81d8886303bb2988416e47b51a1c12bc532c"
+    },
+    {
+      "source": "websockets/resources/accept-handshake.py",
+      "local": "websockets/resources/accept-handshake.py",
+      "sha256": "fcaa23eeb218f6a4447826f43cca88e9df2061bc7d604ce46ba8760283b586c4"
+    },
+    {
+      "source": "websockets/resources/https-proxy.sub.pac",
+      "local": "websockets/resources/https-proxy.sub.pac",
+      "sha256": "6901b2c4718283e88253619e7a4cdab6ede93c9ca4d9a31c4869b0c0e9dbe64c"
+    },
+    {
+      "source": "websockets/resources/websockets-test-helpers.sub.js",
+      "local": "websockets/resources/websockets-test-helpers.sub.js",
+      "sha256": "501fffef88939f655aa3cf5872169251e1eb778576ca070dd3e914c50cf382fd"
+    },
+    {
+      "source": "websockets/security/check.py",
+      "local": "websockets/security/check.py",
+      "sha256": "f8a0d95843e6798fba2d14ce3e6d9910e17f1c7d0a2226ba64b68485816e0332"
+    },
+    {
+      "source": "websockets/stream/tentative/resources/url-constants.js",
+      "local": "websockets/stream/tentative/resources/url-constants.js",
+      "sha256": "abecda63229dc39cf663aeaeee95120c3d1f3cfbdcffc46433e985b9b299526c"
+    },
+    {
+      "source": "xhr/resources/content-in-chunks.py",
+      "local": "xhr/resources/content-in-chunks.py",
+      "sha256": "8df4246ec0f20fce0550045278844a5ab18a39ff1b497548a7dec0157bf7e394"
+    }
+  ]
+}
