@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createPublicKey, verify as verifySignature } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { createCryptoKey, getCryptoKeySlots, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
 import type {
@@ -65,7 +65,7 @@ class RecordingProvider extends NodeCryptoProvider {
 function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { bytes.fill(0x37); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { bytes.fill(0x37); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function key(name: "Ed25519" | "X25519", type: "public" | "private", usages?: readonly KeyUsage[]): Promise<CryptoKey> {
     const use: readonly KeyUsage[] = usages ?? (name === "X25519"

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import type { KeyUsage } from "../src/crypto/crypto-key.ts";
 import type { CryptoNamedCurve } from "../src/provider/crypto.ts";
 import { VirtualScheduler } from "../src/provider/virtual-time.ts";
@@ -13,7 +13,7 @@ import { rsaPkcs8, rsaSpki } from "./rsa-fixtures.ts";
 
 function fixture() {
   const scheduler = new VirtualScheduler();
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { bytes.fill(1); } }, new NodeCryptoProvider(), scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { bytes.fill(1); } }, new NodeCryptoProvider(), scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function ec(curve: CryptoNamedCurve, name: "ECDSA" | "ECDH", type: "private" | "public") {
     const usages: KeyUsage[] = name === "ECDSA" ? [type === "private" ? "sign" : "verify"]

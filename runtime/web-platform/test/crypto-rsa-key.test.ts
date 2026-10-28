@@ -2,7 +2,7 @@
 // RFC 7518 §§2 and 6.3. Native mathematics are supplied by test/node-crypto-provider.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
 import type { CryptoKeyPair } from "../src/crypto/crypto-key.ts";
@@ -56,7 +56,7 @@ class RecordingProvider extends NodeCryptoProvider {
 function fixture(provider = new RecordingProvider()) {
   const scheduler = new VirtualScheduler();
   let fills = 0;
-  const subtle = new Crypto({ fill(bytes) { fills++; bytes.fill(0x42); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes) { fills++; bytes.fill(0x42); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function imported(type: "public" | "private", name: RsaAlgorithmName = "RSASSA-PKCS1-v1_5", extractable = true): Promise<CryptoKey> {
     return settle(subtle.importKey(type === "public" ? "spki" : "pkcs8", type === "public" ? rsaSpki() : rsaPkcs8(),

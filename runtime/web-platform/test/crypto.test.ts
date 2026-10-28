@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { Crypto, createCrypto } from "../src/crypto/crypto.ts";
 import { DOMException } from "../src/core/errors.ts";
 import type { CryptoDigestName, CryptoProvider, CryptoFailure } from "../src/provider/crypto.ts";
 import type { RandomSource } from "../src/provider/primitives.ts";
@@ -45,7 +45,7 @@ function fixture(provider: CryptoProvider = new NodeCryptoProvider()): {
 } {
   const random = new CountingRandom();
   const scheduler = new VirtualScheduler();
-  return { crypto: new Crypto(random, provider, scheduler), random, scheduler };
+  return { crypto: createCrypto(random, provider, scheduler), random, scheduler };
 }
 
 function ascii(text: string): Uint8Array<ArrayBuffer> {
@@ -228,7 +228,7 @@ test("getRandomValues reads intrinsic typed-array slots, not overridden accessor
       Uint8Array.prototype.fill.call(bytes, 0x42);
     },
   };
-  const crypto = new Crypto(random, new NodeCryptoProvider(), new VirtualScheduler());
+  const crypto = createCrypto(random, new NodeCryptoProvider(), new VirtualScheduler());
   assert.equal(crypto.getRandomValues(view), view);
   assert.deepEqual([...new Uint8Array(buffer)], [0, 0, 0, 0x42, 0x42, 0x42, 0x42, 0, 0, 0, 0, 0]);
 });
@@ -287,7 +287,7 @@ test("randomUUID consumes an entire 128-UUID pool before refilling it", () => {
 test("randomUUID overwrites the version and variant bits for all input bit patterns", () => {
   for (const byte of [0, 0x3f, 0x40, 0x7f, 0x80, 0xbf, 0xc0, 0xff]) {
     const random: RandomSource = { fill(bytes) { bytes.fill(byte); } };
-    const crypto = new Crypto(random, new NodeCryptoProvider(), new VirtualScheduler());
+    const crypto = createCrypto(random, new NodeCryptoProvider(), new VirtualScheduler());
     const uuid = crypto.randomUUID();
     assert.equal(uuid[14], "4");
     assert.equal(Number.parseInt(uuid[19]!, 16), ((byte & 0x3f) | 0x80) >> 4);

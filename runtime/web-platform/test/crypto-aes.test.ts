@@ -10,7 +10,7 @@ import { createCipheriv } from "node:crypto";
 import test from "node:test";
 
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { Crypto, createCrypto } from "../src/crypto/crypto.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
 import type {
   CryptoCipherParameters,
@@ -62,7 +62,7 @@ function fixture(): Fixture {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
   const random = { fill(bytes: Uint8Array): void { bytes.fill(0x42); } };
-  return { crypto: new Crypto(random, provider, scheduler), scheduler, provider };
+  return { crypto: createCrypto(random, provider, scheduler), scheduler, provider };
 }
 
 function complete<T>(f: Fixture, promise: Promise<T>): Promise<T> {

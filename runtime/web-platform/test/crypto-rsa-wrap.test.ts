@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import type { KeyUsage } from "../src/crypto/crypto-key.ts";
 import type {
   CryptoCipherParameters, CryptoCiphertext, CryptoFailure, CryptoKeyHandle,
@@ -50,7 +50,7 @@ class RecordingProvider extends NodeCryptoProvider {
 function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { bytes.fill(0xa5); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { bytes.fill(0xa5); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function rsa(type: "public" | "private", name: string, usages: readonly KeyUsage[], extractable = true) {
     return settle(subtle.importKey(type === "public" ? "spki" : "pkcs8", type === "public" ? rsaSpki() : rsaPkcs8(),

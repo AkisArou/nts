@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHmac, hkdfSync, pbkdf2Sync } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import type { KeyUsage } from "../src/crypto/crypto-key.ts";
 import type { CryptoDerivationParameters, CryptoDigestName, CryptoFailure, CryptoKeyHandle,
   CryptoKeyImport, CryptoKeyRecord } from "../src/provider/crypto.ts";
@@ -43,7 +43,7 @@ class CountingScheduler extends VirtualScheduler {
 function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new CountingScheduler();
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { bytes.fill(7); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { bytes.fill(7); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function key(name: KdfName, usages: readonly KeyUsage[] = ["deriveKey", "deriveBits"]) {
     const result = await settle(subtle.importKey("raw", password, name, false, usages));

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
 import type { KdfAlgorithmName } from "../src/crypto/algorithms.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { KeyUsage } from "../src/crypto/crypto-key.ts";
 import { getKdfKeyLength } from "../src/crypto/kdf.ts";
@@ -31,7 +31,7 @@ function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
   let fills = 0;
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { fills++; bytes.fill(0x37); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { fills++; bytes.fill(0x37); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   return { provider, scheduler, subtle, settle, fills: () => fills };
 }

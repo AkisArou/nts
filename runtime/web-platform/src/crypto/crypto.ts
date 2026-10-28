@@ -8,8 +8,10 @@ import {
   cryptoViewByteLength,
   toCryptoArrayBufferView,
 } from "./buffer-source.ts";
-import { SubtleCrypto } from "./subtle-crypto.ts";
+import { createSubtleCrypto } from "./subtle-crypto.ts";
+import type { SubtleCrypto } from "./subtle-crypto.ts";
 
+const constructorToken = Symbol("Crypto construction");
 const uuidHex: string[] = [];
 for (let byte = 0; byte < 256; byte++) uuidHex.push(byte.toString(16).padStart(2, "0"));
 const uuidPoolBytes = 128 * 16;
@@ -21,10 +23,18 @@ export class Crypto {
   #uuidPool: Uint8Array | undefined;
   #uuidOffset: number;
 
-  /** Tests/embedders construct directly until the runtime-assembly PR. */
-  constructor(random: RandomSource, provider: CryptoProvider, scheduler: Scheduler) {
+  /** Web IDL supplies no public constructor or capability-injection arguments. */
+  constructor(
+    token: symbol | undefined = undefined,
+    random?: RandomSource,
+    provider?: CryptoProvider,
+    scheduler?: Scheduler,
+  ) {
+    if (token !== constructorToken || random === undefined || provider === undefined || scheduler === undefined) {
+      throw new TypeError("Illegal constructor");
+    }
     this.#random = random;
-    this.#subtle = new SubtleCrypto(provider, scheduler, random);
+    this.#subtle = createSubtleCrypto(provider, scheduler, random);
     this.#uuidPool = undefined;
     this.#uuidOffset = uuidPoolBytes;
   }
@@ -82,4 +92,9 @@ export class Crypto {
       + uuidHex[pool[offset + 12]!]! + uuidHex[pool[offset + 13]!]!
       + uuidHex[pool[offset + 14]!]! + uuidHex[pool[offset + 15]!]!;
   }
+}
+
+/** Internal embedding factory; capability injection is not part of the Web constructor. */
+export function createCrypto(random: RandomSource, provider: CryptoProvider, scheduler: Scheduler): Crypto {
+  return new Crypto(constructorToken, random, provider, scheduler);
 }
