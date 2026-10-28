@@ -80,6 +80,8 @@ const keyRegistrations: readonly { name: string; operations: readonly CryptoOper
   { name: "ECDH", operations: ["deriveBits", "generateKey", "importKey", "exportKey"] },
   { name: "Ed25519", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
   { name: "X25519", operations: ["deriveBits", "generateKey", "importKey", "exportKey"] },
+  { name: "HKDF", operations: ["deriveBits", "importKey", "get key length"] },
+  { name: "PBKDF2", operations: ["deriveBits", "importKey", "get key length"] },
 ];
 
 for (const registration of keyRegistrations) {
@@ -95,6 +97,9 @@ for (const registration of keyRegistrations) {
         modulusLength: 2048,
         publicExponent: new Uint8Array([1, 0, 1]),
         saltLength: 32,
+        salt: new Uint8Array([1, 2, 3]),
+        info: new Uint8Array([4, 5, 6]),
+        iterations: 1,
         namedCurve: "P-256",
         public: createCryptoKey("public", true, new KeyAlgorithm("ECDH"), [], {} as CryptoKeyHandle),
       };
@@ -115,7 +120,7 @@ for (const registration of keyRegistrations) {
 }
 
 test("future families and Modern Algorithms remain unregistered", () => {
-  for (const name of ["Ed448", "X448", "HKDF", "PBKDF2", "AES-OCB", "KMAC128"]) {
+  for (const name of ["Ed448", "X448", "AES-OCB", "KMAC128"]) {
     for (const operation of allOperations) {
       assert.equal(supportsCryptoOperation(name, operation), false);
     }

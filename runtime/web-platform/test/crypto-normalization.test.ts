@@ -89,6 +89,8 @@ test("parameterless operations ignore unused algorithm properties", () => {
     { name: "AES-CBC", operations: ["importKey", "exportKey"] },
     { name: "Ed25519", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
     { name: "X25519", operations: ["generateKey", "importKey", "exportKey"] },
+    { name: "HKDF", operations: ["importKey", "get key length"] },
+    { name: "PBKDF2", operations: ["importKey", "get key length"] },
   ];
   for (const { name, operations } of inputs) {
     for (const operation of operations) {
@@ -100,6 +102,9 @@ test("parameterless operations ignore unused algorithm properties", () => {
         get namedCurve() { throw new Error("unused curve"); },
         get public() { throw new Error("unused peer"); },
         get context() { throw new Error("unused context"); },
+        get salt() { throw new Error("unused salt"); },
+        get info() { throw new Error("unused info"); },
+        get iterations() { throw new Error("unused iterations"); },
       }, operation);
       assert.equal(normalized.constructor, Algorithm);
       assert.deepEqual(Object.keys(normalized), ["name"]);

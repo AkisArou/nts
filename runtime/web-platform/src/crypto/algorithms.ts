@@ -55,7 +55,8 @@ export type SecretAlgorithmName = AesAlgorithmName | "HMAC";
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
 export type EcAlgorithmName = "ECDSA" | "ECDH";
 export type OkpAlgorithmName = "Ed25519" | "X25519";
-type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName;
+export type KdfAlgorithmName = "HKDF" | "PBKDF2";
+type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
 
 /** Web Cryptography §27.5. Validation of AES key sizes is an operation step. */
 export class AesKeyGenParams extends Algorithm<AesAlgorithmName> {
@@ -226,9 +227,37 @@ export class EcdhKeyDeriveParams extends Algorithm<"ECDH" | "X25519"> {
   }
 }
 
+/** Web Cryptography §33.3. Hash normalization precedes the salt and info snapshots. */
+export class HkdfParams extends Algorithm<"HKDF"> {
+  readonly hash: DigestAlgorithm;
+  readonly salt: Uint8Array;
+  readonly info: Uint8Array;
+
+  constructor(name: "HKDF", hash: DigestAlgorithm, salt: Uint8Array, info: Uint8Array) {
+    super(name);
+    this.hash = hash;
+    this.salt = salt;
+    this.info = info;
+  }
+}
+
+/** Web Cryptography §34.3. A zero iteration count is rejected by the operation. */
+export class Pbkdf2Params extends Algorithm<"PBKDF2"> {
+  readonly hash: DigestAlgorithm;
+  readonly salt: Uint8Array;
+  readonly iterations: number;
+
+  constructor(name: "PBKDF2", hash: DigestAlgorithm, salt: Uint8Array, iterations: number) {
+    super(name);
+    this.hash = hash;
+    this.salt = salt;
+    this.iterations = iterations;
+  }
+}
+
 export type NormalizedAlgorithm =
   | DigestAlgorithm
-  | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName>
+  | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName>
   | AesKeyGenParams
   | AesDerivedKeyParams
   | AesCtrParams
@@ -243,7 +272,9 @@ export type NormalizedAlgorithm =
   | EcdsaParams
   | EcKeyGenParams
   | EcKeyImportParams
-  | EcdhKeyDeriveParams;
+  | EcdhKeyDeriveParams
+  | HkdfParams
+  | Pbkdf2Params;
 
 class AlgorithmRegistration {
   readonly name: RegisteredAlgorithmName;
@@ -325,6 +356,12 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("X25519", "generateKey"),
   new AlgorithmRegistration("X25519", "importKey"),
   new AlgorithmRegistration("X25519", "exportKey"),
+  new AlgorithmRegistration("HKDF", "deriveBits"),
+  new AlgorithmRegistration("HKDF", "importKey"),
+  new AlgorithmRegistration("HKDF", "get key length"),
+  new AlgorithmRegistration("PBKDF2", "deriveBits"),
+  new AlgorithmRegistration("PBKDF2", "importKey"),
+  new AlgorithmRegistration("PBKDF2", "get key length"),
 ];
 
 /** Web IDL's (object or DOMString) union conversion, before later argument conversions. */
@@ -405,6 +442,33 @@ function normalizeRegisteredAlgorithm(
   if (name === "Ed25519") return new Algorithm(name);
   if (name === "X25519") {
     return operation === "deriveBits" ? agreementParameters(algorithm, name) : new Algorithm(name);
+  }
+
+  if (name === "HKDF") {
+    if (operation !== "deriveBits") return new Algorithm(name);
+    const input = algorithm as { readonly hash?: unknown; readonly salt?: unknown; readonly info?: unknown };
+    // Web IDL visits members lexicographically; §18.4.4 then processes their
+    // declared order: hash normalization, salt snapshot, info snapshot.
+    const hash = toAlgorithmIdentifier(requiredMember(input.hash, "HKDF.hash"));
+    const info = toCryptoBufferSource(requiredMember(input.info, "HKDF.info"));
+    const salt = toCryptoBufferSource(requiredMember(input.salt, "HKDF.salt"));
+    const normalizedHash = normalizeAlgorithm(hash, "digest");
+    const saltBytes = normalizedBytes(salt, copyBuffers);
+    const infoBytes = normalizedBytes(info, copyBuffers);
+    return new HkdfParams(name, normalizedHash, saltBytes, infoBytes);
+  }
+
+  if (name === "PBKDF2") {
+    if (operation !== "deriveBits") return new Algorithm(name);
+    const input = algorithm as { readonly hash?: unknown; readonly salt?: unknown; readonly iterations?: unknown };
+    const hash = toAlgorithmIdentifier(requiredMember(input.hash, "PBKDF2.hash"));
+    const iterations = toCryptoUnsignedInteger(requiredMember(input.iterations, "PBKDF2.iterations"), 32);
+    const salt = toCryptoBufferSource(requiredMember(input.salt, "PBKDF2.salt"));
+    // PBKDF2 declares salt before hash. An object hash may execute script during
+    // recursive normalization, so its salt must be copied even for immediate use.
+    const saltBytes = normalizedBytes(salt, copyBuffers || typeof hash !== "string");
+    const normalizedHash = normalizeAlgorithm(hash, "digest");
+    return new Pbkdf2Params(name, normalizedHash, saltBytes, iterations);
   }
 
   if (name === "HMAC") {
