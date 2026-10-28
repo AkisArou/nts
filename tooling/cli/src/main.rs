@@ -13,6 +13,7 @@ mod bind_header;
 mod bind_objc;
 mod bind_scratch;
 mod bind_winmd;
+mod build_manifest;
 mod checkers;
 mod emission;
 mod expect_ir;
@@ -663,6 +664,7 @@ CHECKER
   --out <dir>        where artifacts go. Default `<project>/.nts/build`
   --product <name>   build one product rather than all of them
   --os <os>          build only the targets whose OS is this
+  --partial          allow a cut program for experiments; record its refusals
   --no-acquire       do not fetch dependencies first
   --rc               count references instead of never freeing: lowering
                      inserts retains and releases and the runtime is compiled
@@ -3954,6 +3956,7 @@ impl Shape {
 /// artifact is discovered by whoever links against it.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn build(rest: &[String]) -> Result<()> {
+    let allow_partial = rest.iter().any(|arg| arg == "--partial");
     let tsconfig = project(rest)?;
     let Some(config_path) = nts_build::config::beside(&tsconfig) else {
         bail!(
@@ -4002,6 +4005,7 @@ fn build(rest: &[String]) -> Result<()> {
             shape: Shape::of(&product.kind),
             product: Some((name, product)),
             linking: true,
+            allow_partial,
             host: nts_codegen_c::LoopHost::Libuv,
             abi: native_abi(host_os(), host_arch()),
             llvm: None,
@@ -4105,7 +4109,7 @@ fn build(rest: &[String]) -> Result<()> {
             for note in &needs.notes {
                 println!("  {note}");
             }
-            match target.backend.as_str() {
+            let omissions = match target.backend.as_str() {
                 backend @ ("c" | "llvm") => {
                     let emission = Emission {
                         llvm: (backend == "llvm").then(|| {
@@ -4113,7 +4117,7 @@ fn build(rest: &[String]) -> Result<()> {
                         }),
                         ..emission
                     };
-                    refused += build_c(
+                    build_c(
                         name,
                         product,
                         &out,
@@ -4123,7 +4127,7 @@ fn build(rest: &[String]) -> Result<()> {
                         &native,
                         cache_dir.as_deref(),
                         &needs,
-                    )?;
+                    )?
                 }
                 "jvm" => build_jvm(
                     name,
@@ -4139,6 +4143,15 @@ fn build(rest: &[String]) -> Result<()> {
                 other => bail!(
                     "product `{name}` names backend `{other}`, which is not one of c, llvm, jvm"
                 ),
+            };
+            omissions.write(&out, name, &target.backend, &target_directory(target))?;
+            refused += omissions.len();
+            if allow_partial {
+                println!(
+                    "  partial build requested: {} refusal record(s); see {}",
+                    omissions.len(),
+                    out.join("build-manifest.json")
+                );
             }
             built += 1;
         }
@@ -4148,7 +4161,7 @@ fn build(rest: &[String]) -> Result<()> {
     // write a file describing an artifact that might never have appeared.
     emit_integrations(&resolved, &tsconfig, &root)?;
     if refused > 0 {
-        println!("{built} artifact(s) under {root}, missing {refused} refused function(s)");
+        println!("{built} artifact(s) under {root}, PARTIAL: {refused} refusal record(s)");
     } else {
         println!("{built} artifact(s) under {root}");
     }
@@ -4671,8 +4684,9 @@ fn build_jvm(
     config_roots: &[Utf8PathBuf],
     sdk: Option<&AndroidSdk>,
     needs: &nts_build::dependencies::Resolution,
-) -> Result<()> {
-    let initializes = emit_jvm(tsconfig, Some(out), false, emission)?;
+) -> Result<build_manifest::Refusals> {
+    let wrote = emit_jvm(tsconfig, Some(out), false, emission)?;
+    let initializes = wrote.initializes;
     // **Compiled before the classes are packaged, because the artifact would
     // not say it was missing.** A JVM target's `native:` roots are Java, and
     // they are the half the program calls into -- an artifact built without
@@ -4771,7 +4785,7 @@ fn build_jvm(
             println!("  {}", out.join(RUNTIME_JAR));
         }
     }
-    Ok(())
+    Ok(wrote.omissions)
 }
 
 /// Emit, compile and link one product on the C backend, and say what it lost.
@@ -4793,7 +4807,7 @@ fn build_c(
     native: &[NativeSource],
     cache_dir: Option<&Utf8Path>,
     needs: &nts_build::dependencies::Resolution,
-) -> Result<usize> {
+) -> Result<build_manifest::Refusals> {
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
     // What the program's bindings name (`@ntsPackage`), beside the project's
@@ -4844,7 +4858,7 @@ fn build_c(
             wrote.refused
         );
     }
-    Ok(wrote.refused)
+    Ok(wrote.omissions)
 }
 
 /// libuv is the *program's* dependency, and a cross build rarely has one.
@@ -8892,6 +8906,8 @@ struct Emission<'a> {
     /// prints a command it has already run, and a reader who pastes it gets a
     /// second, differently-flagged copy of the artifact they already have.
     linking: bool,
+    /// Only a build may opt into shipping the program after diagnosed cuts.
+    allow_partial: bool,
     /// Whether an executable's loop is `GLib`'s rather than its own.
     ///
     /// A GTK program runs `g_application_run` from inside module evaluation,
@@ -8933,6 +8949,7 @@ impl Emission<'_> {
             shape: Shape::from_flags(),
             product: None,
             linking: false,
+            allow_partial: false,
             host: if std::env::args().any(|arg| arg == "--glib") {
                 nts_codegen_c::LoopHost::Glib
             } else {
@@ -9201,6 +9218,12 @@ fn emit_llvm_prepared(
     report.text(format_args!("{}", emitted.text));
 }
 
+#[derive(Debug)]
+struct JvmWrote {
+    initializes: bool,
+    omissions: build_manifest::Refusals,
+}
+
 /// `nts emit-jvm <tsconfig> [--out <dir>] [--text]` — the same program, as
 /// class files.
 ///
@@ -9208,7 +9231,7 @@ fn emit_llvm_prepared(
 /// run anything: `java -cp <dir>:<dir>/nts-runtime.jar nts.gen.Program`.
 /// Without it nothing is written, because a class file is bytes and printing
 /// them to a terminal helps nobody -- `--text` is what to read instead.
-/// Returns whether the program has module evaluation to run, which is what an
+/// Records whether the program has module evaluation to run, which is what an
 /// executable's launcher calls. Derived the same way `write_standalone` derives
 /// it for the C lane, so the two cannot disagree about what an entry point is.
 fn emit_jvm(
@@ -9216,7 +9239,7 @@ fn emit_jvm(
     out: Option<&Utf8Path>,
     text: bool,
     emission: Emission,
-) -> Result<bool> {
+) -> Result<JvmWrote> {
     nts_codegen_common::provider::host_gc("jvm", rc_requested()).map_err(anyhow::Error::msg)?;
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
@@ -9239,7 +9262,7 @@ fn emit_jvm_prepared(
     text: bool,
     emission: Emission,
     report: &mut EmissionReport,
-) -> Result<bool> {
+) -> Result<JvmWrote> {
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, "jvm");
     let mut locations = SourceLocations::new(sources);
     for diagnostic in &mismatches {
@@ -9272,6 +9295,12 @@ fn emit_jvm_prepared(
             diagnostic.code, diagnostic.message
         ));
     }
+    let mut omissions = build_manifest::Refusals::default();
+    if emission.product.is_some() {
+        omissions = build_manifest::Refusals::prepared(prepared, sources);
+        omissions.diagnostics("jvm backend", &emitted.diagnostics, sources);
+        omissions.require_complete(emission.allow_partial)?;
+    }
     if text {
         for class in &emitted.classes {
             report.out(format_args!("class {}", class.binary_name));
@@ -9297,11 +9326,23 @@ fn emit_jvm_prepared(
             emitted.classes.len()
         ));
     }
-    Ok(prepared
+    let mut initializes = prepared
         .program
         .funcs
         .iter()
-        .any(|func| func.name == hir::lower::MODULE_INIT))
+        .any(|func| func.name == hir::lower::MODULE_INIT);
+    if emission.product.is_some() && emission.allow_partial {
+        initializes = emitted.classes.iter().any(|class| {
+            class
+                .lines
+                .iter()
+                .any(|method| method.name == "module$init")
+        });
+    }
+    Ok(JvmWrote {
+        initializes,
+        omissions,
+    })
 }
 
 /// The refusals from the emitter that make its output unusable.
@@ -9392,6 +9433,14 @@ struct Wrote {
     /// probe here emitted an executable whose only statement was refused: it
     /// compiled, linked, ran, exited zero and did nothing.
     refused: usize,
+    omissions: build_manifest::Refusals,
+}
+
+#[derive(Clone, Copy)]
+struct NativeOutput<'a> {
+    refused: usize,
+    initializes: bool,
+    addon: Option<&'a nts_codegen_napi::Addon>,
 }
 
 impl Wrote {
@@ -9453,18 +9502,63 @@ fn emit_c_prepared(
     for diagnostic in &prepared.diagnostics {
         report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
+    let mut omissions = if emission.product.is_some() {
+        build_manifest::Refusals::prepared(&prepared, sources)
+    } else {
+        build_manifest::Refusals::default()
+    };
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program, emission.abi);
     for diagnostic in &emitted.diagnostics {
         report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
+    if emission.product.is_some() {
+        omissions.diagnostics("c backend", &emitted.diagnostics, sources);
+        for name in &emitted.refused {
+            omissions.named("c backend", name, "the backend did not emit this function");
+        }
+    }
+    let rendered = emission
+        .llvm
+        .filter(|_| out.is_some())
+        .map(|platform| nts_codegen_llvm::emit(&program, platform));
+    if let Some(rendered) = &rendered
+        && emission.product.is_some()
+    {
+        omissions.diagnostics("llvm backend", &rendered.diagnostics, sources);
+        for diagnostic in &rendered.diagnostics {
+            report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
+        }
+    }
+    let addon = (emission.shape == Shape::Addon && out.is_some())
+        .then(|| nts_codegen_napi::emit_with(&program, &emitted.refused));
+    if let Some(addon) = &addon {
+        for skipped in &addon.skipped {
+            if emission.product.is_some() {
+                omissions.named("node-api bridge", &skipped.function, &skipped.reason);
+                report.err(format_args!(
+                    "no wrapper for {}: {}",
+                    skipped.function, skipped.reason
+                ));
+            }
+        }
+    }
+    if emission.product.is_some() {
+        omissions.require_complete(emission.allow_partial)?;
+    }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
     let initializes = program
         .funcs
         .iter()
-        .any(|func| func.name == hir::lower::MODULE_INIT);
+        .any(|func| func.name == hir::lower::MODULE_INIT)
+        && !(emission.product.is_some()
+            && emission.allow_partial
+            && emitted
+                .refused
+                .iter()
+                .any(|name| name == hir::lower::MODULE_INIT));
     let refused = prepared
         .diagnostics
         .iter()
@@ -9486,6 +9580,7 @@ fn emit_c_prepared(
         return Ok(Wrote {
             initializes,
             refused,
+            omissions,
             ..Wrote::default()
         });
     };
@@ -9495,13 +9590,17 @@ fn emit_c_prepared(
         &emitted,
         out,
         emission,
-        refused,
-        initializes,
+        NativeOutput {
+            refused,
+            initializes,
+            addon: addon.as_ref(),
+        },
         report,
     )?;
-    if let Some(platform) = emission.llvm {
-        write_llvm_program(&mut locations, &program, out, platform, &mut wrote, report)?;
+    if let Some(rendered) = rendered {
+        write_llvm_program(&mut locations, &rendered, out, emission, &mut wrote, report)?;
     }
+    wrote.omissions = omissions;
     wrote.objc = program.objc;
     wrote.winappsdk = bind_winmd::winrt::uses_winappsdk(&program);
     wrote.frameworks.clone_from(&program.native_frameworks);
@@ -9522,17 +9621,18 @@ fn emit_c_prepared(
 /// the function nor the construct behind it.
 fn write_llvm_program(
     locations: &mut SourceLocations<'_>,
-    program: &hir::Program,
+    rendered: &nts_codegen_llvm::Emitted,
     out: &Utf8Path,
-    platform: nts_codegen_llvm::Platform,
+    emission: Emission<'_>,
     wrote: &mut Wrote,
     report: &mut EmissionReport,
 ) -> Result<()> {
-    let rendered = nts_codegen_llvm::emit(program, platform);
-    for diagnostic in &rendered.diagnostics {
-        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
+    if emission.product.is_none() {
+        for diagnostic in &rendered.diagnostics {
+            report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
+        }
     }
-    if !rendered.diagnostics.is_empty() {
+    if !(rendered.diagnostics.is_empty() || emission.product.is_some() && emission.allow_partial) {
         bail!(
             "the llvm backend declined {} function(s), each named above; build this product on the c backend",
             rendered.diagnostics.len()
@@ -9562,10 +9662,14 @@ fn write_c_output(
     emitted: &nts_codegen_c::Emitted,
     out: &Utf8Path,
     emission: Emission,
-    refused: usize,
-    initializes: bool,
+    output: NativeOutput<'_>,
     report: &mut EmissionReport,
 ) -> Result<Wrote> {
+    let NativeOutput {
+        refused,
+        initializes,
+        addon,
+    } = output;
     // Read off `emitted` rather than taken as parameters. They were threaded in
     // from the caller for one revision, which is how the fact got two owners in
     // the first place.
@@ -9616,10 +9720,11 @@ fn write_c_output(
         // `NTS2008` on stderr and exited 0 while writing an unlinkable program;
         // the artifact is fixed above and the exit status is fixed here, because
         // either alone leaves a way to believe the build worked.
-        if program
-            .funcs
-            .iter()
-            .any(|func| func.name == hir::lower::MODULE_INIT)
+        if !(emission.product.is_some() && emission.allow_partial)
+            && program
+                .funcs
+                .iter()
+                .any(|func| func.name == hir::lower::MODULE_INIT)
             && emitted
                 .refused
                 .iter()
@@ -9671,15 +9776,17 @@ fn write_c_output(
     // test suite run against it. Node is a harness here, not a runtime: nothing
     // this writes enters a shipped binary.
     if emission.shape == Shape::Addon {
-        let addon = nts_codegen_napi::emit_with(program, &emitted.refused);
+        let addon = addon.context("an addon emission has its bridge output")?;
         let addon_path = out.join(nts_codegen_napi::ADDON_SOURCE_NAME);
         std::fs::write(&addon_path, &addon.source)
             .with_context(|| format!("writing {addon_path}"))?;
-        for skipped in &addon.skipped {
-            report.err(format_args!(
-                "no wrapper for {}: {}",
-                skipped.function, skipped.reason
-            ));
+        if emission.product.is_none() {
+            for skipped in &addon.skipped {
+                report.err(format_args!(
+                    "no wrapper for {}: {}",
+                    skipped.function, skipped.reason
+                ));
+            }
         }
         report.out(format_args!(
             "wrote program.c, program.h, {}, {} to {out}",

@@ -338,6 +338,13 @@ export default defineConfig({
         );
     }
 
+    let partial = build(&project, &["--partial"]);
+    assert!(
+        !partial.ok,
+        "--partial bypassed the unprovided-builtin stop"
+    );
+    assert!(partial.stderr.contains("NTS1100"), "{}", partial.stderr);
+
     let control = fixture("build-unprovided-control", config);
     std::fs::write(control.join("src/main.ts"), source("1")).expect("entry");
     let run = build(&control, &[]);
@@ -695,59 +702,227 @@ export default defineConfig({ products: { runner: app.cli({ entry: "./src/main.t
     );
 }
 
-/// A build that drops functions says so, rather than reporting an artifact.
-///
-/// `emit-c` prints each refusal and exits zero on purpose -- most are declines,
-/// and the program that remains is the one the tree builds. But a build whose
-/// last line is `1 artifact(s)` has told the reader the opposite of what
-/// happened: a probe emitted an executable whose only statement was refused,
-/// and it compiled, linked, ran, exited zero and did nothing.
+/// Refusals need an explicit experimental build, on every shipping backend.
 #[test]
-fn a_build_that_drops_functions_says_how_many() {
-    if !available() {
-        eprintln!("skipping: needs node, clang and nm");
+fn a_refused_build_needs_an_explicit_partial_request() {
+    if !available() || !jdk() {
+        skip("node, clang and a JDK");
         return;
     }
-    // **Not named after what it tests.** The directory was `build-refused`, and
-    // every path `nts build` prints contains it -- so `stdout.contains("refused")`
-    // was true for the fixture's own name, the test passed with the reporting
-    // deleted, and it had never once checked anything. A check whose answer does
-    // not depend on its input is not a check.
-    let project = fixture("build-dropped", SHARED);
-    // A regular-expression literal, which lowering refuses by name (NTS1001)
-    // and a build drops. Not a builtin this compiler lacks: that stops the
-    // build instead (`a_builtin_this_compiler_does_not_provide_stops_the_build`),
-    // and `console.table`, which this used until then, is one.
-    std::fs::write(
-        project.join("src/main.ts"),
-        "export function published(): void { console.log(/a/.source); }\n",
-    )
-    .expect("writing the program");
-    let run = build(&project, &[]);
-    assert!(run.ok, "{}{}", run.stdout, run.stderr);
-    // The count, not the word: the phrasing carries a number, and a build that
-    // merely mentioned refusals without saying how many would still be hiding
-    // the size of what it dropped.
+    for backend in ["c", "llvm", "jvm"] {
+        let target = if backend == "jvm" {
+            "target.jvm({ release: 8 })".to_owned()
+        } else {
+            format!(r#"target.linux({{ backend: "{backend}" }})"#)
+        };
+        let config = format!(
+            r"
+import {{ defineConfig, app, target }} from '@nts/config';
+export default defineConfig({{ products: {{ demo: app({{ kind: 'executable', entry: './src/main.ts', targets: [{target}] }}) }} }});
+"
+        );
+        let project = fixture(&format!("partial-{backend}"), &config);
+        std::fs::write(project.join("src/main.ts"), "function bad(): string { return /a/.source; }\nconsole.log(42);\nconsole.log(bad());\n").expect("subject");
+        let out = project.join(".nts/build/demo").join(if backend == "jvm" {
+            "java-8"
+        } else {
+            "linux-gnu-x86_64"
+        });
+        let denied = build(&project, &[]);
+        assert!(
+            !denied.ok,
+            "{backend} silently built a cut program: {}{}",
+            denied.stdout, denied.stderr
+        );
+        assert!(
+            denied.stderr.contains("bad") && denied.stderr.contains("--partial"),
+            "{}",
+            denied.stderr
+        );
+        assert!(
+            !out.exists(),
+            "{backend} wrote program artifacts before refusing"
+        );
+        let partial = build(&project, &["--partial"]);
+        assert!(
+            partial.ok,
+            "{backend}: {}{}",
+            partial.stdout, partial.stderr
+        );
+        assert!(
+            partial.stdout.contains("partial build requested")
+                && partial.stdout.contains("PARTIAL:"),
+            "{}",
+            partial.stdout
+        );
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(out.join("build-manifest.json")).expect("partial manifest"),
+        )
+        .expect("manifest JSON");
+        assert_eq!(manifest["partial"], true);
+        assert!(manifest["refusals"].as_array().is_some_and(|rows| {
+            rows.iter()
+                .any(|r| r["message"].as_str().is_some_and(|m| m.contains("bad")))
+        }));
+        let run = if backend == "jvm" {
+            nts_codegen_jvm::toolchain::command("java")
+                .arg("-jar")
+                .arg(out.join("demo.jar"))
+                .output()
+                .expect("partial jar")
+        } else {
+            Command::new(out.join("demo"))
+                .output()
+                .expect("partial executable")
+        };
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout),
+            "42\n",
+            "the cut program must still run the retained statement"
+        );
+
+        // One change makes the source complete. A prior partial manifest must
+        // not survive a successful complete rebuild of the same directory.
+        std::fs::write(
+            project.join("src/main.ts"),
+            "function bad(): string { return 'a'; }\nconsole.log(42);\nconsole.log(bad());\n",
+        )
+        .expect("clean control");
+        let clean = build(&project, &[]);
+        assert!(clean.ok, "{}{}", clean.stdout, clean.stderr);
+        assert!(
+            !clean.stdout.contains("partial build requested") && !clean.stdout.contains("PARTIAL:")
+        );
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(out.join("build-manifest.json")).expect("clean manifest"),
+        )
+        .expect("manifest JSON");
+        assert_eq!(manifest["partial"], false);
+        assert_eq!(manifest["refusals"], serde_json::json!([]));
+    }
+}
+
+#[test]
+fn a_compiled_function_without_a_node_wrapper_is_a_partial_build() {
+    let headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/node/src");
+    if !available() || !headers.join("node_api.h").exists() {
+        skip("node, clang and Node API headers");
+        return;
+    }
+    let project = fixture(
+        "partial-node-bridge",
+        r"import { defineConfig, library } from '@nts/config';
+export default defineConfig({ products: { thing: library.node({ entry: './src/main.ts', apiVersion: 8 }) } });",
+    );
+    std::fs::write(project.join("src/main.ts"), "export function good(n: number): number { return n + 1; }\nexport function factory(): () => number { return () => 42; }\n").expect("entry");
+    let invoke = |partial| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
+        command
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .env("NTS_NAPI_INCLUDE", &headers);
+        if partial {
+            command.arg("--partial");
+        }
+        output_of(&mut command).expect("building addon")
+    };
+    let denied = invoke(false);
+    let error = String::from_utf8_lossy(&denied.stderr);
+    assert!(!denied.status.success(), "{error}");
     assert!(
-        run.stdout.contains("1 function(s) refused"),
-        "the build reported an artifact and not the functions missing from it:\n{}",
-        run.stdout,
+        error.contains("node-api bridge") && error.contains("factory"),
+        "{error}"
     );
     assert!(
-        run.stdout.contains("missing 1 refused function(s)"),
-        "the summary line claimed an artifact with nothing missing:\n{}",
-        run.stdout,
+        !error.contains("NTS1001"),
+        "the function itself must compile: {error}"
     );
-    // **A refusal is not "published without a symbol".** Both end with an
-    // exported name absent from the symbol table, and one sentence for the two
-    // would report every refusal twice while making the other message mean
-    // nothing. This export was refused; the class message is for a name that
-    // compiled and still crosses nothing.
+    let out = project.join(".nts/build/thing/node-api-8-x86_64");
+    assert!(!out.exists(), "wrote an addon before checking its bridge");
+    let partial = invoke(true);
     assert!(
-        !run.stdout.contains("crosses no C symbol"),
-        "a refused export was reported as though it had compiled:\n{}",
-        run.stdout,
+        partial.status.success(),
+        "{}",
+        String::from_utf8_lossy(&partial.stderr)
     );
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(out.join("build-manifest.json")).expect("manifest"))
+            .expect("manifest JSON");
+    assert_eq!(manifest["partial"], true);
+    assert!(
+        manifest["refusals"]
+            .as_array()
+            .expect("refusals")
+            .iter()
+            .any(|r| r["stage"] == "node-api bridge")
+    );
+    let loaded = Command::new("node")
+        .arg("-e")
+        .arg(format!(
+            "const a = require({:?}); console.log(a.good(2), typeof a.factory);",
+            out.join("thing.node"),
+        ))
+        .output()
+        .expect("loading partial addon");
+    assert!(
+        loaded.status.success(),
+        "{}",
+        String::from_utf8_lossy(&loaded.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&loaded.stdout), "3 undefined\n");
+}
+
+#[test]
+fn a_jvm_backend_refusal_requires_partial_even_when_lowering_succeeds() {
+    if !available() || !jdk() {
+        skip("node, clang and a JDK");
+        return;
+    }
+    let project = fixture(
+        "partial-jvm-backend",
+        r"import { defineConfig, library } from '@nts/config';
+export default defineConfig({ products: { thing: library.jvm({ entry: './src/main.ts', release: 8 }) } });",
+    );
+    // Only the opaque brand is needed, not every ambient native interface.
+    std::fs::write(project.join("src/native.d.ts"), "declare module 'c:types' { export type Opaque<Name extends string> = { readonly __c_opaque: Name }; }\n").expect("native type declaration");
+    std::fs::write(project.join("src/main.ts"), "import type { Opaque } from 'c:types';\nexport function bad(p: Opaque<'opaque'>): number { return 1; }\nexport function good(n: number): number { return n + 1; }\n").expect("entry");
+    let denied = build(&project, &[]);
+    assert!(!denied.ok, "{}{}", denied.stdout, denied.stderr);
+    assert!(
+        denied.stderr.contains("jvm backend") && denied.stderr.contains("NTS4"),
+        "{}",
+        denied.stderr
+    );
+    assert!(
+        !denied.stderr.contains("NTS1001"),
+        "lowering must succeed: {}",
+        denied.stderr
+    );
+    let out = project.join(".nts/build/thing/java-8");
+    assert!(!out.exists());
+    let partial = build(&project, &["--partial"]);
+    assert!(partial.ok, "{}{}", partial.stdout, partial.stderr);
+    assert!(out.join("thing.jar").exists());
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(out.join("build-manifest.json")).expect("manifest"))
+            .expect("manifest JSON");
+    assert_eq!(manifest["partial"], true);
+    assert!(
+        manifest["refusals"]
+            .as_array()
+            .expect("refusals")
+            .iter()
+            .any(|r| r["stage"] == "jvm backend")
+    );
+    // Only the parameter's native-pointer type changes in the clean control.
+    std::fs::write(project.join("src/main.ts"), "export function bad(p: number): number { return 1; }\nexport function good(n: number): number { return n + 1; }\n").expect("control");
+    let clean = build(&project, &[]);
+    assert!(clean.ok, "{}{}", clean.stdout, clean.stderr);
 }
 
 /// An exported class is named as publishing nothing, and the link still narrows.
@@ -3049,14 +3224,19 @@ fn the_workspace_fixture_still_builds() {
         }
     };
 
-    // The C lane, plus the CMake hook this app declares.
-    let run = build_app("linux-brownfield", &[], &[]);
+    // This config/packaging example deliberately leaves the platform-specific
+    // scheduler unresolved (notifications/src/index.ts). Build its cut program
+    // explicitly, and pin the omitted surface instead of hiding future cuts.
+    let run = build_app("linux-brownfield", &["--partial"], &[]);
     assert!(run.ok, "linux-brownfield:\n{}{}", run.stdout, run.stderr);
     assert!(
         out.join("linux-brownfield/nts.cmake").is_file(),
         "no CMake hook for the app that declares one:\n{}",
         run.stdout
     );
+
+    assert!(run.stdout.contains("PARTIAL:"), "{}", run.stdout);
+    assert_only_notify_is_missing(&out.join("linux-brownfield"));
 
     // **`windows-brownfield` refuses, and refuses before writing.** It declares
     // `integrate: ["msbuild"]`, whose adapter is not written -- and the check
@@ -3107,6 +3287,35 @@ fn the_workspace_fixture_still_builds() {
             "`--os linux` built {} target(s) of a four-machine product: {built:?}",
             built.len()
         );
+    }
+}
+
+/// The workspace scheduler is deliberately a declaration-only placeholder.
+fn assert_only_notify_is_missing(out: &Path) {
+    for product in ["sdk", "sdkStatic"] {
+        let path = out
+            .join(product)
+            .join("linux-gnu-x86_64/build-manifest.json");
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).expect("manifest")).expect("manifest JSON");
+        assert_eq!(manifest["partial"], true);
+        let rows = manifest["refusals"].as_array().expect("refusals");
+        assert_eq!(rows.len(), 2, "{product}: unexpected omission: {rows:?}");
+        assert!(rows.iter().all(|r| r["stage"] == "lowering"));
+        let named = rows
+            .iter()
+            .find(|r| r["code"] == "")
+            .expect("named refused body");
+        let reason = named["message"]
+            .as_str()
+            .expect("body reason")
+            .strip_prefix("`notify`: ")
+            .expect("only notify may be absent");
+        let diagnostic = rows
+            .iter()
+            .find(|r| r["code"] == "NTS1001")
+            .expect("refusal diagnostic");
+        assert_eq!(diagnostic["message"], reason);
     }
 }
 

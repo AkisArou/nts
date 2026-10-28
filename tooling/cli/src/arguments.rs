@@ -101,7 +101,7 @@ pub(crate) const COMMANDS: &[Command] = &[
             OUT,
             ROOTS,
             PROVIDER,
-            &[value("--os", "os"), switch("--nogc")],
+            &[value("--os", "os"), switch("--nogc"), switch("--partial")],
         ],
     ),
     command("check", " [project]", &[PROJECT, PROVIDER]),

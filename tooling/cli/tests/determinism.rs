@@ -31,6 +31,15 @@ fn artifacts(root: &Path, directory: &Path, files: &mut BTreeMap<PathBuf, Vec<u8
 
 #[test]
 fn all_backends_build_identical_bytes_in_different_environments() {
+    compare_builds(false);
+}
+
+#[test]
+fn partial_builds_and_their_refusal_manifests_are_reproducible() {
+    compare_builds(true);
+}
+
+fn compare_builds(partial: bool) {
     for (tool, flag) in [
         ("node", "--version"),
         ("clang", "--version"),
@@ -50,16 +59,16 @@ fn all_backends_build_identical_bytes_in_different_environments() {
             return;
         }
     }
-    let fixture = Fixture(
-        Path::new(env!("CARGO_TARGET_TMPDIR"))
-            .join(format!("deterministic-all-{}", std::process::id())),
-    );
+    let fixture = Fixture(Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "deterministic-all-{partial}-{}",
+        std::process::id()
+    )));
     drop(std::fs::remove_dir_all(&fixture.0));
     // Different depth also changes the relative spelling of SDK include paths.
     let trees = [fixture.0.join("left"), fixture.0.join("much/deeper/right")];
     let mut outputs = Vec::new();
     for (index, tree) in trees.iter().enumerate() {
-        let app = build_project(tree, index);
+        let app = build_project(tree, index, partial);
         let root = app.join(".nts/build");
         let mut files = BTreeMap::new();
         artifacts(&root, &root, &mut files);
@@ -69,6 +78,9 @@ fn all_backends_build_identical_bytes_in_different_environments() {
             "llvm/linux-gnu-x86_64/program.ll",
             "llvm/linux-gnu-x86_64/libllvm.so",
             "jvm/java-8/jvm.jar",
+            "c/linux-gnu-x86_64/build-manifest.json",
+            "llvm/linux-gnu-x86_64/build-manifest.json",
+            "jvm/java-8/build-manifest.json",
         ] {
             assert!(
                 !files.get(Path::new(required)).expect(required).is_empty(),
@@ -134,8 +146,16 @@ jvm: library.jvm({ entry: './src/main.ts', release: 8 })
     app
 }
 
-fn build_project(tree: &Path, index: usize) -> PathBuf {
+fn build_project(tree: &Path, index: usize, partial: bool) -> PathBuf {
     let app = project(tree);
+    if partial {
+        let entry = app.join("src/main.ts");
+        let mut source = std::fs::read_to_string(&entry).expect("entry");
+        // A deliberately unsupported literal keeps this a refusal test even
+        // as lowering gains support for other constructs.
+        source.push_str("export function refused(): string { return /a/.source; }\n");
+        std::fs::write(entry, source).expect("partial entry");
+    }
     let tmp = tree.join("tmp");
     std::fs::create_dir_all(&tmp).expect("TMPDIR");
     if index > 0 {
@@ -147,8 +167,12 @@ fn build_project(tree: &Path, index: usize) -> PathBuf {
         let compiler =
             std::env::var_os("NTS_BIN").unwrap_or_else(|| env!("CARGO_BIN_EXE_nts").into());
         let mut command = Command::new(compiler);
+        if partial {
+            command.arg("build").arg("--partial");
+        } else {
+            command.arg("build");
+        }
         command
-            .arg("build")
             .arg(app.join("tsconfig.json"))
             .arg("--product")
             .arg(backend)
@@ -171,11 +195,28 @@ fn build_project(tree: &Path, index: usize) -> PathBuf {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        assert!(
-            !String::from_utf8_lossy(&out.stderr).contains("NTS"),
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr).contains("NTS1001"),
+            partial,
             "{backend} refused code: {}",
             String::from_utf8_lossy(&out.stderr)
         );
+        let target = if backend == "jvm" {
+            "java-8"
+        } else {
+            "linux-gnu-x86_64"
+        };
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                app.join(".nts/build")
+                    .join(backend)
+                    .join(target)
+                    .join("build-manifest.json"),
+            )
+            .expect("manifest"),
+        )
+        .expect("manifest JSON");
+        assert_eq!(manifest["partial"], partial);
     }
     app
 }

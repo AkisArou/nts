@@ -110,6 +110,17 @@ fn option_values_and_inline_forms_keep_their_existing_meaning() {
 }
 
 #[test]
+fn partial_is_an_explicit_build_option_only() {
+    assert_eq!(
+        arguments::validate(&args(&["build", "--partial"])),
+        Ok(false)
+    );
+    for command in ["emit", "emit-c", "emit-llvm", "emit-jvm", "check"] {
+        assert!(arguments::validate(&args(&[command, "--partial"])).is_err());
+    }
+}
+
+#[test]
 fn a_backend_value_before_the_project_is_not_a_project() {
     let missing = "__nts_backend_value_is_not_the_project__";
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
