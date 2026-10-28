@@ -45,6 +45,7 @@
     "../wpt-domexception.test.ts",
     "../domexception-policy.test.ts",
     "../wpt-promise-rejection-event.test.ts",
-    "../promise-rejection-event-policy.test.ts"
+    "../promise-rejection-event-policy.test.ts",
+    "../wpt-performance-adapter.test.ts"
   ]
 }

@@ -531,6 +531,14 @@ export class WptHarness {
       assert_not_equals: assert.notStrictEqual,
       // resources/testharness.js at a8f306ee4399724f33399dfdcac7da296f3cc05a:
       // primitive numeric types must match; no string/boxed-number coercion.
+      assert_approx_equals: (actual: unknown, expected: number, epsilon: number, message?: string) => {
+        assert.equal(typeof actual, "number", message);
+        // Pinned testharness.js uses coercing isFinite for the expected value,
+        // then exact equality when both operands are non-finite (NaN included).
+        if (isFinite(actual as number) || isFinite(expected)) {
+          assert.ok(Math.abs((actual as number) - expected) <= epsilon, message);
+        } else assert.equal(actual, expected, message);
+      },
       assert_greater_than: (actual: unknown, expected: unknown, message?: string) => {
         assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
         assert.equal(typeof actual, typeof expected, message);
