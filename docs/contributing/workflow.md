@@ -163,6 +163,10 @@ recorded case on every backend ([conformance](../conformance/typescript.md)).
 
 ## Decisions
 
+- **A cloud agent works through pull requests** under the rules of
+  [cloud-agents.md](cloud-agents.md), and a local agent lands its work
+  (10-28, [log](../records/notebooks/decisions-log.md#contributors-and-packages-10-28)).
+
 - **Team and process:**
   - the coordinator and the roles;
   - the archived branches as a quarry;

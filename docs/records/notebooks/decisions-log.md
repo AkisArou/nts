@@ -310,6 +310,25 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   `runtime/web-platform`, `node:*` in `runtime/node`; JSON and `URL` move
   accordingly: "they should move to the appropriate dirs".
 
+## Contributors and packages (10-28)
+
+- **Cloud agents contribute through pull requests,** starting with the
+  WinterTC floor's missing APIs in `runtime/web-platform`: plain TypeScript
+  implementing published specifications, tested under node; a local agent
+  compiles each with nts, gates and lands it. The user proposed ChatGPT for
+  "typescript library code" in `runtime/{ecmascript,web-platform,nodejs}`,
+  and chose the WinterTC gaps over `runtime/sdk` as the start.
+- **`runtime/sdk` becomes `runtime/app` (`@nts/app`):** its web-standard
+  parts (`Notification`, the Async Clipboard, Web Share, Geolocation, the
+  sensors) move to `runtime/web-platform` as `web:` features, with each
+  platform's part a `host:` capability in its runtime; its lib subset is
+  retired (decision 11); what no standard covers (the photo library, document
+  grants, background tasks, scheduled notifications, secure storage, contacts,
+  calendars, haptics, desktop windows and the tray) stays as nts's own
+  application API, `@nts/app`. Asked where notifications belong, the user
+  chose this over a `runtime/dom`: the DOM is the document tree, which these
+  APIs are not.
+
 ## Compiler settings (10-28)
 
 - **A program compiles only under `strict`** (register L8): every flag

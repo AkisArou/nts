@@ -144,7 +144,7 @@ import ([Decisions](#decisions)).
 |---|---|
 | `@nts/scalars` | the scalar type names ([numbers.md](numbers.md#scalar-types)), declared by `runtime/native/scalars.d.ts`, which a program lists in its `tsconfig.json` (`target.chromium()` adds it); not yet distributed as a package |
 | `@nts/config` | the module `nts.config.ts` imports, evaluated by node ([reference/nts-config.md](../reference/nts-config.md)) |
-| `@nts/sdk` | platform declarations, with no implementation yet |
+| `@nts/sdk` | platform declarations, with no implementation yet; decided to become `@nts/app`, nts's own application API for what no web standard covers ([builtins](../foundations/builtins.md#decisions)) |
 
 ## Decisions
 

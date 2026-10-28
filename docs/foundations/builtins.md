@@ -260,6 +260,12 @@ with recommendations:
 
 ## Decisions
 
+- **`runtime/sdk` becomes `runtime/app` (`@nts/app`):** web standards it
+  covers (`Notification`, the Async Clipboard, Web Share, Geolocation, the
+  sensors) are `web:` features of `runtime/web-platform`, each platform's part
+  a `host:` capability; its lib subset is retired (decision 11); what no
+  standard covers stays as nts's own application API (10-28,
+  [log](../records/notebooks/decisions-log.md#contributors-and-packages-10-28)).
 This page is approved as a whole (10-28,
 [log](../records/notebooks/decisions-log.md#builtins-mechanism-10-28)): a package declares
 what it can provide in its `package.json`, each target's profile orders the

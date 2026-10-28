@@ -169,6 +169,10 @@ The designs and their build orders are in [`foundations/`](foundations).
    native and the JVM. JSON moves to `runtime/ecmascript` and `URL` to
    `runtime/web-platform` before stage 5 makes them reachable. The clock and
    randomness come with stage 6. Decided for it:
+   - the floor's missing APIs in `runtime/web-platform` taken by cloud agents
+     through pull requests ([cloud-agents](contributing/cloud-agents.md));
+   - `runtime/sdk` becoming `runtime/app` (`@nts/app`), its web-standard parts
+     moving to `runtime/web-platform` and its lib subset retired;
    - the floor's `WebAssembly` API last, through an embedded engine linked
      only into programs that reach it;
    - `node:*` for native programs at stage 9, with a `node:` resolver and the
