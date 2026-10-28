@@ -2833,7 +2833,6 @@
       "declaredGlobals": null,
       "declaredVariants": [],
       "capabilityReview": "No DOM operations; requires ambient cookie persistence between WebSocket handshakes. Keep as a baseline failure until provider responsibility is resolved.",
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "window"
       ],
@@ -2915,7 +2914,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker",
         "window"
@@ -2996,7 +2994,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker",
         "window"
@@ -3019,7 +3016,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker",
         "window"
@@ -3042,7 +3038,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker",
         "window"
@@ -3359,7 +3354,6 @@
       "declaredGlobals": null,
       "declaredVariants": [],
       "encoding": "windows-1252",
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "window"
       ],
@@ -3973,7 +3967,6 @@
       "declaredGlobals": null,
       "declaredVariants": [],
       "encoding": "utf-8",
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "window"
       ],
@@ -3999,7 +3992,6 @@
       "declaredGlobals": null,
       "declaredVariants": [],
       "encoding": "utf-8",
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "window"
       ],
@@ -8036,7 +8028,6 @@
       "declaredGlobals": "window,worker",
       "declaredVariants": [],
       "capabilityReview": "Secure-context policy has no DOM dependency; keep as a baseline failure until source/provider responsibility is resolved.",
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker",
         "serviceworker",
@@ -8193,7 +8184,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker"
       ],
@@ -8402,7 +8392,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "window"
       ],
@@ -8426,7 +8415,6 @@
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [],
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "dedicatedworker",
         "window"
@@ -9441,7 +9429,6 @@
       "declaredGlobals": null,
       "declaredVariants": [],
       "encoding": "utf-8",
-      "variant": "",
       "upstreamGlobalEnvironments": [
         "window"
       ],
