@@ -1,0 +1,192 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "html/webappapis/scripting": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "scope": "B10 HTML global error source policy over explicit engine capabilities; automatic engine/global integration is a recorded dependency.",
+  "fixtures": [
+    {
+      "path": "html/webappapis/scripting/reporterror.any.js",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/reporterror.any.js",
+      "sha256": "11e9c32d5ae5ebdd83605cac6a1e7ffe759ac2ae12b893005edeef2242007299",
+      "gitBlob": "b9e7ba25bc6a3938783f7bf32472ba422e815ae2",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "expectedRunnableTests": 2,
+      "blockedTests": {
+        "self.reportError(1)": {
+          "category": "provider-capability",
+          "reason": "Requires actual-global EventTarget dispatch and native extraction of script filename, line and column. This source-policy PR has no production binding for those capabilities; it does not fabricate location or URL metadata. Argument conversion and non-observation cases remain executable over the explicit test contract."
+        },
+        "self.reportError(TypeError)": {
+          "category": "provider-capability",
+          "reason": "Requires actual-global EventTarget dispatch and native extraction of script filename, line and column. This source-policy PR has no production binding for those capabilities; it does not fabricate location or URL metadata. Argument conversion and non-observation cases remain executable over the explicit test contract."
+        },
+        "self.reportError(undefined)": {
+          "category": "provider-capability",
+          "reason": "Requires actual-global EventTarget dispatch and native extraction of script filename, line and column. This source-policy PR has no production binding for those capabilities; it does not fabricate location or URL metadata. Argument conversion and non-observation cases remain executable over the explicit test contract."
+        }
+      },
+      "registrations": [
+        "self.reportError(1)",
+        "self.reportError(TypeError)",
+        "self.reportError(undefined)",
+        "self.reportError() (without arguments) throws",
+        "self.reportError() doesn't invoke getters"
+      ]
+    }
+  ],
+  "support": [],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/LICENSE.md",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "excluded": [
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/allow-crossorigin.html",
+      "gitBlob": "75246041131212d582f97459ecab1f36c5d31986",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/allow-crossorigin.html",
+      "reason": "Requires cross-origin script loading and real muted-errors/native rejection tracking."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/disallow-crossorigin.html",
+      "gitBlob": "d61618a53ef8afd3cdd2527a0f7f7b094caf570b",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/disallow-crossorigin.html",
+      "reason": "Requires cross-origin script loading and real muted-errors/native rejection tracking."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+      "gitBlob": "4319deee7b50163a68e556ee7f401373fab7495b",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+      "reason": "Constructor-only case already imported and executed by B1 PromiseRejectionEvent; not duplicated here."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-during-parse.html",
+      "gitBlob": "160dad9b36bd38de015c9dc82fd2410c5276cc8d",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-during-parse.html",
+      "reason": "Requires real HTML parser execution and native rejection/checkpoint integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-attached-in-event.html",
+      "gitBlob": "b151bd812f9b92a5398923624d6e4601552de095",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-attached-in-event.html",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-iframe.html",
+      "gitBlob": "c749eadef4bafa1e2b99fd036e51c45840e019b3",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-iframe.html",
+      "reason": "Requires real Window/Document creation, cross-realm global receiver resolution or detached Window lifecycle; no browser substitutes."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-many-promises.dedicatedworker.html",
+      "gitBlob": "2dc9e8bd60ac662c3983a4f035f5d82f12b5e908",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-many-promises.dedicatedworker.html",
+      "reason": "Requires a real worker lifecycle and native promise-rejection/checkpoint integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-many-promises.html",
+      "gitBlob": "f8ba7d9e760f01897adde36750921409eab4f309",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-many-promises.html",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-onerror.html",
+      "gitBlob": "b6c02d27c9ef67418210e808eb92256606c273c7",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events-onerror.html",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.dedicatedworker.html",
+      "gitBlob": "b6a4a9f3e697f4a7e747ec09aaa6b5d746e36864",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.dedicatedworker.html",
+      "reason": "Requires a real worker lifecycle and native promise-rejection/checkpoint integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.html",
+      "gitBlob": "2fdfe260251462a2e712fc215c8569b0dfea376e",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.html",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.serviceworker.https.html",
+      "gitBlob": "9d12125928ea7f9afa2468ef708c2b174103ed9c",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.serviceworker.https.html",
+      "reason": "Requires a real worker lifecycle and native promise-rejection/checkpoint integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.sharedworker.html",
+      "gitBlob": "d832d1822fc7b1c8e486c46e4ae8ce229864988d",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-events.sharedworker.html",
+      "reason": "Requires a real worker lifecycle and native promise-rejection/checkpoint integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-resolution-order.html",
+      "gitBlob": "314063025f888effde42daedd4b2e24bfae45beb",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-resolution-order.html",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-access-control.py",
+      "gitBlob": "cf8ed5e49244a614dbe44acf2dc9146629e79290",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-access-control.py",
+      "reason": "Requires cross-origin script loading and real muted-errors/native rejection tracking."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events-many-promises.js",
+      "gitBlob": "af8cd9332eee0eda01a94986a362caa18a1dc234",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events-many-promises.js",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+      "gitBlob": "036e1784dbb79e07cd533256cd391583191f4aa8",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/support/promise-rejection-events.js",
+      "reason": "Requires automatic HostPromiseRejectionTracker and actual microtask checkpoint delivery, with DOM task helpers in the upstream driver. Deterministic source controls exercise the policy without claiming this missing native integration."
+    },
+    {
+      "path": "html/webappapis/scripting/reporterror-cross-realm-method.html",
+      "gitBlob": "6e2c2aae8f07316a83a4e31d557733cc06890b0d",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/reporterror-cross-realm-method.html",
+      "reason": "Requires real Window/Document creation, cross-realm global receiver resolution or detached Window lifecycle; no browser substitutes."
+    },
+    {
+      "path": "html/webappapis/scripting/reporterror-in-detached-window-crash.html",
+      "gitBlob": "33662caa4d1d1f207daab615d4d1a2796d12d8a5",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/reporterror-in-detached-window-crash.html",
+      "reason": "Requires real Window/Document creation, cross-realm global receiver resolution or detached Window lifecycle; no browser substitutes."
+    }
+  ],
+  "counts": {
+    "registered": 5,
+    "runnableSourcePolicy": 2,
+    "blockedNativeIntegration": 3
+  },
+  "executionNote": "The two source-only cases execute canonical GlobalErrorRuntime.reportError with a deterministic capability driver and no native Node reportError replacement. There is no production global dispatch/metadata provider or Promise hook in this PR. No location, Window, Document or URL fake is installed."
+}
