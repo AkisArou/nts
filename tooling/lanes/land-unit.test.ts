@@ -14,6 +14,7 @@ function fixture(t: { after(fn: () => void): void }) {
   const root = join(directory, "main"), tree = join(directory, "compiler"), home = join(directory, "home");
   const bin = join(directory, "bin"), capture = join(directory, "unit.json");
   mkdirSync(join(root, "tooling/lanes"), { recursive: true });
+  writeFileSync(join(root,".gitignore"),".inputs-ready\n");
   mkdirSync(bin);
   writeFileSync(join(bin, "systemd-run"), `#!${process.execPath}\nrequire("node:fs").writeFileSync(process.env.UNIT_CAPTURE, JSON.stringify(process.argv.slice(2)));\n`);
   chmodSync(join(bin, "systemd-run"), 0o755);
@@ -61,6 +62,15 @@ test("the detached launcher seals the caller's HEAD and forwards the descriptor 
   assert.equal(args.some(arg => arg.includes("UNRELATED_SECRET") || arg.includes("never forward this")), false);
   assert.match(result.stdout, new RegExp(`queued ${f.sha} as nts-land-flags-`));
   assert.match(result.stdout, /log: .*land\.log/);
+  const hook=args.find(arg=>arg.startsWith("--property=ExecStopPost="));
+  assert.ok(hook,JSON.stringify(args));
+  assert.match(hook,/taskset.*cleanup\.ts.*--post-stop.*nts-land-flags-/);
+  assert.ok(args.some(arg=>arg.startsWith("--property=StandardOutput=append:")));
+  assert.ok(args.some(arg=>arg.startsWith("--property=StandardError=append:")));
+  const manifest=JSON.parse(readFileSync(join(directory,"..","submission.json"),"utf8"));
+  assert.equal(manifest.sha,f.sha);
+  assert.equal(manifest.preparingPid,null);
+  assert.ok(existsSync(join(directory,"..","cleanup.ts")),"the stop hook survives deletion of the worktree");
 });
 
 test("a landing refuses experimental core dumps before creating a unit", t => {
@@ -80,4 +90,5 @@ test("a failed detached preflight never starts a unit and removes its own submis
   assert.match(result.stderr, /landing preflight failed; nothing queued/);
   assert.equal(existsSync(f.capture), false);
   assert.equal(f.git(f.root, "worktree", "list", "--porcelain").split("\n").filter(line => line.startsWith("worktree ")).length, 2);
+  assert.match(f.git(f.root,"for-each-ref","--format=%(objectname)","refs/archive/land-submissions"),new RegExp(f.sha));
 });
