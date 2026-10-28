@@ -100,6 +100,67 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN GAUSSIAN BLUR: complete original workload checks.
+{
+  const name = "jetstream-gaussian-blur";
+  if (modules.has(name)) {
+    checked.add(name);
+    // Independent original full-buffer oracles; root retains absent-directory gating.
+    const { seed, runIterations, work } = await import("./cases/jetstream-gaussian-blur/case.ts");
+
+    function gaussianWordBytes(words: Uint32Array): Buffer {
+      const bytes = Buffer.alloc(words.length * 4);
+      for (let i = 0; i < words.length; i++) bytes.writeUInt32LE(words[i], 4 * i);
+      return bytes;
+    }
+
+    test("JetStream Gaussian blur retains full original in-place image evolution", () => {
+      assert.equal(seed, 1);
+      const fixtures = [
+      {
+        "n": 0,
+        "sha256": "ddd914c9d93816e89eec9be4ec10b79890f1d7ecaa09f94b536a5ba18f5ae05c"
+      },
+      {
+        "n": 1,
+        "sha256": "5d7ee083c7632f3e47c0c2fba01f9a8bb78742dec9680d151822e9dea78580ef"
+      },
+      {
+        "n": 2,
+        "sha256": "1888a0c734dfc3ba3b8043978de088ef77eca60433686ad2ed38bee5711a4f86"
+      }
+    ];
+      for (const fixture of fixtures) {
+        const words = runIterations(fixture.n);
+        assert.equal(words.length, 800 * 450);
+        assert.equal(createHash("sha256").update(gaussianWordBytes(words)).digest("hex"), fixture.sha256);
+      }
+    });
+
+    test("JetStream Gaussian blur uses deterministic independent trials", () => {
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 467848763);
+      assert.equal(work(2), 1882197264);
+      assert.equal(work(1), 467848763);
+    });
+  }
+}
+// END GAUSSIAN BLUR.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
