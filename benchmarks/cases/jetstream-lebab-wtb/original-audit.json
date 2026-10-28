@@ -1,0 +1,20 @@
+{
+  "node": "v24.20.0",
+  "originalBundleSha256": "5f58ee28553a14af685b475a20a65a1dd66e6086e72886ac4d1e9da4f557421d",
+  "inputSha256": "e5b962b9e5d1ee004d580358fa2e3432599b46fbb413a6d67f02709eb4c72922",
+  "outputs": [
+    {
+      "codeLength": 21316,
+      "warnings": 35,
+      "characters": 23935,
+      "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+    },
+    {
+      "codeLength": 21316,
+      "warnings": 35,
+      "characters": 23935,
+      "sha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+    }
+  ],
+  "treeCopierCopyCalls": 3310
+}

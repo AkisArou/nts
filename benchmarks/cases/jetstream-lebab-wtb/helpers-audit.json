@@ -1,0 +1,19 @@
+{
+  "node": "v24.20.0",
+  "tests": 35,
+  "passed": 35,
+  "failures": [],
+  "serializedCharacters": 7061,
+  "sha256": "229f92e351e3531f3731bd8530df936ac1fda5882fdb8caca6edce7d76bc6c1a",
+  "notes": [
+    "__await is transcribed to a native class; __asyncDelegator’s single original callable factory use is changed to new while preserving its constructed value. The direct factory-only external API is a documented class-transcription adaptation."
+  ],
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "retainedHelperFixes": [
+    "The original self-memoizing __assign variable/function-expression layout is retained, including short-circuit allocation of the fallback function, the live named export and original default-export snapshot.",
+    "Iterator checks occur at the original property reads and calls, preserving getter order and returned identity. Raw done values, including 0 and a nonempty string, are retained without Boolean coercion.",
+    "The original __await constructor becomes a native class. The single original __asyncDelegator call to its callable factory becomes new __await; a focused fixture verifies the resulting value, prototype and delegation behavior.",
+    "The __extends temporary constructor becomes a native class returning the original prototype-shaped object, since native class prototype properties cannot be reassigned. The original derived constructor/static-parent relationships and own constructor descriptor are checked.",
+    "The symbol-array local in __rest is named symbols instead of reusing the earlier string loop variable p; iteration and property order are unchanged."
+  ]
+}

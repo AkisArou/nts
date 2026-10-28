@@ -100,6 +100,50 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN LEBAB WTB.
+{
+  const name = "jetstream-lebab-wtb";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+
+    test(`${name}: exact Preact input and complete original code/warnings are preserved`, () => {
+      const source = readFileSync(new URL(`${name}/sources.ts`, root), "utf8");
+      const declaration = "export const preactSource = ";
+      const start = source.indexOf(declaration);
+      assert.ok(start >= 0);
+      const literal = source.slice(start + declaration.length).trim().replace(/;$/, "");
+      const payload: unknown = JSON.parse(literal);
+      assert.ok(typeof payload === "string");
+      assert.equal(sha256(payload), "e5b962b9e5d1ee004d580358fa2e3432599b46fbb413a6d67f02709eb4c72922");
+      const serialized = module.render(1);
+      assert.ok(typeof serialized === "string");
+      assert.equal(serialized.length, 23935);
+      assert.equal(sha256(serialized), "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1");
+      const result: unknown = JSON.parse(serialized);
+      assert.ok(Array.isArray(result));
+      assert.equal(result.length, 1);
+      const item: unknown = result[0];
+      assert.ok(isRecord(item));
+      assert.ok(typeof item.code === "string");
+      assert.equal(item.code.length, 21316);
+      assert.ok(Array.isArray(item.warnings));
+      assert.equal(item.warnings.length, 35);
+      assert.equal(module.render(2), serialized);
+    });
+
+    test(`${name}: opaque count repeats the whole original transformation`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.render(0), "");
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 1344693304);
+      assert.equal(module.work(2), 2689386608);
+    });
+  }
+}
+// END LEBAB WTB.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });

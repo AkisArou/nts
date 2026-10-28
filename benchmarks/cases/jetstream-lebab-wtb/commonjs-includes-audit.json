@@ -1,0 +1,563 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sourceScope": "web-tooling-benchmark/dist/lebab.bundle.js: ./node_modules/lebab/lib/transform/commonjs/ and includes/",
+  "validation": {
+    "node": "v24.20.0",
+    "typescript": "7.0.2",
+    "strictDiagnostics": 0,
+    "semanticAnyDiagnostics": 0,
+    "runtime": {
+      "node": "v24.20.0",
+      "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+      "scope": "Unmodified CommonJS import/export and includes upstream test bodies; only the import and test-runner bindings are supplied. Both original bundle and typed port must match upstream code and warnings.",
+      "sources": [
+        {
+          "file": "commonjs/importCommonjsTest.js",
+          "sha256": "ba4932fff9fdc93980ea90be7fbf864fecf172ea29324c4a8b6619cb293a5bfd"
+        },
+        {
+          "file": "commonjs/exportCommonjsTest.js",
+          "sha256": "d59699b6a79cd77b7c5f7546da74a8a8fd1bc6ebf1c608bc677e547cf527fe04"
+        },
+        {
+          "file": "includesTest.js",
+          "sha256": "d2448d65140f1c51c5a4e3f07ab0eec263d72261eabb760e3c16777df36b988b"
+        }
+      ],
+      "skipped": [],
+      "tests": 92,
+      "passed": 92,
+      "failures": [],
+      "serializedCharacters": 29961,
+      "sha256": "a3fe540a1ea7c2bd9e18a9876141e214eebe5c7538cf4f3c11222e1885c712d9"
+    }
+  },
+  "sourceAudit": {
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "originalModules": 12,
+    "newTypedBoundaryModules": [
+      {
+        "file": "commonjs/runtime.ts",
+        "sha256": "0d9a77455f7d5ae39d727b3d24c2bd045a74cc74ab4b947c19ab648720fce668"
+      },
+      {
+        "file": "includes/runtime.ts",
+        "sha256": "32241363a459eae9b83af2b6975df325756bc982542a3ae12614f10e6a8bf5c0"
+      }
+    ],
+    "originalFunctions": 53,
+    "sourceFiles": [
+      {
+        "file": "commonjs/exportCommonjs.ts",
+        "originalSha256": "ca0771a9c74fc8a2a751ebaa68e850e5e90c7a2d22e9e9611298e4930a1057d4",
+        "portSha256": "fd5bbf1d53b83efd923c95a6676634f0e3fd93475778b8e536b73613a84bfc98",
+        "originalFunctions": 8,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 13,
+          "IfStatement": 10
+        },
+        "portControls": {
+          "ReturnStatement": 14,
+          "IfStatement": 12,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/traverser.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/matchDefaultExport.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/matchNamedExport.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/utils/functionType.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/syntax/ExportNamedDeclaration.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/syntax/VariableDeclaration.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/importCommonjs.ts",
+        "originalSha256": "27bac27256e51f6e278b8c64515bc169457a5a83f96eb15e27eb69005585edcf",
+        "portSha256": "f1d0564617eacfbc12ab668f7c544f1d70ed0721e0c484c44ac51b66d59540c5",
+        "originalFunctions": 10,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 14,
+          "IfStatement": 8
+        },
+        "portControls": {
+          "ReturnStatement": 15,
+          "IfStatement": 10,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/traverser.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/isVarWithRequireCalls.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/matchRequire.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/utils/multiReplaceStatement.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/syntax/ImportDeclaration.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/syntax/ImportSpecifier.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/syntax/ImportDefaultSpecifier.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/syntax/VariableDeclaration.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/index.ts",
+        "originalSha256": "8ec0a2b698a45863e76dfadf31a422b7bc8558025f82512b3e4c0af8ea65c396",
+        "portSha256": "e2514f2d12602ab06f1cfebf92a5bcf9a303333b566d061cc482dcfbc232c43d",
+        "originalFunctions": 2,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 1
+        },
+        "portControls": {
+          "ReturnStatement": 2,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/importCommonjs.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/exportCommonjs.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/isExports.ts",
+        "originalSha256": "38735ac10f3c448a6d32a27e1162943536940192e4de7ccb11fa790e88925063",
+        "portSha256": "d6f146c33205ea87f1548834fb530ca9fb4c6037566fc9eeff9ae85677ce21c6",
+        "originalFunctions": 0,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {},
+        "portControls": {
+          "IfStatement": 2,
+          "ThrowStatement": 2,
+          "ReturnStatement": 1
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/f-matches/index.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/isModuleExports.ts",
+        "originalSha256": "c4bfaec8528a6a5ec8329f448f162865fea8d811a6a1a6f223b1b463155fd2cb",
+        "portSha256": "92a2b928f526d2cbd237efba413376e6a4378988701104032933aacc1d11b7da",
+        "originalFunctions": 1,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 1
+        },
+        "portControls": {
+          "ReturnStatement": 2,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/f-matches/index.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/isExports.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/isVarWithRequireCalls.ts",
+        "originalSha256": "6d259ccad61e3617e0be53a9f1b238e34c1cced3f3dcb1863687e0e3671f98aa",
+        "portSha256": "deefeb4ebb555b4ad808cb115e95006cc70f5d1b6c4527c9d439c889fe3c4e27",
+        "originalFunctions": 2,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 2
+        },
+        "portControls": {
+          "ReturnStatement": 3,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/matchRequire.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/matchDefaultExport.ts",
+        "originalSha256": "f26e34d8ea91b3d652de54f5a2cd2da1d716a557a9e6ab0326b179eaee7557cf",
+        "portSha256": "d062bbfb4ef69d4ff2cf32429867a260b7ab0e950e580910721281db21eb3aac",
+        "originalFunctions": 1,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 1
+        },
+        "portControls": {
+          "ReturnStatement": 2,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/f-matches/index.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/isModuleExports.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/matchNamedExport.ts",
+        "originalSha256": "1d2b14dd542ec7160cff286b040709271bff2e73e0f0b48fe5a8c8108203b629",
+        "portSha256": "c6bcf19fe0cfaf1c0089e4322422d030e4c4bc81a72e450233942d2ee545a01e",
+        "originalFunctions": 2,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 2
+        },
+        "portControls": {
+          "ReturnStatement": 3,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/f-matches/index.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/isExports.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/commonjs/isModuleExports.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "commonjs/matchRequire.ts",
+        "originalSha256": "1e6ba7932becafc3283337eb32c96adcc6dae98c4ef6fa6a67fd2d849477a735",
+        "portSha256": "cfe287fccb0fe7c61a96c3edbe192fa717559c5c2bb25ff0d7c8dd634b74aa02",
+        "originalFunctions": 4,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 4
+        },
+        "portControls": {
+          "ReturnStatement": 5,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/utils/isString.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/f-matches/index.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "includes/comparison.ts",
+        "originalSha256": "f9be34b2bd6ab770e20ad0e898ba6c6ed86dfa632b173290be60b3ca2f3f5781",
+        "portSha256": "03adee3edb0b7017e215c00d3cea9805dff7f27a2471f6f9ec45e74bd2d4489e",
+        "originalFunctions": 2,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 7,
+        "originalControls": {
+          "SwitchStatement": 2,
+          "CaseClause": 7,
+          "ReturnStatement": 6,
+          "DefaultClause": 2
+        },
+        "portControls": {
+          "SwitchStatement": 2,
+          "CaseClause": 7,
+          "ReturnStatement": 7,
+          "DefaultClause": 2,
+          "IfStatement": 2,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/includes/matchesIndexOf.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "includes/index.ts",
+        "originalSha256": "8703a60c5f93996ba3de70d190d921e563169cc537f83c28ccd73be3a4dd850a",
+        "portSha256": "079a3f66d12de83e8016096758fd8425e5c4bbd3b530e478cd94e7ff50a0b2a2",
+        "originalFunctions": 5,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 5,
+          "IfStatement": 2
+        },
+        "portControls": {
+          "ReturnStatement": 6,
+          "IfStatement": 4,
+          "ThrowStatement": 2
+        },
+        "originalOperations": [
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/traverser.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/includes/matchesIndexOf.js",
+            "original": 1,
+            "port": 0
+          },
+          {
+            "value": "StringLiteral:./node_modules/lebab/lib/transform/includes/comparison.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      },
+      {
+        "file": "includes/matchesIndexOf.ts",
+        "originalSha256": "9737e41f2c5f5c11786f4ef3e46a619f4ded23595a400e61e1e640dbb3c11e5c",
+        "portSha256": "fe0500e330d86efff94282279caa8b2b1af8adb628feb837253e750f91741e2a",
+        "originalFunctions": 16,
+        "preservedFunctionArityAndOrder": true,
+        "addedFunctions": [],
+        "cases": 0,
+        "originalControls": {
+          "ReturnStatement": 17,
+          "IfStatement": 6,
+          "ForStatement": 1,
+          "ThrowStatement": 1
+        },
+        "portControls": {
+          "ReturnStatement": 18,
+          "IfStatement": 8,
+          "ForStatement": 1,
+          "ThrowStatement": 3
+        },
+        "originalOperations": [
+          "Object.defineProperty",
+          "Object.getOwnPropertyDescriptor",
+          "Object.defineProperty",
+          "Object.getOwnPropertyDescriptor",
+          "Object.defineProperty"
+        ],
+        "portOperations": [
+          "Object.defineProperty",
+          "Object.getOwnPropertyDescriptor",
+          "Object.defineProperty",
+          "Object.getOwnPropertyDescriptor",
+          "Object.defineProperty"
+        ],
+        "classes": [],
+        "missingRuntimeLiterals": [],
+        "packagedModuleIds": [
+          {
+            "value": "StringLiteral:./node_modules/f-matches/index.js",
+            "original": 1,
+            "port": 0
+          }
+        ]
+      }
+    ]
+  },
+  "adaptations": [
+    "All twelve original module bodies retain their matcher patterns, callback/function bindings and arities, original AST allocation and mutation statements, branch order and warning text. Every original string, numeric and regular-expression literal is retained; only Webpack module identifier strings become statically named lazy imports.",
+    "The two local runtime.ts files supply finite checked views of AST values captured by the original f-matches patterns. They return the original AST objects and source arrays without copies. Unknown capture values are narrowed only after their original successful-match checks or at original field/method reads.",
+    "Function and class expressions still receive the original in-place type and id assignments; an arrow expression body is still wrapped by the original BlockStatement/ReturnStatement allocations. Checked declaration views observe the updated nodes after those writes.",
+    "Includes retains its original descriptor-aware object-spread helper, symbol-key filtering, key order, _defineProperty behavior, comparisons and all Object descriptor operations. Overload signatures type its variable argument list without changing the implementation parameter count or arguments reads.",
+    "The existing self-reassigning _typeof helper uses a var function initializer because strict TypeScript rejects assignment to a function declaration. Its inferred function name, parameter binding, arity, self-assignment and bodies are retained; the source audit accounts for that binding-preserving form.",
+    "Original optional parent and replacement-result phases use erased non-null annotations; no new runtime sentinel rejection is added. The original comma expressions retain the same operands while redundant non-null parentheses are removed to satisfy strict TypeScript."
+  ]
+}

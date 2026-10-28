@@ -1,0 +1,13 @@
+{
+  "node": "v24.20.0",
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "tests": 128,
+  "passed": 128,
+  "failed": 0,
+  "serializedCharacters": 13874,
+  "sha256": "2e69166704dac66087b6f190ddb90201fad782813b1a6fc82e5f5f0c2200f4bf",
+  "failures": [],
+  "adaptations": [
+    "ArraySet and MappingList are native classes with declared original fields and the original enumerable prototype function assignments. Native class constructor prototype properties are non-writable; instances, method descriptors, and collection behavior are compared."
+  ]
+}

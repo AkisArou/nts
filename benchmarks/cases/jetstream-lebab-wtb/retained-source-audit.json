@@ -1,0 +1,1451 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "modules": 100,
+  "originalDefinitions": 1315,
+  "identicalBodiesAfterTypeErasure": 677,
+  "bodiesEqualAfterCheckedBoundaryNormalization": 576,
+  "reviewedBodies": 60,
+  "reviewed": [
+    {
+      "file": "escope/lib/definition.js",
+      "name": "ParameterDefinition",
+      "originalLine": 87,
+      "typedLineAfterErasure": 52,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/pattern-visitor.js",
+      "name": "PatternVisitor",
+      "originalLine": 63,
+      "typedLineAfterErasure": 54,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/referencer.js",
+      "name": "Importer",
+      "originalLine": 87,
+      "typedLineAfterErasure": 73,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/referencer.js",
+      "name": "Referencer",
+      "originalLine": 141,
+      "typedLineAfterErasure": 107,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "GlobalScope",
+      "originalLine": 522,
+      "typedLineAfterErasure": 362,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "ModuleScope",
+      "originalLine": 576,
+      "typedLineAfterErasure": 395,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "FunctionExpressionNameScope",
+      "originalLine": 588,
+      "typedLineAfterErasure": 402,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "CatchScope",
+      "originalLine": 604,
+      "typedLineAfterErasure": 412,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "WithScope",
+      "originalLine": 616,
+      "typedLineAfterErasure": 419,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "TDZScope",
+      "originalLine": 646,
+      "typedLineAfterErasure": 438,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "BlockScope",
+      "originalLine": 658,
+      "typedLineAfterErasure": 445,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "SwitchScope",
+      "originalLine": 670,
+      "typedLineAfterErasure": 452,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "FunctionScope",
+      "originalLine": 682,
+      "typedLineAfterErasure": 459,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "ForScope",
+      "originalLine": 740,
+      "typedLineAfterErasure": 491,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "name": "ClassScope",
+      "originalLine": 752,
+      "typedLineAfterErasure": 498,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "escope--estraverse/estraverse.js",
+      "name": "clone",
+      "originalLine": 30,
+      "typedLineAfterErasure": 21,
+      "reason": "Outer module/environment factory contains the separately audited native constructor declarations, static dependency routing, and checked export boundary."
+    },
+    {
+      "file": "esrecurse/esrecurse.js",
+      "name": "<anonymous>",
+      "originalLine": 26,
+      "typedLineAfterErasure": 23,
+      "reason": "Outer module/environment factory contains the separately audited native constructor declarations, static dependency routing, and checked export boundary."
+    },
+    {
+      "file": "estraverse/estraverse.js",
+      "name": "clone",
+      "originalLine": 30,
+      "typedLineAfterErasure": 20,
+      "reason": "Outer module/environment factory contains the separately audited native constructor declarations, static dependency routing, and checked export boundary."
+    },
+    {
+      "file": "lebab/lib/Logger.js",
+      "name": "Logger",
+      "originalLine": 20,
+      "typedLineAfterErasure": 51,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/Transformer.js",
+      "name": "Transformer",
+      "originalLine": 33,
+      "typedLineAfterErasure": 101,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/scope/FunctionHoister.js",
+      "name": "FunctionHoister",
+      "originalLine": 35,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/scope/Scope.js",
+      "name": "Scope",
+      "originalLine": 30,
+      "typedLineAfterErasure": 53,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/scope/ScopeManager.js",
+      "name": "ScopeManager",
+      "originalLine": 23,
+      "typedLineAfterErasure": 56,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/scope/Variable.js",
+      "name": "Variable",
+      "originalLine": 27,
+      "typedLineAfterErasure": 51,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/scope/VariableGroup.js",
+      "name": "VariableGroup",
+      "originalLine": 28,
+      "typedLineAfterErasure": 53,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/scope/VariableMarker.js",
+      "name": "VariableMarker",
+      "originalLine": 33,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/ArrowFunctionExpression.js",
+      "name": "ArrowFunctionExpression",
+      "originalLine": 40,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/BaseSyntax.js",
+      "name": "BaseSyntax",
+      "originalLine": 25,
+      "typedLineAfterErasure": 51,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/ExportNamedDeclaration.js",
+      "name": "ExportNamedDeclaration",
+      "originalLine": 38,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/ImportDeclaration.js",
+      "name": "ImportDeclaration",
+      "originalLine": 36,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/ImportDefaultSpecifier.js",
+      "name": "ImportDefaultSpecifier",
+      "originalLine": 34,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/ImportSpecifier.js",
+      "name": "ImportSpecifier",
+      "originalLine": 36,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/TemplateElement.js",
+      "name": "TemplateElement",
+      "originalLine": 39,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/TemplateLiteral.js",
+      "name": "TemplateLiteral",
+      "originalLine": 36,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/syntax/VariableDeclaration.js",
+      "name": "VariableDeclaration",
+      "originalLine": 37,
+      "typedLineAfterErasure": 86,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/PotentialClass.js",
+      "name": "PotentialClass",
+      "originalLine": 38,
+      "typedLineAfterErasure": 94,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/PotentialConstructor.js",
+      "name": "PotentialConstructor",
+      "originalLine": 34,
+      "typedLineAfterErasure": 93,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/PotentialMethod.js",
+      "name": "PotentialMethod",
+      "originalLine": 36,
+      "typedLineAfterErasure": 63,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/ImportUtilDetector.js",
+      "name": "ImportUtilDetector",
+      "originalLine": 21,
+      "typedLineAfterErasure": 54,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/Inheritance.js",
+      "name": "Inheritance",
+      "originalLine": 28,
+      "typedLineAfterErasure": 56,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/Prototypal.js",
+      "name": "Prototypal",
+      "originalLine": 34,
+      "typedLineAfterErasure": 54,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/RequireUtilDetector.js",
+      "name": "RequireUtilDetector",
+      "originalLine": 22,
+      "typedLineAfterErasure": 56,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/RequireUtilInheritsDetector.js",
+      "name": "RequireUtilInheritsDetector",
+      "originalLine": 22,
+      "typedLineAfterErasure": 56,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/UtilInherits.js",
+      "name": "UtilInherits",
+      "originalLine": 35,
+      "typedLineAfterErasure": 89,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "lebab/lib/transform/destructParam.js",
+      "name": "_default",
+      "originalLine": 25,
+      "typedLineAfterErasure": 94,
+      "reason": "Explicit String conversion of numeric warning values at the original concat sites; checked AST views retain all original writes."
+    },
+    {
+      "file": "lebab/lib/transform/destructParam.js",
+      "name": "enter",
+      "originalLine": 28,
+      "typedLineAfterErasure": 97,
+      "reason": "Explicit String conversion of numeric warning values at the original concat sites; checked AST views retain all original writes."
+    },
+    {
+      "file": "lebab/lib/transform/destructParam.js",
+      "name": "<anonymous>",
+      "originalLine": 38,
+      "typedLineAfterErasure": 107,
+      "reason": "Explicit String conversion of numeric warning values at the original concat sites; checked AST views retain all original writes."
+    },
+    {
+      "file": "lebab/lib/utils/Hierarchy.js",
+      "name": "Hierarchy",
+      "originalLine": 25,
+      "typedLineAfterErasure": 54,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__extends",
+      "originalLine": 63,
+      "typedLineAfterErasure": 85,
+      "reason": "Required native temporary constructor returns the original prototype-shaped object; derived prototype and own constructor descriptors are checked in helpers-audit.json."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__",
+      "originalLine": 67,
+      "typedLineAfterErasure": 91,
+      "reason": "Native constructor transcription; original field assignments and ordering retained, with required class-call/super scaffolding adaptations."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__rest",
+      "originalLine": 82,
+      "typedLineAfterErasure": 112,
+      "reason": "The second function-scoped p binding is named symbols to express its different array type; original loop and property order are retained."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__esDecorate",
+      "originalLine": 105,
+      "typedLineAfterErasure": 137,
+      "reason": "Checked callable return preserves the original undefined branch and the same decorator function object."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "accept",
+      "originalLine": 106,
+      "typedLineAfterErasure": 138,
+      "reason": "Checked callable return preserves the original undefined branch and the same decorator function object."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__awaiter",
+      "originalLine": 154,
+      "typedLineAfterErasure": 199,
+      "reason": "Checked native iterator calls at the original reads; helper fixtures cover accessor order, raw done values, queue order and identity."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "<anonymous>",
+      "originalLine": 156,
+      "typedLineAfterErasure": 201,
+      "reason": "Nested checked native iterator forwarding, covered by original-versus-port accessor and raw-result fixtures."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__asyncGenerator",
+      "originalLine": 267,
+      "typedLineAfterErasure": 372,
+      "reason": "Checked native iterator calls at the original reads; helper fixtures cover accessor order, raw done values, queue order and identity."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "resume",
+      "originalLine": 273,
+      "typedLineAfterErasure": 383,
+      "reason": "Checked native iterator calls at the original reads; helper fixtures cover accessor order, raw done values, queue order and identity."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "__asyncDelegator",
+      "originalLine": 280,
+      "typedLineAfterErasure": 395,
+      "reason": "Original callable __await factory invocation becomes new __await for its required native class transcription."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "verb",
+      "originalLine": 283,
+      "typedLineAfterErasure": 398,
+      "reason": "Original callable __await factory invocation becomes new __await for its required native class transcription."
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "name": "<anonymous>",
+      "originalLine": 283,
+      "typedLineAfterErasure": 398,
+      "reason": "Nested original __await factory call becomes new __await for its required native class transcription."
+    }
+  ],
+  "nativeImplicitDerivedConstructors": [
+    {
+      "file": "lebab/lib/scope/BlockScope.js",
+      "name": "BlockScope",
+      "originalBody": "{\n    _classCallCheck(this, BlockScope);\n    return _super.apply(this, arguments);\n}",
+      "replacement": "Native implicit derived constructor forwards the original arguments to the original base class; authored classes have no explicit constructor."
+    },
+    {
+      "file": "lebab/lib/scope/FunctionScope.js",
+      "name": "FunctionScope",
+      "originalBody": "{\n    _classCallCheck(this, FunctionScope);\n    return _super.apply(this, arguments);\n}",
+      "replacement": "Native implicit derived constructor forwards the original arguments to the original base class; authored classes have no explicit constructor."
+    }
+  ],
+  "unaccountedMissingDefinitions": [],
+  "parameterNameDefaultOrRestChanges": [],
+  "originalSwitchCases": 16,
+  "switchCaseDifferences": [],
+  "normalization": "Type erasure plus AST comparison; normalize checked same-object/value readers, dynamic property reads, native calls, and implicit property-key coercion. Full original and port bodies remain in the scratch audit; explicit constructor/local-binding changes are listed here.",
+  "files": [
+    {
+      "file": "escope/lib/definition.js",
+      "originalSha256": "26d28190a45ea76c40d67eb1d09493cefe8aa39428d912ddc242647e88c8790f",
+      "typedSha256": "98673a16a0508cd745b1c1f0cef72b60cea2a4d60ac41b5899ca7173b675f4cb",
+      "definitions": 6,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/index.js",
+      "originalSha256": "e0c55d0147f6e59d759bbb2fc9b0df9127faba88f9e22a8bfb272b8b9fedc832",
+      "typedSha256": "2590d9f784a6a0ee814313edc806f510313674cca703fbdf53dc75c22b96c2dc",
+      "definitions": 7,
+      "identicalBodies": 4,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/pattern-visitor.js",
+      "originalSha256": "4fe229d5dd606e66fefb6c75bd757645a86a6ea128d0c25f700f862d6e9c8bd0",
+      "typedSha256": "f09d7ef3b0e582b971f1b8cc08a8aa62bb9099d8d69aeb7cb203be57b53ead81",
+      "definitions": 21,
+      "identicalBodies": 17,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/reference.js",
+      "originalSha256": "f496776bb15be6e4bd73a352581722499c84576511664ebc4cc563f6a7e5284c",
+      "typedSha256": "83b4e4ba917d11e99d5de0107227c34e89873cb77958e4eca20b99cbbb37e60c",
+      "definitions": 11,
+      "identicalBodies": 10,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/referencer.js",
+      "originalSha256": "e5a2e17036ca2ad94758599daf64b3711344a5d9722187a9568f45adb22942a5",
+      "typedSha256": "49f64a48cdc603f15270b48965950cdbd27ddfc369962e27027117133cc3bb7f",
+      "definitions": 68,
+      "identicalBodies": 58,
+      "boundaryNormalizedBodies": 8,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/scope-manager.js",
+      "originalSha256": "b85e4313f930cea1a6982bcc427fe3b70270e3868c6fbebdec6cb97f5521767f",
+      "typedSha256": "01561412aedf9c0dc0a927ac54213af6fff0b9864f362dbec8a4957148741e79",
+      "definitions": 34,
+      "identicalBodies": 32,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/scope.js",
+      "originalSha256": "163b30c6cc6a6b824cf3359377616e0472281836593c4f8424ed6ff7234e23dc",
+      "typedSha256": "90a460a0979f7f521a79092d78fe387835612d101092738e4a59a4e4b53eb7ad",
+      "definitions": 49,
+      "identicalBodies": 31,
+      "boundaryNormalizedBodies": 7,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/lib/variable.js",
+      "originalSha256": "97b0a866fccd2b2b2a454d1cdfd7e38870d2db14e3a85dc5002f6d6feab8b675",
+      "typedSha256": "94bf6a0df2d802489553cfde1cf1ca484afaa1848f9f7e10e7fdb4929db4d94e",
+      "definitions": 2,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope--estraverse/estraverse.js",
+      "originalSha256": "4be0916f0693012013dea8f3b1de66603c0f9cba70d344808c32d76fbe856be6",
+      "typedSha256": "eea61f2d0a5624585061396bbb84403940281a2ba12f15a796fe97950b0fb652",
+      "definitions": 32,
+      "identicalBodies": 18,
+      "boundaryNormalizedBodies": 13,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope--estraverse/package.json.js",
+      "originalSha256": "d9e671f90dd3dbf8a5b6225c2d4cc9e563611491806c6be5ab5d6db19ec46c5b",
+      "typedSha256": "a852c3a737a0c4400ce17e7d2f05f1e31a3fe3c393108e6b7de94c79578a9a6e",
+      "definitions": 0,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "escope/package.json.js",
+      "originalSha256": "2cb1ef6dc78a66279bd7510c50b0d3a8416d7aa9d953d77d02840e750fb0e535",
+      "typedSha256": "fb2af8f95f51de7894f775f401ff02bb464fefcdc5ede0bdd883c305565abae2",
+      "definitions": 0,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "esrecurse/esrecurse.js",
+      "originalSha256": "22a84ba66f0c768830cded1b41572cc39263ba629e6b634642d1c9c802b5169e",
+      "typedSha256": "661ff444af9274e8810de5fbbb4227bc282f0954048574eba13c5be7ebdcc64d",
+      "definitions": 7,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "esrecurse/package.json.js",
+      "originalSha256": "2d509c7e32b502c48955c5b31363b0f3798aada9aad6c5ecb8302781ac3221bc",
+      "typedSha256": "ad04b487e65b8958a4416fba2f0cd88548925e3d2ca9f406e4ca67f81a424027",
+      "definitions": 0,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "estraverse/estraverse.js",
+      "originalSha256": "58f5cf7199d6459a95cd8a07a3f1a5d7f4c9205f16dde1ce9f0fabebfb330a09",
+      "typedSha256": "d93ecf1b547a736ef85c792cdf6c4bfcbc0a9f18b67b0914178e225139768243",
+      "definitions": 33,
+      "identicalBodies": 19,
+      "boundaryNormalizedBodies": 13,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "f-matches/index.js",
+      "originalSha256": "d6c3823ac07be3350c56cb59d6596692c4acb053791a3badf0ccaa031c2979d1",
+      "typedSha256": "3772e6a494fcdbfc32c7e6a359b49d05b6dffdbfe322e16343f009bdfc0f2e42",
+      "definitions": 8,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/index.js",
+      "originalSha256": "a26f2c2d73c3856163f7e1a5090b5335aa74e7a6585083452c97576db7209f9a",
+      "typedSha256": "7e8b4dce9780294f2f89f1e38fb8abde518f2bd8277cdf363a9017143df3fdbb",
+      "definitions": 1,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/Logger.js",
+      "originalSha256": "982a1fc8e92a2b88c7cf331e681fb20f5352508c0c83b8dddc7d77913990e0a7",
+      "typedSha256": "d0f450dede5ea379f7c884036da3acc3980391679b2abba206874f0e239773d5",
+      "definitions": 11,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/Parser.js",
+      "originalSha256": "88509a904599d044108fd5ca21e5b536c169612edcd1c443b2b1e744214356af",
+      "typedSha256": "d8fb023cf29f3ef18d29a095dac16aca61dd0b3db5d205bd9e8e0bf9c532d5c7",
+      "definitions": 16,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 8,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/Transformer.js",
+      "originalSha256": "e544a8bc70235137598bcde931c77e0753f40d962a61d02a26498962ac257f52",
+      "typedSha256": "bd09335928f0b20cf9a55bb452f54976a839db44e9c67572eac7b65a019e81fd",
+      "definitions": 22,
+      "identicalBodies": 10,
+      "boundaryNormalizedBodies": 11,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/createTransformer.js",
+      "originalSha256": "45d2ede168bf97397fd12d6fd5c2767b4a80d86a127feddfbaa0918ac517915d",
+      "typedSha256": "487969c5911d5d65df878d93951167ad0faaa5e13d4f2f96023ee370cd8dbec6",
+      "definitions": 5,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/BlockScope.js",
+      "originalSha256": "f584e13c5322b2d0d96b4ac39bdf40589f86ff143e5aaa0d50a911ea96186cf0",
+      "typedSha256": "c8d6be136f917ef4253f0e94bca0335527ea97de3db23cf92f803b88bf20fa85",
+      "definitions": 24,
+      "identicalBodies": 9,
+      "boundaryNormalizedBodies": 14,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/FunctionHoister.js",
+      "originalSha256": "e63459ac7de400389944d63421c14aea67f1b17ab170d3b5c738d430be691815",
+      "typedSha256": "fd14c7924fa1ccc4a2e4d0ecd9340cd9b6d9d3aed5799c591019b7281cf51ad2",
+      "definitions": 22,
+      "identicalBodies": 10,
+      "boundaryNormalizedBodies": 11,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/FunctionScope.js",
+      "originalSha256": "4299e0dee450b34ab49d8c85eb1f3d8fe24a58a6d0b2aab983d2761fb382bfcf",
+      "typedSha256": "2da5776bebafe5870a844c0c5b7ee8b80b06825f68fd4685f81f3af382174ee5",
+      "definitions": 24,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 15,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/Scope.js",
+      "originalSha256": "8af090cecf1a15f46575b724868b62a9dc1bd5e8bbb6355a65fb608d3f4e512c",
+      "typedSha256": "9978cfa7cf4fd976ce35aaf3d4c05400a2b242ffa62b6c765c5e3aa70394b349",
+      "definitions": 11,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/ScopeManager.js",
+      "originalSha256": "06b91a666a59b58c4d16a963a5ea3479ce796917be9b0fd41e653708b5b76bd4",
+      "typedSha256": "774c7ac70b2232fe66eae02edaf8601872db9e3070268573a19f23a6b9d3b951",
+      "definitions": 14,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 7,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/Variable.js",
+      "originalSha256": "8437b45ca789dfc488572f2211cb48766af37d069aeef6ee2de4f1159ebdb376",
+      "typedSha256": "17a8e8ae6c15834fbe2871d7d83486f280b1b341195b5ef56941c86e50520a0b",
+      "definitions": 16,
+      "identicalBodies": 11,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/VariableGroup.js",
+      "originalSha256": "dbae604f271c44a6d0b6eeaee722f9c8a2ce0f9e5ba8b3828c9b4f9c6c97d093",
+      "typedSha256": "d5b43152661c23f0e5914e91e034956a03328deec739eae3aa0d7b0a17ac9f54",
+      "definitions": 17,
+      "identicalBodies": 12,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/scope/VariableMarker.js",
+      "originalSha256": "aa2739ae7e4b7d6be6edcfe54e1ba49c3e24d6840930beb83f879db6511ceea7",
+      "typedSha256": "b640c191e6f25e71195d8c329fc86e9a01747b57d7a7ee9eea3c60ca4fb8cd49",
+      "definitions": 30,
+      "identicalBodies": 13,
+      "boundaryNormalizedBodies": 16,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/ArrowFunctionExpression.js",
+      "originalSha256": "3ef90468d32e77ddb752b6cdbb758676086141b098f9360e3458c70e280ef09d",
+      "typedSha256": "c1dcf22c1a326acd4598703fdb6663745354ef2f0cff422b46c2cb71b1eef57c",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/BaseSyntax.js",
+      "originalSha256": "92ca4d4c27106f26ca106411954705406c597c7dc340b8fa8a80532dae957061",
+      "typedSha256": "d9c15fae75fce959b95c3e993a67893ee6b433a3b0853e20b3b478a0a22cc00e",
+      "definitions": 9,
+      "identicalBodies": 4,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/ExportNamedDeclaration.js",
+      "originalSha256": "b950518e14e4b311dd1ecb0dbc98fe311d3718a8289ca6fd8b72700b26732150",
+      "typedSha256": "ca3f761fb6bebd2b7a8744d6b7310943c04f926f8de84c3a5eb5eb6fd9980dc7",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/ImportDeclaration.js",
+      "originalSha256": "f9b7f950f13880143a2fb8d6f1493c2df4fd31870dfbf4878d182bd0ac7e5e03",
+      "typedSha256": "d57149414a1bfdd63d2a5bc4ca352e0523822c81e70d7fb1a8d1cdd92672bfad",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/ImportDefaultSpecifier.js",
+      "originalSha256": "d03ed13b8e106bd72630702a9f8842733b711185cb19edf431aee12372a24657",
+      "typedSha256": "9c9f8622877eaf1f54c383ab222900eded32405cc2140bf52b49728d95ee73f3",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/ImportSpecifier.js",
+      "originalSha256": "8a62ec3e5b03f4c4d4224e16fbe6f05f2752bd4375352046960efe83a1df3254",
+      "typedSha256": "5b51e0b283b28a160d62b09302b83a0eea6e1ad9aba02294e6052351fee307af",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/TemplateElement.js",
+      "originalSha256": "ecebc33deac6694abd394231d4f0c4bf086834a3ac40d9f55465a54c3fda585b",
+      "typedSha256": "be8fc6eb6db92a5d70f01313d9f77c1b7210a1f39470bddc4952e31bb1f81290",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/TemplateLiteral.js",
+      "originalSha256": "b3bcfa9a6648898c7024534d26ce4d3f9c324ac00821661f205259b45acb645c",
+      "typedSha256": "07068614ef97b478d88348f07d2f06c81376fb9b986570f30280281afd380820",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/syntax/VariableDeclaration.js",
+      "originalSha256": "bb8d868180e7b18c96cdf4a47f02840e9d76ff92c1530e1dc9dfe1f86280e73d",
+      "typedSha256": "85e48e853d8bc0ffd7d3b775e3da99693ca1346db50ceacc377716d7ef056ffa",
+      "definitions": 21,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/argRest.js",
+      "originalSha256": "16c4e82e7e7cf22c28db90fe9f1a1d0abf7e369c078cf1b517260bd713fed829",
+      "typedSha256": "7a53e836ba9ef1dbf35210f830636da9a4dea8bb6dbf7ac62eb1127712b84392",
+      "definitions": 10,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/argSpread.js",
+      "originalSha256": "39f9c917febc92f75a9abc9898c24a09cb914128189ea653c4c219cedb713d18",
+      "typedSha256": "e6ef0f8de66c0e07e7fdf653bfead1fd1a752c724dea157902f791f11f738879",
+      "definitions": 8,
+      "identicalBodies": 5,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/arrow.js",
+      "originalSha256": "2f575dae5525b4dc0d2f54af2f894251a64c68acc80031619399b941d430e7d5",
+      "typedSha256": "176905811e2af6e0571de7c35059b35978d9e320eb780a357625b28bfe855f9a",
+      "definitions": 11,
+      "identicalBodies": 4,
+      "boundaryNormalizedBodies": 7,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/arrowReturn.js",
+      "originalSha256": "a31f633650e4fe57af7b981c3434135af57f8dc4cc5a258c8caf0c031fc8fb43",
+      "typedSha256": "c42567b405bdfd31aab9e658e28dd261fe53f5ca433c1313cf0bcc461c960546",
+      "definitions": 6,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/PotentialClass.js",
+      "originalSha256": "a477628034b180669b1e53dee816f188c260d712ad022ffe6a1645a1b08560db",
+      "typedSha256": "cf5c573bae9b42bd86a4c400974acb4420a94e633065d5ca96f67599fdf64997",
+      "definitions": 36,
+      "identicalBodies": 22,
+      "boundaryNormalizedBodies": 13,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/PotentialConstructor.js",
+      "originalSha256": "d52ed407ccea3ab4f4faa169a93de0552dd77c50a6bd2261ea097c767ee72a61",
+      "typedSha256": "2fde11630e7068ddb430c4cc95203f5e93587ee5c4ed124511328c6f2ae74a7b",
+      "definitions": 26,
+      "identicalBodies": 11,
+      "boundaryNormalizedBodies": 14,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/PotentialMethod.js",
+      "originalSha256": "0f0d63c53bdd4e28f46d9f6a0e61e447c474e9222e8509d294d272e59d68d5f6",
+      "typedSha256": "c90adfd624669d061835ee96151c3a097a65a1a6ff5c5b1afdb3c068a0f6f639",
+      "definitions": 20,
+      "identicalBodies": 12,
+      "boundaryNormalizedBodies": 7,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/extractComments.js",
+      "originalSha256": "9722c1c7774ec918b9ac0f5e03d0dc211932b989e410d6bea9a6837c3d3ec3f5",
+      "typedSha256": "476e824ce4e539be2f809eae03bf7a59ae32ebbcd4d327e6d5d1200b271eb81d",
+      "definitions": 2,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/index.js",
+      "originalSha256": "105fef4f13ee94df14069542825f51bd2d51dbbc20926d3eb168efa9e795661e",
+      "typedSha256": "5e2d28ba2fd7e03b70d44c19e58d83c3e1154a607dcdd9c4b8fa74c9042ed082",
+      "definitions": 19,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 11,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/ImportUtilDetector.js",
+      "originalSha256": "62da8a6f6b8166b2c9dd88db9019f79576460f3c76cadedbba34a2cab186bcdf",
+      "typedSha256": "64975c7f6809f40c6756f697c225cb884a9b8886e4ff680e052ffb4d5cafafc3",
+      "definitions": 11,
+      "identicalBodies": 5,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/Inheritance.js",
+      "originalSha256": "1252946cec5a879a351fe5f63dfce046473153ca86ce41985701c9a113c930a7",
+      "typedSha256": "16e5d767a7190f4e2d0df39cc17f80fe512bff2d5a0a2bfc2535ca06a7d01d28",
+      "definitions": 11,
+      "identicalBodies": 5,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/Prototypal.js",
+      "originalSha256": "6c678c07bd77c5b64d203ad41527008620aa45e8f34ecd634c892735b8715f8b",
+      "typedSha256": "66391c85942665c4825605ae6d713690aa935bdddb1e9c2de09b408ee5ea3692",
+      "definitions": 13,
+      "identicalBodies": 7,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/RequireUtilDetector.js",
+      "originalSha256": "4d28cbd2ee9bdab4a97640753597fb9efaf897987e1529183dcf59abbfd7d5e3",
+      "typedSha256": "54621378a415c7c697a59d3c8e5c4e64dad25334e88143bfe875f021c6e7426f",
+      "definitions": 12,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/RequireUtilInheritsDetector.js",
+      "originalSha256": "a543c959258b253088d3340f596efea3ae2c34693e1f7848be284f35be0021fe",
+      "typedSha256": "e46a6863865e5661cd4982e35bb8a3ef38131c9325262515bc7ea9097c96b4bc",
+      "definitions": 12,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/inheritance/UtilInherits.js",
+      "originalSha256": "18592ee0eb79583eab0b885b91f4ae82707c2c4b5fc46931e32fbeca18b9a267",
+      "typedSha256": "f19129212728600649d226368caf7bcb2d8b11d109c21c9897c60b9aebce88ad",
+      "definitions": 23,
+      "identicalBodies": 10,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/isFunctionProperty.js",
+      "originalSha256": "ce11d9dc1df5d2c5a6a354c2bf175a477f871360878641ba452f7c266d05b1c7",
+      "typedSha256": "6254e2fb1204c3278e5f1f1048b4249f79f3521defc6f3692f16b3d73d0196b0",
+      "definitions": 1,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/isTransformableToMethod.js",
+      "originalSha256": "6924f05ec196084b378b0d6d97ab1b99b96cd40597f83c92147614ef2a4017cd",
+      "typedSha256": "9e45ad04a7aa9a3550cc354d33cb6c080722084fb183840ff1104e96f442a2e5",
+      "definitions": 3,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchFunctionAssignment.js",
+      "originalSha256": "15928e8a75fda4c16c6aa3a6a2babd3ea3332f899a6f0cfc7edc2a48c734f036",
+      "typedSha256": "96b08c1ae8735dba29c8d0d7fb80e0730e244681cbe7119230fa1ea1cf2ea62e",
+      "definitions": 0,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchFunctionDeclaration.js",
+      "originalSha256": "8251126f044a11f1f03eb3d64a4d9faf8d010e0ff5d385bf572bbbeccf6f178d",
+      "typedSha256": "3e1c830d8b27aef13b71be3696f1920720a0fbb1df4b31302eae6346154005e9",
+      "definitions": 1,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchFunctionVar.js",
+      "originalSha256": "079fb548f2835f4a84891f6eecda360bc0b35ab4637870e8e6239df9bcdec058",
+      "typedSha256": "66b2a66eb17d3771187fb356449e107072c3d31ef810f9e5478963ccb5bde9ac",
+      "definitions": 8,
+      "identicalBodies": 4,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchObjectDefinePropertiesCall.js",
+      "originalSha256": "06865d479a4d828cc66bbdf9be13f0d484b095e150c91d4f423f03c0020c1291",
+      "typedSha256": "149176b1694f735d0aa08cadf5df3b6c4180ace24165b9e7a70063817b3714ba",
+      "definitions": 3,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchObjectDefinePropertyCall.js",
+      "originalSha256": "bcd949cf3c577444b156fc9ddb79459dfa656093925613ad489792e328b337fe",
+      "typedSha256": "009edd2ac53f6653d32c60b8f688dff465b2b72e9b93cc59214ffa56a3bdf911",
+      "definitions": 4,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchPrototypeFunctionAssignment.js",
+      "originalSha256": "911ef0347e87e20206b06c5149920555b5be7b120eb2ceb42f88f09ecc60ea59",
+      "typedSha256": "977fd6e6343d07f26ca8de57ee78c7a111f753c3424a7626157f1976db40f572",
+      "definitions": 1,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/class/matchPrototypeObjectAssignment.js",
+      "originalSha256": "235475a47804b42417f58d82281972e58c0e4cea9814cc90b696e6e6de4dfc7a",
+      "typedSha256": "8d61974ef50a65c4ab952dac557e056bf2496287361d6276a9758942acabe382",
+      "definitions": 4,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/exportCommonjs.js",
+      "originalSha256": "ca0771a9c74fc8a2a751ebaa68e850e5e90c7a2d22e9e9611298e4930a1057d4",
+      "typedSha256": "fd5bbf1d53b83efd923c95a6676634f0e3fd93475778b8e536b73613a84bfc98",
+      "definitions": 8,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 6,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/importCommonjs.js",
+      "originalSha256": "27bac27256e51f6e278b8c64515bc169457a5a83f96eb15e27eb69005585edcf",
+      "typedSha256": "f1d0564617eacfbc12ab668f7c544f1d70ed0721e0c484c44ac51b66d59540c5",
+      "definitions": 10,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 10,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/index.js",
+      "originalSha256": "8ec0a2b698a45863e76dfadf31a422b7bc8558025f82512b3e4c0af8ea65c396",
+      "typedSha256": "e2514f2d12602ab06f1cfebf92a5bcf9a303333b566d061cc482dcfbc232c43d",
+      "definitions": 2,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/isExports.js",
+      "originalSha256": "38735ac10f3c448a6d32a27e1162943536940192e4de7ccb11fa790e88925063",
+      "typedSha256": "d6f146c33205ea87f1548834fb530ca9fb4c6037566fc9eeff9ae85677ce21c6",
+      "definitions": 0,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/isModuleExports.js",
+      "originalSha256": "c4bfaec8528a6a5ec8329f448f162865fea8d811a6a1a6f223b1b463155fd2cb",
+      "typedSha256": "92a2b928f526d2cbd237efba413376e6a4378988701104032933aacc1d11b7da",
+      "definitions": 1,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/isVarWithRequireCalls.js",
+      "originalSha256": "6d259ccad61e3617e0be53a9f1b238e34c1cced3f3dcb1863687e0e3671f98aa",
+      "typedSha256": "deefeb4ebb555b4ad808cb115e95006cc70f5d1b6c4527c9d439c889fe3c4e27",
+      "definitions": 2,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/matchDefaultExport.js",
+      "originalSha256": "f26e34d8ea91b3d652de54f5a2cd2da1d716a557a9e6ab0326b179eaee7557cf",
+      "typedSha256": "d062bbfb4ef69d4ff2cf32429867a260b7ab0e950e580910721281db21eb3aac",
+      "definitions": 1,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/matchNamedExport.js",
+      "originalSha256": "1d2b14dd542ec7160cff286b040709271bff2e73e0f0b48fe5a8c8108203b629",
+      "typedSha256": "c6bcf19fe0cfaf1c0089e4322422d030e4c4bc81a72e450233942d2ee545a01e",
+      "definitions": 2,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/commonjs/matchRequire.js",
+      "originalSha256": "1e6ba7932becafc3283337eb32c96adcc6dae98c4ef6fa6a67fd2d849477a735",
+      "typedSha256": "cfe287fccb0fe7c61a96c3edbe192fa717559c5c2bb25ff0d7c8dd634b74aa02",
+      "definitions": 4,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/defaultParam/index.js",
+      "originalSha256": "896a62023a1e1cf69ad75dfc01f0ec6c69b2f928c6ab0206d83649e5e40210e5",
+      "typedSha256": "739f9e346702f17d90c84ccb4ee067566d4880964b926e154e1a02fdb462f5a7",
+      "definitions": 21,
+      "identicalBodies": 9,
+      "boundaryNormalizedBodies": 12,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/defaultParam/matchIfUndefinedAssignment.js",
+      "originalSha256": "620e47d3c2a6fb6e459b716b1690a1544bdaef0f2162d782b3f618df550dcaec",
+      "typedSha256": "c1a88c079e4c6229d23e1cf8875152be142711e17c3610a1fe4f8589fd019683",
+      "definitions": 5,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/defaultParam/matchOrAssignment.js",
+      "originalSha256": "7e2d41a5f34d4afd0ed92ed539ae5e15f542f5a50d334e1e47b34793206020c0",
+      "typedSha256": "2c2bc4ac98cab52f45f05c86c74a8746a9ecff7f1eecc58f7dbdc90e8c4a9ea8",
+      "definitions": 1,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/defaultParam/matchTernaryAssignment.js",
+      "originalSha256": "bab47f8f03cf88aa931b8189a08aaac96d5a4c2efe6913a34837a33fdac27b2d",
+      "typedSha256": "c368b5f730815c87485f08d1b0e27c055827cdfc4ef2b0e6e28e2f3996a1cd76",
+      "definitions": 1,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 1,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/destructParam.js",
+      "originalSha256": "21713beab6bd329aae848b2222c1cf000c77d2fcbe3674c368907fe5017a1c0d",
+      "typedSha256": "e8bbc852d18b0068632559240ba59ef2d62acd77d6bfc1eb1f1d45ac8141d62f",
+      "definitions": 36,
+      "identicalBodies": 13,
+      "boundaryNormalizedBodies": 20,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/exponent.js",
+      "originalSha256": "d2b0fa71a82efde10d45b508a26032e867a89d6080fcb22182ac98d928aa3e97",
+      "typedSha256": "de583860ef75a6a6a7cb02e14fffd76f28dba80c2100c182778e9ed9399541b8",
+      "definitions": 4,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/forEach/index.js",
+      "originalSha256": "a929b8321761f3bd527db177840d6240ef6f6a8e5298d9baabc5e21aed5eb1a7",
+      "typedSha256": "e6d231efd4226424197613ffbfd9deb03ec3c6b9199e7294adff3da3c8a39ca3",
+      "definitions": 26,
+      "identicalBodies": 10,
+      "boundaryNormalizedBodies": 16,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/forEach/validateForLoop.js",
+      "originalSha256": "b7779fd080926a7877f6c824d08149a49f4b7019cdf17d7160df203dd8f37f80",
+      "typedSha256": "bcb7eb62c9b753e8c66824ab0f97950967900e3b620cd1b1536a068a1072a648",
+      "definitions": 9,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 8,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/forOf.js",
+      "originalSha256": "d238b72f767386cee80430cbce2bcfe5e7e7e540b93e0fb2bff65e46c4b13ae0",
+      "typedSha256": "90806edd528151ac0b1ae30a60f78c1f636d64df7125ac6f66badacc9c0d8f14",
+      "definitions": 19,
+      "identicalBodies": 5,
+      "boundaryNormalizedBodies": 14,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/includes/comparison.js",
+      "originalSha256": "f9be34b2bd6ab770e20ad0e898ba6c6ed86dfa632b173290be60b3ca2f3f5781",
+      "typedSha256": "03adee3edb0b7017e215c00d3cea9805dff7f27a2471f6f9ec45e74bd2d4489e",
+      "definitions": 2,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 7,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/includes/index.js",
+      "originalSha256": "8703a60c5f93996ba3de70d190d921e563169cc537f83c28ccd73be3a4dd850a",
+      "typedSha256": "079a3f66d12de83e8016096758fd8425e5c4bbd3b530e478cd94e7ff50a0b2a2",
+      "definitions": 5,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/includes/matchesIndexOf.js",
+      "originalSha256": "9737e41f2c5f5c11786f4ef3e46a619f4ded23595a400e61e1e640dbb3c11e5c",
+      "typedSha256": "fe0500e330d86efff94282279caa8b2b1af8adb628feb837253e750f91741e2a",
+      "definitions": 16,
+      "identicalBodies": 9,
+      "boundaryNormalizedBodies": 7,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/let.js",
+      "originalSha256": "71e711b36e205f2564f4d5be335cfa962f2ecba11b18e75857268764af8c88cc",
+      "typedSha256": "d4bb5f6768068a2e9869dc8f57327af7383a6e31a8ca21b7033cb51b56fc53a8",
+      "definitions": 30,
+      "identicalBodies": 17,
+      "boundaryNormalizedBodies": 13,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/multiVar.js",
+      "originalSha256": "81e5d7629ffa714b97f9f0c5c9fb97532f71c8f0d5cfccbe6aff94cd501b9e05",
+      "typedSha256": "acbfa40f6964464607a928d9e3da42a131613607867cb75eff322bbb3b141fad",
+      "definitions": 5,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/noStrict.js",
+      "originalSha256": "5f6be5652a3692543c51dc5dc65a57bf6d2d5492dd9080bc50d63fd2cbdca4dc",
+      "typedSha256": "d2465bc35dc331508b4d1329b4388d056bbdbb910d9544070b128e728551ba49",
+      "definitions": 4,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/objMethod.js",
+      "originalSha256": "9a49ed6ea3cd3cf4ee7f5dca2f07e45541aa0200005805c0be2c5f6afd72df85",
+      "typedSha256": "81fc0ea84af227711713ee65cbc95e4243749ec78e8635f6eb2f7d3f6cdd89c1",
+      "definitions": 3,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/objShorthand.js",
+      "originalSha256": "07c6f10d55a3cb90b616bf2e5da6772b5cf4d86a6e4fa13cf136b466ffdf3b1e",
+      "typedSha256": "613f51ce77e2e6c8b2d2ce1dc2c030464e4c98ae13bbb7fc4438551813223779",
+      "definitions": 4,
+      "identicalBodies": 2,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/transform/template.js",
+      "originalSha256": "831c007a544bdf2f6a9f30efeb62cf8270816fb7bbd21397c87f16d29bff5930",
+      "typedSha256": "afae83746e33aafd354ab660eef650b401d1e1793dcff751b92bef7b0c4d4ff6",
+      "definitions": 7,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/traverser.js",
+      "originalSha256": "7596326660edd8ce1a9acc5534a922426f843d2dd3ba98915486747418e722e1",
+      "typedSha256": "65eb78035649d1aa14b24b866ed2b40290a0e589154b1c8f37f612ec65970679",
+      "definitions": 7,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 6,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/Hierarchy.js",
+      "originalSha256": "404f3ddeea1ce7289138648250aba772518c29d8ef88d8439581dec67499b7b3",
+      "typedSha256": "a8468027a41f73b554a57eb066670bb5ab3d441d3c2c7b944040949ff4f615d0",
+      "definitions": 12,
+      "identicalBodies": 6,
+      "boundaryNormalizedBodies": 5,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/copyComments.js",
+      "originalSha256": "03260e75ea4db3bd665cf05d1f2061842f3a345d7aedee1488f1609664340653",
+      "typedSha256": "e6091d44d7e46e4971767b50b5d29d7977bbaf802e64a536de647c21d807d891",
+      "definitions": 1,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/destructuring.js",
+      "originalSha256": "af25a573c4364ab916896f106b42c37af140e441efb950c6b0efc59f2b3cbb80",
+      "typedSha256": "42d5234e94dfcae1dba13268ae7c201c8dd56cb8a3320b6cf3bfbb5d3ba88510",
+      "definitions": 3,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/functionType.js",
+      "originalSha256": "7f6fab0ed13bdf29c834cc69aef875e60c17ed486755a12b75771333614e506f",
+      "typedSha256": "e8a122409eb11a4c608c5415f9050bdaa85ec09797e91f4e9229f096f33f7bef",
+      "definitions": 3,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/isEqualAst.js",
+      "originalSha256": "9bb36d7e8a87e25e9793b166c902dca659e0a30955dbffcac5328f00eea210a9",
+      "typedSha256": "97d42eacf757830de70938f3a7b25f0d7601118c366896f98336de5c9fa28d83",
+      "definitions": 2,
+      "identicalBodies": 0,
+      "boundaryNormalizedBodies": 2,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/isString.js",
+      "originalSha256": "60c1d92966530282652180cd90b22bfcd5ee27c7472023ced892bed8b65d1fb2",
+      "typedSha256": "fdab8b05f70ac1a2836287f4f4245cdeb0641a8a70dea443049f74eca78a10f9",
+      "definitions": 1,
+      "identicalBodies": 1,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/matchAliasedForLoop.js",
+      "originalSha256": "ca884e1d1dda846a168f90131188195ba42105a280db4ac9c98793907cae195e",
+      "typedSha256": "36e362da05b61246ba70e12e0826484b0a32a23cc9e7478040ac937299413160",
+      "definitions": 7,
+      "identicalBodies": 4,
+      "boundaryNormalizedBodies": 3,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/multiReplaceStatement.js",
+      "originalSha256": "49525fba63bde24f4a75f1122827c28bf2d90c5b0cfbbc08bd1a6021288114e3",
+      "typedSha256": "26440c57a97a60b71fb927429d32b70f39a18c80084797d6b25ae3a17750ed10",
+      "definitions": 9,
+      "identicalBodies": 5,
+      "boundaryNormalizedBodies": 4,
+      "originalSwitchCases": 4,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/utils/variableType.js",
+      "originalSha256": "8d231c8bf8e4ee5c1b617b14f76c3884c0fa8766390210d4f9ec19845e155fd8",
+      "typedSha256": "ffd9bcd538f9bc0cd9d10faeb44b997f61b31b268b64a210fd7893279f9a0897",
+      "definitions": 8,
+      "identicalBodies": 8,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "lebab/lib/withScope.js",
+      "originalSha256": "81f4bd811648097977bf72192cb13c8f019ed9aa737a772756a3326ef08ad7a7",
+      "typedSha256": "cee96a54289ea5243c970c77e972e162b8fb65f46b5351c7e8cc5c8fcf9545d7",
+      "definitions": 3,
+      "identicalBodies": 3,
+      "boundaryNormalizedBodies": 0,
+      "originalSwitchCases": 0,
+      "switchCasesEqual": true
+    },
+    {
+      "file": "tslib/tslib.es6.mjs",
+      "originalSha256": "86558c00322957f9ee5f63c4df34f97fcc6200251375075ebf1c8f4f1e8a1742",
+      "typedSha256": "85c8d765e937c5c39713e934b46df751cb24ffec0964bfa65b692ff2b3847936",
+      "definitions": 118,
+      "identicalBodies": 65,
+      "boundaryNormalizedBodies": 41,
+      "originalSwitchCases": 5,
+      "switchCasesEqual": true
+    }
+  ]
+}

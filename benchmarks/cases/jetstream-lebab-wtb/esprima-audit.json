@@ -1,0 +1,526 @@
+{
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "typedSourceProvenance": {
+    "compiler": "2.3.2",
+    "options": {
+      "target": 1,
+      "module": 1,
+      "noImplicitAny": false,
+      "strict": true,
+      "noEmitOnError": false
+    },
+    "normalization": "Whitespace/comments/AST printer; nested Webpack numeric require routing mapped to authored relative module requests. No algorithm or value normalization.",
+    "rows": [
+      {
+        "id": 0,
+        "path": "esprima.ts",
+        "sourceSha256": "9dec8c3d7d24880388ed14d344d6f711eac93f9de3dc22afefe8bdbd32dbe266",
+        "bundleModuleSha256": "6ec1f7eb50dc97fa7438b8a921b6786279d07287c6160d9979a98e4fa91d0711",
+        "emittedSha256": "2ac66b220530a6d9658c483f222485d74a8d2daed59a79121e32698dd6c2190b",
+        "normalizedEmittedSha256": "2caf3e0e2c168fd4ccbc213ac69d62306ad1c6f4673b9edeed4fd39db27762e2",
+        "normalizedBundleSha256": "2caf3e0e2c168fd4ccbc213ac69d62306ad1c6f4673b9edeed4fd39db27762e2",
+        "matches": true
+      },
+      {
+        "id": 1,
+        "path": "comment-handler.ts",
+        "sourceSha256": "1379e911ac149999647e26ea706c12348bdcac8697eb04d19ec5aeb3655f6928",
+        "bundleModuleSha256": "c88adc7da126e457bf6cc073be5e6fcdb65a81623873c5314f67a1a286eb0551",
+        "emittedSha256": "5a23db8dc1c305d35f45c26e3741494cc54dffa1898ea859058b752af8426890",
+        "normalizedEmittedSha256": "5516f1634fb12eafe0cb5db557c9685aaab793e547590ffc515fb6a0f062e1dc",
+        "normalizedBundleSha256": "5516f1634fb12eafe0cb5db557c9685aaab793e547590ffc515fb6a0f062e1dc",
+        "matches": true
+      },
+      {
+        "id": 2,
+        "path": "syntax.ts",
+        "sourceSha256": "c0f3b9376f3ae794646b8bdf5d8b6d10c1526c5a7ade5c16c9bd7817626d973e",
+        "bundleModuleSha256": "0a667a663c05fec92822fbf3895fbbea4ae2278320eaf1390b6253b6488f3fd9",
+        "emittedSha256": "4d068fbf96a9a5c4e62d065742ad5542f27f695981ff552ba7d092d822c2d511",
+        "normalizedEmittedSha256": "4d068fbf96a9a5c4e62d065742ad5542f27f695981ff552ba7d092d822c2d511",
+        "normalizedBundleSha256": "4d068fbf96a9a5c4e62d065742ad5542f27f695981ff552ba7d092d822c2d511",
+        "matches": true
+      },
+      {
+        "id": 3,
+        "path": "jsx-parser.ts",
+        "sourceSha256": "b86ec57d7ccc358888a84173607295ea3c64596d1c6b3594c824cab2a317d9b5",
+        "bundleModuleSha256": "83018671cd3a21ecf9c311b571f8b683688cefabdccaf14583f362fc77a2e8c8",
+        "emittedSha256": "1659b937eba388323c0e1296ef4690fa54e8b20f5ba166e64f6c8e6df14af4c2",
+        "normalizedEmittedSha256": "74a5f82acb8f1cef44ecd535a5f40cf72fd67b4dc76b14c4f9366232a73aee86",
+        "normalizedBundleSha256": "74a5f82acb8f1cef44ecd535a5f40cf72fd67b4dc76b14c4f9366232a73aee86",
+        "matches": true
+      },
+      {
+        "id": 4,
+        "path": "character.ts",
+        "sourceSha256": "b19e0fde8ed4e7908eec1f7487b0fd7a3101d6c64573a01139ba83fe917bac08",
+        "bundleModuleSha256": "6dc28f0ea8d91218aef273f7b4d25c203ae11377addb1c6c2010f7613c90074b",
+        "emittedSha256": "55f53b9058bd38e98c92d0ec09621794a191f7103ccae20f01456ba756454e2d",
+        "normalizedEmittedSha256": "33d701081782deac72a431f4905ff3e3e11003b28af8d78ab0f084510d8dd35f",
+        "normalizedBundleSha256": "33d701081782deac72a431f4905ff3e3e11003b28af8d78ab0f084510d8dd35f",
+        "matches": true
+      },
+      {
+        "id": 5,
+        "path": "jsx-nodes.ts",
+        "sourceSha256": "3962993af6f0adb26848780029d8fd22ba6c232657e6083cc1229bc4fd3f861a",
+        "bundleModuleSha256": "8ec341f99117737112a778c81a281e2a3bb1632ac35b047fc4f835a0879cc1e8",
+        "emittedSha256": "dd23deeeb7759dc5fe48338340f9ab78064835cb7f3784cffcb9caffbc4d573c",
+        "normalizedEmittedSha256": "14c452c5f98f1e1272ca4267a752d8d380bbdf693750463cba5f0c0db7a20a36",
+        "normalizedBundleSha256": "14c452c5f98f1e1272ca4267a752d8d380bbdf693750463cba5f0c0db7a20a36",
+        "matches": true
+      },
+      {
+        "id": 6,
+        "path": "jsx-syntax.ts",
+        "sourceSha256": "15aaba4def7fe91274fd70a0b5099d90960fe1db755f014aed602553843da603",
+        "bundleModuleSha256": "130373c2a196511612a0974f4dfe02b44547db1f7034f01db07fff98a99502d5",
+        "emittedSha256": "a38f07be492f843fe986d2d9b2273614d452db20accc8a09b85213f278ec00b6",
+        "normalizedEmittedSha256": "a38f07be492f843fe986d2d9b2273614d452db20accc8a09b85213f278ec00b6",
+        "normalizedBundleSha256": "a38f07be492f843fe986d2d9b2273614d452db20accc8a09b85213f278ec00b6",
+        "matches": true
+      },
+      {
+        "id": 7,
+        "path": "nodes.ts",
+        "sourceSha256": "0da846a57ba98c587e35d071bc7eba33ae120151da48d45993fe9338e97e5183",
+        "bundleModuleSha256": "1668a3bc138e21bf1ed119c3b082d87ba1cb6074a0d70d2275a8289bbe1f2a4d",
+        "emittedSha256": "1ab7b82bf8a4aafc5b3d10b85f3b5950b4cf610ef1cd155d387ff73698e7ea0e",
+        "normalizedEmittedSha256": "fa8107f5c153644c4712b5ac884a251da875d1721eee9286d0ed8ebf933a0a0a",
+        "normalizedBundleSha256": "fa8107f5c153644c4712b5ac884a251da875d1721eee9286d0ed8ebf933a0a0a",
+        "matches": true
+      },
+      {
+        "id": 8,
+        "path": "parser.ts",
+        "sourceSha256": "3d5828f2cbe1085f66fa910228f6d5f76f05d7f5763cf796e6bfeaa43d7f3b97",
+        "bundleModuleSha256": "c57865faf02b0d9fce20869f5ed76de75d2e2ed7a86f94331fd082f040cbea19",
+        "emittedSha256": "80ac8c0dc6740f456c23081a381a4158caf90e6e17a4d20a3ef363a643bc0237",
+        "normalizedEmittedSha256": "32b5d44d87c612cb922042cf4df6959b09422b40a83056a039555c824d27d68e",
+        "normalizedBundleSha256": "32b5d44d87c612cb922042cf4df6959b09422b40a83056a039555c824d27d68e",
+        "matches": true
+      },
+      {
+        "id": 9,
+        "path": "assert.ts",
+        "sourceSha256": "16b9701d23d105de84a48cba81c96f9fcec969686b11327e2b4a4454ff02a25e",
+        "bundleModuleSha256": "1dbfda4748d0147f31fe9fc9bffa1095a05a924691c47a0127fd9c7401013baa",
+        "emittedSha256": "8b2f4dda51761e5153b936a9dfb9a6bbf6474151e0a56624588a617e95798dd6",
+        "normalizedEmittedSha256": "320866abc8738898f7c9c10e30ce4d111a99dc540136ade235cf7104737757ca",
+        "normalizedBundleSha256": "320866abc8738898f7c9c10e30ce4d111a99dc540136ade235cf7104737757ca",
+        "matches": true
+      },
+      {
+        "id": 10,
+        "path": "error-handler.ts",
+        "sourceSha256": "a2d15eeadc0b81b61cfd46d33145bf53cff919155db769c50d4b030802e50035",
+        "bundleModuleSha256": "4da201f83fab93f240a98fff25eb970a4f5865ee7763c87df1a2aa74898a5d62",
+        "emittedSha256": "b946d875fc04580d52c5db7554d5e9672ddf82af655cde76209c565435fd58da",
+        "normalizedEmittedSha256": "0ad92d5ef451d871d38c613843bc17bea18de59034574f6e0a01f4359c1de2de",
+        "normalizedBundleSha256": "0ad92d5ef451d871d38c613843bc17bea18de59034574f6e0a01f4359c1de2de",
+        "matches": true
+      },
+      {
+        "id": 11,
+        "path": "messages.ts",
+        "sourceSha256": "99dafe402730a1a7d6c0c634f615c273cc1a9b9ac772e0223cdbabb14634029f",
+        "bundleModuleSha256": "3d4e245aac4b8bcf71c4aebbc7ac12a57296a12f1f9059500b8edbb98d843748",
+        "emittedSha256": "19e49816c86e69006955acd74f896b5169a94ec79e54ce3a6dcf0586c17b1be4",
+        "normalizedEmittedSha256": "7a1fe00c0551ac328daaafccd61451475b0aa7d9e04110e779e49193c4365ba2",
+        "normalizedBundleSha256": "7a1fe00c0551ac328daaafccd61451475b0aa7d9e04110e779e49193c4365ba2",
+        "matches": true
+      },
+      {
+        "id": 12,
+        "path": "scanner.ts",
+        "sourceSha256": "380cf03260de1f99fd433e19f9dfa531c59a3df606f5de168da9687ffe152b79",
+        "bundleModuleSha256": "fa21f58d7d73330017a9fd99fb15e55255a9ff7c87c19e2d02b4a8bbd79933b5",
+        "emittedSha256": "bb72b98e74a88688f855d33785adf8720d0c7b768ea3f42ba92dbccbda4ddf52",
+        "normalizedEmittedSha256": "2d804def3c60051e9851a5f5c8909de5633f9c8205a7318504049bbdb20e0ba7",
+        "normalizedBundleSha256": "2d804def3c60051e9851a5f5c8909de5633f9c8205a7318504049bbdb20e0ba7",
+        "matches": true
+      },
+      {
+        "id": 13,
+        "path": "token.ts",
+        "sourceSha256": "876858206d958096c74681c27d9712bdb24fc463ecf25922a6e9693339623d7e",
+        "bundleModuleSha256": "cb9b1f513688b8bfbed2d93e7497c9561cab03b897ee7dda4330632407a6dfdd",
+        "emittedSha256": "054e35186f5dbdd0f8f20e18415cf4f0406c69854d34dd1fa566a6e7076722c5",
+        "normalizedEmittedSha256": "3cc4688a5e18c7d986fe965cfb04af75219216fd63e6294ec04db766bfcff4ee",
+        "normalizedBundleSha256": "3cc4688a5e18c7d986fe965cfb04af75219216fd63e6294ec04db766bfcff4ee",
+        "matches": true
+      },
+      {
+        "id": 14,
+        "path": "xhtml-entities.ts",
+        "sourceSha256": "9b208da6ee8015de92ee0a88506804f4762d71d798811a90e21ddd6380edb3d1",
+        "bundleModuleSha256": "59cb9de65c7351d49e9f35e253a23c70684dfe9d6a73f7b44285295ca7512025",
+        "emittedSha256": "479a4167579d8582c09a2c2f1b6775c038a26b2cc70ae1be698c62011ce1d101",
+        "normalizedEmittedSha256": "2edfa472c86f27dd968a1bd834971a7ae1b886e3d2260a74915b02a7bc8e501e",
+        "normalizedBundleSha256": "2edfa472c86f27dd968a1bd834971a7ae1b886e3d2260a74915b02a7bc8e501e",
+        "matches": true
+      },
+      {
+        "id": 15,
+        "path": "tokenizer.ts",
+        "sourceSha256": "793125dfce9f21649cebf63ccc531f8d5e5c1763db66acff4a387837480d514b",
+        "bundleModuleSha256": "f223dca93b0d5f169f90af23047a7a886decb57145c4fd7650f3ba8356d42151",
+        "emittedSha256": "82e9c5d932430fc5e123c40589e2bd50474f5defaae3967688084861e6c1702b",
+        "normalizedEmittedSha256": "fc490c5e44cf8cc0c4f0c230a0925242b6322cf9ebba84067d35b89635522ccf",
+        "normalizedBundleSha256": "fc490c5e44cf8cc0c4f0c230a0925242b6322cf9ebba84067d35b89635522ccf",
+        "matches": true
+      }
+    ]
+  },
+  "originalCorpus": {
+    "node": "v24.20.0",
+    "esprima": "4.0.1",
+    "sourceEmitAudit": "lebab-esprima-source-audit.json",
+    "fixtureFiles": 1576,
+    "cases": 4728,
+    "characters": 5885337,
+    "allEqual": true,
+    "failures": []
+  },
+  "focusedFixtures": {
+    "node": "v24.20.0",
+    "esprima": "4.0.1",
+    "sourceEmitAudit": "lebab-esprima-source-audit.json",
+    "cases": [
+      {
+        "name": "preact",
+        "characters": 1025063,
+        "sha256": "f84993a9b47eb2c07d2d94c200295eb037863c24289330c38eb42a5b824f3daf"
+      },
+      {
+        "name": "functions",
+        "characters": 7775,
+        "sha256": "4937e62aec11eec0b389f51eb322b535080e6abf92285d80e6b68fbe969bfed6"
+      },
+      {
+        "name": "classes",
+        "characters": 10442,
+        "sha256": "a90dd7c55a88e4a50282539621094d47c8e0d5dcda3e0b6f5fc4eab5b9c176a4"
+      },
+      {
+        "name": "patterns",
+        "characters": 143,
+        "sha256": "78ec311158b3b16f685f1f400e548a81f8b2a435db5925a50eebe2bcf85dc4e2"
+      },
+      {
+        "name": "template",
+        "characters": 4615,
+        "sha256": "36e20212582f0f5b10d02ceaf92604a68e66dc41945425ddac80f4aba6304a44"
+      },
+      {
+        "name": "module",
+        "characters": 4682,
+        "sha256": "2bea317427325d3ed6013eb9187e18d8349a05fc5d5921108a8050740687895a"
+      },
+      {
+        "name": "jsx",
+        "characters": 6504,
+        "sha256": "5621f0000349afd1683f54f94631ff7318b5d2392bf6737995077ea35cb7e5b8"
+      },
+      {
+        "name": "regex",
+        "characters": 2506,
+        "sha256": "d893ffb2e8f6343ceb15c248606f09299def5a45719cb43ca08e553ac2df6be0"
+      },
+      {
+        "name": "comments",
+        "characters": 2659,
+        "sha256": "ef4f094a961de9b9562a44905325b3fd4e1cc996595fc1717673fe779c924694"
+      },
+      {
+        "name": "async",
+        "characters": 5119,
+        "sha256": "4fdf1e6290f4863ac5d084188e38d6e498bf0817151bc89ebdd3c4e41d64f3e4"
+      },
+      {
+        "name": "tolerant",
+        "characters": 4220,
+        "sha256": "7f20325eac10bc9024f5f63eced7b0aa1aca7ea5bfcaa5ee7dd619bac35344b4"
+      },
+      {
+        "name": "invalid",
+        "characters": 137,
+        "sha256": "287c278ce0adcd788b8c966b14b673afc37c4bae6e4d16b0c6072ba06507afe4"
+      },
+      {
+        "name": "unterminated",
+        "characters": 149,
+        "sha256": "25d711e58c6de6ea624f8e7387d27adb6417408d00067cfc3728346030cd2437"
+      },
+      {
+        "name": "identifier",
+        "characters": 2836,
+        "sha256": "3595b309fab95561bf2d5758119c609eec339b03f9b4d0959b23c81c9ee76f9a"
+      }
+    ]
+  },
+  "retainedDefinitions": {
+    "modules": 16,
+    "originalDefinitions": 304,
+    "identicalBodies": 267,
+    "changedBodies": 36,
+    "missing": [
+      {
+        "module": "jsx-parser",
+        "key": "__",
+        "index": 0,
+        "original": {
+          "key": "__",
+          "line": 11,
+          "body": "{\n    this.constructor = d;\n}",
+          "parameters": []
+        }
+      }
+    ],
+    "parameterChanges": [],
+    "types": {
+      "any": [],
+      "assertions": [],
+      "suppressions": [],
+      "fields": 723
+    },
+    "reviewed": [
+      {
+        "module": "comment-handler",
+        "key": "CommentHandler.insertInnerComments",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "comment-handler",
+        "key": "CommentHandler.visitNode",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "comment-handler",
+        "key": "CommentHandler.visit",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "jsx-parser",
+        "key": "JSXParser.constructor",
+        "equalAfterReviewedNormalization": false,
+        "nativeSuperAdaptation": true
+      },
+      {
+        "module": "jsx-parser",
+        "key": "JSXParser.parsePrimaryExpression",
+        "equalAfterReviewedNormalization": false,
+        "nativeSuperAdaptation": true
+      },
+      {
+        "module": "jsx-parser",
+        "key": "JSXParser.parseJSXChildren",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "jsx-parser",
+        "key": "JSXParser.isStartOfExpression",
+        "equalAfterReviewedNormalization": false,
+        "nativeSuperAdaptation": true
+      },
+      {
+        "module": "parser",
+        "key": "Parser.throwError",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.tolerateError",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.unexpectedTokenError",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parsePrimaryExpression",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseObjectPropertyKey",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseObjectProperty",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseTemplateHead",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseTemplateElement",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseIdentifierName",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseUpdateExpression",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseUnaryExpression",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseBinaryExpression",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.reinterpretAsCoverFormalsList",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseAssignmentExpression",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseLexicalDeclaration",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseVariableIdentifier",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseForStatement",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseCatchClause",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseFormalParameter",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseFunctionDeclaration",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseFunctionExpression",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseDirectivePrologues",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseClassElement",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "parser",
+        "key": "Parser.parseExportDeclaration",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "error-handler",
+        "key": "ErrorHandler.constructError",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "scanner",
+        "key": "Scanner.skipSingleLineComment",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "scanner",
+        "key": "Scanner.skipMultiLineComment",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "scanner",
+        "key": "Scanner.testRegExp",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      },
+      {
+        "module": "tokenizer",
+        "key": "Tokenizer.getNextToken",
+        "equalAfterReviewedNormalization": true,
+        "nativeSuperAdaptation": false
+      }
+    ],
+    "unexplained": []
+  },
+  "requiredInheritanceAdaptation": {
+    "source": "Esprima 4.0.1 src/jsx-parser.ts",
+    "emitCompiler": "TypeScript2.3.2",
+    "provenance": "lebab-esprima-source-audit.json",
+    "removedEmittedScaffold": "/* istanbul ignore next */\n\tvar __extends = (this && this.__extends) || (function () {\n\t    var extendStatics = Object.setPrototypeOf ||\n\t        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||\n\t        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };\n\t    return function (d, b) {\n\t        extendStatics(d, b);\n\t        function __() { this.constructor = d; }\n\t        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());\n\t    };\n\t})();",
+    "reason": "The exact authored JSXParser extends Parser class is restored. The emitted helper is unused after that required constructor-to-class transcription.",
+    "originalHelperCallSites": 1,
+    "originalOperations": {
+      "setPrototypeOfRead": 1,
+      "objectCreateCall": 1,
+      "prototypeAssignments": 2,
+      "temporaryConstructorOwnConstructorAssignment": 1,
+      "temporaryConstructorNew": 1,
+      "legacyProtoAssignment": 1
+    },
+    "replacement": "native class JSXParser extends parser_1.Parser; original subclass constructor calls super(code, options, delegate)"
+  },
+  "inferredAny": []
+}
