@@ -24,6 +24,7 @@ use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::{JsText, Origin};
 
 mod header;
+use nts_codegen_common::literals::Pool as Literals;
 mod notices;
 
 /// The C runtime, as source.
@@ -496,7 +497,7 @@ struct Context<'a> {
     cycles: &'a nts_core::hir::Cycles,
     /// The target's C ABI, which decides every size and offset emitted.
     abi: NativeAbi,
-    literals: &'a [JsText],
+    literals: &'a Literals,
     templates: bool,
     /// Values something in this function reads.
     ///
@@ -983,15 +984,9 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
         }
     }
 
-    // Collected before emission so that every reference names the same static.
-    //
-    // From the values each block still *executes*, not from every value the
-    // function defines. Dead-code elimination leaves the definitions behind --
-    // they are addressed by index, so removing one would renumber the rest --
-    // and a static nothing reads is an error under `-Wunused-const-variable`,
-    // which is the setting that makes a warning from generated code a compiler
-    // bug rather than a style preference.
-    let literals = literal_table(program);
+    // Bodies intern at actual use. Their request scopes are retained only if
+    // the body survives backend refusal and orphan pruning.
+    let literals = Literals::default();
 
     let cycles = program.cycles();
     let mut bodies = emit_bodies(
@@ -1093,9 +1088,13 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     }
     writer.blank(&origin);
 
-    emit_literals(&mut writer, &origin, &literals);
+    let kept = bodies
+        .iter()
+        .map(|(_, _, func)| func.name.as_str())
+        .collect();
+    let mut data = CodeWriter::new();
     emit_object_descriptors(
-        &mut writer,
+        &mut data,
         &origin,
         program,
         &cycles,
@@ -1103,8 +1102,10 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
         &literals,
         &mut diagnostics,
     );
-    emit_descriptors(&mut writer, &origin, &descriptors);
-    emit_templates(&mut writer, program, &literals);
+    emit_descriptors(&mut data, &origin, &descriptors);
+    emit_templates(&mut data, program, &literals, &literals.templates(&kept));
+    emit_literals(&mut writer, &origin, &literals.definitions(&kept));
+    writer.append(data);
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
         diagnostics.push(diagnostic);
     }
@@ -1610,9 +1611,8 @@ fn declares_the_name(header: &str, name: &str) -> bool {
 }
 
 /// The C name of a string literal's static data.
-fn literal_name(literals: &[JsText], text: &JsText) -> String {
-    let index = literals.iter().position(|known| known == text).unwrap_or(0);
-    format!("nts_str_{index}")
+fn literal_name(literals: &Literals, text: &JsText) -> String {
+    format!("nts_str_{}", literals.string(text))
 }
 
 /// Whether a runtime helper takes a managed reference of any class here.
@@ -1651,7 +1651,7 @@ fn emit_bodies<'a>(
     program: &'a Program,
     abi: NativeAbi,
     cycles: &nts_core::hir::Cycles,
-    literals: &[JsText],
+    literals: &Literals,
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
 ) -> Vec<(String, CodeWriter, &'a Func)> {
@@ -1670,12 +1670,13 @@ fn emit_bodies<'a>(
             continue;
         }
         let mut body = CodeWriter::new();
+        let body_literals = literals.for_body(&func.name);
         let context = Context {
             program,
             layouts: &layouts,
             cycles,
             abi,
-            literals,
+            literals: &body_literals,
             templates,
             read: values_read(func),
         };
@@ -2996,44 +2997,12 @@ fn float_literal(value: f64) -> String {
     format!("{value:?}")
 }
 
-fn literal_table(program: &Program) -> Vec<JsText> {
-    let mut literals: Vec<JsText> = Vec::new();
-    for func in program.native_funcs() {
-        for block in &func.blocks {
-            for value in &block.ops {
-                let texts: &[JsText] = match &func.values[value.0 as usize].kind {
-                    OpKind::ConstString(text) => std::slice::from_ref(text),
-                    OpKind::ConstTemplate { cooked, .. } => cooked,
-                    _ => &[],
-                };
-                for text in texts {
-                    if !literals.contains(text) {
-                        literals.push(text.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    // And what each function is called (`Program::function_names`), which its
-    // descriptor points at.
-    for name in program.function_names.values() {
-        if let FunctionName::Is(text) = name {
-            let text = JsText::from(text.clone());
-            if !literals.contains(&text) {
-                literals.push(text);
-            }
-        }
-    }
-    literals
-}
-
 /// String literals, as static data.
 ///
 /// Emitted as numeric code units rather than as C string literals: a C literal
 /// would need escaping rules that do not match JavaScript's, and would carry
 /// its own idea of what a byte means.
-fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[JsText]) {
+fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[(usize, JsText)]) {
     writer.line(
         origin,
         format!(
@@ -3041,7 +3010,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[JsText]) 
             nts_codegen_common::string_hash::HASHED
         ),
     );
-    for (index, text) in literals.iter().enumerate() {
+    for (index, text) in literals {
         let units: Vec<u16> = text.encode_utf16().collect();
         let name = format!("nts_str_{index}");
         // One byte per code unit whenever every one fits, which for ordinary
@@ -3077,8 +3046,16 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[JsText]) 
 
 /// Immutable arrays are static data. Their identity is the source site rather
 /// than their contents; ordinary arrays retain their existing storage and ABI.
-fn emit_templates(writer: &mut CodeWriter, program: &Program, literals: &[JsText]) {
+fn emit_templates(
+    writer: &mut CodeWriter,
+    program: &Program,
+    literals: &Literals,
+    needed: &std::collections::BTreeSet<u32>,
+) {
     for object in nts_core::hir::templates::objects(program) {
+        if !needed.contains(&object.site) {
+            continue;
+        }
         let site = object.site;
         let pieces: Vec<String> = object
             .cooked
@@ -3517,7 +3494,7 @@ fn emit_object_descriptors(
     program: &Program,
     cycles: &nts_core::hir::Cycles,
     defined: &rustc_hash::FxHashSet<String>,
-    literals: &[JsText],
+    literals: &Literals,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let cyclic_layouts = &cycles.cyclic;
@@ -6036,6 +6013,7 @@ fn emit_op(
             format!("{name} = (NtsString *)(void *)&{literal};")
         }
         OpKind::ConstTemplate { site, .. } => {
+            context.literals.template(*site);
             format!("{name} = (NtsArray *)(void *)&nts_template_{site};")
         }
         OpKind::Binary { op: bin, lhs, rhs } => binary_text(
@@ -6475,7 +6453,11 @@ mod tests {
         .collect();
         texts.push(JsText::from_utf16(vec![0xd800, 0, 0xdc00]));
         let mut writer = CodeWriter::new();
-        emit_literals(&mut writer, &origin, &texts);
+        emit_literals(
+            &mut writer,
+            &origin,
+            &texts.iter().cloned().enumerate().collect::<Vec<_>>(),
+        );
         for (index, text) in texts.iter().enumerate() {
             let units: Vec<u16> = text.encode_utf16().collect();
             let flags = if units.iter().any(|&unit| unit > 255) {

@@ -30,6 +30,7 @@ pub mod com;
 pub mod compile_flags;
 pub mod counting;
 pub mod gobject;
+pub mod literals;
 pub mod native;
 pub mod objc;
 pub mod optional;

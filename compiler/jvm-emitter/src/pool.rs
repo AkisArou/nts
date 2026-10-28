@@ -95,6 +95,27 @@ enum Entry {
     Filler,
 }
 
+impl Entry {
+    fn key(&self) -> Option<Key> {
+        Some(match self {
+            Self::Utf8(text) => Key::Utf8(text.clone()),
+            Self::Integer(value) => Key::Integer(*value),
+            Self::Float(value) => Key::Float(*value),
+            Self::Long(value) => Key::Long(*value),
+            Self::Double(value) => Key::Double(*value),
+            Self::Class(name) => Key::Class(*name),
+            Self::String(text) => Key::String(*text),
+            Self::NameAndType(name, descriptor) => Key::NameAndType(*name, *descriptor),
+            Self::Ref {
+                tag,
+                class,
+                name_and_type,
+            } => Key::Ref(*tag, *class, *name_and_type),
+            Self::Filler => return None,
+        })
+    }
+}
+
 /// A class file's constant pool, under construction.
 ///
 /// Indices are 1-based and the zeroth is not a slot -- so `entries[0]` is the
@@ -117,6 +138,31 @@ impl Pool {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Keep a render's entries only when it succeeds. Indices requested by a
+    /// failed render cannot escape in emitted code; both the entries and their
+    /// deduplication keys are removed before the next render reuses them.
+    ///
+    /// Checkpointing is constant work. Rollback visits only the appended
+    /// entries, including the filler slots of wide constants, and restores an
+    /// overflow caused by the failed render without hiding an earlier one.
+    pub fn transaction<T, E>(
+        &mut self,
+        render: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let start = self.entries.len();
+        let overflow = self.overflow;
+        let result = render(self);
+        if result.is_err() {
+            for entry in self.entries.drain(start..) {
+                if let Some(key) = entry.key() {
+                    self.interned.remove(&key);
+                }
+            }
+            self.overflow = overflow;
+        }
+        result
     }
 
     /// One more than the number of entries -- what `constant_pool_count` is.
@@ -417,5 +463,57 @@ mod tests {
         let encoded = modified_utf8("\u{1F600}");
         assert_eq!(encoded.len(), 6);
         assert_eq!(encoded, vec![0xED, 0xA0, 0xBD, 0xED, 0xB8, 0x80]);
+    }
+
+    #[test]
+    fn failed_transactions_restore_entries_keys_wide_slots_and_overflow() {
+        let mut pool = Pool::new();
+        let shared = pool.string("shared");
+        let count = pool.count();
+        let mut before = Vec::new();
+        pool.write(&mut before);
+        let result: Result<(), ()> = pool.transaction(|pool| {
+            assert_eq!(pool.string("shared"), shared);
+            pool.method_ref("OnlyInRefusedBody", "discarded", "()V");
+            pool.long(23);
+            pool.double(-0.0);
+            pool.overflow = true;
+            Err(())
+        });
+        assert!(result.is_err());
+        assert_eq!(pool.count(), count);
+        assert!(!pool.overflowed());
+        let mut after = Vec::new();
+        pool.write(&mut after);
+        assert_eq!(after, before);
+        assert_eq!(pool.string("shared"), shared);
+        assert_eq!(pool.utf8("OnlyInRefusedBody"), count);
+        assert_eq!(pool.long(23), count + 1);
+        assert_eq!(pool.double(-0.0), count + 3);
+        // An earlier failure is not repaired by an unrelated rollback.
+        pool.overflow = true;
+        let _: Result<(), ()> = pool.transaction(|_| Err(()));
+        assert!(pool.overflowed());
+    }
+
+    #[test]
+    fn successful_and_nested_transactions_keep_only_committed_indices() {
+        let mut pool = Pool::new();
+        let saved = pool
+            .transaction(|pool| {
+                let saved = pool.string("kept");
+                let count = pool.count();
+                let _: Result<(), ()> = pool.transaction(|pool| {
+                    pool.string("discarded");
+                    Err(())
+                });
+                assert_eq!(pool.count(), count);
+                Ok::<_, ()>(saved)
+            })
+            .expect("outer transaction succeeds");
+        assert_eq!(pool.string("kept"), saved);
+        assert_eq!(pool.count(), 3);
+        assert_eq!(pool.string("discarded"), 4);
+        assert_eq!(pool.count(), 5);
     }
 }

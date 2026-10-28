@@ -64,6 +64,7 @@ pub mod signatures_arm64_linux;
 pub mod signatures_arm64_windows;
 pub mod signatures_win64;
 
+use nts_codegen_common::literals::Pool as LiteralPool;
 use nts_codegen_common::release::Action;
 use nts_core::hir::JsText;
 use std::fmt::Write as _;
@@ -290,8 +291,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     for line in externals(program, platform) {
         let _ = writeln!(text, "{line}");
     }
-    let _ = writeln!(text, "\n{}", descriptors(program, &mut diagnostics));
-    let _ = writeln!(text, "{}", literals(program));
+    let pool = LiteralPool::default();
     let _ = write!(text, "{}", cell_name_globals(program));
     // Module-scope storage. `internal` unless the program exports it, for the
     // same reason the C backend makes it `static`: a name outside the program
@@ -344,9 +344,12 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     // chose, and the C backend asks the same `Cycles`.
     let cycles = program.cycles();
     let mut bodies = String::new();
+    let mut kept = std::collections::BTreeSet::new();
     for func in program.native_funcs() {
-        match function(program, &cycles, func, platform, templates) {
+        let body_pool = pool.for_body(&func.name);
+        match function(program, &cycles, func, platform, templates, &body_pool) {
             Ok(rendered) => {
+                kept.insert(func.name.as_str());
                 let _ = writeln!(bodies, "\n{rendered}");
             }
             Err(diagnostic) => {
@@ -368,6 +371,9 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             }
         }
     }
+    let descriptors = descriptors(program, &pool, &mut diagnostics);
+    let _ = writeln!(text, "{descriptors}");
+    let _ = writeln!(text, "{}", literals(program, &pool, &kept));
     text.push_str(&entry_points(program, platform, &mut diagnostics));
     text.push_str(&bodies);
     let _ = writeln!(text, "\n{TBAA_TREE}");
@@ -698,14 +704,17 @@ fn tag_of(ty: &HirType) -> Option<u32> {
 /// so it is laid out the way clang lays out the C one.
 const HEADER_TYPE: &str = "%NtsHeader = type { ptr, i64, i32, i32 }";
 
-/// Every string literal in the program, in the order the C backend numbers
-/// them -- one table, so `nts_str_3` is the same string in both outputs.
+/// The string data actually referenced by kept LLVM output.
 ///
 /// A literal is static storage with an immortal count, so nothing ever tries to
 /// free it. Emitted as code *units* rather than as an LLVM string constant for
 /// the reason the C backend gives: an escape rule that is not JavaScript's is a
 /// different string, and a wide literal is not bytes at all.
-fn literals(program: &Program) -> String {
+fn literals(
+    program: &Program,
+    pool: &LiteralPool,
+    kept: &std::collections::BTreeSet<&str>,
+) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{HEADER_TYPE}");
     // What to run, how to drop it unrun, and the frame both act on. Named
@@ -719,8 +728,8 @@ fn literals(program: &Program) -> String {
         out,
         "@nts_bound_function_name = external constant %NtsHeader"
     );
-    let table = literal_table(program);
-    for (index, text) in table.iter().enumerate() {
+    let templates = template_data(program, pool, &pool.templates(kept));
+    for (index, text) in pool.definitions(kept) {
         let units: Vec<u16> = text.encode_utf16().collect();
         let wide = units.iter().any(|unit| *unit > 0xFF);
         let (element, descriptor, flags) = if wide {
@@ -755,12 +764,26 @@ fn literals(program: &Program) -> String {
             length = units.len(),
         );
     }
+    out.push_str(&templates);
+
+    out
+}
+
+fn template_data(
+    program: &Program,
+    pool: &LiteralPool,
+    needed: &std::collections::BTreeSet<u32>,
+) -> String {
+    let mut out = String::new();
     for object in nts_core::hir::templates::objects(program) {
+        if !needed.contains(&object.site) {
+            continue;
+        }
         let pieces: Vec<String> = object
             .cooked
             .iter()
             .map(|text| {
-                let index = table.iter().position(|known| known == text).unwrap_or(0);
+                let index = pool.string(text);
                 format!("ptr @nts_str_{index}")
             })
             .collect();
@@ -780,38 +803,6 @@ fn literals(program: &Program) -> String {
     }
 
     out
-}
-
-/// The literals a program holds, numbered the way the C backend numbers them.
-fn literal_table(program: &Program) -> Vec<JsText> {
-    let mut table: Vec<JsText> = Vec::new();
-    for func in program.native_funcs() {
-        for block in &func.blocks {
-            for value in &block.ops {
-                let texts: &[JsText] = match &func.values[value.0 as usize].kind {
-                    OpKind::ConstString(text) => std::slice::from_ref(text),
-                    OpKind::ConstTemplate { cooked, .. } => cooked,
-                    _ => &[],
-                };
-                for text in texts {
-                    if !table.contains(text) {
-                        table.push(text.clone());
-                    }
-                }
-            }
-        }
-    }
-    // And what each function is called (`Program::function_names`), which its
-    // descriptor points at -- after the program's own, as the C backend does.
-    for name in program.function_names.values() {
-        if let FunctionName::Is(text) = name {
-            let text = JsText::from(text.clone());
-            if !table.contains(&text) {
-                table.push(text);
-            }
-        }
-    }
-    table
 }
 
 /// `NtsDescriptor`, as LLVM's own struct type.
@@ -947,8 +938,7 @@ fn native_column(
     })
 }
 
-fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
-    let literals = literal_table(program);
+fn descriptors(program: &Program, pool: &LiteralPool, diagnostics: &mut Vec<Diagnostic>) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
     let cyclic = program.cyclic_layouts();
@@ -1043,7 +1033,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         // runtime refuses by name.
         let function_name = match program.function_names.get(&layout.name) {
             Some(FunctionName::Is(text)) => {
-                let index = literals.iter().position(|known| known == text).unwrap_or(0);
+                let index = pool.string(&JsText::from(text));
                 format!("ptr @nts_str_{index}")
             }
             Some(FunctionName::Bound) => "ptr @nts_bound_function_name".to_owned(),
@@ -3272,6 +3262,7 @@ fn function(
     func: &Func,
     platform: Platform,
     templates: bool,
+    pool: &LiteralPool,
 ) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut returns = return_ty_of(&func.return_type, func)?.to_owned();
@@ -3364,7 +3355,7 @@ fn function(
     for block in &func.blocks {
         let mut lines = Vec::new();
         for value in &block.ops {
-            let line = operation(program, cycles, func, *value, platform, templates)?;
+            let line = operation(program, cycles, func, *value, platform, templates, pool)?;
             if !line.is_empty() {
                 lines.push(line);
             }
@@ -3697,6 +3688,7 @@ fn operation(
     value: ValueId,
     platform: Platform,
     templates: bool,
+    pool: &LiteralPool,
 ) -> Result<String, Diagnostic> {
     let op = &func.values[value.0 as usize];
     let out = name(value);
@@ -3755,13 +3747,12 @@ fn operation(
         OpKind::ConstInt(number) => format!("{out} = add {} 0, {number}", ty_of(&op.ty, func)?),
         OpKind::ConstHandle(bits) => format!("{out} = inttoptr i64 {bits} to ptr"),
         // The address of the static storage, which is what a string value is.
-        OpKind::ConstString(text) => string_literal_address(program, text, &out),
+        OpKind::ConstString(text) => string_literal_address(pool, text, &out),
         OpKind::ConstTemplate { site, .. } => {
+            pool.template(*site);
             format!("{out} = getelementptr i8, ptr @nts_template_{site}, i64 0")
         }
-        OpKind::ConstBool(flag) => {
-            format!("{out} = add i1 0, {}", u8::from(*flag))
-        }
+        OpKind::ConstBool(flag) => format!("{out} = add i1 0, {}", u8::from(*flag)),
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
             return tagging(program, func, value, &out, platform, templates);
         }
@@ -6616,10 +6607,7 @@ mod emitted_name_guards {
     }
 }
 
-fn string_literal_address(program: &Program, text: &JsText, out: &str) -> String {
-    let index = literal_table(program)
-        .iter()
-        .position(|known| known == text)
-        .unwrap_or(0);
+fn string_literal_address(pool: &LiteralPool, text: &JsText, out: &str) -> String {
+    let index = pool.string(text);
     format!("{out} = getelementptr i8, ptr @nts_str_{index}, i64 0")
 }

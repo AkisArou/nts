@@ -1699,11 +1699,13 @@ fn render(
     pool: &mut Pool,
     templates: bool,
 ) -> Result<(String, String, nts_jvm_emitter::Body), body::Declined> {
-    let emitter = body::Emitter::new(package, program, func, plan, templates)?;
-    let signature = body::signature(package, program, func)
-        .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;
-    let rendered = emitter.emit(pool)?;
-    Ok((body::method_name(&func.name), signature, rendered))
+    pool.transaction(|pool| {
+        let emitter = body::Emitter::new(package, program, func, plan, templates)?;
+        let signature = body::signature(package, program, func)
+            .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;
+        let rendered = emitter.emit(pool)?;
+        Ok((body::method_name(&func.name), signature, rendered))
+    })
 }
 
 /// `nts$print`, how an object of this layout prints -- by the layout's own
