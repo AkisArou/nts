@@ -248,9 +248,13 @@ then a guard once fixed), `tests/memory/`.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
   measurement.** Every process an agent starts excludes both, monitors and
   samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the
-  command (or a narrower set, such as E-cores `16-31`). A process started
-  from a systemd user unit is otherwise allowed on all 32 CPUs, and one light
-  monitor on CPU 5 is enough to make `with-lock.sh` time out. `land.ts` and `pinned.sh`
+  command (or a narrower set, such as E-cores `16-31`). The system and user
+  systemd managers default to the same set (`CPUAffinity=0-3 6-31` in
+  `/etc/systemd/{system,user}.conf.d/30-nts-measure-cpus.conf`; `daemon-reload`
+  applies a change, `daemon-reexec` does not), so a unit inherits it. That
+  does not cover a process started before the managers took it, or one that
+  widens its own mask, and one light monitor on CPU 5 is enough to make
+  `with-lock.sh` time out. `land.ts` and `pinned.sh`
   apply the exclusion without widening their inherited affinity. A user scope
   with `AllowedCPUs` enforces a kernel ceiling when cpuset is delegated and a
   widening probe proves it. Otherwise the log says `best-effort`: a library

@@ -77,14 +77,46 @@ Two things differ:
 ### Records and the gate
 
 A record is [`results/typescript/<backend>/cases.tsv`](../../results/typescript),
-one each for `c`, `llvm` and `jvm`: every case that ran, with what it
-did, in test262's record format ([records](test262.md#records)).
+one each for `c`, `llvm` and `jvm`. Its first line is versioned JSON metadata:
+the record's version, the backend, the compiler's commit and fingerprint, the
+harness and the selection. Then every source case in the selection has one
+row, its path and its observation as typed JSON:
 
-The gate's `typescript-cases` step, a core step, holds each backend to its
-record: a recorded pass that does anything else, a changed failure, a missing
-case or a new failure fails it. There is no floor, because the record is the
-ratchet. The step needs the test262 checkout, whose harness the cases assert
-with.
+| kind | what is pinned |
+|---|---|
+| `pass` | nothing more |
+| `wrong` | the thrown class and the program's output, exactly |
+| `refused` | the sorted set of diagnostic codes, each with where it points (`body`, `harness`, `other` or `none`) |
+| `invalid-hir` | the validator's error |
+| `runtime-abort` | the termination (exit status or signal) and the output, exactly |
+
+A record pins what a case did, never how the compiler phrased or numbered it:
+
+- a refusal's prose stays in the run's raw rows and is ranked in the report;
+  a reworded message changes no outcome;
+- generated numbering, such as instantiation and type ids (`Queue<N>`,
+  `type N`), is normalized before anything is compared or written, by the
+  normalizer the outcomes corpus shares;
+- names and the case's own source positions are kept.
+
+Before `--recorded` selects what to run, the record must match the complete
+source inventory: a new case with no row, or a row whose case is gone, fails
+the run. Missing, duplicate, orphaned and malformed rows fail closed, and a
+timeout or an infrastructure failure is never recorded as an outcome.
+
+The gate's `typescript-cases` step, a core step, runs every case on each
+backend and compares it with its record under the outcomes corpus's
+transition policy:
+
+- a pass that does anything else is `REGRESSED`;
+- a different defect, a different set of refusal codes, or a defect where
+  there was a refusal is `CHANGED`;
+- either fails the step;
+- a defect or refusal that now passes is `FIXED`, and a defect that is now
+  refused is `REFUSES NOW`. Both pass, loudly, with a note to re-record.
+
+There is no floor, because the record is the ratchet. The step needs the
+test262 checkout, whose harness the cases assert with.
 
 ### Running it
 
