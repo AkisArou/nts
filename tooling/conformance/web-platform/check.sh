@@ -53,6 +53,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/wpt-promise-rejection-event.test.ts \
   runtime/web-platform/test/promise-rejection-event-policy.test.ts \
   runtime/web-platform/test/wpt-performance-adapter.test.ts \
+  runtime/web-platform/test/performance-policy.test.ts \
   runtime/web-platform/test/fetch-headers-wpt-policy.test.ts \
   runtime/web-platform/test/fetch-body-wpt-policy.test.ts \
   runtime/web-platform/test/fetch-multipart-wpt-policy.test.ts \
