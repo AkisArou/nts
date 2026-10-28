@@ -9,6 +9,7 @@ import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { Blob } from "../file/blob.ts";
 import {
+  convertWebSocketProtocolUnion,
   normalizeWebSocketCloseArguments,
   normalizeWebSocketProtocols,
   normalizeWebSocketURL,
@@ -206,8 +207,12 @@ export class WebSocket extends EventTarget {
     ) {
       throw new RangeError("Invalid WebSocket buffer limit");
     }
-    const parsed = normalizeWebSocketURL(args[0], context);
-    const offers = normalizeWebSocketProtocols(args[1] ?? []);
+    // Web IDL converts arguments left-to-right before the constructor parses the URL.
+    // https://websockets.spec.whatwg.org/#dom-websocket
+    const url = coerceToUSVString(args[0]);
+    const protocols = convertWebSocketProtocolUnion(args[1]);
+    const parsed = normalizeWebSocketURL(url, context);
+    const offers = normalizeWebSocketProtocols(protocols);
     this.#url = parsed.href;
     context.registerWebSocket(this);
     this.registered = true;

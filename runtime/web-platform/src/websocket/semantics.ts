@@ -24,6 +24,46 @@ export interface NormalizedWebSocketClose {
   readonly reason: string;
 }
 
+function isObject(value: unknown): value is object {
+  return value !== null && (typeof value === "object" || typeof value === "function");
+}
+
+// Capture abstract Call once; iterator methods may have their own `call` property.
+const callProtocolIteratorMethod: (
+  method: (this: object) => unknown,
+  receiver: object,
+) => unknown = Function.prototype.call.bind(Function.prototype.call);
+
+/** Convert the WebSocket constructor's DOMString-or-sequence union. */
+export function convertWebSocketProtocolUnion(input: unknown): string[] {
+  // Only undefined selects the optional argument's default sequence.
+  // https://webidl.spec.whatwg.org/#es-overloads
+  if (input === undefined) return [];
+  // GetMethod selects the sequence branch only for an object with an iterator.
+  // https://webidl.spec.whatwg.org/#es-union
+  if (isObject(input)) {
+    const method = (input as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+    if (method !== undefined && method !== null) {
+      if (typeof method !== "function") throw new TypeError("WebSocket protocols iterator must be callable");
+      const iterator = callProtocolIteratorMethod(method as (this: object) => unknown, input) as Iterator<unknown>;
+      if (!isObject(iterator)) throw new TypeError("WebSocket protocols iterator must be an object");
+      const next = iterator.next;
+      if (typeof next !== "function") throw new TypeError("WebSocket protocols iterator must have a next method");
+      const values: string[] = [];
+      // Convert every element before token validation. Web IDL sequence conversion
+      // does not IteratorClose when an element conversion throws.
+      // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+      while (true) {
+        const result = callProtocolIteratorMethod(next, iterator) as IteratorResult<unknown>;
+        if (!isObject(result)) throw new TypeError("WebSocket protocols iterator result must be an object");
+        if (result.done) return values;
+        values.push(coerceToDOMString(result.value));
+      }
+    }
+  }
+  return [coerceToDOMString(input)];
+}
+
 /** Apply the URL conversion and validation shared by both WebSocket APIs. */
 export function normalizeWebSocketURL(input: unknown, context: WebSocketURLContext): URLRecord {
   const value = coerceToUSVString(input);
