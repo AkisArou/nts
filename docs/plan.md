@@ -190,7 +190,7 @@ The designs and their build orders are in [`foundations/`](foundations).
    hash.
 5. **The builtins mechanism** ([builtins](foundations/builtins.md)), approved,
    with WinterTC's Minimum Common Web API as the web floor on native and the
-   JVM. Stage 1 is on `main`, and stage 2's compiler provider table is landing.
+   JVM. Stages 1 and 2 are on `main`, and stage 3's resolver is being built.
    JSON's move to `runtime/ecmascript` is ready. `URL` moves to
    `runtime/web-platform` in stage 3, as a canonical implementation that
    depends on nothing in `runtime/node` and that node re-exports. Both become
@@ -200,6 +200,9 @@ The designs and their build orders are in [`foundations/`](foundations).
      through pull requests ([cloud-agents](contributing/cloud-agents.md)): the
      web platform's conformance, Web Crypto, WebSocket and EventSource, with
      their first pull requests landing;
+   - WebSocket as the client only: the server code in `runtime/web-platform`
+     is removed once the realtime pull requests have landed, and the client's
+     conformance tests get a peer of their own;
    - `runtime/sdk` becoming `runtime/app` (`@nts/app`), its web-standard parts
      moving to `runtime/web-platform` and its lib subset retired;
    - the floor's `WebAssembly` API last, through an embedded engine linked
@@ -213,7 +216,7 @@ The designs and their build orders are in [`foundations/`](foundations).
      compiler has its own (G9).
 6. **The dependency policy** (D-1), written as a foundations page.
 7. **Licensing:** nts becomes Apache-2.0 WITH LLVM-exception, so its own runtime
-   owes no notice in programs, and FFC is used under BSL-1.0 (*landing*).
+   owes no notice in programs, and FFC is used under BSL-1.0 (*done*).
    Then `nts build` writes the notices file for the third-party code a program
    links.
 

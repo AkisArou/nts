@@ -31,7 +31,8 @@ Out of scope: `compiler/`, `runtime/c/`, `tooling/` (except adding a test file
 to `tooling/conformance/web-platform/check.sh`'s list), `docs/` (except a
 pointer to the specification section a change implements), and any file
 another open pull request touches, except the two shared files below (under
-"A pull request").
+"A pull request"). So is a WebSocket server: nts provides the client only, and
+its tests talk to a test-only peer.
 
 ## The TypeScript nts compiles
 
@@ -55,8 +56,10 @@ does. In particular:
   descriptors (`Object.getPrototypeOf`, `Object.getOwnPropertyDescriptor`).
   nts compiles a class to a fixed layout with no property descriptors yet,
   so Web IDL's writable, enumerable and configurable flags are not
-  reproduced: declare members plainly (constants as `static readonly`), and
-  list a case that tests only a descriptor as left out. An nts program
+  reproduced: declare members plainly (constants as `static readonly`, an
+  interface's tag as a class-body getter,
+  `get [Symbol.toStringTag]() { return "Name"; }`, never a field), and list a
+  case that tests only a descriptor as left out. An nts program
   cannot redefine an intrinsic accessor either, so `view.byteLength` and the
   like already are the internal slot reads Web IDL asks for. Read them
   plainly, and list a case that spoofs one by patching a prototype as left

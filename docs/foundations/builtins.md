@@ -307,6 +307,10 @@ providers, and an app's `nts.config.ts` may override a choice. With it, also
   `runtime/ecmascript`, `web:*` in `runtime/web-platform` and `node:*` in
   `runtime/node`. So JSON (ECMAScript) moves to `runtime/ecmascript` and `URL`
   (WHATWG) to `runtime/web-platform`.
+- **WebSocket is the client only:** `WebSocket` and `WebSocketStream`, as the
+  WHATWG standard defines them and node ships them. No specification nts
+  follows defines a WebSocket server, so nts provides none: a program that
+  serves WebSockets uses a library for it.
 
 From the open-questions audit, also 10-28
 ([log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)):

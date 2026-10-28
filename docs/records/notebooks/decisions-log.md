@@ -332,6 +332,16 @@ From [`foundations/memory.md`](../../foundations/memory.md):
 - **One package per spec family:** `es:*` in `runtime/ecmascript`, `web:*` in
   `runtime/web-platform`, `node:*` in `runtime/node`; JSON and `URL` move
   accordingly: "they should move to the appropriate dirs".
+- **No WebSocket server:** asked why nts had one, the user answered "drop it
+  entirely". No specification nts follows defines a WebSocket server: the
+  WHATWG WebSockets Standard defines the client, WinterTC's Minimum Common Web
+  API has no server APIs, and node ships only the client. A program that
+  serves WebSockets uses a library for it ("something like uWebSockets"). The
+  server code in `runtime/web-platform/src/websocket` came with the original
+  web-platform delivery, whose integration plan called a public server "a
+  required Node/server extension"; this replaces that line. The client
+  (`WebSocket`, `WebSocketStream`) stays; its conformance tests need a peer to
+  talk to, and that is decided with the tests, not provided by the runtime.
 
 ## Contributors and packages (10-28)
 
