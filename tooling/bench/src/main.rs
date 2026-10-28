@@ -36,6 +36,7 @@ use nts_frontend_ts::Frontend;
 use serde::{Deserialize, Serialize};
 
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
+mod reference_link;
 mod results;
 
 /// One measurement.
@@ -889,7 +890,13 @@ fn write_full_table(root: &Utf8Path, rows: &[Row]) -> Result<Utf8PathBuf> {
     }
 
     let legend = legend(root);
-    let spreads = spreads(rows);
+    let mut spreads = spreads(rows);
+    for row in rows {
+        if let Some(reason) = &row.cpp_absence {
+            use std::fmt::Write as _;
+            let _ = writeln!(spreads, "\n{}: {reason}.", row.case);
+        }
+    }
     // The dagger is only worth printing where one was, and a legend line that
     // explains a mark nothing carries reads as a warning about the whole table.
     let daggered = rows.iter().any(|row| {
@@ -928,6 +935,8 @@ struct Row {
     /// a second implementation of it in C++ to have something to divide by is
     /// a correctness burden rather than a reference.
     cpp: Option<f64>,
+    /// Optional reference dependencies that were unavailable on this host.
+    cpp_absence: Option<String>,
     /// This compiler's primary lane. **`None` where it refused the program.**
     ///
     /// Non-optional until 2026-09-15, which meant "this compiler cannot compile
@@ -1257,6 +1266,7 @@ fn variants(
     // Why the JVM column is empty, where it is. Two different absences that a
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
+    let mut cpp_absence = None;
     let driver = native_driver(case, out, name, emission.initializes)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
@@ -1301,6 +1311,17 @@ fn variants(
             results.push(None);
             continue;
         }
+        let libraries = if variant.generated == Generated::None {
+            let libraries = reference_link::Libraries::read(case)?;
+            if let Some(reason) = libraries.probe(&out.join(format!("{name}.reference-link")))? {
+                cpp_absence = Some(reason);
+                results.push(None);
+                continue;
+            }
+            libraries
+        } else {
+            reference_link::Libraries::default()
+        };
         let front = if variant.generated == Generated::None {
             source
         } else {
@@ -1343,7 +1364,7 @@ fn variants(
             }
             Generated::None => {}
         }
-        let built = compile(root, &cpp, &c, &binary, defines)
+        let built = compile(root, &cpp, &c, &binary, defines, &libraries)
             .and_then(|()| measure(&mut std::process::Command::new(&binary)));
         match built {
             Ok(measured) => results.push(Some(measured)),
@@ -1353,13 +1374,21 @@ fn variants(
             Err(error) => return Err(error),
         }
     }
-    Ok((results, Absences { jvm: jvm_absence }))
+    Ok((
+        results,
+        Absences {
+            jvm: jvm_absence,
+            cpp: cpp_absence,
+        },
+    ))
 }
 
 /// Why the columns that may be missing are, for one row.
 #[derive(Serialize, Deserialize)]
 struct Absences {
     jvm: Option<JvmAbsence>,
+    #[serde(default)]
+    cpp: Option<String>,
 }
 
 /// The engines, the checksum agreement, and the printed row.
@@ -1710,6 +1739,7 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
     let mut row = Row {
         case: shown.to_owned(),
         cpp: optional(2),
+        cpp_absence: absences.cpp.clone(),
         nts: required(0)?,
         unspecialized: required(1)?,
         node: node.ns_per_op,
@@ -1721,6 +1751,9 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
         varied: Vec::new(),
     };
 
+    if let Some(reason) = &row.cpp_absence {
+        println!("note: {shown:<16} {reason}");
+    }
     note_unsteady_cells(shown, results, &mut row);
 
     work_agrees(&row)?;
@@ -2632,6 +2665,7 @@ fn compile(
     c: &[Utf8PathBuf],
     binary: &Utf8Path,
     defines: &[&str],
+    libraries: &reference_link::Libraries,
 ) -> Result<()> {
     // What a shipped program is built with (`compile_flags::OPTIMIZE` and
     // `LTO`), for nts's code and the C++ reference alike: the same compiler and
@@ -2715,6 +2749,7 @@ fn compile(
         .arg("-o")
         .arg(binary)
         .arg("-lm")
+        .args(libraries.flags())
         .output()
         .context("linking")?;
     if !link.status.success() {
@@ -3283,6 +3318,7 @@ mod tests {
         Row {
             case: case.to_owned(),
             cpp: None,
+            cpp_absence: None,
             nts: Some(1.0),
             unspecialized: Some(1.0),
             node: 1.0,
@@ -3336,6 +3372,7 @@ mod tests {
             ],
             absences: super::Absences {
                 jvm: Some(super::JvmAbsence::NotRun),
+                cpp: None,
             },
             lowers: true,
             node: measured(30.0),
@@ -3351,6 +3388,36 @@ mod tests {
         );
         assert_eq!(again.nts, Some(10.0));
         assert!(matches!(again.jvm_absence, Some(super::JvmAbsence::NotRun)));
+    }
+
+    #[test]
+    fn missing_optional_cpp_library_keeps_a_valid_row_and_its_reason() {
+        let absent = "optional C++ libraries unavailable: missing; C++ column is --";
+        let measurements = super::Measurements {
+            shown: "optional-link-control".to_owned(),
+            results: vec![
+                Some(measured(1.0)),
+                Some(measured(1.0)),
+                None,
+                Some(measured(1.0)),
+            ],
+            absences: super::Absences {
+                jvm: None,
+                cpp: Some(absent.to_owned()),
+            },
+            lowers: true,
+            node: measured(1.0),
+            bun: Some(measured(1.0)),
+        };
+        let json = serde_json::to_string(&measurements).expect("valid missing-reference row");
+        let restored = serde_json::from_str(&json).expect("valid missing-reference row");
+        let row = super::assemble(&restored, false).expect("valid missing-reference row");
+        assert!(row.cpp.is_none());
+        assert_eq!(row.cpp_absence.as_deref(), Some(absent));
+        assert_eq!(row.nts, Some(1.0));
+        assert_eq!(row.node, 1.0);
+        assert_eq!(row.bun, Some(1.0));
+        super::work_agrees(&row).expect("valid missing-reference row");
     }
 
     #[test]
@@ -3375,7 +3442,10 @@ mod tests {
                     Some(measured(1.5)),
                     Some(measured(if rejected { 11_000.0 } else { 2.0 })),
                 ],
-                absences: super::Absences { jvm: None },
+                absences: super::Absences {
+                    jvm: None,
+                    cpp: None,
+                },
                 lowers: true,
                 node: measured(30.0),
                 bun: None,

@@ -145,15 +145,18 @@ fn cells_of(rows: &[Row], run: &Run<'_>) -> BTreeMap<(String, String), Cell> {
             if !measured(label) {
                 continue;
             }
-            let (ns, refused) = value(row, key);
+            let (ns, explicit_absence) = value(row, key);
             // NaN is how a row says a lane was not run; it is no time.
             let ns = ns.filter(|ns| !ns.is_nan());
             // A column the case has no implementation for -- no `ref.cpp`, no
             // Bun installed -- is not a measurement.
-            if ns.is_none() && !refused {
+            if ns.is_none() && !explicit_absence {
                 continue;
             }
             let mut note = Vec::new();
+            if key == "cpp" {
+                note.extend(row.cpp_absence.iter().cloned());
+            }
             if spoiled {
                 note.push("measured beside other work".to_owned());
             }
@@ -174,12 +177,12 @@ fn cells_of(rows: &[Row], run: &Run<'_>) -> BTreeMap<(String, String), Cell> {
     found
 }
 
-/// A row's value for one column, and whether its absence is a refusal (an nts
-/// column) rather than a reference the case does not have.
+/// A row's value and whether an explicit absence must replace an older cell:
+/// a backend refusal or a reference whose optional libraries are unavailable.
 fn value(row: &Row, key: &str) -> (Option<f64>, bool) {
     let nts = |ns: Option<f64>| (ns, ns.is_none());
     match key {
-        "cpp" => (row.cpp, false),
+        "cpp" => (row.cpp, row.cpp_absence.is_some()),
         "nts_c" => nts(row.nts),
         "nts_llvm" => nts(row.llvm),
         "nts_jvm" => nts(row.jvm),
@@ -281,9 +284,16 @@ fn render(
             shown(mine),
             shown(get(case, "node")),
             times(against_node),
-            shown(get(case, reference)),
+            get(case, reference)
+                .and_then(|cell| cell.ns)
+                .map_or_else(|| "--".to_owned(), human),
             times(ratio(mine, get(case, reference))),
         );
+    }
+    for case in &cases {
+        if let Some(cell) = get(case, reference).filter(|cell| !cell.note.is_empty()) {
+            let _ = writeln!(out, "\n{case}, {named}: {}.", cell.note);
+        }
     }
     out.push_str("\n▲ slower than node.\n");
     out
@@ -300,6 +310,26 @@ mod tests {
             commit: "abc".to_owned(),
             note: String::new(),
         }
+    }
+
+    #[test]
+    fn missing_reference_is_dashes_with_a_persisted_reason() {
+        let mut cells = BTreeMap::new();
+        cells.insert(
+            ("optional".to_owned(), "nts_c".to_owned()),
+            cell(Some(1.0), "now"),
+        );
+        cells.insert(
+            ("optional".to_owned(), "node".to_owned()),
+            cell(Some(1.0), "now"),
+        );
+        let mut absent = cell(None, "now");
+        absent.note = "optional C++ libraries unavailable: missing".to_owned();
+        cells.insert(("optional".to_owned(), "cpp".to_owned()), absent);
+        let text = render(&cells, "c", "nts_c", ("cpp", "C++"));
+        assert!(text.contains("| -- | -- |"), "{text}");
+        assert!(text.contains("optional, C++: optional C++ libraries unavailable: missing"));
+        assert!(!text.contains("| refused |"), "{text}");
     }
 
     /// A row slower than node is counted and marked, a refusal says so, and a

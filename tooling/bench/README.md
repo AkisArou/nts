@@ -1,3 +1,23 @@
+# Optional C++ reference libraries
+
+A case may put library names in `ref.link` beside `ref.cpp`, in link order:
+
+```text
+gmpxx gmp # GMP's C++ wrapper before its C library
+```
+
+Names are separated by whitespace; `#` starts a comment. Write `re2` for RE2.
+The runner passes these as `-l` arguments only when linking that case's C++
+reference. A case without `ref.link` keeps the usual flags. Arbitrary compiler
+or linker flags are not accepted.
+
+The runner first checks that a tiny C++ program links against the declared
+libraries. A linker diagnostic explicitly naming a missing declared library
+leaves the C++ column `--`, with the reason in the console, saved run and
+results. Other toolchain, compilation, checksum and workload errors still fail
+the row. Library availability does not affect any nts or host-engine column.
+The runner never installs packages; references remain optional system tools.
+
 # Native layout mode
 
 Use this mode when an A/B effect is smaller than the row's recorded layout
