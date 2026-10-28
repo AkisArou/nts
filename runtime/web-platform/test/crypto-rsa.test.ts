@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { constants, createPrivateKey, createPublicKey, privateDecrypt, verify as verifySignature } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { createCryptoKey, getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
 import type { RsaAlgorithmName } from "../src/crypto/algorithms.ts";
@@ -77,7 +77,7 @@ function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
   const random = { fill(bytes: Uint8Array): void { bytes.fill(0x42); } };
-  const subtle = new Crypto(random, provider, scheduler).subtle;
+  const subtle = createCrypto(random, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function key(name: RsaAlgorithmName, hash: CryptoDigestName, type: "public" | "private", usages?: readonly KeyUsage[]): Promise<CryptoKey> {
     const use: readonly KeyUsage[] = usages ?? (name === "RSA-OAEP"

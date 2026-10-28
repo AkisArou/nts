@@ -45,6 +45,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/crypto-448-normalization.test.ts \
   runtime/web-platform/test/crypto-448-provider.test.ts \
   runtime/web-platform/test/crypto-448.test.ts \
+  runtime/web-platform/test/crypto-construction.test.ts \
   runtime/web-platform/test/crypto-ec-der.test.ts \
   runtime/web-platform/test/crypto-ec-derive.test.ts \
   runtime/web-platform/test/crypto-ec-key.test.ts \

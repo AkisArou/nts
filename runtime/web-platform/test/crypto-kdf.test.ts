@@ -6,7 +6,7 @@ import { hkdfSync, pbkdf2Sync } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
 import type { KdfAlgorithmName } from "../src/crypto/algorithms.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
 import type {
@@ -48,7 +48,7 @@ class RecordingProvider extends NodeCryptoProvider {
 function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { bytes.fill(0x37); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { bytes.fill(0x37); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function key(name: KdfAlgorithmName, bytes: Uint8Array = new Uint8Array([1, 2, 3]), usages: readonly KeyUsage[] = ["deriveBits"]): Promise<CryptoKey> {
     return settle(subtle.importKey("raw", bytes, name, false, usages));

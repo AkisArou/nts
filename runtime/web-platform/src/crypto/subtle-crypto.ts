@@ -28,6 +28,8 @@ import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
 import { exportSecretKey, generateSecretKey, getSecretKeyLength, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
 
+const constructorToken = Symbol("SubtleCrypto construction");
+
 /**
  * Execute the specification's parallel steps synchronously over native primitives,
  * then settle from one crypto task. Conversion/normalization stays outside this
@@ -151,8 +153,16 @@ export class SubtleCrypto {
   readonly #scheduler: Scheduler;
   readonly #random: RandomSource;
 
-  /** Provider construction; runtime/global exposure is a separate integration change. */
-  constructor(provider: CryptoProvider, scheduler: Scheduler, random: RandomSource) {
+  /** Web IDL supplies no public constructor or capability-injection arguments. */
+  constructor(
+    token: symbol | undefined = undefined,
+    provider?: CryptoProvider,
+    scheduler?: Scheduler,
+    random?: RandomSource,
+  ) {
+    if (token !== constructorToken || provider === undefined || scheduler === undefined || random === undefined) {
+      throw new TypeError("Illegal constructor");
+    }
     this.#provider = provider;
     this.#scheduler = scheduler;
     this.#random = random;
@@ -425,4 +435,9 @@ export class SubtleCrypto {
       return Promise.reject(error);
     }
   }
+}
+
+/** Internal embedding factory; only trusted assembly supplies native capabilities. */
+export function createSubtleCrypto(provider: CryptoProvider, scheduler: Scheduler, random: RandomSource): SubtleCrypto {
+  return new SubtleCrypto(constructorToken, provider, scheduler, random);
 }

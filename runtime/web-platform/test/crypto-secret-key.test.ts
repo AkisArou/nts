@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHmac } from "node:crypto";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { SubtleCrypto } from "../src/crypto/subtle-crypto.ts";
 import { createCryptoKey, CryptoKey, getCryptoKeySlots, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
 import type { KeyUsage } from "../src/crypto/crypto-key.ts";
@@ -75,7 +75,7 @@ class RecordingProvider extends NodeCryptoProvider {
 function fixture(provider = new RecordingProvider()) {
   const random = new TestRandom();
   const scheduler = new VirtualScheduler();
-  const subtle = new Crypto(random, provider, scheduler).subtle;
+  const subtle = createCrypto(random, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function raw(key: CryptoKey): Promise<Uint8Array> {
     const value = await settle(subtle.exportKey("raw", key));

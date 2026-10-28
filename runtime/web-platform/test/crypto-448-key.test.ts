@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { Crypto } from "../src/crypto/crypto.ts";
+import { createCrypto } from "../src/crypto/crypto.ts";
 import { getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, CryptoKeyPair, KeyUsage } from "../src/crypto/crypto-key.ts";
 import type { JsonWebKeyObject } from "../src/crypto/jwk.ts";
@@ -63,7 +63,7 @@ function fixture() {
   const provider = new RecordingProvider();
   const scheduler = new VirtualScheduler();
   let fills = 0;
-  const subtle = new Crypto({ fill(bytes: Uint8Array): void { fills++; bytes.fill(0x37); } }, provider, scheduler).subtle;
+  const subtle = createCrypto({ fill(bytes: Uint8Array): void { fills++; bytes.fill(0x37); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
   async function imported(name: Curve448FixtureName, type: "public" | "private", extractable = true): Promise<CryptoKey> {
     return settle(subtle.importKey(type === "public" ? "spki" : "pkcs8", type === "public" ? curve448Spki(name) : curve448Pkcs8(name), name, extractable, usagesFor(name, type)));
