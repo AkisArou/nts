@@ -13,7 +13,7 @@ interface CompressionManifest extends WptManifest {
 const root = new URL("./wpt/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("compression-streams/manifest.json", root), "utf8")) as CompressionManifest;
 
-test("WPT Compression Streams — ae05f5cb53d3e290b91ae1e92069baa188292880", { timeout: 180000 }, async (suite) => {
+test("WPT Compression Streams — ae05f5cb53d3e290b91ae1e92069baa188292880", async (suite) => {
   const server = await startCompressionResourceServer();
   try {
     await runWptFixtures(suite, root, manifest, (reportError) => createCompressionEnvironment(server, reportError));
