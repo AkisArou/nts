@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 1024,
+        "allowNaN": true,
+        "reason": "Keep the quadratic matrix workload inside the Node oracle recording caps while including the published n=100 output and seed 128; negative, fractional and NaN inputs retain their ordinary answers."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 1024,
+        "allowNaN": true,
+        "reason": "Keep the quadratic matrix workload inside the Node oracle recording caps while including the published n=100 output and seed 128; negative, fractional and NaN inputs retain their ordinary answers."
+      }
+    }
+  }
+}
