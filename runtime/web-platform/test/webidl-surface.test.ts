@@ -74,7 +74,10 @@ const INTERFACES = {
 // These interfaces use declared class members under the current cloud-agent
 // fixed-layout rule. Keep each descriptor-only omission visible by name while
 // retaining the descriptor checks for the unchanged legacy interfaces.
-const PLAIN_CLASS_MEMBERS = new Set(["Blob", "DOMException", "File", "FileReader", "FormData", "ProgressEvent"]);
+const PLAIN_CLASS_MEMBERS = new Set([
+  "Blob", "DOMException", "File", "FileReader", "FormData", "ProgressEvent",
+  "TextDecoder", "TextDecoderStream", "TextEncoder", "TextEncoderStream",
+]);
 const DESCRIPTOR_REASON = "nts fixed class layouts do not reproduce Web IDL property descriptors; members are declared plainly";
 
 /**

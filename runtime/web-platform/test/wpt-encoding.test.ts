@@ -42,7 +42,7 @@ test("WPT Encoding — Node 24.20 directory revision", { timeout: 600000 }, asyn
         // The unchanged common/sab.js discovers the actual SharedArrayBuffer
         // constructor through WebAssembly.Memory. This is test input creation,
         // not a claim that the package supplies WebAssembly or shared memory.
-        WebAssembly,
+        WebAssembly: (globalThis as unknown as { WebAssembly: unknown }).WebAssembly,
         // An empty query runs every subset-tests.js case in this one file.
         // No Window, Document, network, MessageChannel or host codec is exposed.
         location: { search: "" },
