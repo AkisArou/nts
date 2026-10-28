@@ -209,5 +209,17 @@
     "worktreeCleanBeforeRemoval": true,
     "worktreeRemoved": true,
     "hostDiagnosticCPUAffinity": "0-3,6-31; the portable gate itself requires only Node, without taskset"
+  },
+  "manifestSummaryCorrection": {
+    "manifestSha256": "9dd28f10d76a707bd583072d9a5356425fd5e74158596a5ee9d8d6b74ef6ef83",
+    "expectedRunnableTests": 97,
+    "explicitlyBlockedTests": 10,
+    "unchangedExecutionFields": [
+      "fixtures",
+      "support",
+      "license",
+      "revisions"
+    ],
+    "note": "A later metadata-only correction aligns aggregate totals and the baseline note with the already-classified fixture entries. Historical captures retain their exact tested commit, manifest checksum and results. No fixture selection, blocked registration, runtime source or driver changed."
   }
 }
