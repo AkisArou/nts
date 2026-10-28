@@ -37,6 +37,11 @@ arguments; exactly `true` cancels. Ordinary events use one argument; exactly
 `false` cancels. Callback exceptions re-enter the reporting algorithm, whose
 per-global guard suppresses recursive error-event dispatch.
 
+The registered internal event type selects that special `ErrorEvent` path.
+`readErrorEventData` supplies its initialized message, filename, line, column
+and error value. A subclass may override public getters, so reading `event.type`
+or those other getters is not a substitute for the canonical event data.
+
 Every object assignment captures the assigning script's incumbent settings
 through `captureGlobalHandlerContext`, even when the same function replaces
 itself or is assigned to another handler attribute. Each slot retains its
@@ -68,7 +73,8 @@ Construct one `GlobalErrorRuntime` per provider global. It needs:
 | --- | --- |
 | `globalObject`, `resolveGlobalReporter` | Identify the actual global or WindowProxy and resolve a borrowed global method's receiver. |
 | `extractErrorInformation` | Supply implementation-defined message, filename, line, column and the selected script's muted-errors flag without script-visible input reads or coercion. |
-| `addGlobalEventListener`, `removeGlobalEventListener` | Add and remove internal non-capture listeners in the actual global's listener list. |
+| `readErrorEventData` | Read the canonical initialized fields of a branded ErrorEvent without invoking subclass getters or other public property access. The compiler/provider owns this intrinsic layout access. |
+| `addGlobalEventListener`, `removeGlobalEventListener` | Add and remove internal non-capture listeners in the actual global's listener list. Route by internal event type, never the public `type` getter. |
 | `captureGlobalHandlerContext` | Capture the assigning script's incumbent settings on every object-to-callback conversion and return an opaque retained token. Source implementation frames must not replace the assigning script's context. |
 | `invokeGlobalHandler` | Invoke the actual IDL handler with the supplied receiver, arguments, and assignment-time context token. Apply callback-realm runnability, the callback's relevant settings and the supplied stored settings, and Web IDL callback/script cleanup before returning `{ ok: true, value }` or `{ ok: false, error }`. An inactive handler returns success with undefined. |
 | `dispatchGlobalEvent` | Dispatch a trusted canonical event at that actual global; preserve target/currentTarget identity, ordinary-listener callback cleanup and listener-exception reporting. Internal handler wrappers use the separate invocation boundary before processing their result. Apply scripting and active-document checks when relevant. |
@@ -142,7 +148,7 @@ are included in that path count; it is not a count of failed test cases.
 
 Measurements use Node `v24.20.0`. The initial measurements below apply to source
 commit `308e3cc5c8c339464afd3ea1cf201cc3fff83b3a` and its recorded adapter hashes.
-The subsequent callback-boundary and assignment-context fixes each have their
+The subsequent callback-boundary, assignment-context and intrinsic-event fixes each have their
 own source hashes and fresh measurements in `global-errors-results.json` and
 the subsections below. Earlier measurements remain tied to their source.
 
@@ -252,6 +258,41 @@ file remains **2 pass / 0 fail / 3 named blocks**. Node reports **78 entries:
 75 pass, 0 fail, 3 skipped**, including wrappers. Both strict TypeScript
 projects pass. Native incumbent-settings capture and callback setup/cleanup,
 actual-global integration, and automatic Promise hooks remain **not verified**.
+
+### ErrorEvent subclass review and fix
+
+A further concrete control found that ordinary `ErrorEvent` subclasses could
+change the handler's argument list or invoke arbitrary getters before the
+handler. [HTML event-handler processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm)
+selects special handling using the event's type and invokes it with the event's
+IDL data. The [ErrorEvent attributes](https://html.spec.whatwg.org/multipage/webappapis.html#the-errorevent-interface)
+return their initialized values. These are canonical event fields, not a
+request to invoke subclass overrides on the ECMAScript wrapper.
+
+Source now selects special handling from the registered internal event type
+and reads the five initialized fields through the explicit
+`readErrorEventData(event: ErrorEvent): GlobalErrorEventData` capability.
+The provider must route listeners by internal type and supply non-observing
+field access. `core/events.ts` is untouched. The deterministic test driver
+uses captured original getters only in test infrastructure; no prototype or
+descriptor reflection was introduced in source.
+
+Three controls cover a real `error` event whose subclass reports another type,
+throwing overrides for all five `ErrorEvent` getters, and an ordinary
+`unhandledrejection` event whose subclass reports type `error`. All three fail
+with the preceding `1d312a2b96d661df4adf4c917839ce80251a5705` core and pass after
+restoring the fix byte-for-byte. They prove the source chooses the correct
+argument list, forwards initialized values, and avoids virtual getter reads.
+
+The latest focused run passes **47 source-policy controls**, **five adapter
+controls**, and **22 unchanged adapter controls**. The unchanged WPT file is
+still **2 pass / 0 fail / 3 named blocks**. The combined Node totals are
+**81 entries: 78 pass, 0 fail, 3 skipped**, including wrappers. Both strict
+TypeScript projects pass. Node `v24.20.0` exposes none of the `ErrorEvent`,
+`reportError` or global `dispatchEvent` APIs, so it cannot provide a direct
+global-handler oracle for these subclass cases. Browser execution and the
+native intrinsic read remain **not verified**; the contract and controls
+follow the primary HTML algorithms.
 
 ### Shared adapter changes
 

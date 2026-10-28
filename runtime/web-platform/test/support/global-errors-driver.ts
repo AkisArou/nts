@@ -3,14 +3,23 @@
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { GlobalErrorRuntime } from "../../src/core/global-errors.ts";
-import { eventBegin, eventEnd, eventStopped } from "../../src/core/events.ts";
-import type { Event, EventTarget } from "../../src/core/events.ts";
+import { ErrorEvent, Event, eventBegin, eventEnd, eventStopped } from "../../src/core/events.ts";
+import type { EventTarget } from "../../src/core/events.ts";
 import type {
-  GlobalErrorCapabilities, GlobalErrorEventType, GlobalErrorInformation,
+  GlobalErrorCapabilities, GlobalErrorEventData, GlobalErrorEventType, GlobalErrorInformation,
   GlobalErrorListener, GlobalExceptionReporter, GlobalWorkerErrorOwner,
   GlobalHandlerArguments, GlobalHandlerCallback, GlobalHandlerInvocationResult,
   GlobalHandlerContext,
 } from "../../src/provider/global-errors.ts";
+
+// Test-only intrinsic reads over the source classes. Native bindings access
+// their known layouts directly; source policy must not use this reflection.
+const eventType = Object.getOwnPropertyDescriptor(Event.prototype, "type")!.get!;
+const errorMessage = Object.getOwnPropertyDescriptor(ErrorEvent.prototype, "message")!.get!;
+const errorFilename = Object.getOwnPropertyDescriptor(ErrorEvent.prototype, "filename")!.get!;
+const errorLine = Object.getOwnPropertyDescriptor(ErrorEvent.prototype, "lineno")!.get!;
+const errorColumn = Object.getOwnPropertyDescriptor(ErrorEvent.prototype, "colno")!.get!;
+const errorValue = Object.getOwnPropertyDescriptor(ErrorEvent.prototype, "error")!.get!;
 
 interface HandlerInvocation {
   readonly callback: GlobalHandlerCallback;
@@ -43,6 +52,7 @@ export class ErrorDriver implements GlobalErrorCapabilities {
   readonly errors: unknown[] = [];
   readonly rejections: unknown[] = [];
   readonly extractions: unknown[] = [];
+  readonly errorEventReads: ErrorEvent[] = [];
   readonly reads: string[] = [];
   readonly invocations: HandlerInvocation[] = [];
   readonly capturedContexts: GlobalHandlerContext[] = [];
@@ -64,6 +74,13 @@ export class ErrorDriver implements GlobalErrorCapabilities {
   extractErrorInformation(exception: unknown): GlobalErrorInformation {
     this.extractions.push(exception);
     return this.information;
+  }
+  readErrorEventData(event: ErrorEvent): GlobalErrorEventData {
+    this.errorEventReads.push(event);
+    return {
+      message: errorMessage.call(event), filename: errorFilename.call(event),
+      lineno: errorLine.call(event), colno: errorColumn.call(event), error: errorValue.call(event),
+    };
   }
   addGlobalEventListener(type: GlobalErrorEventType, callback: GlobalErrorListener): void {
     this.listeners.push(new Listener(type, callback));
@@ -96,6 +113,7 @@ export class ErrorDriver implements GlobalErrorCapabilities {
   }
   dispatchGlobalEvent(event: Event, reportException: (exception: unknown) => void): boolean {
     this.events.push(event);
+    const type: string = eventType.call(event);
     // The internal Event hooks let this deterministic driver exercise actual
     // canonical event cancellation/trust. A production native global binding
     // still has to supply its complete listener semantics and callback cleanup.
@@ -103,7 +121,7 @@ export class ErrorDriver implements GlobalErrorCapabilities {
     try {
       for (const listener of this.listeners.slice()) {
         if (event[eventStopped]) break;
-        if (listener.removed || listener.type !== event.type) continue;
+        if (listener.removed || listener.type !== type) continue;
         try { listener.callback(event); }
         catch (error) { reportException(error); }
       }

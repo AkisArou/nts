@@ -119,7 +119,7 @@
     "FileReader two event-order cases native microtask checkpoint",
     "known 100 ms adapter load-sensitive control"
   ],
-  "initialMeasurementScope": "Fields sourceCommit, sourceAndAdapterSha256, after, sabotage and restored describe the original 308e3cc5 source. The callbackBoundaryFix and callbackContextCaptureFix objects record fresh evidence for their respective later fixes; historical measurements are not transferred.",
+  "initialMeasurementScope": "Fields sourceCommit, sourceAndAdapterSha256, after, sabotage and restored describe the original 308e3cc5 source. The callbackBoundaryFix, callbackContextCaptureFix and intrinsicErrorEventFix objects record fresh evidence for their respective later fixes; historical measurements are not transferred.",
   "callbackBoundaryFix": {
     "date": "2026-10-28",
     "reviewedOriginalSourceCommit": "308e3cc5c8c339464afd3ea1cf201cc3fff83b3a",
@@ -265,6 +265,82 @@
       "https://webidl.spec.whatwg.org/#es-nullable-type",
       "https://webidl.spec.whatwg.org/#invoke-a-callback-function",
       "https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm"
+    ]
+  },
+  "intrinsicErrorEventFix": {
+    "date": "2026-10-28",
+    "reviewedPreviousSourceCommit": "1d312a2b96d661df4adf4c917839ce80251a5705",
+    "reason": "HTML event handler processing uses the internal event type and initialized ErrorEvent data. Ordinary subclass getter overrides must not select a different argument list or run while those values are prepared.",
+    "capability": "GlobalErrorCapabilities.readErrorEventData(event: ErrorEvent): GlobalErrorEventData returns message, filename, lineno, colno and error without virtual getters. Provider listener routing must use internal event type; source selects special handling from that registered type.",
+    "sourceSha256": {
+      "runtime/web-platform/src/core/global-errors.ts": "70b563d8b7240e3af649a9e3034ffdd0bf963a7c19cfa7e5ddab89177b514cbe",
+      "runtime/web-platform/src/provider/global-errors.ts": "397ce39b131c58653dbde9ce93319d9e82fa220a30691d1a9416e33296934806",
+      "runtime/web-platform/test/global-errors-policy.test.ts": "b71c0ff0be529528c47108e3f88b72cb98bd5ae930d84d4428ebd920c0218fd0",
+      "runtime/web-platform/test/support/global-errors-driver.ts": "c3218e4de7a82ff2df83c00e1b0a82fa3b10a49d55a3e7fcf5e11acc766b1015"
+    },
+    "regressionControls": {
+      "command": "node --expose-gc --test --test-reporter=tap --test-name-pattern='global handler intrinsic data' runtime/web-platform/test/global-errors-policy.test.ts",
+      "previousSourceSha256": "dab6d133ca6f378134f14d4e6ccc299939caa68d54e15ec0ed9ce106bfa2bd2f",
+      "previousSourceWithNewControls": {
+        "pass": 0,
+        "fail": 3,
+        "exitCode": 1
+      },
+      "fixedSourceWithNewControls": {
+        "pass": 3,
+        "fail": 0,
+        "exitCode": 0
+      },
+      "fixedSourceRestoredExactly": true,
+      "cases": [
+        "internal error type wins over a subclass type getter returning other",
+        "all five initialized ErrorEvent fields are read without throwing subclass getters",
+        "a subclass type getter returning error does not give an ordinary unhandledrejection event special handling"
+      ]
+    },
+    "after": {
+      "command": "node --expose-gc --test --test-isolation=none --test-reporter=tap runtime/web-platform/test/global-errors-policy.test.ts runtime/web-platform/test/global-errors-harness-policy.test.ts runtime/web-platform/test/wpt-global-errors.test.ts runtime/web-platform/test/wpt-harness.test.ts",
+      "exitCode": 0,
+      "wptCounts": {
+        "path": "html/webappapis/scripting/reporterror.any.js",
+        "passed": 2,
+        "failed": 0,
+        "blocked": 3
+      },
+      "controls": {
+        "sourcePolicyPassed": 47,
+        "newAdapterPassed": 5,
+        "unchangedAdapterPassed": 22
+      },
+      "nodeTotals": {
+        "tests": 81,
+        "pass": 78,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 3,
+        "todo": 0
+      }
+    },
+    "typeChecks": [
+      {
+        "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+        "exitCode": 0
+      },
+      {
+        "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+        "exitCode": 0
+      }
+    ],
+    "nativeBoundary": "not verified; test-only captured original getters exercise source branching and forwarding. Source contains no added reflection and core/events.ts is unchanged. Native canonical-field access remains required.",
+    "runtimeOracle": {
+      "node": "v24.20.0",
+      "command": "node -e 'console.log(process.version, typeof globalThis.ErrorEvent, typeof globalThis.reportError, typeof globalThis.dispatchEvent)'",
+      "output": "v24.20.0 undefined undefined undefined",
+      "browserExecution": "not verified; no direct runtime oracle for the global-handler subclass controls is claimed"
+    },
+    "specification": [
+      "https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm",
+      "https://html.spec.whatwg.org/multipage/webappapis.html#the-errorevent-interface"
     ]
   }
 }
