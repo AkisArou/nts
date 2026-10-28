@@ -1,0 +1,34 @@
+{
+  "node": "v24.20.0",
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sourceFiles": 148,
+  "concatenatedSourceSha256": "5af610976b7caec3400ee597744fee6ef3531e366eaf3882ea0dfec70f1aa110",
+  "calls": 22354,
+  "stdlibCalls": 3620,
+  "mainCalls": 18734,
+  "receiverClasses": {
+    "DotExpression": 22085,
+    "IndexExpression": 83,
+    "VariableRef": 54,
+    "ReadModifyWriteExpression": 104,
+    "Assignment": 11,
+    "DereferenceExpression": 10,
+    "CallExpression": 6,
+    "MakeArrayRefExpression": 1
+  },
+  "targetClasses": {
+    "DereferenceExpression": 22020,
+    "VariableRef": 54,
+    "CommaExpression": 87,
+    "IdentityExpression": 28,
+    "CallExpression": 78,
+    "EnumLiteral": 80,
+    "GenericLiteral": 6,
+    "ConvertPtrToArrayRefExpression": 1
+  },
+  "registeredTests": 285,
+  "allOriginalAssertionsPassed": true,
+  "method": "All 148 pinned files loaded unchanged; a scratch observer wraps the original Value.prototype.become and invokes it with the same receiver and argument. Both original Benchmark phases and all 285 registered tests run. The observer checks alias identity, the replacement constructor and target after every call. No production variant is created.",
+  "constraint": "Current docs/contributing/cloud-agents.md forbids prototype reflection and uses fixed class layouts. The active transformation changes the receiver prototype while preserving aliases; replacing it with tags/forwarding is a representation change, not static module or constructor syntax.",
+  "status": "Blocked pending an explicit scope decision; no algorithm or representation rewrite is proposed."
+}

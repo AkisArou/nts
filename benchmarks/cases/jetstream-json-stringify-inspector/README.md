@@ -92,3 +92,9 @@ maintainers add awaited harness execution: `doxbee-promise`, `doxbee-async`,
 `async-fs`, `bigint-noble-bls12-381`, `bigint-noble-secp256k1`, and
 `bigint-noble-ed25519`. The released `web-ssr` row remains excluded because it
 times cache-busted evaluation before rendering.
+
+## WSL implementation finding
+
+The initial inventory selects 43 workloads. **42 remain unaffected; WSL is blocked by an additional confirmed implementation constraint.** Its [Value.become](https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/Value.js) changes an existing AST object's prototype to `IdentityExpression.prototype`, preserving aliases while changing inherited getters and `constructor.name`-based visitor dispatch. This is active compiler work: the complete pinned workload performs **22,354 replacements** (3,620 in standard-library preparation and 18,734 in the main run), and all 285 original tests pass. The trace and exact source digest are recorded in `wsl-prototype-audit.json`.
+
+The current `docs/contributing/cloud-agents.md` fixed-layout/no-prototype rule prevents this transcription. A tag, forwarding layer or replacement-object scheme would change the compiler's representation and dispatch. No such rewrite has been made. This needs an explicit scope decision before a WSL row can be proposed; it is separate from the already documented static Proxy-registration adapter. All unaffected ports continue.
