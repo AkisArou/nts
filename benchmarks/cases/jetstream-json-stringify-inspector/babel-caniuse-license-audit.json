@@ -1,0 +1,91 @@
+{
+  "package": "caniuse-lite",
+  "version": "1.0.30001731",
+  "license": "CC-BY-4.0",
+  "tarballSha256": "97a4465d9119c089234d37c05e10a050b97d4a65d2f815da8cebfbbd8f245f26",
+  "files": [
+    {
+      "source": "../../node_modules/caniuse-lite/data/browsers.js",
+      "packageFile": "data/browsers.js",
+      "exact": true,
+      "packageSha256": "63c5f20e38bbeef5d28f0af686170bb9ee1438819c96583a6af621c4b1ec0edf",
+      "sourceMapSha256": "63c5f20e38bbeef5d28f0af686170bb9ee1438819c96583a6af621c4b1ec0edf",
+      "bytes": 220,
+      "sourceCommitBlobSha1": "04fbb50f7fe992b33ff8cb5e472356d0085387fd",
+      "sourceCommitExact": true,
+      "sourceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/data/browsers.js"
+    },
+    {
+      "source": "../../node_modules/caniuse-lite/dist/unpacker/browsers.js",
+      "packageFile": "dist/unpacker/browsers.js",
+      "exact": true,
+      "packageSha256": "b8775f01de6ff801a56db3478b5e3794debf222a7d73239f20d37589f9cc968b",
+      "sourceMapSha256": "b8775f01de6ff801a56db3478b5e3794debf222a7d73239f20d37589f9cc968b",
+      "bytes": 57,
+      "sourceCommitBlobSha1": "85e68b4f768be9c1c52447f9ad18bf1f11e0cd0e",
+      "sourceCommitExact": true,
+      "sourceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/dist/unpacker/browsers.js"
+    },
+    {
+      "source": "../../node_modules/caniuse-lite/data/browserVersions.js",
+      "packageFile": "data/browserVersions.js",
+      "exact": true,
+      "packageSha256": "d4632a391920f111a6d8b48c0de230de3fe96b34dabfb42242222b01c613b8e8",
+      "sourceMapSha256": "d4632a391920f111a6d8b48c0de230de3fe96b34dabfb42242222b01c613b8e8",
+      "bytes": 2230,
+      "sourceCommitBlobSha1": "78d36e4f9221518b871ea7d6eb0d22c40a8861a7",
+      "sourceCommitExact": true,
+      "sourceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/data/browserVersions.js"
+    },
+    {
+      "source": "../../node_modules/caniuse-lite/dist/unpacker/browserVersions.js",
+      "packageFile": "dist/unpacker/browserVersions.js",
+      "exact": true,
+      "packageSha256": "21fb3fc52b70bb44091d82e55f74f8e93ffe6ab5608654af64da7964b4acc455",
+      "sourceMapSha256": "21fb3fc52b70bb44091d82e55f74f8e93ffe6ab5608654af64da7964b4acc455",
+      "bytes": 71,
+      "sourceCommitBlobSha1": "553526e28277541d27acef72610c0a85ace4f5ad",
+      "sourceCommitExact": true,
+      "sourceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/dist/unpacker/browserVersions.js"
+    },
+    {
+      "source": "../../node_modules/caniuse-lite/data/agents.js",
+      "packageFile": "data/agents.js",
+      "exact": true,
+      "packageSha256": "f356e12e37630c96b44bcc8a4fbea3fb8c01b79eaa272753da49ad05f21931c3",
+      "sourceMapSha256": "f356e12e37630c96b44bcc8a4fbea3fb8c01b79eaa272753da49ad05f21931c3",
+      "bytes": 23470,
+      "sourceCommitBlobSha1": "52bcd287adbee7794acf84d9664ad2a1a1ad962a",
+      "sourceCommitExact": true,
+      "sourceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/data/agents.js"
+    },
+    {
+      "source": "../../node_modules/caniuse-lite/dist/unpacker/agents.js",
+      "packageFile": "dist/unpacker/agents.js",
+      "exact": true,
+      "packageSha256": "6c62eb14bb8653e3a80fb0aea9d38462f68b0711346a3fd92eee7e9edff069fe",
+      "sourceMapSha256": "6c62eb14bb8653e3a80fb0aea9d38462f68b0711346a3fd92eee7e9edff069fe",
+      "bytes": 1439,
+      "sourceCommitBlobSha1": "0c8a7905b491c34c4e36a4296997932346439bc5",
+      "sourceCommitExact": true,
+      "sourceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/dist/unpacker/agents.js"
+    }
+  ],
+  "sourceCommit": "fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b",
+  "sourceLicenseExact": true,
+  "licenseSha256": "fd3a263fe19ed8faa9068b43abaebafc02c77897b0c6fc09abc04bb592e5f16e",
+  "licenseFilesInCompleteSourceTree": [
+    "LICENSE"
+  ],
+  "sourceTreeTruncated": false,
+  "separatePermittedGrantFound": false,
+  "reviewedGrantSources": [
+    "exact npm package.json and LICENSE",
+    "exact commit LICENSE and README.md",
+    "complete exact commit tree for additional LICENSE/COPYING/NOTICE files",
+    "all six exact file headers"
+  ],
+  "classification": "CC-BY-4.0 declared at package level; README expressly applies it to data; no separate permitted or dual-license grant found for these six bundled files",
+  "sourceLicenseUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/LICENSE",
+  "sourceReadmeUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/README.md"
+}

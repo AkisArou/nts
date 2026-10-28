@@ -81,11 +81,13 @@ to the maintainer workflow.
 ## Release inventory
 
 `inventory.json` accounts for all **90 JavaScript leaf workloads** in the
-release driver: **43 eligible and 47 excluded**. It also records all 19 excluded
+release driver: **43 initially selected and 47 excluded**. It also records all 19 excluded
 Wasm leaves, optional registrations, source and input licences, exact source
 blobs, reasons, required adaptations, and the proposed category order.
 
-Eligibility records the audit result; it does not mean that all 43 ports have
+The initial eligibility audit is retained for provenance. Full implementation
+review later found one licence blocker in Babel, leaving 42 currently cleared
+candidates; see the finding below. Selection does not mean that all ports have
 been implemented. This case is the first port in that order. The six genuine
 async rows are ported as drafts with `work(n): Promise<number>` until the
 maintainers add awaited harness execution: `doxbee-promise`, `doxbee-async`,
@@ -107,11 +109,11 @@ These operations execute inside the original compiler or transformation, beyond 
 
 ## Port status
 
-The inventory records every selected workload's status and PR link. **39 of the
-43 selected programs have open PRs**: 33 ready for maintainer compilation and
+The inventory records every selected workload's status and PR link. **41 of the
+43 selected programs have open PRs**: 35 ready for maintainer compilation and
 six drafts (#69–#74) waiting for awaited harness support.
 
-The next eight ports were opened in the handoff order, all targeting #44's
+The next ten ports were opened in the handoff order, all targeting #44's
 `chatgpt/jetstream-json-stringify-inspector` branch:
 
 | Program | PR | Local Node 24.20.0 ms | Shared tests passed |
@@ -124,17 +126,35 @@ The next eight ports were opened in the handoff order, all targeting #44's
 | `espree-wtb` | [#106](https://github.com/AkisArou/nts/pull/106) | 61.002504 | 8/8 |
 | `esprima-next-wtb` | [#107](https://github.com/AkisArou/nts/pull/107) | 57.491258 | 9/9 |
 | `typescript-octane` | [#108](https://github.com/AkisArou/nts/pull/108) | 250.195342 | 7/7 |
+| `typescript-lib` | [#118](https://github.com/AkisArou/nts/pull/118) | 1135.598815 | 7/7 |
+| `WSL` | [#119](https://github.com/AkisArou/nts/pull/119) | 8307.094613 | 9/9 |
 
 Every listed case passes strict TypeScript 7.0.2 with zero diagnostics. Times
 are the best of five fresh processes using the unchanged common harness;
-all use `seed = 1`. FlightPlanner falls within 1–10 ms. The other seven retain
+all use `seed = 1`. FlightPlanner falls within 1–10 ms. The other nine retain
 one full original operation under the approved timing exception.
 
-The remaining PR order is `typescript-lib`, `WSL`, `babel-wtb`, `lebab-wtb`.
-TypeScript-lib, Babel and Lebab are still being typed and validated. WSL is
-complete on `chatgpt/jetstream-wsl`, passes strict checking and all nine shared
-tests, and awaits its place after TypeScript-lib. Its original Proxy registry,
-all 285 tests, and all 22,354 prototype replacements remain unchanged.
+Lebab is the remaining permitted row being typed and validated. WSL's original
+Proxy registry, all 285 tests, and all 22,354 prototype replacements remain.
+TypeScript-lib retains all 118 input files, the original 54 diagnostics and zero
+emitted outputs, with all original third-party notices. Its WHATWG source-code
+portions use the offered BSD-3-Clause option verified before TypeScript 5.9.2.
+
+### Newly found Babel licence blocker
+
+The unchanged Babel standalone 7.28.3 bundle includes six exact
+`caniuse-lite@1.0.30001731` modules: three data files and three unpackers.
+The package declares **CC-BY-4.0**, which is outside the permitted list. All six
+files match the Babel source map and exact upstream commit; no separate
+permitted grant was found. The unpackers run during initialization.
+
+The prior inventory's umbrella notice did not disclose this component.
+[The finding](babel-license-finding.md) and
+[the six-file provenance audit](babel-caniuse-license-audit.json) preserve the
+release, licence and source evidence without including its code. No Babel port
+PR has been opened. Strict transcription is also unfinished. Removing or
+replacing the component would contradict the unchanged-program instruction,
+so this row remains blocked pending maintainer direction.
 
 Additional completed-port audits found original operations that remain in the
 code as compiler-support targets:
