@@ -100,7 +100,7 @@ impl Utf16Index {
                     + if byte.0 < byte_end {
                         0
                     } else {
-                        u32::from(entry.utf16_len) + byte.0 - byte_end
+                        u32::from(entry.utf16_len) + (byte.0 - byte_end)
                     }
             }
         })
@@ -164,6 +164,23 @@ mod tests {
             Utf16Index::new("ééé").positions,
             Positions::Dense(_)
         ));
+    }
+
+    #[test]
+    fn sparse_eof_does_not_overflow_an_intermediate_sum() {
+        let index = Utf16Index {
+            bytes: u32::MAX as usize,
+            positions: Positions::Sparse(
+                vec![NonAscii {
+                    byte_start: 0,
+                    utf16_start: 0,
+                    byte_len: 2,
+                    utf16_len: 1,
+                }]
+                .into_boxed_slice(),
+            ),
+        };
+        assert_eq!(index.position(BytePos(u32::MAX)), Utf16Pos(u32::MAX - 1));
     }
 
     #[test]
