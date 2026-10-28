@@ -1716,7 +1716,9 @@
           "name": "FileAPI Test: filereader_error",
           "defaultNameFromTitle": true
         }
-      ]
+      ],
+      "defaultTestName": "FileAPI Test: filereader_error",
+      "interpretationNote": "This legacy fixture has one unnamed async_test. The adapter uses its unchanged META title as the default WPT name without fabricating a Document."
     },
     {
       "path": "FileAPI/reading-data-section/filereader_events.any.js",
@@ -1729,8 +1731,17 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 2,
-      "blockedTests": {},
-      "expectedRunnableTests": 2,
+      "blockedTests": {
+        "events are dispatched in the correct order for an empty blob": {
+          "category": "provider-capability",
+          "reason": "Temporary shared provider/event-execution dependency: the ordinary-node source provider does not perform the HTML cleanup-after-running-a-callback microtask checkpoint when a FileReader event listener returns. The unchanged test awaits load before registering its loadend wait; the required same-task loadend dispatch therefore arrives before that continuation in this host. Both exact cases were executed and failed with an unexpected loadend event. Neither EventWatcher nor FileReader adds an artificial yield/task; this is not a permanent FileReader feature exclusion and needs the shared event/provider boundary fixed."
+        },
+        "events are dispatched in the correct order for a non-empty blob": {
+          "category": "provider-capability",
+          "reason": "Temporary shared provider/event-execution dependency: the ordinary-node source provider does not perform the HTML cleanup-after-running-a-callback microtask checkpoint when a FileReader event listener returns. The unchanged test awaits load before registering its loadend wait; the required same-task loadend dispatch therefore arrives before that continuation in this host. Both exact cases were executed and failed with an unexpected loadend event. Neither EventWatcher nor FileReader adds an artificial yield/task; this is not a permanent FileReader feature exclusion and needs the shared event/provider boundary fixed."
+        }
+      },
+      "expectedRunnableTests": 0,
       "registrations": [
         {
           "kind": "promise_test",
@@ -1761,7 +1772,9 @@
           "name": "FileAPI Test: filereader_readAsArrayBuffer",
           "defaultNameFromTitle": true
         }
-      ]
+      ],
+      "defaultTestName": "FileAPI Test: filereader_readAsArrayBuffer",
+      "interpretationNote": "This legacy fixture has one unnamed async_test. The adapter uses its unchanged META title as the default WPT name without fabricating a Document."
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
@@ -1782,7 +1795,9 @@
           "name": "FileAPI Test: filereader_readAsBinaryString",
           "defaultNameFromTitle": true
         }
-      ]
+      ],
+      "defaultTestName": "FileAPI Test: filereader_readAsBinaryString",
+      "interpretationNote": "This legacy fixture has one unnamed async_test. The adapter uses its unchanged META title as the default WPT name without fabricating a Document."
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
@@ -1881,7 +1896,9 @@
           "name": "FileAPI Test: filereader_readystate",
           "defaultNameFromTitle": true
         }
-      ]
+      ],
+      "defaultTestName": "FileAPI Test: filereader_readystate",
+      "interpretationNote": "This legacy fixture has one unnamed async_test. The adapter uses its unchanged META title as the default WPT name without fabricating a Document."
     },
     {
       "path": "FileAPI/reading-data-section/filereader_result.any.js",
@@ -3559,12 +3576,12 @@
     "selectedFixtureFiles": 34,
     "selectedSupportFiles": 2,
     "expectedRegisteredTests": 502,
-    "explicitlyBlockedTests": 15,
-    "expectedRunnableTests": 487,
+    "explicitlyBlockedTests": 17,
+    "expectedRunnableTests": 485,
     "blocksByCategory": {
       "excluded-language-feature": 5,
       "compiler-capability": 1,
-      "provider-capability": 9
+      "provider-capability": 11
     },
     "deferredBrowserDependentRegistrations": 2,
     "excludedSourcePaths": 84,
