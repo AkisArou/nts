@@ -44,6 +44,8 @@ export class Crypto {
     return this.#subtle;
   }
 
+  get [Symbol.toStringTag](): string { return "Crypto"; }
+
   getRandomValues<T extends ArrayBufferView>(array: T): T {
     const random = this.#random;
     requireArguments(arguments, 1, "Crypto.getRandomValues");
