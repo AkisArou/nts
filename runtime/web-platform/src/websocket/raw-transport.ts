@@ -27,6 +27,7 @@ import type {
   WebSocketTransport,
 } from "./transport.ts";
 import { abortSignalSubscribe } from "../core/abort.ts";
+import { WebSocketConnectionQueue } from "./connection-queue.ts";
 
 export interface RawWebSocketOptions {
   connectTimeoutMs?: number;
@@ -50,6 +51,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
   private readonly deflate: WebSocketDeflateProvider | undefined;
   private readonly sessions = new Set<RawWebSocketSession>();
   private readonly connecting = new Set<AbortController>();
+  private readonly connectionQueue = new WebSocketConnectionQueue();
   private closed = false;
 
   constructor(
@@ -85,7 +87,13 @@ export class RawWebSocketTransport implements WebSocketTransport {
     this.connecting.add(controller);
     const detach = signal[abortSignalSubscribe](() => controller.abort(signal.reason));
     try {
-      return await this.open(handshake, controller.signal);
+      const release = await this.connectionQueue.acquire(handshake.url, controller.signal);
+      try {
+        controller.signal.throwIfAborted();
+        return await this.open(handshake, controller.signal);
+      } finally {
+        release();
+      }
     } finally {
       detach();
       this.connecting.delete(controller);

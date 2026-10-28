@@ -1,3 +1,4 @@
+import { AbortController, abortSignalSubscribe } from "../core/abort.ts";
 import type { AbortSignal } from "../core/abort.ts";
 import { ProtocolError } from "../core/errors.ts";
 import { Headers } from "../fetch/headers.ts";
@@ -8,6 +9,7 @@ import type { RandomSource, Scheduler } from "../provider/primitives.ts";
 import { createKey, validateHandshake } from "./handshake.ts";
 import { perMessageDeflateOffer } from "./permessage-deflate.ts";
 import { adoptClientWebSocketSession } from "./raw-transport.ts";
+import { WebSocketConnectionQueue } from "./connection-queue.ts";
 import type { RawWebSocketOptions } from "./raw-transport.ts";
 import type {
   WebSocketDeflateProvider,
@@ -41,6 +43,8 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
   readonly #options: RawWebSocketOptions;
   readonly #deflate: WebSocketDeflateProvider | undefined;
   readonly #sessions = new Set<WebSocketSession>();
+  readonly #connecting = new Set<AbortController>();
+  readonly #connectionQueue = new WebSocketConnectionQueue();
   #closed = false;
 
   constructor(
@@ -60,7 +64,26 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
   async connect(handshake: WebSocketHandshake, signal: AbortSignal): Promise<WebSocketSession> {
     signal.throwIfAborted();
     if (this.#closed) throw new TypeError("WebSocket transport is closed");
+    const controller = new AbortController();
+    this.#connecting.add(controller);
+    const detach = signal[abortSignalSubscribe](() => controller.abort(signal.reason));
+    try {
+      const release = await this.#connectionQueue.acquire(handshake.url, controller.signal);
+      try {
+        controller.signal.throwIfAborted();
+        return await this.#open(handshake, controller.signal);
+      } finally {
+        release();
+      }
+    } catch (error) {
+      throw controller.signal.aborted ? controller.signal.reason : error;
+    } finally {
+      detach();
+      this.#connecting.delete(controller);
+    }
+  }
 
+  async #open(handshake: WebSocketHandshake, signal: AbortSignal): Promise<WebSocketSession> {
     const key = createKey(this.#random);
     const headers: HeaderEntry[] = [
       ["sec-websocket-key", key],
@@ -90,6 +113,7 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
     const response = await this.#transport.dispatch(request);
     const connection = response.connection;
     if (connection === undefined) {
+      signal.throwIfAborted();
       // Either the server refused or the transport cannot hand over a socket. Draining
       // the body would be tidier; leaving it is deliberate, because the caller of a
       // WebSocket has nowhere to put a response body and a silent drain would make a
@@ -137,6 +161,8 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    for (const controller of this.#connecting)
+      controller.abort(new TypeError("WebSocket transport is closed"));
     for (const session of [...this.#sessions]) session.abort();
     this.#sessions.clear();
   }
