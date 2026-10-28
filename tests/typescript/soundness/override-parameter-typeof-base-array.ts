@@ -1,0 +1,20 @@
+/*---
+description: An array of base-class receivers reaches a narrower override and preserves the string in its number-typed payload.
+features: [ts-unsound-bivariance, ts-class, ts-inheritance, ts-override, ts-arrays, ts-class-fields, ts-typeof-operator, ts-conversions, ts-unknown]
+---*/
+// TypeScript permits a narrower override parameter by method bivariance.
+// Food's string payload violates Fish's number field; node keeps the string.
+class Food { payload: unknown = "7"; }
+class Fish extends Food { override payload: number = 2; }
+let visits = 0;
+class Animal { eat(food: Food): void { throw new Test262Error("base method ran"); } }
+class Cat extends Animal {
+  override eat(food: Fish): void {
+    visits++;
+    assert.sameValue(typeof food.payload, "string");
+    assert.sameValue(String(food.payload + 1), "71");
+  }
+}
+const feeders: Animal[] = [new Cat()];
+feeders[0].eat(new Food());
+assert.sameValue(visits, 1);
