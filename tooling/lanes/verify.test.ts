@@ -19,10 +19,11 @@ function fixture(t:{after(fn:()=>void):void}) {
   writeFileSync(join(repo,"tooling/gate/owed.mjs"),`import {execFileSync} from "node:child_process";
 const range=process.argv[process.argv.indexOf("--range")+1];
 const paths=execFileSync("git",["diff","--name-only",range],{encoding:"utf8"}).trim().split("\\n");
-process.stdout.write('NTS_GATE_STEPS="'+(paths.every(p=>p.startsWith("docs/"))?"format":"fake")+'" sh tooling/gate/all.sh\\n');\n`);
+process.stdout.write('NTS_GATE_STEPS="'+(paths.every(p=>p.startsWith("docs/")||p==="README.md"||p==="AGENTS.md")?"format":"fake")+'" sh tooling/gate/all.sh\\n');\n`);
   writeFileSync(join(repo,"tooling/gate/run.mjs"),'process.stdout.write(process.argv.includes("--tree-only")?"format\\n":JSON.stringify({fake:[],other:[],format:[]}));\n');
   writeFileSync(join(repo,"tooling/gate/pinned.sh"),`set -eu
 . "${join(directory,"controls.sh")}"
+[ -z "\${SHADOW_TEST_CALLS:-}" ] || printf 'gate\\n' >> "$SHADOW_TEST_CALLS"
 # nts-gate-tree-lock-handoff: 8
 exec 9>&8
 flock -n 9
@@ -77,6 +78,33 @@ test("a later coordinator docs move is checked without hiding original agreement
   assert.deepEqual(batch.landings!.map(e=>e.agreement),["agree","no-expectation"]);
   assert.deepEqual(batch.checks.steps,["fake","format"]);
   assert.equal(batch.state,"agreed");assert.equal(ledger.verified.tip,tip);
+});
+
+test("recomparison uses the recorded verdict without running a gate and rejects a bad parent status",async t=>{
+  const f=fixture(t),calls=join(f.home,"gate-calls");f.env.SHADOW_TEST_CALLS=calls;
+  f.append("one",{steps:["fake","wasm"],interop:null});
+  writeFileSync(join(f.repo,"README.md"),"documentation\n");f.git("add","README.md");f.git("commit","-qm","docs");
+  const original=await f.start().done;assert.equal(original.status,0,original.out);
+  const file=join(f.store,"ledger.json"),saved=JSON.parse(readFileSync(file,"utf8")),batch=saved.shadow.batches[0];
+  const summary=join(batch.run,"summary.json"),parent=join(batch.run,"process.json");
+  const raw=readFileSync(summary,"utf8"),rawParent=readFileSync(parent,"utf8"),gateCalls=readFileSync(calls,"utf8");
+  // The old classifier kept the exact same raw green run but could compare
+  // neither the retired Wasm arm nor a coordinator README move.
+  delete batch.availableSteps;batch.state="held";batch.agreement="unavailable";batch.expected="unknown";
+  for (const landing of batch.landings) {delete landing.retiredSince;landing.agreement="unavailable";}
+  batch.landings[1].expectation="unknown";
+  writeFileSync(file,JSON.stringify(saved));
+  const invoke=()=>spawnSync("flock",[join(f.home,".cache/nts-land.lock"),process.execPath,verifier,"--recompare",batch.id],{cwd:f.repo,env:f.env,encoding:"utf8"});
+  const result=invoke();assert.equal(result.status,0,result.stdout+result.stderr);
+  const compared=JSON.parse(result.stdout);
+  assert.equal(compared.agreement,"agree");
+  assert.deepEqual(compared.landings.map((e:{agreement:string})=>e.agreement),["agree","no-expectation"]);
+  assert.deepEqual(compared.landings[0].retiredSince,["wasm"]);
+  assert.equal(readFileSync(calls,"utf8"),gateCalls,"no new gate invocation");
+  assert.equal(readFileSync(summary,"utf8"),raw);assert.equal(readFileSync(parent,"utf8"),rawParent);
+  const before=readFileSync(file,"utf8");writeFileSync(parent,JSON.stringify({...JSON.parse(rawParent),status:17}));
+  const bad=invoke();assert.notEqual(bad.status,0);assert.match(bad.stderr,/recorded shadow verdict is unavailable or changed/);
+  assert.equal(readFileSync(file,"utf8"),before,"a failed parent cannot change recorded agreement");
 });
 
 test("a failed step disagrees only with the landing whose original train ran it",async t=>{

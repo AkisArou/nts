@@ -54,7 +54,7 @@ import { gateCapabilities, gateEnvironmentError } from "../gate/environment.ts";
 import { cleanDevProfile, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL, TEST_CACHE_MAX_BYTES, TEST_DISK_FLOOR_BYTES, TEST_BUILD_WORKING_BYTES, testBuildAdmissionProblem } from "../gate/test-artifacts.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
-import { VerificationLedger, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
+import { VerificationLedger, declaredShadowSteps, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
 import { GateResource, supportsResourceHandoff } from "./gate-resource.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 
@@ -125,7 +125,7 @@ function authorOf(tree: string): Author {
 export function ledgerAt(root: string, main: string): VerificationLedger {
   // The shared checkout is at main under this lock. Use its actual owed
   // rules without switching the gate tree (which may hold a checked train).
-  const ledger = new VerificationLedger(VERIFICATION, root, main, (from, to) => owedSteps(root, `${from}..${to}`), treeSteps(root));
+  const ledger = new VerificationLedger(VERIFICATION, root, main, (from, to) => owedSteps(root, `${from}..${to}`), treeSteps(root), tip=>declaredShadowSteps(root,tip));
   ledger.recover(main);
   return ledger;
 }

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { covers, readLedger, shadowStepVerdicts, VerificationLedger, type Checks } from "./verification-ledger.ts";
+import { covers, declaredShadowSteps, readLedger, shadowStepVerdicts, VerificationLedger, type Checks } from "./verification-ledger.ts";
 
 function scratch(t: {after(fn: () => void): void}) {
   const root = mkdtempSync(join(tmpdir(), "verification-ledger-"));
@@ -199,6 +199,99 @@ test("a missing original full-train step list stays unavailable",t=>{
   s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
   const batch=l.beginShadow(tip)!,done=l.finishShadow(batch.id,{ok:true,run:"/shadow/missing",stepVerdicts:{tests:"green"}},tip);
   assert.equal(done.agreement,"unavailable");assert.equal(done.state,"held");
+});
+
+test("retired steps are named while shared steps still decide agreement",t=>{
+  for (const red of [false,true]) {
+    const s=scratch(t);let available:string[]|undefined;
+    const l=new VerificationLedger(s.directory,s.repo,s.base,()=>tests,[],()=>available);
+    const tip=s.commit("old train"),scope:Checks={steps:["tests","wasm"],interop:null};
+    const id=l.prepare(s.base,tip,[entry(s.base,tip)],"strict",proof(tip,scope));
+    s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
+    const batch=l.beginShadow(tip)!,result={ok:!red,run:"/shadow/retired",stepVerdicts:{tests:red?"red" as const:"green" as const}};
+    l.finishShadow(batch.id,result,tip);
+    available=["tests"];
+    const revised=l.recompareShadow(batch.id,result,tip);
+    assert.deepEqual(revised.landings![0].retiredSince,["wasm"]);
+    assert.deepEqual(revised.landings![0].steps,["tests","wasm"],"original scope is retained");
+    assert.equal(revised.agreement,red?"disagree":"agree");
+    assert.equal(revised.state,red?"held":"agreed");
+    assert.equal(s.git("rev-parse","main"),tip);
+    assert.ok(l.state.events.some(e=>e.transition==="shadow-recompared"));
+    if (!red) {
+      const next=s.commit("next"),n=l.prepare(tip,next,[entry(tip,next)],"strict",proof(next));
+      s.git("update-ref","refs/heads/main",next,tip);l.commit(n,next);
+      assert.equal(l.beginShadow(next)!.base,tip,"the next batch starts after the re-derived green one");
+    }
+  }
+});
+
+test("an observed red cannot be relabelled retired, and a missing live step stays unavailable",t=>{
+  for (const observedRed of [false,true]) {
+    const s=scratch(t),scope:Checks={steps:["tests","memory"],interop:null};
+    const available=observedRed?["tests"]:["tests","memory"];
+    const l=new VerificationLedger(s.directory,s.repo,s.base,()=>tests,[],()=>available);
+    const tip=s.commit("change"),id=l.prepare(s.base,tip,[entry(s.base,tip)],"strict",proof(tip,scope));
+    s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
+    const batch=l.beginShadow(tip)!;
+    const result={ok:!observedRed,run:"/shadow/live",stepVerdicts:{tests:"green" as const,...(observedRed?{memory:"red" as const}:{})}};
+    const done=l.finishShadow(batch.id,result,tip);
+    assert.deepEqual(done.landings![0].retiredSince,[]);
+    assert.equal(done.agreement,observedRed?"disagree":"unavailable");
+    assert.equal(done.state,"held");
+  }
+});
+
+test("a legacy README docs move is reclassified by owed without hiding a real failure",t=>{
+  for (const red of [false,true]) {
+    const s=scratch(t),tree:Checks={steps:["format"],interop:null};
+    const l=new VerificationLedger(s.directory,s.repo,s.base,()=>tree,["format"]);
+    const tip=s.commit("proven"),id=l.prepare(s.base,tip,[entry(s.base,tip)],"strict",proof(tip));
+    s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
+    writeFileSync(join(s.repo,"README.md"),"documentation\n");s.git("add","README.md");s.git("commit","-qm","docs");
+    const docs=s.git("rev-parse","HEAD");s.git("update-ref","refs/heads/main",docs,tip);
+    const batch=l.beginShadow(docs)!;
+    // A saved batch made by the old docs/ + AGENTS-only classifier.
+    batch.landings![1].expectation="unknown";batch.expected="unknown";
+    const result={ok:!red,run:"/shadow/readme",stepVerdicts:{tests:red?"red" as const:"green" as const,format:"green" as const}};
+    l.finishShadow(batch.id,result,docs);
+    const revised=l.recompareShadow(batch.id,result,docs);
+    assert.deepEqual(revised.landings!.map(e=>e.agreement),[red?"disagree":"agree","no-expectation"]);
+    assert.equal(revised.agreement,red?"disagree":"agree");
+    assert.equal(revised.verdict,red?"red":"green","the raw verdict does not change");
+    assert.throws(()=>l.recompareShadow(batch.id,{...result,ok:red},docs),/unavailable or changed/);
+  }
+});
+
+test("README content owing a product check is not excluded as documentation",t=>{
+  const s=scratch(t),l=new VerificationLedger(s.directory,s.repo,s.base,()=>tests,["format"]);
+  const first=s.commit("proven"),id=l.prepare(s.base,first,[entry(s.base,first)],"strict",proof(first));
+  s.git("update-ref","refs/heads/main",first,s.base);l.commit(id,first);
+  writeFileSync(join(s.repo,"README.md"),"machine-read data\n");s.git("add","README.md");s.git("commit","-qm","readme input");
+  const tip=s.git("rev-parse","HEAD");s.git("update-ref","refs/heads/main",tip,first);
+  const batch=l.beginShadow(tip)!,done=l.finishShadow(batch.id,{ok:true,run:"/shadow/readme-input",stepVerdicts:{tests:"green"}},tip);
+  assert.equal(done.landings![1].agreement,"unavailable");
+  assert.equal(done.state,"held");
+});
+
+test("declared step identity requires clean tooling at the exact tip",t=>{
+  const s=scratch(t),directory=join(s.repo,"tooling/gate"),file=join(directory,"run.mjs");mkdirSync(directory,{recursive:true});
+  const source='process.stdout.write(JSON.stringify({tests:[]}));\n';writeFileSync(file,source);
+  s.git("add","tooling");s.git("commit","-qm","declarations");const tip=s.git("rev-parse","HEAD");
+  assert.deepEqual(declaredShadowSteps(s.repo,tip),["tests"]);
+  writeFileSync(file,'process.stdout.write(JSON.stringify({memory:[]}));\n');
+  assert.equal(declaredShadowSteps(s.repo,tip),undefined,"a dirty declaration is not retirement evidence");
+  writeFileSync(file,source);
+  assert.equal(declaredShadowSteps(s.repo,s.base),undefined,"another tip is not this batch's declaration");
+});
+
+test("a range owing only retired steps supplies no positive agreement",t=>{
+  const s=scratch(t),scope:Checks={steps:["wasm"],interop:null};
+  const l=new VerificationLedger(s.directory,s.repo,s.base,()=>scope,[],()=>["tests"]);
+  const tip=s.commit("old wasm"),id=l.prepare(s.base,tip,[entry(s.base,tip,scope)],"strict",proof(tip,scope));
+  s.git("update-ref","refs/heads/main",tip,s.base);l.commit(id,tip);
+  assert.equal(l.beginShadow(tip),null);
+  assert.equal(l.state.shadow!.batches.length,0);
 });
 
 test("a docs failure cannot advance the shadow cursor even when all proven landings agree",t=>{

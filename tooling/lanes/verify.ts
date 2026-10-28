@@ -41,6 +41,22 @@ async function run(): Promise<void> {
     const batch=ledgerAt(root,main()).finishShadow(id,result,main());
     process.stdout.write(JSON.stringify(batch));return;
   }
+  if (operation === "--recompare") {
+    locked();
+    const [id,...rest]=extra;
+    if (!id || rest.length || !/^[a-f0-9-]+$/.test(id)) throw new Error("invalid shadow re-comparison invocation");
+    const ledger=ledgerAt(root,main()),batch=ledger.state.shadow?.batches.find(b=>b.id === id);
+    if (!batch?.run) throw new Error("shadow batch has no recorded gate");
+    const result=JSON.parse(readFileSync(join(state,"verification/shadow",id,"outcome.json"),"utf8")) as ShadowResult;
+    if (result.run !== batch.run) throw new Error("shadow outcome does not name its recorded gate");
+    const summary=JSON.parse(readFileSync(join(result.run,"summary.json"),"utf8"));
+    const parent=JSON.parse(readFileSync(join(result.run,"process.json"),"utf8"));
+    result.stepVerdicts=shadowStepVerdicts(batch.tip,result.ok,summary,parent);
+    const compared=ledger.recompareShadow(id,result,main());
+    process.stdout.write(JSON.stringify(compared));
+    if (compared.state !== "agreed" || compared.verdict !== "green") process.exitCode=1;
+    return;
+  }
   if (operation || extra.length) throw new Error("usage: node tooling/lanes/verify.ts (one manual shadow batch)");
   if (!supportsResourceHandoff(root)) throw new Error("shared pinned.sh does not support shadow resource locking yet");
   mkdirSync(state,{recursive:true});
