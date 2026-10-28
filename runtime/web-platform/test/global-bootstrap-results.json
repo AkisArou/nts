@@ -1,0 +1,130 @@
+{
+  "scope": "Explicit source-global binding preparation; actual native global installation remains a provider operation.",
+  "date": "2026-10-28",
+  "node": "v24.20.0",
+  "sourceCommit": "1b42357047f09a59df5b67fd96cfa93c8cb4876a",
+  "sourceAndTestSha256": {
+    "runtime/web-platform/src/provider/web-platform-runtime.ts": "7b3ea80aab2eab053352997c878d69face596dda127a7e68c866ccc58da1a50f",
+    "runtime/web-platform/test/global-bootstrap-policy.test.ts": "82b52303f86faa8ebd1efd2ee4726f87b8c42415f1402e4d2add61e98c9bc410"
+  },
+  "dependencyOriginalCommits": {
+    "globalErrorsBase": "4597d3f6553472bc8720b5984668f2a8b9e1776c",
+    "performanceSource": "20ed4f37314f4a98a3a0596fbc8359785b804c05",
+    "performanceExplicitInitialization": "8003453d0b9109c33ef5fb66fac6b102c2eb2015",
+    "navigator": "3c0ee305b793f56db5a71029699974a710c487ac",
+    "urlPattern": "5139a3767770b0990002c5051b6bfc50d2795c72",
+    "errorCallbackCleanup": "a85dc479ffb4f9c80f9e0666baeb494cef249da7",
+    "errorCallbackContext": "1d312a2b96d661df4adf4c917839ce80251a5705",
+    "canonicalErrorEventData": "f7a0e6678b255dd69779ff855bd7d124fd37b27a"
+  },
+  "command": "node --expose-gc --test --test-reporter=tap runtime/web-platform/test/global-bootstrap-policy.test.ts",
+  "before": {
+    "dependencyTreeCommit": "dea66a62a00e008aa6fbd532a3d5200469042bdf",
+    "definition": "The final 16 test controls with only web-platform-runtime.ts restored to the exact dependency-only source; the bootstrap entry point does not exist.",
+    "totals": {
+      "tests": 16,
+      "pass": 1,
+      "fail": 15,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "getterRegressionDiscovery": {
+    "sourceCommit": "b462e0b395b0a0d791669d769b6f580fca07a877",
+    "definition": "Two newly added regression controls against the initial local bootstrap, before the snapshot fix. The subsequent test edit only added an explicit variable type and a type-only import.",
+    "totals": {
+      "tests": 16,
+      "pass": 14,
+      "fail": 2,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "failedTests": [
+      "global bootstrap snapshots capability getters before registration and permits failed-read retry",
+      "global bootstrap snapshots the origin object and both scalar values before zero-offset validation"
+    ],
+    "observedFailures": [
+      "A second errors getter read throws after Performance registration; retry fails with Performance is already installed for this runtime.",
+      "Changing origin reads yield Performance.now() 125.125 while Event uses 150.125 in the fixed-clock control."
+    ]
+  },
+  "after": {
+    "totals": {
+      "tests": 16,
+      "pass": 16,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "tests": [
+      "ordinary WebPlatformRuntime construction does not initialize Performance or URLPattern",
+      "global bootstrap returns canonical constructors and exactly one set of environment bindings",
+      "global bootstrap refuses missing capabilities before any installation and allows a complete retry",
+      "global bootstrap refuses a nonzero Performance offset before installing anything",
+      "global bootstrap snapshots capability getters before registration and permits failed-read retry",
+      "global bootstrap snapshots the origin object and both scalar values before zero-offset validation",
+      "global Event timestamps and Performance share the provider's environment-relative clock",
+      "global bootstrap passes the explicit clone and Navigator capabilities without reading them eagerly",
+      "global bootstrap installs URLPattern's capability before constructor use and preserves refusal",
+      "preparing source bindings never writes the actual host globals",
+      "global handler bindings forward backing slots without recursive global reads",
+      "the extracted reportError callable retains real-global receiver behavior",
+      "native rejection and checkpoint hooks are explicit and separate from public bindings",
+      "captured Performance and Navigator values remain scoped to their runtime",
+      "global bootstrap does not replace an explicitly initialized Performance",
+      "a closed runtime cannot bootstrap source globals"
+    ],
+    "snapshotCorrection": "Read top-level capability references, origin/cloner, and both origin scalars once before validation and registration. Construct Navigator and error policy first, then register Performance and URLPattern using stable snapshots. Keep the original capability object only for idempotent identity."
+  },
+  "sabotage": {
+    "sourceCommit": "1b42357047f09a59df5b67fd96cfa93c8cb4876a",
+    "baselineCommit": "dea66a62a00e008aa6fbd532a3d5200469042bdf",
+    "baselineSourceSha256": "f7e3f1d39081aaec4983569be92e8c095a5e264ba3e8f2e9d4f41c545f004e4a",
+    "mutation": "Remove the global-bootstrap zero-offset clock-domain guard",
+    "sourceSha256Before": "7b3ea80aab2eab053352997c878d69face596dda127a7e68c866ccc58da1a50f",
+    "mutantSha256": "47ae7080dc9276d3d2a58519c1e5983518e3ef89f2bbf40f8ae300e56617ce4e",
+    "exitCode": 1,
+    "failedTests": [
+      "global bootstrap refuses a nonzero Performance offset before installing anything"
+    ],
+    "sourceSha256Restored": "7b3ea80aab2eab053352997c878d69face596dda127a7e68c866ccc58da1a50f",
+    "restoredExactly": true,
+    "totals": {
+      "tests": 16,
+      "pass": 15,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "restored": {
+    "totals": {
+      "tests": 16,
+      "pass": 16,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "typeChecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    }
+  ],
+  "runtimeClockRequirement": "The provider clock is relative to the selected environment origin; this bootstrap requires monotonic origin offset zero. Epoch correlation and native coarsening are provider guarantees. General createPerformance offset support is unchanged.",
+  "testProviders": "Deterministic error/Promise driver, Node structuredClone as test injection, and explicit unsupported URL component primitives. These do not implement the actual native installation.",
+  "nativeIntegration": "not verified: actual globals, canonical field access, callback context/cleanup, Promise slots/checkpoint, URL canonicalization, epoch correlation and native coarsening",
+  "compiledNts": "not verified; maintainers own the compiled gate",
+  "wholeSuite": "not run in this internal worktree; parent integration owns the final combined gate",
+  "published": false
+}
