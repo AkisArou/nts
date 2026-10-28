@@ -130,6 +130,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/websocket-server.test.ts \
   runtime/web-platform/test/websocket-server-lifetime.test.ts \
   runtime/web-platform/test/websocket-handshake-policy.test.ts \
+  runtime/web-platform/test/websocket-interop-policy.test.ts \
   runtime/web-platform/test/websocket-wpt-policy.test.ts \
   runtime/web-platform/test/websocket-stream-wpt-policy.test.ts \
   runtime/web-platform/test/wpt-server.test.ts \

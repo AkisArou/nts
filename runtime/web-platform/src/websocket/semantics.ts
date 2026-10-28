@@ -51,11 +51,17 @@ export function normalizeWebSocketProtocols(input: string | Iterable<string>): s
   const seen = new Set<string>();
   for (const value of values) {
     const protocol = coerceToDOMString(value);
-    if (!isToken(protocol) || seen.has(protocol)) {
+    if (!isToken(protocol)) {
+      throw new DOMException("Invalid or duplicate WebSocket subprotocol", "SyntaxError");
+    }
+    // The token is ASCII. Match deployed duplicate detection without changing
+    // its spelling in the offer; WebSockets 3.1 step 9 does not specify folding.
+    const key = protocol.toLowerCase();
+    if (seen.has(key)) {
       throw new DOMException("Invalid or duplicate WebSocket subprotocol", "SyntaxError");
     }
     protocols.push(protocol);
-    seen.add(protocol);
+    seen.add(key);
   }
   return protocols;
 }
