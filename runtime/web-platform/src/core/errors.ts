@@ -1,4 +1,5 @@
 /** DOMException's useful non-DOM surface. No host DOMException dependency. */
+import { coerceToDOMString } from "./webidl.ts";
 
 export class DOMException extends Error {
   static readonly INDEX_SIZE_ERR = 1;
@@ -28,8 +29,12 @@ export class DOMException extends Error {
   static readonly DATA_CLONE_ERR = 25;
 
   constructor(message = "", name = "Error") {
-    super(message);
-    this.name = name;
+    // Web IDL converts both DOMString arguments in order before construction.
+    // https://webidl.spec.whatwg.org/#dom-domexception-domexception
+    const convertedMessage = coerceToDOMString(message);
+    const convertedName = coerceToDOMString(name);
+    super(convertedMessage);
+    this.name = convertedName;
   }
 
   get INDEX_SIZE_ERR(): number {
