@@ -3186,13 +3186,8 @@
       ],
       "harnessScripts": [],
       "expectedTests": 1,
-      "blockedTests": {
-        "Create WebSocket - Pass a valid URL and an array of protocol strings with repeated values but different case - SYNTAX_ERR is thrown": {
-          "category": "upstream-specification-mismatch",
-          "reason": "The pinned fixture expects SyntaxError for the distinct strings \"echo\" and \"eCho\". Current WHATWG WebSockets section 3.1 constructor step 9 rejects repeated values; RFC 6455 section 4.1 requires unique protocol strings. The implementation preserves case-sensitive protocol values and duplicate comparison. This assertion needs upstream review; it is not a browser capability exclusion and is not counted as a pass. See https://websockets.spec.whatwg.org/#dom-websocket-websocket and https://datatracker.ietf.org/doc/html/rfc6455#section-4.1."
-        }
-      },
-      "expectedRunnableTests": 0,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [
@@ -3220,13 +3215,8 @@
       ],
       "harnessScripts": [],
       "expectedTests": 1,
-      "blockedTests": {
-        "Create WebSocket - Pass a valid URL and an array of protocol strings with repeated values but different case - SYNTAX_ERR is thrown": {
-          "category": "upstream-specification-mismatch",
-          "reason": "The pinned fixture expects SyntaxError for the distinct strings \"echo\" and \"eCho\". Current WHATWG WebSockets section 3.1 constructor step 9 rejects repeated values; RFC 6455 section 4.1 requires unique protocol strings. The implementation preserves case-sensitive protocol values and duplicate comparison. This assertion needs upstream review; it is not a browser capability exclusion and is not counted as a pass. See https://websockets.spec.whatwg.org/#dom-websocket-websocket and https://datatracker.ietf.org/doc/html/rfc6455#section-4.1."
-        }
-      },
-      "expectedRunnableTests": 0,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
       "timeoutCategory": "network",
       "declaredGlobals": null,
       "declaredVariants": [
@@ -13538,12 +13528,11 @@
     "supportPaths": 42,
     "metadataPaths": 3,
     "excludedBrowserHelperPaths": 9,
-    "explicitlyBlockedTests": 25,
-    "expectedRunnableTests": 846,
+    "explicitlyBlockedTests": 23,
+    "expectedRunnableTests": 848,
     "blockedByCategory": {
       "ambient-cookie-provider": 1,
       "shared-core-port-policy": 2,
-      "upstream-specification-mismatch": 2,
       "nts-binding-descriptors": 16,
       "secure-context-provider-policy": 1,
       "missing-file-reader": 3
@@ -15082,11 +15071,26 @@
   ],
   "blockedTestPolicy": {
     "baseline": "before-results.json",
-    "note": "These exact names were observed as failures in the initial run before any blocks were applied. They stay in the unedited imported files and registration totals, are emitted as named skips, and never count as passes. Unresolved binding/provider/core gaps and a specification-mismatch review remain explicit. All other implementation failures are still ordinary runnable tests.",
+    "note": "These exact blocked names were observed as failures in the initial run before any blocks were applied. They stay in the unedited imported files and registration totals, are emitted as named skips, and never count as passes. Unresolved binding/provider/core gaps remain explicit. All other implementation failures are ordinary runnable tests. The protocol-duplicate cases were enabled in the successor interop policy; historical result captures remain unchanged.",
     "bindingDecision": {
       "commit": "437c4fdc45c1125da2f5142063c75dc32d416fcf",
       "sourceURL": "https://github.com/AkisArou/nts/commit/437c4fdc45c1125da2f5142063c75dc32d416fcf",
       "specificationURL": "https://webidl.spec.whatwg.org/#es-constants"
+    },
+    "protocolDuplicateInteropDecision": {
+      "fixture": "websockets/Create-protocols-repeated-case-insensitive.any.js",
+      "test": "Create WebSocket - Pass a valid URL and an array of protocol strings with repeated values but different case - SYNTAX_ERR is thrown",
+      "variants": [
+        "?default",
+        "?wss"
+      ],
+      "specificationURL": "https://websockets.spec.whatwg.org/#dom-websocket-websocket",
+      "specificationSection": "3.1, constructor step 9",
+      "specificationRetrieved": "2026-10-28",
+      "specificationExcerpt": "If any of the values in protocols occur more than once",
+      "specificationGap": "The normative wording does not explicitly require ASCII-case-insensitive comparison. This successor adopts that comparison as the requested interoperability policy, matching the pinned WPT expectation and the maintainer-verified Node 24.20 behavior; it does not claim the quoted wording mandates folding.",
+      "policy": "Reject protocol tokens that differ only by ASCII case, while preserving the original spelling of every token offered to the server.",
+      "historicalCaptures": "before-results.json and after-results.json retain their original observations. The original after capture is 846 pass / 0 fail / 25 blocked; the current manifest enables 848 tests and blocks 23."
     }
   }
 }
