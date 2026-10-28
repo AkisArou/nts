@@ -20,6 +20,7 @@ export interface WptFixture extends WptSource {
   harnessScripts: string[];
   expectedTests: number;
   blockedTests: Record<string, WptBlock>;
+  defaultTestName?: string;
 }
 
 export interface WptManifest {
@@ -108,7 +109,10 @@ export async function runWptFixtures(
       file.after(() => environment.close());
       // WPT resources/testharness.js uses 10 seconds normally and 60 for long tests.
       harness = new WptHarness(environment.globals, fixture.blockedTests,
-        timeouts.length === 0 ? 10000 : 60000, { exposeSelf: environment.exposeSelf });
+        timeouts.length === 0 ? 10000 : 60000, {
+          exposeSelf: environment.exposeSelf,
+          defaultTestName: fixture.defaultTestName,
+        });
       const scripts = [...source.matchAll(/^\/\/ META: script=(.+)$/gm)].map((match) => {
         const reference = match[1];
         assert.ok(reference);
