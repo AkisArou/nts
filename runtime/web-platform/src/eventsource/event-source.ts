@@ -211,8 +211,16 @@ export class EventStreamParser {
   }
 }
 
-function isMessageEvent(event: Event): event is MessageEvent<string> {
-  return event instanceof MessageEvent && typeof event.data === "string";
+// HTML EventHandler values retain non-callable objects, independently of the
+// callable used by the active listener. Protocol events keep their public types.
+interface EventSourceHandlerSlot extends EventHandlerSlot<EventSource, Event> {
+  value: unknown;
+}
+
+function ignoreNonCallableHandler(): void {}
+
+function acceptsEvent(_event: Event): _event is Event {
+  return true;
 }
 
 /** HTML server-sent events over the canonical environment-owned Fetch implementation. */
@@ -235,15 +243,18 @@ export class EventSource extends EventTarget {
   private connection: AbortController | null = null;
   private reconnectWait: ReconnectWait | null = null;
   private registered = false;
-  private readonly openHandler: EventHandlerSlot<EventSource, Event> = {
+  private readonly openHandler: EventSourceHandlerSlot = {
+    value: null,
     callback: null,
     listener: null,
   };
-  private readonly messageHandler: EventHandlerSlot<EventSource, MessageEvent<string>> = {
+  private readonly messageHandler: EventSourceHandlerSlot = {
+    value: null,
     callback: null,
     listener: null,
   };
-  private readonly errorHandler: EventHandlerSlot<EventSource, Event> = {
+  private readonly errorHandler: EventSourceHandlerSlot = {
+    value: null,
     callback: null,
     listener: null,
   };
@@ -281,27 +292,44 @@ export class EventSource extends EventTarget {
   }
 
   get onopen(): ((this: EventSource, event: Event) => void) | null {
-    return this.openHandler.callback;
+    return this.openHandler.value as ((this: EventSource, event: Event) => void) | null;
   }
 
   set onopen(callback: ((this: EventSource, event: Event) => void) | null) {
-    this[eventTargetSetHandler](this, this.openHandler, "open", callback, (_event): _event is Event => true);
+    this.#setHandler(this.openHandler, "open", callback);
   }
 
   get onmessage(): ((this: EventSource, event: MessageEvent<string>) => void) | null {
-    return this.messageHandler.callback;
+    return this.messageHandler.value as ((this: EventSource, event: MessageEvent<string>) => void) | null;
   }
 
   set onmessage(callback: ((this: EventSource, event: MessageEvent<string>) => void) | null) {
-    this[eventTargetSetHandler](this, this.messageHandler, "message", callback, isMessageEvent);
+    this.#setHandler(this.messageHandler, "message", callback);
   }
 
   get onerror(): ((this: EventSource, event: Event) => void) | null {
-    return this.errorHandler.callback;
+    return this.errorHandler.value as ((this: EventSource, event: Event) => void) | null;
   }
 
   set onerror(callback: ((this: EventSource, event: Event) => void) | null) {
-    this[eventTargetSetHandler](this, this.errorHandler, "error", callback, (_event): _event is Event => true);
+    this.#setHandler(this.errorHandler, "error", callback);
+  }
+
+  #setHandler(slot: EventSourceHandlerSlot, type: string, value: unknown): void {
+    // HTML 8.1.8.1; Web IDL 3.2.19, 3.2.20 and 3.4.8:
+    // https://webidl.spec.whatwg.org/#LegacyTreatNonObjectAsNull
+    let callback: ((this: EventSource, event: Event) => void) | null = null;
+    if (typeof value === "function") {
+      slot.value = value;
+      callback = value as (this: EventSource, event: Event) => void;
+    } else if (typeof value === "object" && value !== null) {
+      slot.value = value;
+      // Keep an active listener's position without trying to call the object.
+      callback = ignoreNonCallableHandler;
+    } else {
+      slot.value = null;
+    }
+    this[eventTargetSetHandler](this, slot, type, callback, acceptsEvent);
   }
 
   close(): void {
