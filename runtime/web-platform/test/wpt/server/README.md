@@ -107,8 +107,7 @@ These controls verify resource behavior and package-client integration. They
 are not executions of WPT test files. The subsequent API-specific imports use
 the shared `test/wpt/harness.ts` and `runner.ts`, verify the original source
 before substitution, and report WPT counts per file. The three focused test
-entrypoints also require registration in `tooling/conformance/web-platform/check.sh`
-before landing.
+entrypoints are registered in `tooling/conformance/web-platform/check.sh`.
 
 ## Applicability and integration boundary
 
