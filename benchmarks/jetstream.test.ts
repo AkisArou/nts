@@ -100,6 +100,35 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN JSON PARSE: add with the parser case.
+{
+  const name = "jetstream-json-parse-inspector";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+
+    test(`${name}: every parsed value and key order matches the complete original output`, () => {
+      const result = module.render(1);
+      assert.ok(Array.isArray(result));
+      assert.equal(result.length, 846);
+      const text = JSON.stringify(result);
+      assert.equal(text.length, 7333850);
+      assert.equal(sha256(text), "f7594b93901565ac9bef3ec74fe2365a568d2514f0480ac3f1cea1613c376b85");
+      assert.equal(JSON.stringify(module.render(2)), text);
+    });
+
+    test(`${name}: repeated parsing retains the full original input`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.render(0), null);
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 2215243919);
+      assert.equal(module.work(2), 2168328672);
+    });
+  }
+}
+// END JSON PARSE.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
