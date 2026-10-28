@@ -100,6 +100,36 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN PBKDF2: add with the stanford-crypto-pbkdf2 case.
+{
+  const name = "jetstream-stanford-crypto-pbkdf2";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { seed, originalCount, runIteration, work } = await import("./cases/jetstream-stanford-crypto-pbkdf2/case.ts");
+    const { pbkdf2, hex } = await import("./cases/jetstream-stanford-crypto-pbkdf2/pbkdf2.ts");
+    // Independent original values; root retains absent-directory gating/import policy.
+    
+    test("JetStream PBKDF2 retains its original full input and validation", () => {
+      assert.equal(seed, 1);
+      assert.equal(originalCount, 2048);
+      assert.equal(runIteration(), "5436c4c0d73e425a521f4a5a13e0fffe5cd957a823f435385fa0a75068a26803");
+    });
+    
+    test("JetStream PBKDF2 repeats complete iterations with stable checksums", () => {
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 1028499425);
+      assert.equal(work(2), 3475752898);
+      assert.equal(work(1), 1028499425);
+    });
+    
+    test("JetStream PBKDF2 retains original optional-length and error behavior", () => {
+      assert.equal(hex.fromBits(pbkdf2("password", "salt", 2, 256)), "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43");
+      assert.throws(() => pbkdf2("password", "salt", -1), error => String(error) === "INVALID: invalid params to pbkdf2");
+    });
+  }
+}
+// END PBKDF2.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
