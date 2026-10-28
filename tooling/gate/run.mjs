@@ -150,7 +150,8 @@ const STEPS = [
   { name: "definitions", elastic: true, slots: 4, min: 2, mem: 2, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module emits fewer functions" },
   // Reads the CPU time integrity-runtime measured on that same lowering
   // (NTS_COMPILE_TIMES_FROM); lowers the modules itself when it runs alone.
-  { name: "compile-time", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["integrity-runtime"], doc: "no runtime module lowers 2x slower than recorded" },
+  { name: "compile-time", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["integrity-runtime"], doc: "NoGC preparation stays within its calibrated instruction budget" },
+  { name: "compile-time-rc", elastic: true, slots: 4, min: 2, mem: 8, nts: true, fe: true, after: ["build"], doc: "RC preparation stays within its calibrated instruction budget" },
   { name: "integrity-runtime", elastic: true, slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
   { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
   { name: "c-compiles", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, after: ["profile"], doc: "every runtime program's emitted C compiles" },

@@ -1,3 +1,4 @@
+import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { COUNTER_SCOPE } from "./compile-counter.ts";
@@ -20,7 +21,7 @@ test("integrity executes every listing and counts only a kept prepared child", (
     writeFileSync(compiler, `#!/usr/bin/env node
 import {appendFileSync} from "node:fs";
 const argv=process.argv.slice(2);
-appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv})+"\\n");
+appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv,ambient:Object.fromEntries(["LANG", "LC_ALL", "TZ", "FORCE_COLOR", "TERM"].map(key=>[key,process.env[key]]))})+"\\n");
 if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
 `);
     chmodSync(compiler, 0o755);
@@ -45,7 +46,7 @@ child.on("close",status=>{
       mkdirSync(arm);
       const commands = join(arm, "commands.jsonl");
       const counters = join(arm, "counters.jsonl");
-      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, NTS_BIN: compiler,
+      const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, NTS_BIN: compiler, LC_ALL: "C", TZ: "Pacific/Kiritimati",
         NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: join(arm, "costs"), CONTROL_COMMANDS: commands, CONTROL_COUNTERS: counters };
       delete env.NTS_INTEGRITY_KEEP;
       delete env.NTS_GATE_TOKENS;
@@ -56,6 +57,7 @@ child.on("close",status=>{
       assert.match(result.stdout, /1 of 1 project\(s\) measured, 1 function\(s\)/);
       const calls = readFileSync(commands, "utf8").trim().split("\n").map(JSON.parse);
       assert.deepEqual(calls.map(c => c.argv.slice(0, -1)), [["hir", "--prepared"], ["hir"], ["layouts"], ["refusals"]]);
+      for (const call of calls) assert.deepEqual(call.ambient, FIXED_AMBIENT);
       const counted = existsSync(counters) ? readFileSync(counters, "utf8").trim().split("\n").map(JSON.parse) : [];
       assert.deepEqual(counted.map(c => c.pid), keep ? [calls[0].pid] : []);
       if (keep) {
@@ -63,6 +65,8 @@ child.on("close",status=>{
         assert.equal(measured.status, 0);
         assert.equal(measured.cpu_s, 0.012);
         assert.equal(measured.counter_scope, COUNTER_SCOPE);
+        assert.equal(measured.arm, "nogc");
+        assert.equal(JSON.parse(readFileSync(join(arm, "listings/meta.json"), "utf8")).arm, "nogc");
         assert.ok(existsSync(measured.counter_file), "the raw counter file is retained");
         assert.equal(measured.instructions, 123456);
       }

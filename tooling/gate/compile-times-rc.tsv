@@ -1,0 +1,36 @@
+# counter-scope: exec-inherited-user-instructions-v1
+# arm: rc
+# compiler-sha256: 7fbfdf54f28e5a5e353747c91ce32c7735953d3ea3b4f32500f2799bc73bba15
+# regression-ratio: 1.10
+# Five-repeat medians; policy/evidence: results/compile-counter-rc-calibration.json
+# Rerecord with node tooling/gate/compile-time.mjs --record --arm rc; explain why.
+# module	G user instructions (all threads/descendants from exec)	CPU s
+runtime/node/assert	402.640	42.866
+runtime/node/async_hooks	5.774	0.490
+runtime/node/buffer	23.757	1.763
+runtime/node/child_process	590.966	58.004
+runtime/node/cluster	652.303	68.051
+runtime/node/console	415.619	49.956
+runtime/node/crypto	631.138	90.667
+runtime/node/dgram	586.099	56.858
+runtime/node/diagnostics_channel	5.305	0.646
+runtime/node/dns	31.547	3.750
+runtime/node/events	386.010	40.860
+runtime/node/fs	766.475	89.070
+runtime/node/http	766.603	82.579
+runtime/node/net	594.384	62.396
+runtime/node/os	25.919	2.360
+runtime/node/path	19.314	1.971
+runtime/node/perf_hooks	574.083	130.361
+runtime/node/process	776.951	84.398
+runtime/node/punycode	2.713	0.236
+runtime/node/querystring	34.086	2.772
+runtime/node/readline	474.565	42.520
+runtime/node/stream	512.781	49.696
+runtime/node/string_decoder	24.399	1.917
+runtime/node/timers	11.337	1.091
+runtime/node/tty	0.052	0.014
+runtime/node/url	90.785	6.614
+runtime/node/util	406.590	36.113
+runtime/node/zlib	555.308	56.027
+runtime/web-platform	463.433	42.511

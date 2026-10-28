@@ -1,3 +1,4 @@
+import { FIXED_AMBIENT } from "./canonical-environment.ts";
 // Did lowering a runtime module regress beyond its calibrated instruction budget?
 //
 //   node tooling/gate/compile-time.mjs            check against compile-times.tsv
@@ -40,23 +41,26 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from "./cputime.mjs";
-import { readCounterTable } from "./compile-counter.ts";
+import { COMPILE_ARMS, compileArm, compileCommand, readCounterTable } from "./compile-counter.ts";
 import { withToken } from "./tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const TABLE = join(HERE, "compile-times.tsv");
+const ARM = compileArm(process.argv.slice(2));
+const TABLE = join(HERE, COMPILE_ARMS[ARM].table);
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const JOBS = Number(process.env.NTS_GATE_JOBS ?? 4);
 const RECORD = process.argv.includes("--record");
-let FROM = process.env.NTS_COMPILE_TIMES_FROM;
+// Only NoGC has shared prepared listings. RC always measures its own pipeline.
+let FROM = ARM === "nogc" ? process.env.NTS_COMPILE_TIMES_FROM : undefined;
 if (RECORD) {
   await import("./compile-counter-calibrate.ts");
   process.exit(0);
 }
 const cache = join(homedir(), ".cache/nts-compile-counters");
 mkdirSync(cache, { recursive: true });
-const COUNTERS = join(process.env.NTS_GATE_RUN_DIR ?? mkdtempSync(join(cache, "run-")), "compile-time-counters");
+const COUNTERS = join(process.env.NTS_GATE_RUN_DIR ?? mkdtempSync(join(cache, "run-")), "compile-time-counters", ARM);
+console.log(`  preparation arm: ${ARM}; baseline ${COMPILE_ARMS[ARM].table}`);
 
 const modules = [
   ...readdirSync(join(ROOT, "runtime/node"), { withFileTypes: true })
@@ -93,6 +97,10 @@ if (FROM) {
     console.log(`  NOT MEASURED: incompatible counter scope in ${FROM}; attached counts cannot be reused`);
     process.exit(2);
   }
+  if (meta.arm !== ARM) {
+    console.log(`  NOT MEASURED: incompatible preparation arm in ${FROM}; expected ${ARM}, found ${meta.arm ?? "unknown"}`);
+    process.exit(2);
+  }
   if (meta.sha256 !== mine) {
     console.log(`  NOT MEASURED: the times in ${FROM} were taken with ${meta.nts} (${meta.sha256?.slice(0, 12)}), not ${NTS} (${mine.slice(0, 12)})`);
     process.exit(2);
@@ -101,7 +109,7 @@ if (FROM) {
 }
 
 let baseline;
-try { baseline = readCounterTable(readFileSync(TABLE, "utf8")); }
+try { baseline = readCounterTable(readFileSync(TABLE, "utf8"), ARM); }
 catch (error) {
   console.log(`  NOT MEASURED: ${error.message}`);
   process.exit(2);
@@ -112,8 +120,8 @@ const { rows: base, ratio: RATIO } = baseline;
 
 function lower(module) {
   return withToken(async () => {
-    const counted = spawnCounted(NTS, ["hir", "--prepared", module], { cwd: ROOT, stdio: "ignore",
-      env: { ...process.env, NTS_CHECKERS: "1" }, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
+    const counted = spawnCounted(NTS, compileCommand(ARM, module), { cwd: ROOT, stdio: "ignore",
+      env: { ...process.env, NTS_CHECKERS: "1", ...FIXED_AMBIENT }, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
     return counted.measurement;
   });
 }
@@ -121,7 +129,10 @@ function lower(module) {
 function kept(module) {
   const path = join(FROM, `${module.replaceAll("/", "_")}.json`);
   if (!existsSync(path)) return { error: `has no listing in ${FROM}` };
-  try { return JSON.parse(readFileSync(path, "utf8")); }
+  try {
+    const row = JSON.parse(readFileSync(path, "utf8"));
+    return row.arm === ARM ? row : { error: `incompatible preparation arm in ${path}` };
+  }
   catch (error) { return { error: `cannot read kept measurement: ${error.message}` }; }
 }
 
@@ -152,7 +163,7 @@ for (const module of modules) {
   // A module with no row is not checked against anything: red until recorded,
   // whatever it measured.
   if (was === undefined) {
-    unmeasured.push(`${module}: ${t.g.toFixed(1)} G instructions and no row in compile-times.tsv -- record it with --record`);
+    unmeasured.push(`${module}: ${t.g.toFixed(1)} G instructions and no row in ${COMPILE_ARMS[ARM].table} -- record it with --record --arm ${ARM}`);
     continue;
   }
   sumNow += t.g;

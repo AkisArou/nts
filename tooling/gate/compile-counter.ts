@@ -3,6 +3,24 @@
 // processes. CPU is perf's waited-command user+sys rusage in that same scope.
 export const COUNTER_SCOPE = "exec-inherited-user-instructions-v1";
 
+export type CompileArm = "nogc" | "rc";
+export const COMPILE_ARMS = {
+  nogc: { table: "compile-times.tsv", calibration: "compile-counter-calibration.json" },
+  rc: { table: "compile-times-rc.tsv", calibration: "compile-counter-rc-calibration.json" },
+} as const;
+
+export function compileArm(args: readonly string[]): CompileArm {
+  const at = args.indexOf("--arm");
+  if (at < 0) return "nogc";
+  const arm = args[at + 1];
+  if (arm !== "nogc" && arm !== "rc") throw new Error("--arm requires nogc or rc");
+  return arm;
+}
+
+export function compileCommand(arm: CompileArm, module: string): string[] {
+  return ["hir", "--prepared", ...(arm === "rc" ? ["--rc"] : []), module];
+}
+
 export interface CounterRow {
   counter_scope?: unknown;
   instructions?: number | null;
@@ -27,8 +45,12 @@ export function counterProblem(row: CounterRow): string | null {
   return null;
 }
 
-export function readCounterTable(text: string) {
+export function readCounterTable(text: string, arm: CompileArm = "nogc") {
   if (!text.split("\n").includes(`# counter-scope: ${COUNTER_SCOPE}`)) throw new Error("incompatible compile-times.tsv counter scope; record a fresh five-repeat baseline");
+  // Unlabelled legacy tables were recorded only for NoGC. An RC table must
+  // identify itself; neither arm may consume the other arm's baseline.
+  const recordedArm = text.split("\n").find(line => line.startsWith("# arm: "))?.slice(7) ?? "nogc";
+  if (recordedArm !== arm) throw new Error(`incompatible preparation arm: expected ${arm}, table records ${recordedArm}`);
   const rows = new Map<string, number>();
   for (const line of text.split("\n")) {
     if (!line || line.startsWith("#")) continue;
@@ -45,6 +67,7 @@ export function readCounterTable(text: string) {
 }
 
 export interface CalibrationRun extends CounterRow {
+  arm?: CompileArm;
   module: string;
   repeat: number;
   listing_functions: number | null;
@@ -52,6 +75,7 @@ export interface CalibrationRun extends CounterRow {
   counter_file: string;
 }
 export interface Calibration {
+  arm?: CompileArm;
   counter_scope: string;
   complete: boolean;
   nts_sha256: string;
@@ -66,11 +90,13 @@ export interface Calibration {
 export function calibratedTable(summary: Calibration, expected: string[]) {
   if (!summary.complete || summary.counter_scope !== COUNTER_SCOPE || !/^[a-f0-9]{64}$/.test(summary.nts_sha256)) throw new Error("incomplete or incompatible calibration");
   const modules = [...summary.modules].sort((a, b) => a.module < b.module ? -1 : a.module > b.module ? 1 : 0);
+  const arm = summary.arm ?? "nogc";
+  if (arm !== "nogc" && arm !== "rc") throw new Error("invalid calibration preparation arm");
   if (JSON.stringify(modules.map(m => m.module)) !== JSON.stringify([...expected].sort())) throw new Error("calibration population differs from the current runtime modules");
   const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[2];
   let maxSpread = 0;
   const rows = modules.map(({ module, runs }) => {
-    if (runs.length !== 5 || runs.some(r => r.module !== module || r.status !== 0 || counterProblem(r) !== null)
+    if (runs.length !== 5 || runs.some(r => r.module !== module || (r.arm ?? "nogc") !== arm || r.status !== 0 || counterProblem(r) !== null)
       || JSON.stringify(runs.map(r => r.repeat).sort()) !== "[1,2,3,4,5]"
       || runs.some(r => !Number.isInteger(r.listing_functions) || r.listing_functions! < 1 || r.listing_functions !== r.listing_definitions)
       || new Set(runs.map(r => r.listing_functions)).size !== 1) throw new Error(`incomplete five-repeat listing/count proof: ${module}`);
@@ -80,10 +106,10 @@ export function calibratedTable(summary: Calibration, expected: string[]) {
   });
   const ratio = 1 + Math.max(2, Math.ceil(80 * maxSpread)) / 20;
   const policy = { ratio, observed_max_spread: maxSpread, spread_multiplier: 4, relative_floor: 0.10 };
-  const text = [`# counter-scope: ${COUNTER_SCOPE}`, `# compiler-sha256: ${summary.nts_sha256}`,
+  const text = [`# counter-scope: ${COUNTER_SCOPE}`, `# arm: ${arm}`, `# compiler-sha256: ${summary.nts_sha256}`,
     `# regression-ratio: ${ratio.toFixed(2)}`,
-    "# Five-repeat medians; policy/evidence: results/compile-counter-calibration.json",
-    "# Rerecord with node tooling/gate/compile-time.mjs --record; explain why.",
+    `# Five-repeat medians; policy/evidence: results/${COMPILE_ARMS[arm].calibration}`,
+    `# Rerecord with node tooling/gate/compile-time.mjs --record --arm ${arm}; explain why.`,
     "# module\tG user instructions (all threads/descendants from exec)\tCPU s", ...rows, ""].join("\n");
   return { text, policy };
 }

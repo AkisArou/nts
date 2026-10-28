@@ -1,3 +1,4 @@
+import { FIXED_AMBIENT } from "./canonical-environment.ts";
 // The CPU time a child process spends itself, sampled from /proc while it
 // runs: `utime + stime` of the process (every thread of it), not of the
 // children it starts. The native frontend runs in this process, so its CPU
@@ -88,7 +89,7 @@ let probed;
 export function instructionsWork() {
   if (probed !== undefined) return probed;
   const r = spawnSync("perf", [...PERF_ARGS, "--", "sh", "-c", "i=0; while [ $i -lt 10000 ]; do i=$((i+1)); done"],
-    { encoding: "utf8", env: { ...process.env, LC_ALL: "C" }, timeout: 120_000 });
+    { encoding: "utf8", env: { ...process.env, ...FIXED_AMBIENT }, timeout: 120_000 });
   const measurement = parseMeasurement(r.stderr ?? "");
   probed = r.error ? `no perf (${r.error.message})` : r.status !== 0 ? `perf exited ${r.status}: ${r.stderr.trim()}` : counterProblem(measurement);
   return probed;
@@ -106,7 +107,7 @@ export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, 
   mkdirSync(dirname(counterFile), { recursive: true });
   const child = spawn("timeout", ["--signal=TERM", "--kill-after=5s", `${timeoutMs / 1000}s`, "perf",
     ...PERF_ARGS, "-o", counterFile, "--", command, ...args],
-    { ...options, env: { ...(options.env ?? process.env), LC_ALL: "C" } });
+    { ...options, env: { ...(options.env ?? process.env), ...FIXED_AMBIENT } });
   const measurement = new Promise((resolve) => {
     let launchError;
     child.on("error", (error) => { launchError = error.message; });

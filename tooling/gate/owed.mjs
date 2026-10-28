@@ -140,6 +140,7 @@ export const WIDE = new Set([
   "profile",
   "definitions",
   "compile-time",
+  "compile-time-rc",
   "addons",
   "interop",
   "on-device",
@@ -188,7 +189,8 @@ export const ASKS = {
   // lowering change owed pointed at it until another lane found it red.
   "benches": ["answers", "does every benchmarks/cases program still emit C that compiles and runs"],
   addons: ["valid", "does each runtime module build, load and publish something"],
-  "compile-time": ["hygiene", "did lowering exceed its calibrated instruction budget (perf from exec)"],
+  "compile-time": ["hygiene", "did NoGC lowering exceed its calibrated instruction budget (perf from exec)"],
+  "compile-time-rc": ["hygiene", "did RC lowering exceed its calibrated instruction budget (perf from exec)"],
   profile: ["whether", "does runtime/node emit without a panic, under the refusal ceiling, above the definition floor"],
   interop: ["answers", "does every interop project build the way its README says and run"],
   divergence: ["valid", "do node's divergence instruments still hold"],
@@ -598,6 +600,13 @@ export const RULES = [
     name: "the native counter control fixture",
     when: (p) => p === "tooling/gate/fixtures/counter-thread.c",
     steps: ["tooling"],
+    arms: [],
+  },
+  {
+    name: "the compile-time baselines",
+    wide: true,
+    when: (p) => /^tooling\/gate\/compile-times(?:-rc)?\.tsv$/.test(p) || /^results\/compile-counter(?:-rc)?-calibration\.json$/.test(p),
+    steps: ["compile-time"],
     arms: [],
   },
   {
@@ -1163,7 +1172,11 @@ export function owed(changes) {
     if (!r) { r = { name, paths: [], steps: [], arms: [], precise: true }; out.push(r); }
     Object.assign(r, mergeRuleMetadata(r, extra));
     if (!r.paths.includes(path)) r.paths.push(path);
-    for (const st of steps) if (!r.steps.includes(st)) r.steps.push(st);
+    // Both preparation arms have exactly the same subjects. Centralising the
+    // implication keeps future compile-time rules from silently missing RC.
+    for (const st of steps.flatMap(st => st === "compile-time" ? [st, "compile-time-rc"] : [st])) {
+      if (!r.steps.includes(st)) r.steps.push(st);
+    }
     if (steps.includes("interop")) {
       r.interop = !projects || r.interop === "all" ? "all" : [...new Set([...(r.interop ?? []), ...projects])];
     }

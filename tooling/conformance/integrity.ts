@@ -1,3 +1,4 @@
+import { FIXED_AMBIENT } from "../gate/canonical-environment.ts";
 // Is what the backend receives whole? Nine facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
 //
@@ -168,7 +169,8 @@ const KNOWN = join(HERE, "integrity.known");
 const ADDON = /^runtime\/(node|web-platform)(\/|$)/;
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 
-const env = { ...process.env, NTS_CHECKERS: "1" };
+// hir --prepared without --rc prepares NoGC; kept rows record that arm.
+const env = { ...process.env, NTS_CHECKERS: "1", ...FIXED_AMBIENT };
 // Four listings per project; `http` alone lowers for about 95 s. Memory, not
 // cores, is what this box runs out of.
 const WORKERS = Number(process.env.NTS_INTEGRITY_JOBS ?? 4);
@@ -1340,7 +1342,7 @@ function keep(project, done) {
   if (!KEEP || !ADDON.test(project)) return;
   const name = project.replaceAll("/", "_");
   writeFileSync(join(KEEP, `${name}.txt`), `${done.stdout}${done.stderr}`);
-  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null, counter_scope: done.counter_scope ?? null, counter_file: done.counter_file ?? null, counter_error: done.counter_error ?? null, user_s: done.user_s ?? null, sys_s: done.sys_s ?? null }));
+  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ arm: "nogc", status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null, counter_scope: done.counter_scope ?? null, counter_file: done.counter_file ?? null, counter_error: done.counter_error ?? null, user_s: done.user_s ?? null, sys_s: done.sys_s ?? null }));
 }
 
 const cost = {};
@@ -1391,7 +1393,7 @@ const started = Date.now();
 const costKey = process.argv.includes("--runtime") ? "integrity-runtime" : "integrity";
 await Promise.all(longestFirst(costKey, projects, (p) => pathOf.get(p) ?? p).map(scan));
 recordCosts(costKey, cost);
-if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), counter_scope: COUNTER_SCOPE, projects }, null, 1));
+if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), counter_scope: COUNTER_SCOPE, arm: "nogc", projects }, null, 1));
 
 const key = (v) => `${v.project}\t${v.rule}\t${stable(v.subject)}`;
 const fresh = found.filter((v) => !known.has(key(v))).sort((a, b) => key(a).localeCompare(key(b)));

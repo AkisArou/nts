@@ -1,4 +1,5 @@
 # counter-scope: exec-inherited-user-instructions-v1
+# arm: nogc
 # compiler-sha256: 45c6d5eae26cdd3aaeba3e002c99945e18a2e3019fa8b2805d3a630eef94ac76
 # regression-ratio: 1.10
 # Five-repeat medians; policy/evidence: results/compile-counter-calibration.json

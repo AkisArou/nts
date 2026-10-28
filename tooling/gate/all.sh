@@ -2242,13 +2242,20 @@ definitions() {
   return $status
 }
 
-# Each runtime module's lowering against tooling/gate/compile-times.tsv: fails
-# when one takes twice its recorded CPU time and 3 s more. A 7x regression in
-# one compiler pass (Program::cycles, 2026-10-04) left every verdict green for
-# two days. Times are read from integrity --runtime's lowering when both run;
+# Each runtime module's NoGC preparation against its calibrated instruction
+# budget. Counts are read from integrity --runtime's lowering when both run;
 # see tooling/gate/compile-time.mjs.
 compile_time() {
-  out=$(node tooling/gate/compile-time.mjs 2>&1)
+  out=$(node tooling/gate/compile-time.mjs --arm nogc 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^$/'
+  return $status
+}
+
+# The shipping preparation pipeline is measured independently, so it need not
+# wait for integrity-runtime's shared NoGC listings.
+compile_time_rc() {
+  out=$(node tooling/gate/compile-time.mjs --arm rc 2>&1)
   status=$?
   printf '%s\n' "$out" | awk '!/^$/'
   return $status
@@ -2550,6 +2557,7 @@ step "expect-ir" expect_ir
 step "integrity" integrity
 step "definitions" definitions
 step "compile-time" compile_time
+step "compile-time-rc" compile_time_rc
 # The gate's own tools: the tokens (tokens.test.mjs), what owed.mjs maps a
 # path to (owed.test.mjs, and its --self-test), land.ts's train
 # (land.test.ts), and the test262 runner's case roots and population

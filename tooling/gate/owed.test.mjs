@@ -559,3 +559,13 @@ test("the retired backend has no runnable or selected gate step", () => {
     }
   }
 });
+
+test("every compile-time subject owes the independent RC arm, while docs do not", () => {
+  for (const path of ["compiler/core/src/hir/lower.rs", "runtime/node/path/index.ts", "tooling/conformance/integrity.ts",
+    "tooling/gate/compile-times.tsv", "tooling/gate/compile-times-rc.tsv", "results/compile-counter-rc-calibration.json"]) {
+    const steps = stepsFor(path);
+    assert.equal(steps.includes("compile-time"), steps.includes("compile-time-rc"), path);
+  }
+  owes("tooling/gate/compile-times-rc.tsv", ["compile-time", "compile-time-rc"], { not: ["examples"] });
+  owes("docs/architecture.md", [], { not: ["compile-time", "compile-time-rc"] });
+});

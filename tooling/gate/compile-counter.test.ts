@@ -1,3 +1,4 @@
+import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import assert from "node:assert/strict";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -5,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { COUNTER_SCOPE, counterProblem, readCounterTable, calibratedTable } from "./compile-counter.ts";
+import { COUNTER_SCOPE, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand } from "./compile-counter.ts";
 import { instructionsWork, spawnCounted } from "./cputime.mjs";
 import { spawnTest, waitFor, TEST_HANG_MS } from "./test-wait.ts";
 
@@ -44,15 +45,15 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
   mkdirSync(kept);
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
-  for (const name of ["compile-time.mjs", "compile-counter.ts", "cputime.mjs", "tokens.mjs"]) {
+  for (const name of ["compile-time.mjs", "compile-counter.ts", "cputime.mjs", "tokens.mjs", "canonical-environment.ts", "run-temporary.ts"]) {
     copyFileSync(fileURLToPath(new URL(name, import.meta.url)), join(gate, name));
   }
   const sha256 = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
-  const meta = { counter_scope: COUNTER_SCOPE, sha256, nts: process.execPath };
+  const meta = { counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts: process.execPath };
   const table = `# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
   writeFileSync(join(gate, "compile-times.tsv"), table);
   writeFileSync(join(kept, "meta.json"), JSON.stringify(meta));
-  const valid = { counter_scope: COUNTER_SCOPE, status: 0, signal: null, cpu_s: 10, instructions: 100e9 };
+  const valid = { counter_scope: COUNTER_SCOPE, arm: "nogc", status: 0, signal: null, cpu_s: 10, instructions: 100e9 };
   const check = (row: object) => {
     writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify(row));
     return spawnTest(process.execPath, [join(gate, "compile-time.mjs")], { encoding: "utf8", env: {
@@ -89,6 +90,16 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
   assert.equal(legacy.status, 2);
   assert.match(legacy.stdout, /NOT MEASURED: incompatible counter scope/);
   writeFileSync(join(kept, "meta.json"), JSON.stringify(meta));
+  for (const arm of [undefined, "rc"]) {
+    writeFileSync(join(kept, "meta.json"), JSON.stringify({ ...meta, arm }));
+    const wrong = check(valid);
+    assert.equal(wrong.status, 2);
+    assert.match(wrong.stdout, /NOT MEASURED: incompatible preparation arm/);
+  }
+  writeFileSync(join(kept, "meta.json"), JSON.stringify(meta));
+  const mixed = check({ ...valid, arm: "rc" });
+  assert.equal(mixed.status, 1);
+  assert.match(mixed.stdout, /incompatible preparation arm/);
   writeFileSync(join(root, "runtime/node/subject/nts.config.ts"), "export default {};");
   const config = check(valid);
   assert.equal(config.status, 2);
@@ -175,4 +186,65 @@ test("from-exec inheritance counts a late thread and fork, and termination reach
   // Native fixed work, with no JIT: count the same loop in both scope controls.
   const spread = Math.max(...counts) / Math.min(...counts) - 1;
   assert.ok(spread < 0.03, `counts ${counts.join(", ")}, spread ${spread}`);
+});
+
+test("preparation arms have distinct commands, tables and complete calibration evidence", () => {
+  assert.equal(compileArm([]), "nogc");
+  assert.equal(compileArm(["--arm", "rc"]), "rc");
+  assert.throws(() => compileArm(["--arm"]), /requires/);
+  assert.throws(() => compileArm(["--arm", "other"]), /requires/);
+  assert.deepEqual(compileCommand("nogc", "subject"), ["hir", "--prepared", "subject"]);
+  assert.deepEqual(compileCommand("rc", "subject"), ["hir", "--prepared", "--rc", "subject"]);
+  const runs = [1, 2, 3, 4, 5].map(repeat => ({ arm: "rc" as const, module: "subject", repeat,
+    counter_scope: COUNTER_SCOPE, status: 0, instructions: 100e9 + repeat * 1e6, cpu_s: 10,
+    listing_functions: 1, listing_definitions: 1, counter_file: "raw.perf" }));
+  const summary = { arm: "rc" as const, counter_scope: COUNTER_SCOPE, complete: true,
+    nts_sha256: "b".repeat(64), modules: [{ module: "subject", runs }] };
+  const { text, policy } = calibratedTable(summary, ["subject"]);
+  assert.equal(policy.ratio, 1.10);
+  assert.equal(readCounterTable(text, "rc").rows.size, 1);
+  assert.throws(() => readCounterTable(text), /preparation arm/);
+  assert.throws(() => readCounterTable(text.replace("# arm: rc\n", ""), "rc"), /preparation arm/);
+  assert.throws(() => calibratedTable({ ...summary,
+    modules: [{ module: "subject", runs: runs.map(r => ({ ...r, arm: "nogc" as const })) }] }, ["subject"]), /five-repeat/);
+});
+
+test("RC runs fresh with --rc despite a valid NoGC shared measurement, and owns its guard", { skip: instructionsWork() ?? false }, t => {
+  const cache = join(homedir(), ".cache/nts-counter-tests");
+  mkdirSync(cache, { recursive: true });
+  const root = mkdtempSync(join(cache, "rc-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const gate = join(root, "tooling/gate"), kept = join(root, "kept");
+  mkdirSync(gate, { recursive: true }); mkdirSync(kept);
+  mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
+  writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
+  for (const name of ["compile-time.mjs", "compile-counter.ts", "cputime.mjs", "tokens.mjs", "canonical-environment.ts", "run-temporary.ts"]) {
+    copyFileSync(fileURLToPath(new URL(name, import.meta.url)), join(gate, name));
+  }
+  const commands = join(root, "commands.jsonl"), nts = join(root, "nts");
+  writeFileSync(nts, `#!/usr/bin/env node
+require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({args:process.argv.slice(2), ambient:Object.fromEntries(["LANG", "LC_ALL", "TZ", "FORCE_COLOR", "TERM"].map(key=>[key,process.env[key]]))})+'\\n');
+`);
+  chmodSync(nts, 0o755);
+  const sha256 = createHash("sha256").update(readFileSync(nts)).digest("hex");
+  writeFileSync(join(kept, "meta.json"), JSON.stringify({ counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts }));
+  writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify({ arm: "nogc", counter_scope: COUNTER_SCOPE, status: 0, cpu_s: 10, instructions: 100e9 }));
+  const table = `# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
+  writeFileSync(join(gate, "compile-times.tsv"), table);
+  writeFileSync(join(gate, "compile-times-rc.tsv"), `# arm: rc\n${table}`);
+  const check = (arm: string) => spawnTest(process.execPath, [join(gate, "compile-time.mjs"), "--arm", arm], {
+    encoding: "utf8", env: { ...process.env, NTS_BIN: nts, NTS_COMPILE_TIMES_FROM: kept,
+      NTS_GATE_RUN_DIR: join(root, "run"), LC_ALL: "C", TZ: "Pacific/Kiritimati", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_TOKENS: "" },
+  });
+  assert.equal(check("nogc").status, 0);
+  const rc = check("rc");
+  assert.equal(rc.status, 0, rc.stdout + rc.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(commands, "utf8").trim()), {
+    args: ["hir", "--prepared", "--rc", "runtime/node/subject"], ambient: FIXED_AMBIENT,
+  });
+  writeFileSync(join(gate, "compile-times-rc.tsv"), `# arm: rc\n${table.replace("subject\t100", "subject\t0.000001")}`);
+  assert.equal(check("nogc").status, 0);
+  const slower = check("rc");
+  assert.equal(slower.status, 1, slower.stdout + slower.stderr);
+  assert.match(slower.stdout, /SLOWER/);
 });
