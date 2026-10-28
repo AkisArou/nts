@@ -6,14 +6,6 @@ README in a separate directory such as `events-abort/`. The manifests record the
 exact revision, SHA-256 and Git blob ID of each fixture, support file and licence.
 Do not patch a copied case or insert a new header into its bytes.
 
-`versions.json` is the shared directory-version table. It records one revision
-per imported WPT directory and both hashes for every copied fixture and helper.
-Area manifests retain their case selection and named dependencies; the versions
-control checks that those manifests agree with the table and the files on disk.
-Shared `common/` helpers have one copy and one revision. The upstream harness
-references are recorded separately because the original TypeScript adapter
-replaces them; those reference entries do not claim that a harness was copied.
-
 ## Reuse from another specification area
 
 `harness.ts` supplies the `testharness.js` adaptation. `runner.ts` supplies
