@@ -7,7 +7,7 @@
   "scope": [
     "websockets/stream/tentative/"
   ],
-  "inventoryNote": "All nine original .any.js fixture files and their declared non-HTTP/2 variants are selected. Fixtures and required support match one pinned WPT revision byte-for-byte; the shared adapter verifies SHA-256 and Git blob IDs. Eight HTTP/2 variants are explicitly excluded. The initial baseline has no named test blocks.",
+  "inventoryNote": "All nine original .any.js files and their thirteen non-HTTP/2 variants are selected. Fixtures and support match one pinned WPT revision byte-for-byte. Eight HTTP/2 variants are excluded. Ten registrations with elapsed-time or fixed-size pending-write assumptions remain named blocks; deterministic package controls cover their ordering separately. The other 97 registrations, including the independent GC-only test, run unchanged.",
   "specification": {
     "name": "WebSocketStream draft",
     "status": "tentative proposal, not part of the published WebSockets Standard",
@@ -67,8 +67,13 @@
       ],
       "harnessScripts": [],
       "expectedTests": 1,
-      "blockedTests": {},
-      "expectedRunnableTests": 1,
+      "blockedTests": {
+        "backpressure should be applied to received messages": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Asserts at least 1.8 seconds of server write time while the client delays reads. Deterministic transport read counts cover receive backpressure separately."
+        }
+      },
+      "expectedRunnableTests": 0,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -98,8 +103,13 @@
       ],
       "harnessScripts": [],
       "expectedTests": 1,
-      "blockedTests": {},
-      "expectedRunnableTests": 1,
+      "blockedTests": {
+        "backpressure should be applied to sent messages": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Assumes an 8 MiB message exceeds host buffers and asserts at least 1800 ms elapsed. The gate cannot depend on machine speed or socket buffer sizes; deterministic provider-gated writes cover send backpressure separately."
+        }
+      },
+      "expectedRunnableTests": 0,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -129,8 +139,13 @@
       ],
       "harnessScripts": [],
       "expectedTests": 27,
-      "blockedTests": {},
-      "expectedRunnableTests": 27,
+      "blockedTests": {
+        "writer close() promise should not resolve until handshake completes": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Asserts at least 900 ms elapsed. A deterministic withheld peer close covers the same ordering without a clock assertion."
+        }
+      },
+      "expectedRunnableTests": 26,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -161,8 +176,13 @@
       ],
       "harnessScripts": [],
       "expectedTests": 27,
-      "blockedTests": {},
-      "expectedRunnableTests": 27,
+      "blockedTests": {
+        "writer close() promise should not resolve until handshake completes": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Asserts at least 900 ms elapsed. A deterministic withheld peer close covers the same ordering without a clock assertion."
+        }
+      },
+      "expectedRunnableTests": 26,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -290,8 +310,13 @@
       ],
       "harnessScripts": [],
       "expectedTests": 7,
-      "blockedTests": {},
-      "expectedRunnableTests": 7,
+      "blockedTests": {
+        "close with unwritten data should not be considered clean": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Assumes a 20 MiB write is still pending when remote close arrives. This also exceeds the provider default 16 MiB message limit. A tiny write held by an explicit provider gate covers pending-write closure separately."
+        }
+      },
+      "expectedRunnableTests": 6,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -322,8 +347,13 @@
       ],
       "harnessScripts": [],
       "expectedTests": 7,
-      "blockedTests": {},
-      "expectedRunnableTests": 7,
+      "blockedTests": {
+        "close with unwritten data should not be considered clean": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Assumes a 20 MiB write is still pending when remote close arrives. This also exceeds the provider default 16 MiB message limit. A tiny write held by an explicit provider gate covers pending-write closure separately."
+        }
+      },
+      "expectedRunnableTests": 6,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -379,8 +409,17 @@
       ],
       "harnessScripts": [],
       "expectedTests": 6,
-      "blockedTests": {},
-      "expectedRunnableTests": 6,
+      "blockedTests": {
+        "a write that was incomplete at close time should reject": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Assumes an 8 MiB message cannot finish before a peer close. A tiny write held by an explicit provider gate covers rejection and error identity independently of host buffers."
+        },
+        "garbage collection after close with a pending write promise should not crash": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Uses the same 8 MiB pending-write race helper. The independent GC-only registration remains enabled; deterministic gated-write controls cover closure of a pending write."
+        }
+      },
+      "expectedRunnableTests": 4,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
@@ -412,8 +451,17 @@
       ],
       "harnessScripts": [],
       "expectedTests": 6,
-      "blockedTests": {},
-      "expectedRunnableTests": 6,
+      "blockedTests": {
+        "a write that was incomplete at close time should reject": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Assumes an 8 MiB message cannot finish before a peer close. A tiny write held by an explicit provider gate covers rejection and error identity independently of host buffers."
+        },
+        "garbage collection after close with a pending write promise should not crash": {
+          "category": "host-timing-or-buffer-assumption",
+          "reason": "Uses the same 8 MiB pending-write race helper. The independent GC-only registration remains enabled; deterministic gated-write controls cover closure of a pending write."
+        }
+      },
+      "expectedRunnableTests": 4,
       "timeoutCategory": "network",
       "declaredGlobals": "window,worker",
       "declaredVariants": [
