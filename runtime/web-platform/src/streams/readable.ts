@@ -605,9 +605,7 @@ export class ReadableStream<T> {
     }
     const byteState = this.#byteState;
     if (byteState !== null) {
-      const cancellation = byteState.cancel(reason);
-      this.#finish(true);
-      await cancellation;
+      await byteState.cancel(reason);
       return;
     }
 
@@ -1889,6 +1887,10 @@ class ReadableByteStreamState {
   async cancel(reason: unknown): Promise<void> {
     const source = this.#source;
     const cancel = this.#cancelAlgorithm;
+    // ReadableStreamCancel closes before running the controller's cancel steps.
+    // Capture the callback first because finishing the stream clears algorithms.
+    // https://streams.spec.whatwg.org/#readable-stream-cancel
+    this.stream[kStreamFinishByteStream](true);
     this.#queue.reset();
     this.#queueTotalSize = 0;
     this.#invalidateBYOBRequest();
