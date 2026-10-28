@@ -130,6 +130,8 @@ import { fileURLToPath } from "node:url";
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
 import { compileSync, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
+import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
+import { normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -412,15 +414,6 @@ function decideCheck(said, status) {
   return { category: "not-measured", nts: text || `nts check exited ${status} and said nothing that decides` };
 }
 
-/**
- * The construct, not its scratch directory or moved source location: a
- * lowering's `refused:` line, and a backend's `not emitted:` one, which names
- * the same scratch path (a JVM decline, `a-boolean-radix-to-parse-int`).
- */
-function stableCheckText(text) {
-  return text.replace(/\b(refused|not emitted):\s*\S+:\d+:\d+:\s+/g, "$1: ");
-}
-
 function memoryOptions(name) {
   const source = readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8");
   return {
@@ -627,28 +620,30 @@ function judge(was, now) {
   const ranTo = (r) => (r.category === "refused" && r.run === "build" ? r.ran : undefined);
   // Old records retain their original spelling and provenance. Apply the same
   // normalization to them that new check measurements use.
-  const textOf = (r) => r.run === "check" ? stableCheckText(r.nts) : r.nts;
+  const textOf = (r) => {
+    const text = r.run === "check" ? stableCheckText(r.nts) : r.nts;
+    return r.category === "invalid-hir" || r.category === "refused" ? normalizeGeneratedNumbers(text) : text;
+  };
   const same = was.category === now.category && textOf(was) === textOf(now) && ranTo(was) === ranTo(now);
+  const transition = outcomeTransition(outcomeDisposition(was.category), outcomeDisposition(now.category), same);
   const past = ranTo(now) !== undefined && ranTo(now) !== now.node && /^exit /.test(ranTo(now))
     ? ` -- and the program still ran, answering ${ranTo(now)} where node answers ${now.node}`
     : "";
-  if (same) return { word: was.category === "agrees" ? "holds" : "reproduces", ok: true, why: `${now.category} -- ${now.nts}${past}` };
-  if (was.category === "agrees") return { word: "REGRESSED", ok: false, why: `agreed with node; now ${now.category} -- ${now.nts}` };
-  if (now.category === "agrees") {
-    return { word: "FIXED", ok: true, loud: true, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to tests/programs/ or re-record it as a guard` };
+  if (same) return { ...transition, why: `${now.category} -- ${now.nts}${past}` };
+  if (transition.word === "REGRESSED") return { ...transition, why: `agreed with node; now ${now.category} -- ${now.nts}` };
+  if (transition.word === "FIXED") {
+    return { ...transition, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to tests/programs/ or re-record it as a guard` };
   }
-  if (now.category === "refused" && was.category !== "refused") {
+  if (transition.word === "REFUSES NOW") {
     return {
-      word: "REFUSES NOW",
-      ok: true,
-      loud: true,
+      ...transition,
       why: `was ${was.category}; hand it to tests/refusals/ with\n                // expect: ${now.nts}`,
     };
   }
   if (was.category === now.category && textOf(was) === textOf(now)) {
-    return { word: "CHANGED", ok: false, why: `refused as before; its artefact ran to ${ranTo(was) ?? "(not recorded)"}, now ${ranTo(now)}` };
+    return { ...transition, why: `refused as before; its artefact ran to ${ranTo(was) ?? "(not recorded)"}, now ${ranTo(now)}` };
   }
-  return { word: "CHANGED", ok: false, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };
+  return { ...transition, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };
 }
 
 // **A recorded fixture is an input to `integrity`**, which reads every outcomes

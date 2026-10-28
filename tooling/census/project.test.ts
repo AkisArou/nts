@@ -125,7 +125,7 @@ test("a hit refreshes old use records without rewriting the published tree", (t)
 test("body, harness, include and fixture diagnostics keep their classification", (t) => {
   const base = scratch(t);
   const { root } = caseRoot((dir) => fill(dir), { base });
-  const cases = [["src/harness.ts", 4, "harness"], ["src/include-extra.js", 2, "harness"], ["src/main.js", 3, "body"], ["src/a_FIXTURE.js", 2, "other"]];
+  const cases = [["src/harness.ts", 4, "harness"], ["src/include-extra.js", 2, "harness"], ["src/main.js", 3, "body"], ["src/main.ts", 3, "body"], ["src/a_FIXTURE.js", 2, "other"]];
   for (const [file, line, where] of cases) {
     const rows = parseDiagnostics(`${join(root, file)}:${line}:1: TS2322 A diagnostic`);
     assert.equal(rows.length, 1);

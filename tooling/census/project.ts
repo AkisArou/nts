@@ -300,7 +300,7 @@ export function fixturesOf(origin, body) {
  * ranked as the test's it would top every table.
  */
 export function placeOf(file, line) {
-  if (file.endsWith(TEST_FILE)) return { where: "body", line: line - TEST_PRELUDE.split("\n").length + 1 };
+  if (file.endsWith(TEST_FILE) || file.endsWith(testFileOf("ts"))) return { where: "body", line: line - TEST_PRELUDE.split("\n").length + 1 };
   if (file.endsWith(HARNESS_FILE) || file.includes(INCLUDE_PREFIX)) return { where: "harness" };
   return { where: "other" };
 }

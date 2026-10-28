@@ -28,10 +28,13 @@
 //
 // `--suite typescript` runs the TypeScript conformance cases instead
 // (`tests/typescript/<family>/<case>.ts`, selected by `suites/typescript.ts`):
-// strict TypeScript with test262's front matter and harness, recorded,
-// ratcheted and ranked exactly as a test262 row is. Only the selection, the
-// language the case is written in and the exclusions differ, and a TypeScript
-// case has no negatives.
+// strict TypeScript with test262's front matter and harness. Its versioned
+// record pins every case: pass, wrong, refused by diagnostic code and location,
+// invalid HIR with generated numbers normalized, or runtime abort. Raw prose
+// remains in the run's rows and rankings. The outcomes corpus's shared
+// progress policy holds transitions; a timeout or tool failure cannot be a
+// recorded result. Before --recorded selects a population, the record must
+// match the complete source inventory. Rankings remain a display projection.
 //
 // # Why this exists beside `run262.ts`
 //
@@ -118,6 +121,8 @@ import { fileURLToPath } from "node:url";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
+import { assertRecordedInventory, compareTypeScriptObservation, observationFromRow,
+  parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION } from "./typescript-record.ts";
 import { selectTypescript } from "./suites/typescript.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
@@ -313,6 +318,21 @@ if (TYPESCRIPT) {
 }
 if (records.length === 0) cannotMeasure(`${under} selected no test`);
 
+// A recorded-only population must not hide a newly added or deleted case.
+// TypeScript records contain every outcome, so their inventory is the source's.
+if (TYPESCRIPT && checkFile) {
+  try {
+    const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
+    if (expected.metadata.under !== under) throw new Error(`record selection ${expected.metadata.under} differs from ${under}`);
+    assertRecordedInventory(expected, records.map(record => record.path));
+  } catch (error) { cannotMeasure(`${checkFile}: ${error.message}`); }
+}
+
+if (TYPESCRIPT) for (const file of pathsFrom) {
+  try { parseTypeScriptRecord(readFileSync(file, "utf8")); }
+  catch (error) { cannotMeasure(`${file}: ${error.message}`); }
+}
+
 const chosen = populationOf(records, {
   sample,
   backend: BACKEND,
@@ -441,14 +461,17 @@ async function runAll(all) {
   // The harness is part of what a row measured: a stand-in that gains an
   // overload changes which cases typecheck, so rows from two harnesses are two
   // runs even under one compiler.
-  const header = { fingerprint: FINGERPRINT, under, harness: HARNESS_HASH };
+  const header = { fingerprint: FINGERPRINT, under, harness: HARNESS_HASH,
+    ...(TYPESCRIPT ? { observations: TYPESCRIPT_OBSERVATIONS_VERSION } : {}) };
   if (rowsFile && resume && existsSync(rowsFile)) {
     const [first, ...rest] = readFileSync(rowsFile, "utf8").split("\n");
     let was = null;
     try { was = JSON.parse(first); } catch {}
-    if (was?.fingerprint !== FINGERPRINT || was?.under !== under || was?.harness !== HARNESS_HASH) {
+    if (was?.fingerprint !== FINGERPRINT || was?.under !== under || was?.harness !== HARNESS_HASH ||
+      TYPESCRIPT && was?.observations !== header.observations) {
       cannotMeasure(`${rowsFile} was written by ${was?.fingerprint ?? "no named compiler"} over ${was?.under} ` +
-        `with harness ${was?.harness ?? "unnamed"}; this run is ${FINGERPRINT} over ${under} with harness ${HARNESS_HASH}`);
+        `with harness ${was?.harness ?? "unnamed"}; this run is ${FINGERPRINT} over ${under} with harness ${HARNESS_HASH}; ` +
+        "TypeScript rows must also retain versioned raw observations");
     }
     const wanted = new Set(paths);
     for (const line of rest) {
@@ -839,17 +862,44 @@ function recordCommit() {
  * one is C's: every record was, until the runner took `--backend`.
  */
 function recordedBackendOf(file) {
+  if (TYPESCRIPT) {
+    try { return parseTypeScriptRecord(readFileSync(file, "utf8")).metadata.backend; }
+    catch (error) { cannotMeasure(`${file}: ${error.message}`); }
+  }
   const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
   return /, backend ([a-z]+)/.exec(header ?? "")?.[1] ?? "c";
 }
 
 /** The record's commit, from its header, or null for one written before records named it. */
 function recordedCommitOf(file) {
+  if (TYPESCRIPT) return parseTypeScriptRecord(readFileSync(file, "utf8")).metadata.commit;
   const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
   return /, commit ([0-9a-f]{40})/.exec(header ?? "")?.[1] ?? null;
 }
 
-if (recordFile) {
+let typeScriptObserved = null;
+if (TYPESCRIPT) {
+  typeScriptObserved = new Map();
+  for (const one of cases) {
+    try {
+      if (one.gap !== null) throw new Error(`harness cannot judge: ${one.gap}`);
+      typeScriptObserved.set(one.record.path, observationFromRow(rows.get(one.record.path)));
+    } catch (error) { cannotMeasure(`${one.record.path}: ${error.message}`); }
+  }
+}
+
+if (recordFile && TYPESCRIPT) {
+  const record = {
+    metadata: { version: 2, backend: BACKEND, commit: provenanceOf(NTS)?.sha,
+      compiler: FINGERPRINT, harness: HARNESS_HASH, under },
+    cases: typeScriptObserved,
+  };
+  try {
+    assertRecordedInventory(record, records.map(one => one.path));
+    const contents = serializeTypeScriptRecord(record);
+    writeFileSync(recordFile, contents);
+  } catch (error) { cannotMeasure(`${recordFile}: not recorded: ${error.message}`); }
+} else if (recordFile) {
   writeFileSync(
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
@@ -859,7 +909,17 @@ if (recordFile) {
   );
 }
 let comparison = null;
-if (checkFile) {
+if (checkFile && TYPESCRIPT) {
+  const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
+  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], MISSING: [], "NEW FAIL": [] };
+  for (const [path, now] of typeScriptObserved) {
+    const was = expected.cases.get(path);
+    if (was === undefined) { comparison.MISSING.push(`${path}: no recorded outcome`); continue; }
+    const verdict = compareTypeScriptObservation(was, now);
+    if (verdict.word === "holds" || verdict.word === "reproduces") continue;
+    comparison[verdict.word].push(`${path}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
+  }
+} else if (checkFile) {
   const before = new Map(
     readFileSync(checkFile, "utf8")
       .split("\n")
@@ -1059,6 +1119,7 @@ console.log(out.join("\n"));
 
 if (jsonFile) {
   writeFileSync(jsonFile, JSON.stringify({
+    ...(TYPESCRIPT ? { record_version: 2, observations: Object.fromEntries(typeScriptObserved) } : {}),
     pin, compiler: NTS, fingerprint: FINGERPRINT, under, machine: { start: machineAtStart, end: machineAtEnd, jobs }, selected: records.length, population: population.length,
     attempted: toAttempt.length, checks, tally, inScope: inScope.length, inScopePass, excluded: excludedCases.length,
     rankSole, rankFirst, rankAny, rankNamed, exclusions: exclusionReport, comparison, problems,

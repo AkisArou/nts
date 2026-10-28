@@ -72,8 +72,8 @@ export function linkCommand(emitted) {
  * ask the question that clears work -- "in how many cases is this the **only**
  * cause?" -- rather than "in how many is it the first?".
  *
- * Each entry: `code`, a redacted `message` that ranks (identifiers `X`, type
- * ids `N`), the `named` identifiers it redacted, and `where`:
+ * Each entry: `code`, the unredacted `raw` observation, a redacted `message`
+ * that ranks (identifiers `X`, type ids `N`), its `named` identifiers, and `where`:
  *
  *   body     a line of the test itself
  *   harness  a line of the prepended stand-in -- a fact about us, not the test.
@@ -84,7 +84,7 @@ export function linkCommand(emitted) {
  *            test's own; nothing of ours on that line (a lone `}`) can refuse.
  *   none     TypeScript prints no location, so a checker error says nothing
  *
- * Duplicates (same code, message and place) are one entry: a generic copy of
+ * Duplicates (same code, raw message and place) are one entry: a generic copy of
  * one function reports the same line once per instantiation.
  */
 const unapostrophe = (text) => text.replace(/(\w)'(t|s|re|ve|ll|d)\b/g, "$1\u2019$2");
@@ -114,6 +114,7 @@ export function parseDiagnostics(text) {
       const text = message.replace(/ is not supported by this lowering yet$/, "");
       entry = {
         code,
+        raw: text.trim(),
         message: text.replace(/`[^`]*`/g, "`X`").replace(/\btype \d+/g, "type N").trim(),
         named: [...new Set(text.match(/`[^`]*`/g) ?? [])].map((quoted) => quoted.slice(1, -1)),
         ...place,
@@ -121,6 +122,7 @@ export function parseDiagnostics(text) {
     } else {
       entry = {
         code,
+        raw: message.trim(),
         // `can't` is an apostrophe, not a quote: left in, it pairs with the
         // next quote and the redaction eats the text between them.
         message: redactQuoted(message),
@@ -128,7 +130,7 @@ export function parseDiagnostics(text) {
         ...place,
       };
     }
-    const key = `${entry.code} ${entry.message} ${entry.where} ${entry.named.join(",")}`;
+    const key = JSON.stringify([entry.code, entry.raw, entry.where]);
     if (seen.has(key)) continue;
     seen.add(key);
     found.push(entry);
@@ -483,6 +485,7 @@ export function attempt(dir, body, tools, origin?) {
     if (invalid) {
       return {
         bucket: "invalid-hir",
+        validatorError: invalid[1].trim(),
         first: invalid[1].replace(/"[^"]*"/g, '"X"').replace(/\b(\w*Id)\(\d+\)/g, "$1(N)").trim().slice(0, 200),
       };
     }
@@ -521,7 +524,11 @@ export function attempt(dir, body, tools, origin?) {
       maxBuffer: 16 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return flagsOf(body).includes("async") ? asyncVerdict(printed, objects) : { bucket: "strict-pass", objects };
+    if (!flagsOf(body).includes("async")) return { bucket: "strict-pass", objects };
+    const verdict = asyncVerdict(printed, objects);
+    return verdict.bucket === "threw"
+      ? { ...verdict, runtimeFailure: { exit: 0, signal: null, output: printed.trimEnd() } }
+      : verdict;
   } catch (error) {
     if (error.signal === "SIGTERM") return { bucket: "timeout" };
     const thrown = UNCAUGHT.exec(String(error.stderr ?? ""));
@@ -533,7 +540,8 @@ export function attempt(dir, body, tools, origin?) {
       // The stand-in's own "I cannot judge this" (harness-throws.ts): a limit
       // of ours, recorded as the harness refusing, never as the test failing.
       if (thrown[1] === "StandInCannotJudge") return { bucket: "unsupported", why: "harness", first: said?.trim().slice(0, 200) };
-      return { bucket: "threw", thrown: thrown[1], message: said?.trim().slice(0, 240) };
+      return { bucket: "threw", thrown: thrown[1], message: said?.trim().slice(0, 240),
+        runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() } };
     }
     // The program's last word, kept: a runtime refusal prints
     // `nts: refused: index 1 is outside [0, 1)` and aborts, and a row that says
@@ -543,11 +551,13 @@ export function attempt(dir, body, tools, origin?) {
     // defect of the program's translation, named by its class, never a
     // TypeScript throw (both exit 1; stderr tells them apart).
     const host = /^Exception in thread "[^"]*" ([\w.$]+)/m.exec(String(error.stderr ?? ""));
-    if (host) return { bucket: "crash", why: "host exception", first: host[1] };
+    if (host) return { bucket: "crash", why: "host exception", first: host[1],
+      runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() } };
     const said = String(error.stderr ?? "").split("\n").find((text) => text.startsWith("nts: "));
     return {
       bucket: "crash",
       why: error.signal ?? `exit ${error.status}`,
+      runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() },
       first: said?.trim().replace(/\d+/g, "N").slice(0, 200),
     };
   }
