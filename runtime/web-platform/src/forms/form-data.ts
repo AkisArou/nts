@@ -210,22 +210,7 @@ export class FormData implements Iterable<FormDataEntry> {
     return new FormDataIterator(this.#list, selectEntry);
   }
 
+  get [Symbol.toStringTag](): string {
+    return "FormData";
+  }
 }
-// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-// written inline rather than through a helper.
-// Web IDL member attributes. This prototype carries no non-standard names, so the pass
-// reaches only the interface's own members.
-for (const key of Object.getOwnPropertyNames(FormData.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(FormData.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(FormData.prototype, key, descriptor);
-}
-Object.defineProperty(FormData.prototype, Symbol.toStringTag, {
-  value: "FormData",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-
