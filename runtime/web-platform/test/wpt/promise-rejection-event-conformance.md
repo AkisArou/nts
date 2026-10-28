@@ -1,7 +1,7 @@
 # PromiseRejectionEvent source API and conformance
 
-Stacked on [PR #27](https://github.com/AkisArou/nts/pull/27),
-`chatgpt/wpt-files-forms` at `5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f`.
+Stacked on [DOMException PR #36](https://github.com/AkisArou/nts/pull/36),
+`chatgpt/wpt-domexception` at `f2d8b957c4d0be08b9c413a6824b6fbe4701b87a`.
 This PR implements handoff item B6 on `chatgpt/promise-rejection-event`.
 
 ## Behavior and specification
@@ -71,11 +71,13 @@ sh tooling/conformance/web-platform/check.sh
 ```
 
 Both strict type projects pass. The focused command reports **25 passed,
-0 failed, 1 skipped** including the two WPT containers. The complete gate
-exits zero: **4,004 tests; 3,754 passed, 0 failed, 250 skipped**. Its broader
+0 failed, 1 skipped** including the two WPT containers. The complete gate rerun on the final A5 stack
+exits zero: **4,135 tests; 3,824 passed, 0 failed, 311 skipped**. Its broader
 upstream runner records **2,772 passed, 0 failed, 45 not applicable**.
 [Machine-readable evidence](promise-rejection-event-results.json) preserves
-identities, per-file counts and log hashes.
+identities, per-file counts and log hashes. The #27 baseline and original
+sabotage are retained as historical measurements; the new full-gate result is
+measured on the A5 stack, not transferred from #27.
 
 ## Deliberate boundaries
 
