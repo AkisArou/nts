@@ -8313,6 +8313,18 @@ mod agrees_with_hir {
     use super::core_external;
     use nts_core::hir::{self, HirType};
 
+    #[test]
+    fn every_mapped_runtime_helper_has_a_shared_raising_contract() {
+        for name in mapped_names() {
+            if core_external(name).is_some() {
+                assert!(
+                    hir::runtime::raising(name).is_some(),
+                    "{name} has no shared raising contract",
+                );
+            }
+        }
+    }
+
     /// Every `"nts_…"` literal in this file, which is every name the static
     /// tables can match. Prefix-stripped and `format!`-assembled names are
     /// invisible here and are not claimed.

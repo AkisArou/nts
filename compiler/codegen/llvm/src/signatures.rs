@@ -2902,6 +2902,27 @@ fn find(table: &'static [Signature], name: &str) -> Option<&'static Signature> {
 mod tests {
     use super::SIGNATURES;
 
+    #[test]
+    fn every_native_helper_signature_has_a_shared_raising_contract() {
+        for table in [
+            SIGNATURES,
+            super::super::signatures_win64::SIGNATURES_WIN64,
+            super::super::signatures_arm64::SIGNATURES_ARM64,
+            super::super::signatures_arm64_linux::SIGNATURES_ARM64_LINUX,
+            super::super::signatures_arm64_windows::SIGNATURES_ARM64_WINDOWS,
+        ] {
+            for signature in table {
+                if signature.name.starts_with("nts_") {
+                    assert!(
+                        nts_core::hir::runtime::raising(signature.name).is_some(),
+                        "{} has no shared raising contract",
+                        signature.name,
+                    );
+                }
+            }
+        }
+    }
+
     /// The table is searched with `binary_search_by`, so its order is not a
     /// matter of taste.
     ///

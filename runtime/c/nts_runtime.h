@@ -100,6 +100,13 @@
  *      the worked example, and the `returns_nonnull` note on
  *      `NTS_ALLOCATES_OR_NULL` above is the same hazard one attribute over.
  *
+ *   Raising effects are a separate contract in the shared
+ *   `compiler/core/src/hir/runtime.rs` helper catalog: every helper declares
+ *   `NoRaise`, `MayRaise`, or `Diverges`. Core checks coverage and the C call
+ *   graph: a no-raise helper cannot reach the `nts_raise` producer. Host
+ *   refusals and assertions diverge; they are not catchable language throws.
+ *   Scalar ABI normalization and raising are independent columns.
+ *
  *   4. `compiler/codegen/jvm/src/ops.rs`, `external` -- a mapping, **or** a
  *      raised `REFUSED_FLOOR` in
  *      `compiler/codegen/jvm/tests/runtime_agrees_with_hir.rs` when the JVM
@@ -163,7 +170,10 @@
  * guarded `g_object_ref_sink`/`g_object_unref`), and pointed at by every slot
  * that holds one of its objects -- a field, or an array's elements. Nothing is
  * registered: a program with no generated `main` (a library, a test's own
- * caller) carries its families in its descriptors like everything else. */
+ * caller) carries its families in its descriptors like everything else.
+ * Counting hooks do not raise language values or run language methods. Foreign
+ * finalizers may release lent callbacks; their bridges cannot propagate a
+ * language exception through this C counting ABI. */
 typedef struct NtsFamilyOps {
   void *(*retain)(void *object);
   void (*release)(void *object);
@@ -322,7 +332,8 @@ typedef struct NtsDescriptor {
    * This never frees the receiver or recurses through destruction: child
    * releases join the runtime's iterative dying list. The cycle collector
    * must not call it, because trial deletion already accounted for its edges.
-   * Appended after the legacy fields for handwritten source compatibility. */
+   * Appended after the legacy fields for handwritten source compatibility.
+   * Release and trace hooks do not raise or invoke language methods. */
   void (*release_fields)(struct NtsHeader *object);
   /* Enumerate the same owned managed fields during cycle collection, without
    * clearing slots or releasing children. The runtime supplies the action for
@@ -452,7 +463,9 @@ static inline void *nts_family_row(const NtsDescriptor *descriptor,
  * - `sever`: a node found garbage. The object lets go of the closures it holds
  *   (a disconnect), and the release each lend's notify then makes reaches an
  *   object the collector has already marked dying, which ignores it. The
- *   family frees the node here or later; the collector reads it no more. */
+ *   family frees the node here or later; the collector reads it no more.
+ * These collection hooks, including their visitor callbacks, do not raise
+ * language values or invoke language methods. */
 typedef struct NtsHolders {
   NtsHeader *(*node)(void *object);
   void (*each_held)(NtsHeader *node, void (*visit)(NtsHeader *));
@@ -3944,7 +3957,9 @@ typedef enum NtsHostPumpResult {
   NTS_HOST_PUMP_BUSY
 } NtsHostPumpResult;
 
-/* Scheduling and optional synchronous progress for an embedding host. */
+/* Scheduling and optional synchronous progress for an embedding host.
+ * Scheduling, cancellation, accounting and thread queries do not run language
+ * callbacks inline or raise language values. Only pump_one may run them. */
 typedef struct NtsHost {
   /* Run after the current task *and* after a complete checkpoint. That
    * ordering is what `setImmediate` is built on, so it is specified here
