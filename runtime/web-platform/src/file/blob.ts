@@ -616,12 +616,19 @@ export class Blob {
     return bytes;
   }
 
-  bytes(): Promise<Uint8Array<ArrayBuffer>> {
+  #readBytes(): Promise<Uint8Array<ArrayBuffer>> {
     return this.#hasExternal ? this.#copyBytes() : Promise.resolve(this.#copyMemoryBytes());
   }
 
+  bytes(): Promise<Uint8Array<ArrayBuffer>> {
+    return this.#readBytes();
+  }
+
   arrayBuffer(): Promise<ArrayBuffer> {
-    return this.bytes().then((bytes) => bytes.buffer);
+    // File API reads the Blob's own bytes, without invoking another public
+    // operation that script can replace.
+    // https://w3c.github.io/FileAPI/#dom-blob-arraybuffer
+    return this.#readBytes().then((bytes) => bytes.buffer);
   }
 
   text(): Promise<string> {

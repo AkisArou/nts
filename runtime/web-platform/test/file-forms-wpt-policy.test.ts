@@ -158,3 +158,23 @@ for (const factory of [
     assert.equal(await blob.text(), "abc");
   });
 }
+
+// https://w3c.github.io/FileAPI/#dom-blob-arraybuffer
+for (const factory of [
+  { name: "Blob", create: (): Blob => new Blob([new Uint8Array([1, 2, 3])]) },
+  { name: "File", create: (): Blob => new File([new Uint8Array([1, 2, 3])], "file") },
+]) {
+  test(`${factory.name}.arrayBuffer reads private storage despite an overridden bytes method`, async (t) => {
+    useRuntime(t);
+    const blob = factory.create();
+    let calls = 0;
+    blob.bytes = (): never => { calls++; throw new Error("public bytes must not be called"); };
+    const first = await blob.arrayBuffer();
+    assert.deepEqual(new Uint8Array(first), new Uint8Array([1, 2, 3]));
+    new Uint8Array(first).fill(9);
+    const second = await blob.arrayBuffer();
+    assert.notEqual(first, second);
+    assert.deepEqual(new Uint8Array(second), new Uint8Array([1, 2, 3]));
+    assert.equal(calls, 0);
+  });
+}
