@@ -215,5 +215,188 @@
     "nts compiled axis",
     "full project gate",
     "performance benchmarks"
-  ]
+  ],
+  "chronology": "The original source baseline, selected WPT comparison, 64 controls and sabotage above use the adapter at testCommit a01743e0, before the two integrity fixes below. No initial measurement is transferred to their later adapter pins. Root stack integration and its full gate are separate.",
+  "adapterFollowups": {
+    "registrationIntegrity": {
+      "beforeSourceCommit": "84e7baadf770e9a5c3fd2a663a385c074525d342",
+      "beforeOverlay": "The two new swallowed-provider-exception controls were added, with the old harness retained.",
+      "beforePolicy": {
+        "tests": 30,
+        "pass": 28,
+        "fail": 2,
+        "skipped": 0
+      },
+      "afterSourceCommit": "38cfd1890988c8756d044c0c2abca47f3ad8343b",
+      "afterFocusedControls": {
+        "tests": 66,
+        "pass": 66,
+        "fail": 0,
+        "skipped": 0
+      },
+      "policyTestsAfter": 30,
+      "fix": "Persist registration validation failures before rethrow; legitimate allowed uncaught-global reports remain separate.",
+      "logSHA256": {
+        "before": "73d705e643cf9e133e1d2e6325139a4e1c775e1b22804c9755c0f193d6186e47",
+        "after": "0175343970ad0d2d8e3a6bcd0395c8c36a93a3fc5f18c5c73c5ad34cd337b486"
+      }
+    },
+    "providerTeardown": {
+      "beforeSourceCommit": "38cfd1890988c8756d044c0c2abca47f3ad8343b",
+      "beforeOverlay": "Three subprocess controls added against the unchanged fixture runner.",
+      "beforeControls": {
+        "tests": 3,
+        "pass": 2,
+        "fail": 1,
+        "skipped": 0
+      },
+      "afterSourceCommit": "731de6abe81b3f694eec017544b23876a263144b",
+      "afterTeardownControls": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "skipped": 0
+      },
+      "finalFocusedControls": {
+        "tests": 69,
+        "pass": 69,
+        "fail": 0,
+        "skipped": 0
+      },
+      "finalControlGroups": {
+        "policy": 30,
+        "subprocessTeardown": 3,
+        "existingAdapter": 36
+      },
+      "wptTypecheck": {
+        "exitCode": 0,
+        "diagnostics": 0
+      },
+      "fix": "Await environment.close() in the fixture after hook, then assertNoErrors() before Node completes the file; only recorded harness/cleanup errors are inspected.",
+      "logSHA256": {
+        "before": "29369516b2e170eeb34b33939d804ed67bea5ba1fc24afbdafefc78061038125",
+        "finalFocused": "0b3e9bb73efe233b9f7f40c8fd9c83ce51184aaf648867331afc7ee4dd8dfad0"
+      },
+      "adapterSHA256": {
+        "runtime/web-platform/test/wpt/harness.ts": "6679af7b6728ed70e5f35ff13e2485db3aecd212352e27b746cfad2e3c93ddca",
+        "runtime/web-platform/test/wpt/runner.ts": "a0c6008ecf0dc447bfd5a8ad370d45da3120c98dd689aeeb064b0101627aace0",
+        "runtime/web-platform/test/urlpattern-policy.test.ts": "f5ad9d44c3a748922450289f391dddc6d884261915fa725bf7cc2f1b773e5c75",
+        "runtime/web-platform/test/urlpattern-adapter-policy.test.ts": "91543f3612637684cacabcdfd687384082f9ccbfbbbb5288d0554458936c8f6b"
+      }
+    }
+  },
+  "nodeDivergences": {
+    "date": "2026-10-28",
+    "node": "v24.20.0",
+    "operation": "new URLPattern().exec(input); report null or result[component].input",
+    "sourceCapability": "Explicit test-only HostURLPatternURLCapability; these are not native nts results.",
+    "separateFromSelectedWPT": true,
+    "cases": [
+      {
+        "input": {
+          "protocol": "https",
+          "port": "\t"
+        },
+        "component": "port",
+        "sourceResult": null,
+        "nodeResult": "",
+        "sourceMatched": false,
+        "nodeMatched": true,
+        "specificationAlgorithms": [
+          "https://urlpattern.spec.whatwg.org/#canonicalize-a-port",
+          "https://url.spec.whatwg.org/#concept-basic-url-parser",
+          "https://url.spec.whatwg.org/#port-state"
+        ]
+      },
+      {
+        "input": {
+          "protocol": "https",
+          "pathname": "\\path"
+        },
+        "component": "pathname",
+        "sourceResult": "/path",
+        "nodeResult": "\\path",
+        "sourceMatched": true,
+        "nodeMatched": true,
+        "specificationAlgorithms": [
+          "https://urlpattern.spec.whatwg.org/#process-pathname-for-init",
+          "https://urlpattern.spec.whatwg.org/#canonicalize-a-pathname",
+          "https://urlpattern.spec.whatwg.org/#url-pattern-create-a-dummy-url",
+          "https://url.spec.whatwg.org/#path-state"
+        ]
+      },
+      {
+        "input": {
+          "protocol": "x",
+          "pathname": "/a/../b"
+        },
+        "component": "pathname",
+        "sourceResult": "/a/../b",
+        "nodeResult": "/b",
+        "sourceMatched": true,
+        "nodeMatched": true,
+        "specificationAlgorithms": [
+          "https://urlpattern.spec.whatwg.org/#process-pathname-for-init",
+          "https://urlpattern.spec.whatwg.org/#canonicalize-an-opaque-pathname",
+          "https://url.spec.whatwg.org/#concept-basic-url-parser",
+          "https://url.spec.whatwg.org/#cannot-be-a-base-url-path-state"
+        ]
+      },
+      {
+        "input": {
+          "protocol": "x",
+          "pathname": " a "
+        },
+        "component": "pathname",
+        "sourceResult": " a ",
+        "nodeResult": " a",
+        "sourceMatched": true,
+        "nodeMatched": true,
+        "specificationAlgorithms": [
+          "https://urlpattern.spec.whatwg.org/#process-pathname-for-init",
+          "https://urlpattern.spec.whatwg.org/#canonicalize-an-opaque-pathname",
+          "https://url.spec.whatwg.org/#concept-basic-url-parser",
+          "https://url.spec.whatwg.org/#cannot-be-a-base-url-path-state"
+        ]
+      },
+      {
+        "input": {
+          "protocol": "x",
+          "pathname": "a\u0000"
+        },
+        "component": "pathname",
+        "sourceResult": "a%00",
+        "nodeResult": "a",
+        "sourceMatched": true,
+        "nodeMatched": true,
+        "specificationAlgorithms": [
+          "https://urlpattern.spec.whatwg.org/#process-pathname-for-init",
+          "https://urlpattern.spec.whatwg.org/#canonicalize-an-opaque-pathname",
+          "https://url.spec.whatwg.org/#concept-basic-url-parser",
+          "https://url.spec.whatwg.org/#cannot-be-a-base-url-path-state"
+        ]
+      },
+      {
+        "input": {
+          "protocol": "x",
+          "pathname": "\u0000"
+        },
+        "component": "pathname",
+        "sourceResult": "%00",
+        "nodeResult": "",
+        "sourceMatched": true,
+        "nodeMatched": true,
+        "specificationAlgorithms": [
+          "https://urlpattern.spec.whatwg.org/#process-pathname-for-init",
+          "https://urlpattern.spec.whatwg.org/#canonicalize-an-opaque-pathname",
+          "https://url.spec.whatwg.org/#concept-basic-url-parser",
+          "https://url.spec.whatwg.org/#cannot-be-a-base-url-path-state"
+        ]
+      }
+    ],
+    "sourceCommit": "5139a3767770b0990002c5051b6bfc50d2795c72",
+    "expectationStatus": "Source expectations verified by following linked standard algorithms; native nts state-override binding remains not verified.",
+    "testCapabilityCommit": "a01743e0a7b7a9700242be4c51bf2706fdc6b890",
+    "testCapabilitySHA256": "742c73161434695b46eea6555837f0da80fa9602f9deeba25a4d0c339855e740"
+  }
 }
