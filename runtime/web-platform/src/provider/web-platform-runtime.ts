@@ -1,4 +1,17 @@
 import type { BodyPolicy } from "../fetch/body.ts";
+import { GlobalErrorRuntime } from "../core/global-errors.ts";
+import type { GlobalErrorHandlerValue, GlobalRejectionHandlerValue } from "../core/global-errors.ts";
+import { PromiseRejectionEvent } from "../core/promise-rejection-event.ts";
+import { Navigator, createNavigator } from "../navigator/navigator.ts";
+import {
+  Performance, PerformanceEntry, PerformanceMark, PerformanceMeasure, createPerformance,
+} from "../performance/performance.ts";
+import { URLPattern } from "../urlpattern/url-pattern.ts";
+import type { GlobalErrorCapabilities } from "./global-errors.ts";
+import type { NavigatorCapability } from "./navigator.ts";
+import type { PerformanceDetailCloner, PerformanceTimeOrigin } from "./performance.ts";
+import { installURLPatternURLCapability } from "./url-pattern.ts";
+import type { URLPatternURLCapability } from "./url-pattern.ts";
 import {
   CacheStorage,
   MemoryCacheStorageStore,
@@ -109,6 +122,65 @@ export interface WebPlatformOptions {
   blobURLPrefix?: string;
 }
 
+/** Complete provider configuration required to expose these source Web APIs. */
+export interface WebPlatformGlobalCapabilities {
+  readonly performance: {
+    /** The runtime clock must already be relative to this origin: offset zero. */
+    readonly timeOrigin: PerformanceTimeOrigin;
+    readonly detailCloner: PerformanceDetailCloner;
+  };
+  readonly navigator: NavigatorCapability;
+  readonly urlPattern: URLPatternURLCapability;
+  readonly errors: GlobalErrorCapabilities;
+}
+
+/** Engine entry points; these are not properties to install as Web globals. */
+export interface WebPlatformGlobalHooks {
+  reportException(exception: unknown, omitError?: boolean): void;
+  hostPromiseRejectionTracker(promise: object, operation: "reject" | "handle", mutedErrors?: boolean): void;
+  notifyRejectedPromises(): void;
+}
+
+/**
+ * Additional canonical source globals for a provider's explicit installation.
+ * These accessors back the actual global's attributes; they never read it.
+ */
+export class WebPlatformGlobalBindings {
+  readonly PromiseRejectionEvent: typeof PromiseRejectionEvent = PromiseRejectionEvent;
+  readonly Performance: typeof Performance = Performance;
+  readonly PerformanceEntry: typeof PerformanceEntry = PerformanceEntry;
+  readonly PerformanceMark: typeof PerformanceMark = PerformanceMark;
+  readonly PerformanceMeasure: typeof PerformanceMeasure = PerformanceMeasure;
+  readonly Navigator: typeof Navigator = Navigator;
+  readonly URLPattern: typeof URLPattern = URLPattern;
+  readonly performance: Performance;
+  readonly navigator: Navigator;
+  readonly reportError: GlobalErrorRuntime["reportError"];
+  readonly #errors: GlobalErrorRuntime;
+
+  /** @internal Constructed by WebPlatformRuntime.bootstrapGlobals. */
+  constructor(performance: Performance, navigator: Navigator, errors: GlobalErrorRuntime) {
+    this.performance = performance;
+    this.navigator = navigator;
+    this.#errors = errors;
+    // Keep Web IDL's ordinary receiver behavior when installed at the real
+    // global. Binding this function to the holder would give it a false global.
+    this.reportError = errors.reportError;
+  }
+
+  get onerror(): GlobalErrorHandlerValue { return this.#errors.onerror; }
+  set onerror(value: GlobalErrorHandlerValue) { this.#errors.onerror = value; }
+  get onunhandledrejection(): GlobalRejectionHandlerValue { return this.#errors.onunhandledrejection; }
+  set onunhandledrejection(value: GlobalRejectionHandlerValue) { this.#errors.onunhandledrejection = value; }
+  get onrejectionhandled(): GlobalRejectionHandlerValue { return this.#errors.onrejectionhandled; }
+  set onrejectionhandled(value: GlobalRejectionHandlerValue) { this.#errors.onrejectionhandled = value; }
+}
+
+export interface WebPlatformGlobalBootstrap {
+  readonly globals: WebPlatformGlobalBindings;
+  readonly hooks: WebPlatformGlobalHooks;
+}
+
 /**
  * Environment-owned Web networking state.
  *
@@ -141,6 +213,8 @@ export class WebPlatformRuntime
   private readonly webSockets: WebSocket[] = [];
   private readonly webSocketStreams: WebSocketStream[] = [];
   private closed = false;
+  private globalCapabilities: WebPlatformGlobalCapabilities | null = null;
+  private globalBootstrap: WebPlatformGlobalBootstrap | null = null;
 
   constructor(primitives: PlatformPrimitives, options: WebPlatformOptions = {}) {
     if (options.fetchTransport !== undefined && options.proxy !== undefined) {
@@ -238,6 +312,43 @@ export class WebPlatformRuntime
       this.requestContext,
       this.fetch,
     );
+  }
+
+  /**
+   * Prepare source bindings once; the provider owns actual global installation.
+   * It must associate this runtime with its environment before using canonical
+   * constructors, and supply real global/Promise/callback and URL capabilities.
+   * Existing runtime construction does not implicitly initialize Performance.
+   */
+  bootstrapGlobals(capabilities: WebPlatformGlobalCapabilities): WebPlatformGlobalBootstrap {
+    if (this.closed) throw new TypeError("Web-platform runtime is closed");
+    if (this.globalBootstrap !== null) {
+      if (this.globalCapabilities !== capabilities) {
+        throw new TypeError("Web-platform global capabilities are already configured");
+      }
+      return this.globalBootstrap;
+    }
+    if (capabilities == null || capabilities.performance == null ||
+        capabilities.performance.timeOrigin == null || capabilities.performance.detailCloner == null ||
+        capabilities.navigator == null || capabilities.urlPattern == null || capabilities.errors == null) {
+      throw new TypeError("Web-platform global bootstrap requires all explicit provider capabilities");
+    }
+    // Event.timeStamp reads the runtime clock directly. A nonzero Performance
+    // offset would expose two time domains at the same global; do not install it.
+    if (capabilities.performance.timeOrigin.monotonicMilliseconds !== 0) {
+      throw new TypeError("Global bootstrap requires a runtime clock relative to the environment origin (offset zero)");
+    }
+    const performance = createPerformance(this, capabilities.performance);
+    const navigator = createNavigator(capabilities.navigator);
+    const errors = new GlobalErrorRuntime(capabilities.errors);
+    installURLPatternURLCapability(this, capabilities.urlPattern);
+    const bootstrap: WebPlatformGlobalBootstrap = {
+      globals: new WebPlatformGlobalBindings(performance, navigator, errors),
+      hooks: errors,
+    };
+    this.globalCapabilities = capabilities;
+    this.globalBootstrap = bootstrap;
+    return bootstrap;
   }
 
   wallTimeMilliseconds(): number {

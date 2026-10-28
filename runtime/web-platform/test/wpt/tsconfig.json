@@ -43,6 +43,7 @@
     "../urlpattern-adapter-policy.test.ts",
     "../wpt-global-errors.test.ts",
     "../global-errors-policy.test.ts",
-    "../global-errors-harness-policy.test.ts"
+    "../global-errors-harness-policy.test.ts",
+    "../global-bootstrap-policy.test.ts"
   ]
 }
