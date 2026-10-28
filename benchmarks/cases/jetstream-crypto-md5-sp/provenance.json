@@ -1,0 +1,147 @@
+{
+  "benchmark": "crypto-md5-SP",
+  "case": "jetstream-crypto-md5-sp",
+  "identification": "This typed transcription is derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm.",
+  "source": {
+    "repository": "WebKit/JetStream",
+    "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "path": "SunSpider/crypto-md5.js",
+    "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/SunSpider/crypto-md5.js",
+    "bytes": 9991,
+    "sha256": "211d392be7f575397b5dfec55d7ee9fc32bbf3daa4c58e061656482fbe915e89",
+    "gitBlob": "2af845924d08f40961e0b345974f5081465ccf18"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "originalHeaderAndCreditsRetained": true,
+    "fullAuthorBsdNoticeIncluded": true,
+    "additionalRsaMd5NoticeIncluded": true,
+    "authorLegalUrl": "https://pajhome.org.uk/site/legal.html#bsdlicense",
+    "authorLegalEvidenceSha256": "2f5fb66a6a44fd8f1cb1dd30a103d71e331bfc2b8b11f88d82d88ee0b7fdc5cc",
+    "jetstreamGlueLicense": "BSD-2-Clause",
+    "companionText": "../LICENSE-jetstream"
+  },
+  "originalInput": {
+    "baseInputCharacters": 989,
+    "baseInputSha256": "1ce4958053f7d03ee730f31a2e2ef025220caeb2899b01a6dc3fa16a5b285cb5",
+    "completeInputCharacters": 15824,
+    "completeInputSha256": "a28881104be90d0fcbf320a95e8fc074f1af4d4aa9256dc6c8518ae309055dbf",
+    "rawInputLiteralSha256": "75f2420695d742954a00e4a06dde63424529b96d5bf8704760f303829beb8772"
+  },
+  "workload": {
+    "doublingsInsideEveryRun": 4,
+    "runsPerOriginalIteration": 22,
+    "originalExpectedDigest": "a831e91e0f70eddcb70dc61c6f82f6cd",
+    "rng": null,
+    "inputChanges": false
+  },
+  "lifecycle": "The stateless original Benchmark is constructed once outside work. Every inner run retains its complete original string construction, hash and validation; only the small digest and input length are observed afterward.",
+  "adapter": {
+    "seed": 1,
+    "meaning": "Complete original benchmark iterations",
+    "checksum": "Hash every digest character with multiplication by 31 and unsigned truncation; mix that hash once per complete original iteration using the same operation."
+  },
+  "sourceBodyAudit": {
+    "retainedOriginalFunctions": [
+      "hex_md5",
+      "b64_md5",
+      "str_md5",
+      "hex_hmac_md5",
+      "b64_hmac_md5",
+      "str_hmac_md5",
+      "md5_vm_test",
+      "core_md5",
+      "md5_cmn",
+      "md5_ff",
+      "md5_gg",
+      "md5_hh",
+      "md5_ii",
+      "core_hmac_md5",
+      "safe_add",
+      "bit_rol",
+      "str2binl",
+      "binl2str",
+      "binl2hex",
+      "binl2b64",
+      "run"
+    ],
+    "allOriginalFunctionBodiesEqualAfterErasureAndRemovingTwoObservationAssignments": true,
+    "completeOriginalBenchmarkAstEqual": true,
+    "rawInputLiteralIdentical": true,
+    "forbiddenExecutableFeatures": []
+  },
+  "validation": {
+    "algorithm": "md5",
+    "node": "v24.20.0",
+    "sourceModified": false,
+    "originalCompleteIterationValidationPassed": true,
+    "originalRunsPerIteration": 22,
+    "originalInputCharacters": 15824,
+    "expectedDigest": "a831e91e0f70eddcb70dc61c6f82f6cd",
+    "knownInputCases": 16,
+    "hmacCases": 4,
+    "comparedEncodings": [
+      "hex",
+      "unpadded-base64",
+      "8-bit-string"
+    ],
+    "outputComparisons": 60,
+    "exactUpstreamAndIndependentNativeOracleAgreement": true,
+    "checksums": {
+      "work0": 0,
+      "work1": 1301045875,
+      "work2": 2978762336
+    },
+    "traceSha256": "d48d60dfdb5f68210f1ec9665e6be8baa9ee8bb0da65d72e2d7c4a74aa4294b1",
+    "timingPerformed": false,
+    "strictTypeScriptPassed": true,
+    "strictCommand": "taskset -c 1,2 ./node_modules/.bin/tsc --project ../jetstream-validation/ports-air/crypto-md5-sp/tsconfig.json --pretty false",
+    "strictExitCode": 0
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 4.161589913,
+    "processes": [
+      {
+        "nsPerOp": 4161589.913,
+        "bits": "41d363189cc00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 7140332.9444,
+        "bits": "41d363189cc00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 4568303.3333,
+        "bits": "41d363189cc00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 5101813.6818,
+        "bits": "41d363189cc00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 4954068.3,
+        "bits": "41d363189cc00000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "83508ac7e074bf0b07f8ffb98072ab42e3f9729132bef556aeb2a71f9150416a",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": false
+  },
+  "portFile": {
+    "bytes": 15076,
+    "sha256": "83508ac7e074bf0b07f8ffb98072ab42e3f9729132bef556aeb2a71f9150416a",
+    "gitBlob": "8c28e38309f7bb85c0a0780859fbc565e0f9bf88"
+  },
+  "rulesRead": {
+    "repository": "AkisArou/nts",
+    "ref": "main",
+    "path": "docs/contributing/cloud-agents.md",
+    "gitBlob": "6ad6f54854b8189fad9315c8db9aa8dab97b4525"
+  }
+}
