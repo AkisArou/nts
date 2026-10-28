@@ -326,6 +326,15 @@ From [`foundations/memory.md`](../../foundations/memory.md):
 
 ## Contributors and packages (10-28)
 
+- **nts's licence is Apache-2.0 WITH LLVM-exception,** LLVM's exact licence:
+  nts's own code compiled into a program (its runtime) owes nothing there, so
+  a program that links nothing third-party owes no notice at all. Third-party
+  components a program links (libuv, OpenSSL, ICU) owe their own notices,
+  which `nts build` is to write for exactly what it linked; at equal quality,
+  a component whose licence needs no notice in programs is preferred. Asked
+  whether Apache-2.0 is the best licence, and whether users must ship notices
+  anyway, the user chose this. The copy of Apple's SDKs on the shared machine
+  is kept for now.
 - **Cloud agents contribute through pull requests,** starting with the
   WinterTC floor's missing APIs in `runtime/web-platform`: plain TypeScript
   implementing published specifications, tested under node; a local agent

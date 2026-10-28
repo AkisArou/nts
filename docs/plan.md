@@ -185,6 +185,8 @@ The designs and their build orders are in [`foundations/`](foundations).
    - an untyped `JSON.parse` served by the TypeScript parser until the
      compiler has its own (G9).
 5. **The dependency policy** (D-1), written as a foundations page.
+6. **Licensing:** nts becomes Apache-2.0 WITH LLVM-exception, and `nts build`
+   writes the notices file for the third-party code a program links.
 
 ## Phase 3: conformance-driven development
 

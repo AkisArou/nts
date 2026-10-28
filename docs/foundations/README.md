@@ -116,6 +116,11 @@ The order in which they are built is the [plan](../plan.md#phase-2-foundations-n
 
 ## Decisions
 
+- **nts is licensed Apache-2.0 WITH LLVM-exception:** its runtime, compiled
+  into a program, adds no notice obligation; a program owes only the notices
+  of third-party code it links, which `nts build` writes (10-28,
+  [log](../records/notebooks/decisions-log.md#contributors-and-packages-10-28)).
+
 On vendored code and libraries
 ([log](../records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)):
 
