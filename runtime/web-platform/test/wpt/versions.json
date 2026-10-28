@@ -15,7 +15,8 @@
     "websockets": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
     "xhr": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
     "xhr/formdata": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "webidl/ecmascript-binding/es-exceptions": "2f96fa19966d6bc19e979a09479ac8a7aa337c54"
+    "webidl/ecmascript-binding/es-exceptions": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+    "html/webappapis": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742"
   },
   "files": {
     "common/blank.html": {
@@ -681,6 +682,10 @@
     "FileAPI/unicode.html": {
       "sha256": "74d569fadfbde3742590e8087e1ad92491f13a5df0867aca90f0591547f24f6d",
       "gitBlob": "ce3e3579d7c2c74c27d907ccd25c953588ef87f2"
+    },
+    "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html": {
+      "sha256": "c0fb97b890aeb587d92cc632a418e8e4e7a92f447981f335571083dacf86b4f8",
+      "gitBlob": "4319deee7b50163a68e556ee7f401373fab7495b"
     },
     "LICENSE.md": {
       "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",

@@ -11,7 +11,7 @@ export interface PromiseRejectionEventInit extends EventInit {
 export class PromiseRejectionEvent extends Event {
   readonly #promise: object;
   readonly #reason: unknown;
-  readonly [Symbol.toStringTag] = "PromiseRejectionEvent";
+  get [Symbol.toStringTag](): string { return "PromiseRejectionEvent"; }
 
   constructor(type: string, init: PromiseRejectionEventInit) {
     requireArguments(arguments, 2, "PromiseRejectionEvent constructor");
