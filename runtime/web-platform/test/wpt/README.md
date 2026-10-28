@@ -44,6 +44,21 @@ instead of pretending to pass. Keep its negative controls in
 exposure or optional platform API is fabricated. Exclusions must name the exact
 case and missing capability, and stale exclusions fail the run.
 
+The shared surface includes `test`, `async_test`, serialized `promise_test`,
+test steps and timeouts, FIFO cleanup invocation with awaited promise cleanups,
+and `setup(callback?, { explicit_done })`. With `explicit_done`, asynchronous
+registration stays open until global `done()`; without it, register cases while
+their scripts execute. Provider-reported errors retain their test ownership
+across `await`.
+
+Assertions cover exact equality, arrays and enumerable object contents,
+JavaScript and injected DOM exception classes, and the `promise_rejects_js`,
+`promise_rejects_dom` and `promise_rejects_exactly` forms. `promise_setup`,
+optional-feature status helpers, QuotaExceededError-specific assertions,
+browser/worker aggregation and other setup options are not implemented; using
+them fails explicitly. Extend the adapter with specification controls when a
+new corpus requires one, without altering that corpus's cases.
+
 Node 24.20 pins harness `resources` to
 `6a2f32237615d7ea9c1eb1e30453066b5555c603` and `common` to
 `dbd648158d337580885e70a54f929daf215211a0`. Use those revisions when importing
