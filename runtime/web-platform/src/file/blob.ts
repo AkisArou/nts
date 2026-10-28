@@ -552,6 +552,10 @@ export class Blob {
     return this.#mediaType;
   }
 
+  get [Symbol.toStringTag](): string {
+    return "Blob";
+  }
+
   slice(...args: [start?: number, end?: number, contentType?: string]): Blob {
     const start = args[0] === undefined ? 0 : toClampedLongLong(args[0]);
     const end = args[1] === undefined ? this.#byteLength : toClampedLongLong(args[1]);
@@ -682,24 +686,6 @@ export class Blob {
   }
 
 }
-// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-// written inline rather than through a helper.
-// Web IDL member attributes. This prototype carries no non-standard names, so the pass
-// reaches only the interface's own members.
-for (const key of Object.getOwnPropertyNames(Blob.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(Blob.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(Blob.prototype, key, descriptor);
-}
-Object.defineProperty(Blob.prototype, Symbol.toStringTag, {
-  value: "Blob",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-
 
 /** Construct a Blob over internal reopenable storage without copying it. */
 export function _createBlobFromExternalSource(source: BlobExternalSource, type = ""): Blob {
@@ -711,11 +697,14 @@ export class File extends Blob {
   readonly #modificationTime: number;
 
   constructor(parts: Iterable<BlobPart>, name: string, options?: FileOptions);
-  constructor(...args: [parts: Iterable<BlobPart>, name: string, options?: FileOptions | null]) {
-    requireArguments(args, 2, "File constructor");
-    const parts = convertBlobParts(args[0]);
-    const name = coerceToUSVString(args[1]);
-    const rawOptions = args[2];
+  constructor(
+    parts: Iterable<BlobPart>,
+    name: string,
+    rawOptions: FileOptions | null | undefined = undefined,
+  ) {
+    requireArguments(arguments, 2, "File constructor");
+    const convertedParts = convertBlobParts(parts);
+    const fileName = coerceToUSVString(name);
     const options = convertBlobOptions(rawOptions);
     const rawLastModified =
       rawOptions === undefined || rawOptions === null ? undefined : rawOptions.lastModified;
@@ -724,8 +713,8 @@ export class File extends Blob {
         ? currentWebPlatformRuntime().wallTimeMilliseconds()
         : toLongLong(rawLastModified);
 
-    super(new BlobPartConstruction(parts, options));
-    this.#fileName = name;
+    super(new BlobPartConstruction(convertedParts, options));
+    this.#fileName = fileName;
     this.#modificationTime = lastModified;
   }
 
@@ -737,28 +726,7 @@ export class File extends Blob {
     return this.#modificationTime;
   }
 
+  override get [Symbol.toStringTag](): string {
+    return "File";
+  }
 }
-// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-// written inline rather than through a helper.
-// Web IDL member attributes. This prototype carries no non-standard names, so the pass
-// reaches only the interface's own members.
-for (const key of Object.getOwnPropertyNames(File.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(File.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(File.prototype, key, descriptor);
-}
-Object.defineProperty(File.prototype, Symbol.toStringTag, {
-  value: "File",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-Object.defineProperty(File, "length", {
-  value: 2,
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-
