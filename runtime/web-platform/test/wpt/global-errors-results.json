@@ -118,5 +118,79 @@
     "FileReader legacy encodings native codecs",
     "FileReader two event-order cases native microtask checkpoint",
     "known 100 ms adapter load-sensitive control"
-  ]
+  ],
+  "initialMeasurementScope": "Fields sourceCommit, sourceAndAdapterSha256, after, sabotage and restored describe the original 308e3cc5 source. The callbackBoundaryFix object records fresh evidence for the later fix; historical measurements are not transferred.",
+  "callbackBoundaryFix": {
+    "date": "2026-10-28",
+    "reviewedOriginalSourceCommit": "308e3cc5c8c339464afd3ea1cf201cc3fff83b3a",
+    "reason": "The actual IDL handler must finish Web IDL callback/script cleanup before its completion returns to HTML cancellation processing. Dispatch cleanup around the source listener wrapper is too late.",
+    "capability": "GlobalErrorCapabilities.invokeGlobalHandler(callback, receiver, args) returns {ok:true,value} or {ok:false,error}; an inactive callback returns success with undefined.",
+    "sourceSha256": {
+      "runtime/web-platform/src/core/global-errors.ts": "d8ef98189c9a055f8fed84b3a691008bc82173c49eda06edb26efef5fa5c3110",
+      "runtime/web-platform/src/provider/global-errors.ts": "a104d160a70c7e1acb746b55f35e663541ebb8460d73508d6271afc0caf6437d",
+      "runtime/web-platform/test/global-errors-policy.test.ts": "a867a5cabcff793d5f7f0c89632e28f6691c6a96131e47efd472d1e314b58b03",
+      "runtime/web-platform/test/support/global-errors-driver.ts": "2b0ad60be8ba6e41afa6fb674be034d7a71e306130e6f04334e1beb561d409d3"
+    },
+    "regressionControls": {
+      "command": "node --expose-gc --test --test-reporter=tap --test-name-pattern=global handler invocation runtime/web-platform/test/global-errors-policy.test.ts",
+      "originalSourceSha256": "a89e3a5689c72886437bc905c26c54c00a282c123c170fc5f725ea3659332885",
+      "originalSourceWithNewControls": {
+        "pass": 0,
+        "fail": 5,
+        "exitCode": 1
+      },
+      "fixedSourceWithNewControls": {
+        "pass": 5,
+        "fail": 0,
+        "exitCode": 0
+      },
+      "fixedSourceRestoredExactly": true,
+      "cases": [
+        "cleanup precedes onerror cancellation",
+        "cleanup handling precedes rejection cancellation and outstanding tracking",
+        "thrown handler completion returns after cleanup",
+        "native callback failure is returned as a value",
+        "inactive handler is skipped without changing its slot"
+      ]
+    },
+    "after": {
+      "command": "node --expose-gc --test --test-isolation=none --test-reporter=tap runtime/web-platform/test/global-errors-policy.test.ts runtime/web-platform/test/global-errors-harness-policy.test.ts runtime/web-platform/test/wpt-global-errors.test.ts runtime/web-platform/test/wpt-harness.test.ts",
+      "exitCode": 0,
+      "wptCounts": {
+        "path": "html/webappapis/scripting/reporterror.any.js",
+        "passed": 2,
+        "failed": 0,
+        "blocked": 3
+      },
+      "controls": {
+        "sourcePolicyPassed": 39,
+        "newAdapterPassed": 5,
+        "unchangedAdapterPassed": 22
+      },
+      "nodeTotals": {
+        "tests": 73,
+        "pass": 70,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 3,
+        "todo": 0
+      }
+    },
+    "typeChecks": [
+      {
+        "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+        "exitCode": 0
+      },
+      {
+        "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+        "exitCode": 0
+      }
+    ],
+    "nativeBoundary": "not verified; tests use deterministic injected callback cleanup and inactive state, not a native scheduler, realm manager or automatic Promise hooks",
+    "specification": [
+      "https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm",
+      "https://webidl.spec.whatwg.org/#invoke-a-callback-function",
+      "https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script"
+    ]
+  }
 }

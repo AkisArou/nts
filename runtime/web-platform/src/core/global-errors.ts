@@ -3,7 +3,7 @@ import { PromiseRejectionEvent } from "./promise-rejection-event.ts";
 import { requireArguments } from "./webidl.ts";
 import type {
   GlobalErrorCapabilities, GlobalErrorEventType, GlobalErrorListener,
-  GlobalExceptionReporter,
+  GlobalExceptionReporter, GlobalHandlerArguments, GlobalHandlerCallback,
 } from "../provider/global-errors.ts";
 
 export type GlobalErrorHandler = (
@@ -25,12 +25,6 @@ class HandlerSlot {
   active = false;
 }
 
-const invokeEventHandler: (callback: GlobalRejectionHandler, receiver: object, event: Event) => unknown =
-  Function.prototype.call.bind(Function.prototype.call);
-const invokeErrorHandler: (
-  callback: GlobalErrorHandler, receiver: object, message: string,
-  filename: string, lineno: number, colno: number, error: unknown,
-) => unknown = Function.prototype.call.bind(Function.prototype.call);
 const cancelEvent: (event: Event) => void = Function.prototype.call.bind(Event.prototype.preventDefault);
 
 function objectValue(value: unknown): object | null {
@@ -112,11 +106,14 @@ export class GlobalErrorRuntime implements GlobalExceptionReporter {
       ? scope.onunhandledrejection : scope.onrejectionhandled;
     if (typeof callback !== "function") return;
     const special = event instanceof ErrorEvent && event.type === "error";
-    const result = special
-      ? invokeErrorHandler(callback as GlobalErrorHandler, globalThis,
-          event.message, event.filename, event.lineno, event.colno, event.error)
-      : invokeEventHandler(callback as GlobalRejectionHandler, globalThis, event);
-    if (special ? result === true : result === false) cancelEvent(event);
+    const args: GlobalHandlerArguments = special
+      ? [event.message, event.filename, event.lineno, event.colno, event.error]
+      : [event];
+    // Web IDL invocation finishes callback/script cleanup before HTML processes
+    // the return value. Dispatch cannot defer this to after our wrapper returns.
+    const result = this.#capabilities.invokeGlobalHandler(callback as GlobalHandlerCallback, globalThis, args);
+    if (!result.ok) throw result.error;
+    if (special ? result.value === true : result.value === false) cancelEvent(event);
   }
 
   /** HTML 8.1.4.6: report an exception; listener errors re-enter this algorithm. */

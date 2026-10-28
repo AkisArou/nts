@@ -101,6 +101,103 @@ test("an ordinary error Event receives one argument and false cancels normally",
   assert.equal(event.defaultPrevented, true);
 });
 
+test("global handler invocation cleanup precedes onerror cancellation", (t) => {
+  const d = driver(t);
+  const reason = {};
+  const order: string[] = [];
+  const cancellationAtCleanup: boolean[] = [];
+  const handler = () => { order.push("handler"); return true; };
+  d.runtime.onerror = handler;
+  d.invocationCleanup = () => {
+    order.push("cleanup");
+    cancellationAtCleanup.push(d.events[0]!.defaultPrevented);
+  };
+  d.addGlobalEventListener("error", () => { order.push("following listener"); });
+  d.report(reason);
+  assert.deepEqual(order, ["handler", "cleanup", "following listener"]);
+  assert.deepEqual(cancellationAtCleanup, [false]);
+  assert.equal(d.events[0]?.defaultPrevented, true);
+  assert.equal(d.invocations[0]?.callback, handler);
+  assert.equal(d.invocations[0]?.receiver, globalThis);
+  assert.deepEqual(d.invocations[0]?.args, ["provider message", "provider-source.ts", 23, 7, reason]);
+  assert.deepEqual(d.errors, []);
+});
+
+test("global handler invocation cleanup can handle a rejection before cancellation and outstanding tracking", (t) => {
+  const d = driver(t);
+  const promise = d.promise("handled during cleanup");
+  const cancellationAtCleanup: boolean[] = [];
+  const handler = () => false;
+  d.runtime.onunhandledrejection = handler;
+  d.invocationCleanup = () => {
+    cancellationAtCleanup.push(d.events[0]!.defaultPrevented);
+    // Models a queued microtask running at the provider's actual callback
+    // cleanup point. It is not a substitute for a native microtask checkpoint.
+    d.handle(promise);
+  };
+  d.runtime.hostPromiseRejectionTracker(promise, "reject");
+  d.runtime.notifyRejectedPromises();
+  d.task();
+  assert.deepEqual(cancellationAtCleanup, [false]);
+  assert.equal(d.events[0]?.defaultPrevented, true);
+  assert.equal(d.invocations[0]?.callback, handler);
+  assert.deepEqual(d.invocations[0]?.args, [d.events[0]]);
+  assert.deepEqual(d.rejections, []);
+  d.handle(promise);
+  assert.equal(d.tasks.length, 0, "cleanup handling prevents outstanding registration");
+  assert.deepEqual(d.events.map((event) => event.type), ["unhandledrejection"]);
+});
+
+test("global handler invocation returns thrown values only after cleanup", (t) => {
+  const d = driver(t);
+  const inner = {};
+  const outer = {};
+  let cleaned = false;
+  const reports: [unknown, boolean][] = [];
+  d.invocationCleanup = () => { cleaned = true; };
+  d.reportExceptionToConsole = (error) => { reports.push([error, cleaned]); };
+  d.runtime.onerror = () => { throw inner; };
+  assert.doesNotThrow(() => d.report(outer));
+  assert.deepEqual(reports, [[inner, true], [outer, true]]);
+  assert.equal(d.events.length, 1, "returned callback exception observes the reporting guard");
+  assert.equal(d.events[0]?.defaultPrevented, false);
+});
+
+test("global handler invocation failures cross as values and re-enter exception reporting", (t) => {
+  const d = driver(t);
+  const inner = {};
+  const outer = {};
+  d.invokeGlobalHandler = () => ({ ok: false, error: inner });
+  d.runtime.onerror = () => { throw new Error("source bypassed the provider invocation"); };
+  assert.doesNotThrow(() => d.report(outer));
+  assert.deepEqual(d.errors, [inner, outer]);
+  assert.equal(d.events.length, 1);
+  assert.equal(d.events[0]?.defaultPrevented, false);
+});
+
+test("global handler invocation can skip an inactive callback without changing its slot", (t) => {
+  const d = driver(t);
+  let invoked = 0;
+  let cleaned = 0;
+  const handler = () => { invoked++; return true; };
+  d.runtime.onerror = handler;
+  d.inactiveHandlers.add(handler);
+  d.invocationCleanup = () => { cleaned++; };
+  d.report("inactive");
+  assert.equal(invoked, 0);
+  assert.equal(cleaned, 0);
+  assert.equal(d.events[0]?.defaultPrevented, false);
+  assert.equal(d.runtime.onerror, handler);
+  assert.deepEqual(d.errors, ["inactive"]);
+  d.inactiveHandlers.delete(handler);
+  d.report("active");
+  assert.equal(invoked, 1);
+  assert.equal(cleaned, 1);
+  assert.equal(d.events[1]?.defaultPrevented, true);
+  assert.equal(d.listeners.filter((listener) => !listener.removed).length, 1);
+  assert.deepEqual(d.errors, ["inactive"]);
+});
+
 test("an ErrorEvent dispatched as unhandledrejection still uses ordinary handler processing", (t) => {
   const d = driver(t);
   const event = new ErrorEvent("unhandledrejection", { cancelable: true });
