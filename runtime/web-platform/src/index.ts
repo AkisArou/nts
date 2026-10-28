@@ -1,5 +1,13 @@
 export { DOMException } from "./core/errors.ts";
 export { Navigator } from "./navigator/navigator.ts";
+export { URLPattern } from "./urlpattern/url-pattern.ts";
+export type {
+  URLPatternInit,
+  URLPatternInput,
+  URLPatternOptions,
+  URLPatternComponentResult,
+  URLPatternResult,
+} from "./urlpattern/types.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
 export type {
