@@ -82,6 +82,17 @@ switch's official runs set `NTS_JOBS=4` and took 72–100 minutes for the full
 gate (2026-10-25 to 10-27). The same gate took 26–32 minutes at 24 slots on
 10-24.
 
+**The gate's environment is its own, not your shell's.** Every step of
+`land`, `pinned.sh` and `full.ts` runs in one canonical environment
+(`tooling/gate/canonical-environment.ts`): host tools passed by name, locale,
+time zone and node options fixed, and a temporary directory inside the run.
+`land` refuses any verdict-policy variable your shell sets (the caps above,
+floors, step selectors, `NTS_BIN`), naming it; unset it and run again. On
+`pinned.sh` and `full.ts` such a variable is allowed, but it makes the run a
+recorded experiment that can never serve as landing evidence. Standing
+policy, such as the accepted on-device skip, lives in
+`tooling/gate/verdict-policy.ts`, so a launcher never has to remember it.
+
 **Keep the full gate out of urgent work.** Before asking for review, run
 `land.ts --dry-run` and say what the change owes. A sweep of comments over the
 gate's own scripts, or over a path with no rule in `owed.mjs`, owes the full
@@ -229,7 +240,8 @@ then a guard once fixed), `tests/memory/`.
   `nts-bench` links the compiler crates directly: run a plain
   `cargo build --release` (no `-p`) before measuring a compiler change.
 - A gate or bench run drives `target/release/nts` unless told otherwise: pass
-  `NTS_BIN` for any other build.
+  `NTS_BIN` for any other build (on `pinned.sh` and `full.ts` that marks the
+  run an experiment, above).
 - Never edit a gate script (`all.sh` and its helpers) while a run of it is
   executing from that tree: the shell reads a running script incrementally.
 - System packages come from `paru`.
