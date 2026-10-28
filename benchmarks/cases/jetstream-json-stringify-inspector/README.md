@@ -103,17 +103,48 @@ The initial inventory selected **43 of 90 JavaScript workloads**. Full original 
 | Babel WTB | `gensync` reads and rewrites dynamic callable wrappers' `name` and `length` descriptors during the complete Redux transformation: **126 descriptor reads and 126 writes**. The unchanged original successfully emits **21,248 characters**. | [Original source](https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js); `babel-wtb-model-audit.json`. |
 | Lebab WTB | Recast's `TreeCopier.copy` preserves each node's runtime prototype and adds a non-enumerable `original` backlink with `Object.create(Object.getPrototypeOf(node), descriptors)`: **3,310 calls** during all ten original Preact transforms. The unchanged original emits **21,316 characters and 35 warnings**. | [Original source](https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/lebab.bundle.js); `lebab-wtb-model-audit.json`. |
 
-These operations execute inside the original compiler or transformation, beyond static module registration or constructor syntax. Replacing WSL's object reclassification with tags or forwarding, removing Babel's callable metadata, or replacing Lebab's prototype-preserving copies would change the original representation or behavior. No such rewrite has been made. The compact evidence records exact input/output digests and the original execution method. The earlier scope hold is resolved by the maintainer handoff. These three remain in the port queue with their operations unchanged. They await implementation and then maintainer compilation, not another scope decision.
+These operations execute inside the original compiler or transformation, beyond static module registration or constructor syntax. Replacing WSL's object reclassification with tags or forwarding, removing Babel's callable metadata, or replacing Lebab's prototype-preserving copies would change the original representation or behavior. No such rewrite has been made. The compact evidence records exact input/output digests and the original execution method. The earlier scope hold is resolved by the maintainer handoff. These three retain their original operations. Their individual implementation and PR states are recorded below; no further scope decision is pending.
 
 ## Port status
 
-The inventory records every selected workload's status and PR link. Currently
-**31 of the 43 selected programs have open PRs**: 25 ready for maintainer
-compilation, and six drafts waiting for awaited harness support. The remaining
-12 are queued in the handoff order:
+The inventory records every selected workload's status and PR link. **39 of the
+43 selected programs have open PRs**: 33 ready for maintainer compilation and
+six drafts (#69–#74) waiting for awaited harness support.
 
-`threejs`, `FlightPlanner`, `OfflineAssembler`, `acorn-wtb`, `babylon-wtb`, `espree-wtb`, `esprima-next-wtb`, `typescript-octane`, `typescript-lib`, `WSL`, `babel-wtb`, `lebab-wtb`.
+The next eight ports were opened in the handoff order, all targeting #44's
+`chatgpt/jetstream-json-stringify-inspector` branch:
 
-All completed ports await the maintainer workflow: nts compilation, input-domain
+| Program | PR | Local Node 24.20.0 ms | Shared tests passed |
+| --- | --- | ---: | ---: |
+| `threejs` | [#101](https://github.com/AkisArou/nts/pull/101) | 94.389965 | 7/7 |
+| `FlightPlanner` | [#102](https://github.com/AkisArou/nts/pull/102) | 3.866324 | 8/8 |
+| `OfflineAssembler` | [#103](https://github.com/AkisArou/nts/pull/103) | 23.006903 | 9/9 |
+| `acorn-wtb` | [#104](https://github.com/AkisArou/nts/pull/104) | 90.325335 | 7/7 |
+| `babylon-wtb` | [#105](https://github.com/AkisArou/nts/pull/105) | 54.321999 | 8/8 |
+| `espree-wtb` | [#106](https://github.com/AkisArou/nts/pull/106) | 61.002504 | 8/8 |
+| `esprima-next-wtb` | [#107](https://github.com/AkisArou/nts/pull/107) | 57.491258 | 9/9 |
+| `typescript-octane` | [#108](https://github.com/AkisArou/nts/pull/108) | 250.195342 | 7/7 |
+
+Every listed case passes strict TypeScript 7.0.2 with zero diagnostics. Times
+are the best of five fresh processes using the unchanged common harness;
+all use `seed = 1`. FlightPlanner falls within 1–10 ms. The other seven retain
+one full original operation under the approved timing exception.
+
+The remaining PR order is `typescript-lib`, `WSL`, `babel-wtb`, `lebab-wtb`.
+TypeScript-lib, Babel and Lebab are still being typed and validated. WSL is
+complete on `chatgpt/jetstream-wsl`, passes strict checking and all nine shared
+tests, and awaits its place after TypeScript-lib. Its original Proxy registry,
+all 285 tests, and all 22,354 prototype replacements remain unchanged.
+
+Additional completed-port audits found original operations that remain in the
+code as compiler-support targets:
+
+| Program | Original operation counts | Evidence |
+| --- | --- | --- |
+| Three.js | Initialization: 31 `defineProperty`, 11 `defineProperties`, three `freeze`. First complete iteration adds 96,000 and 24,000 descriptor calls; later observed frames add none. Original and port counts and complete WebGL argument traces match. | [#101](https://github.com/AkisArou/nts/pull/101) |
+| Espree WTB | 91 `Object.freeze` calls during initialization, zero during work. Original calls remain. | [#106](https://github.com/AkisArou/nts/pull/106) |
+| Esprima-next WTB | 2,184 `Object.defineProperty` calls per complete operation, split 232/832/803/317 across its four inputs. Original and port counts match. | [#107](https://github.com/AkisArou/nts/pull/107) |
+
+All completed ports await nts compilation and refusal recording, input-domain
 integration where needed, Node oracle counts, the gate, measurement and landing.
 The source-loading `web-ssr` exclusion remains unchanged.
