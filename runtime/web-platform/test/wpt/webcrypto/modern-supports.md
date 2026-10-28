@@ -91,8 +91,11 @@ NTS_WPT_CRYPTO_RAW=1 NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-
 
 The install reuses eight cached packages without a dependency or lockfile change.
 Both project typechecks and the strict standalone new-test typecheck exit 0.
-The combined test command reports **50 tests, 50 pass, 0 fail, 0 skip**, including
-25 supports controls. The recording capability refuses every cryptographic
+The combined test command reports **51 tests, 51 pass, 0 fail, 0 skip**, including
+26 supports controls. The ML-DSA context control covers all three parameter sets and both signature
+operations: 256-byte contexts fail before any native query, while 255-byte
+contexts reach an accepting capability, as §§8.4.1–2 require. The recording
+capability refuses every cryptographic
 operation, and its random source refuses entropy requests. Positive queries
 still pass, with zero primitive calls, entropy calls or pending scheduler tasks.
 A class-body getter control verifies that internal capability lookup does not

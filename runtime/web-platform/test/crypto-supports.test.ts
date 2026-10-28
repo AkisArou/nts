@@ -338,6 +338,24 @@ test("ML-DSA, ML-KEM and public-key derivation use only their registered operati
   for (const name of ["AES-GCM", "HMAC", "KMAC128", "HKDF", "Argon2id", "SHA-256"]) assert.equal(SubtleCrypto.supports("getPublicKey", name), false);
 });
 
+test("ML-DSA support rejects the context bound before native availability", (t) => {
+  const { provider } = fixture(t);
+  const results: boolean[] = [];
+  for (const name of ["ML-DSA-44", "ML-DSA-65", "ML-DSA-87"]) {
+    for (const operation of ["sign", "verify"]) {
+      results.push(SubtleCrypto.supports(operation, { name, context: new Uint8Array(256) }));
+    }
+  }
+  assert.deepEqual(results, [false, false, false, false, false, false]);
+  assert.equal(provider.queries.length, 0);
+  for (const name of ["ML-DSA-44", "ML-DSA-65", "ML-DSA-87"]) {
+    for (const operation of ["sign", "verify"]) {
+      assert.equal(SubtleCrypto.supports(operation, { name, context: new Uint8Array(255) }), true);
+    }
+  }
+  assert.equal(provider.queries.length, 6);
+});
+
 test("deriveKey follows target import, two key-length normalizations, then primary derivation", (t) => {
   const { provider } = fixture(t);
   const trace = provider.trace;
