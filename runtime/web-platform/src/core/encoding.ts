@@ -246,16 +246,16 @@ export class TextDecoder {
   #decoderFatal: boolean;
   #decoderIgnoreBOM: boolean;
   /** The odd byte of a UTF-16 code unit split across chunks, or -1. */
-  private pendingByte = -1;
+  #pendingByte: number = -1;
   /** A high surrogate waiting for its low half, or -1. */
-  private pendingLead = -1;
-  private needed = 0;
-  private seen = 0;
-  private code = 0;
-  private lower = 0x80;
-  private upper = 0xbf;
-  private bomSeen = false;
-  private doNotFlush = false;
+  #pendingLead: number = -1;
+  #needed: number = 0;
+  #seen: number = 0;
+  #code: number = 0;
+  #lower: number = 0x80;
+  #upper: number = 0xbf;
+  #bomSeen: boolean = false;
+  #doNotFlush: boolean = false;
 
   constructor(label = "utf-8", options?: TextDecoderOptions) {
     const convertedLabel = coerceToDOMString(label);
@@ -280,13 +280,13 @@ export class TextDecoder {
   }
   #brand(): void {}
   #resetSequence(): void {
-    this.needed = 0;
-    this.seen = 0;
-    this.code = 0;
-    this.lower = 0x80;
-    this.upper = 0xbf;
-    this.pendingByte = -1;
-    this.pendingLead = -1;
+    this.#needed = 0;
+    this.#seen = 0;
+    this.#code = 0;
+    this.#lower = 0x80;
+    this.#upper = 0xbf;
+    this.#pendingByte = -1;
+    this.#pendingLead = -1;
   }
   #replacement(): void {
     this.#resetSequence();
@@ -312,16 +312,16 @@ export class TextDecoder {
     for (let index = 0; index < input.length; index++) {
       const byte = input[index];
       if (byte === undefined) break;
-      if (this.pendingByte === -1) {
-        this.pendingByte = byte;
+      if (this.#pendingByte === -1) {
+        this.#pendingByte = byte;
         continue;
       }
-      const unit = bigEndian ? (this.pendingByte << 8) | byte : (byte << 8) | this.pendingByte;
-      this.pendingByte = -1;
+      const unit = bigEndian ? (this.#pendingByte << 8) | byte : (byte << 8) | this.#pendingByte;
+      this.#pendingByte = -1;
 
-      if (this.pendingLead !== -1) {
-        const lead = this.pendingLead;
-        this.pendingLead = -1;
+      if (this.#pendingLead !== -1) {
+        const lead = this.#pendingLead;
+        this.#pendingLead = -1;
         if (unit >= 0xdc00 && unit <= 0xdfff) {
           emit(0x10000 + ((lead - 0xd800) << 10) + (unit - 0xdc00));
           continue;
@@ -333,7 +333,7 @@ export class TextDecoder {
       }
 
       if (unit >= 0xd800 && unit <= 0xdbff) {
-        this.pendingLead = unit;
+        this.#pendingLead = unit;
         continue;
       }
       if (unit >= 0xdc00 && unit <= 0xdfff) {
@@ -345,9 +345,9 @@ export class TextDecoder {
     }
 
     if (stream) return;
-    if (this.pendingLead !== -1 || this.pendingByte !== -1) {
-      this.pendingLead = -1;
-      this.pendingByte = -1;
+    if (this.#pendingLead !== -1 || this.#pendingByte !== -1) {
+      this.#pendingLead = -1;
+      this.#pendingByte = -1;
       this.#utf16Error();
       emit(0xfffd);
     }
@@ -361,16 +361,16 @@ export class TextDecoder {
     this.#brand();
     requireBufferSource(args[0]);
     const stream = convertTextDecodeOptions(args[1]);
-    if (!this.doNotFlush) {
+    if (!this.#doNotFlush) {
       this.#resetSequence();
-      this.bomSeen = false;
+      this.#bomSeen = false;
     }
-    this.doNotFlush = stream;
+    this.#doNotFlush = stream;
     // The method's byte-copy step follows Web IDL argument conversion.
     // An options getter can mutate or detach a previously validated input.
     const input = bufferSourceBytes(args[0]);
 
-    let bomSeen = this.bomSeen;
+    let bomSeen = this.#bomSeen;
     const pieces: string[] = [];
     let ascii = "";
     const emit = (code: number): void => {
@@ -386,7 +386,7 @@ export class TextDecoder {
     };
     if (this.#decoderEncoding !== "utf-8") {
       this.#decodeUTF16(input, stream, emit);
-      this.bomSeen = bomSeen;
+      this.#bomSeen = bomSeen;
       pieces.push(ascii);
       return pieces.join("");
     }
@@ -394,56 +394,56 @@ export class TextDecoder {
     while (i < input.length) {
       const byte = input[i];
       if (byte === undefined) break;
-      if (this.needed === 0) {
+      if (this.#needed === 0) {
         i++;
         if (byte <= 0x7f) {
           emit(byte);
           continue;
         }
         if (byte >= 0xc2 && byte <= 0xdf) {
-          this.needed = 1;
-          this.code = byte & 0x1f;
+          this.#needed = 1;
+          this.#code = byte & 0x1f;
         } else if (byte >= 0xe0 && byte <= 0xef) {
-          this.needed = 2;
-          this.code = byte & 0x0f;
-          if (byte === 0xe0) this.lower = 0xa0;
-          if (byte === 0xed) this.upper = 0x9f;
+          this.#needed = 2;
+          this.#code = byte & 0x0f;
+          if (byte === 0xe0) this.#lower = 0xa0;
+          if (byte === 0xed) this.#upper = 0x9f;
         } else if (byte >= 0xf0 && byte <= 0xf4) {
-          this.needed = 3;
-          this.code = byte & 7;
-          if (byte === 0xf0) this.lower = 0x90;
-          if (byte === 0xf4) this.upper = 0x8f;
+          this.#needed = 3;
+          this.#code = byte & 7;
+          if (byte === 0xf0) this.#lower = 0x90;
+          if (byte === 0xf4) this.#upper = 0x8f;
         } else {
           this.#replacement();
           emit(0xfffd);
         }
       } else {
-        if (byte < this.lower || byte > this.upper) {
+        if (byte < this.#lower || byte > this.#upper) {
           this.#replacement();
           emit(0xfffd);
           continue;
         }
         i++;
-        this.lower = 0x80;
-        this.upper = 0xbf;
-        this.code = (this.code << 6) | (byte & 63);
-        this.seen++;
-        if (this.seen === this.needed) {
-          const code = this.code;
+        this.#lower = 0x80;
+        this.#upper = 0xbf;
+        this.#code = (this.#code << 6) | (byte & 63);
+        this.#seen++;
+        if (this.#seen === this.#needed) {
+          const code = this.#code;
           this.#resetSequence();
           emit(code);
         }
       }
     }
     if (!stream) {
-      if (this.needed !== 0) {
+      if (this.#needed !== 0) {
         this.#replacement();
         emit(0xfffd);
       }
       this.#resetSequence();
       bomSeen = false;
     }
-    this.bomSeen = bomSeen;
+    this.#bomSeen = bomSeen;
     pieces.push(ascii);
     return pieces.join("");
   }
