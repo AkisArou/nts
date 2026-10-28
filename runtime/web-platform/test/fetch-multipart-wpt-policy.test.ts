@@ -2,6 +2,7 @@ import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { TextEncoder } from "../src/core/encoding.ts";
+import { LimitError } from "../src/core/errors.ts";
 import { decodeMultipart } from "../src/forms/multipart-decode.ts";
 import { parseMIMEType } from "../src/forms/mime.ts";
 
@@ -27,4 +28,18 @@ test("multipart preserves a padded boundary prefix followed by payload bytes", (
 test("multipart does not accept arbitrary bytes after closing-boundary padding", () => {
   const body = '--b\r\nContent-Disposition: form-data; name="value"\r\n\r\nx\r\n--b-- \tX';
   assert.throws(() => decodeMultipart(encoder.encode(body), mime), TypeError);
+});
+
+// Fetch's formData conversion reports malformed multipart syntax as TypeError.
+test("multipart missing part headers is a syntax error below the configured limit", () => {
+  assert.throws(() => decodeMultipart(encoder.encode("--b\r\n"), mime), TypeError);
+});
+
+test("multipart preserves explicit header limits for complete and truncated headers", () => {
+  for (const body of [
+    '--b\r\nContent-Disposition: form-data; name="value"\r\n\r\nx\r\n--b--',
+    '--b\r\nContent-Disposition: form-data; name="value"',
+  ]) {
+    assert.throws(() => decodeMultipart(encoder.encode(body), mime, { maxPartHeaderBytes: 4 }), LimitError);
+  }
 });

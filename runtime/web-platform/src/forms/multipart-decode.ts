@@ -125,8 +125,15 @@ export function decodeMultipart(
       throw new LimitError("Too many multipart fields");
     }
     const end = headersEnd.find(bytes, offset);
-    if (end < 0 || end - offset > maxPartHeaderBytes) {
-      throw new LimitError("Multipart headers missing or too large");
+    const headerBytes = (end < 0 ? bytes.length : end) - offset;
+    if (headerBytes > maxPartHeaderBytes) {
+      throw new LimitError("Multipart headers too large");
+    }
+    if (end < 0) {
+      // Fetch formData(): malformed multipart syntax is a TypeError. A missing
+      // terminator is not itself evidence that the configured limit was crossed.
+      // https://fetch.spec.whatwg.org/#dom-body-formdata
+      throw new TypeError("Missing multipart part headers");
     }
     let disposition: string | null = null;
     let type = "text/plain";
