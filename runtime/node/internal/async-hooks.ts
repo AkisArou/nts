@@ -26,7 +26,7 @@
  * the right layer: this is the fatal path, and it should not depend on any
  * machinery that could itself be the thing that failed.
  */
-/** @ntsAbi managed */
+/** @intrinsic */
 declare function nts_write_stderr(text: string): number;
 
 /** Stop the process. A hook that throws is not a recoverable condition. */
