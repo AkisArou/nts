@@ -1,0 +1,1213 @@
+{
+  "sourceRevision": "WebKit/JetStream@3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "node": "v24.20.0",
+  "sourceFiles": [
+    {
+      "path": "./WSL/Node.js",
+      "bytes": 4469,
+      "sha256": "cef009079eabcd0a4691dc2de8c35f0f39318912834773537ef5ab0ec4c649fe"
+    },
+    {
+      "path": "./WSL/Type.js",
+      "bytes": 2404,
+      "sha256": "91e01d9a20e743611a5c3ee4ad77ddc71970c19f64602c48c5e6784fc2262a9b"
+    },
+    {
+      "path": "./WSL/ReferenceType.js",
+      "bytes": 2035,
+      "sha256": "54878889af87d4c98e5e717bd8d5444beff350bc850a59432dd7b5910ee0d561"
+    },
+    {
+      "path": "./WSL/Value.js",
+      "bytes": 1975,
+      "sha256": "fa36a99d5703a81aebcc6fcec1e97bcdf98a0931b3ebe473eb816551e7d96a0e"
+    },
+    {
+      "path": "./WSL/Expression.js",
+      "bytes": 1513,
+      "sha256": "ef5fe7fd5973e0c7b2fa33443f2c2809847f6c34f2a5775cb0e16a54cb7885de"
+    },
+    {
+      "path": "./WSL/Rewriter.js",
+      "bytes": 13896,
+      "sha256": "1f0476f9265ef68d2b152de516dd3f3552ca979b630dff67e6b41f830701b095"
+    },
+    {
+      "path": "./WSL/Visitor.js",
+      "bytes": 8907,
+      "sha256": "858c1435ed59c5dabdae3b4ca7cc7df8b1e9af6f77820f916d29662e7649aa55"
+    },
+    {
+      "path": "./WSL/CreateLiteral.js",
+      "bytes": 3163,
+      "sha256": "9ef986a46238211833cf51f91bba28e117805907e78da2c5928d68f5a1ada757"
+    },
+    {
+      "path": "./WSL/CreateLiteralType.js",
+      "bytes": 3694,
+      "sha256": "062bf0a143783ca98bda91e4d4d993b83995d264a9fe0dbd031f8f5818cb0638"
+    },
+    {
+      "path": "./WSL/PropertyAccessExpression.js",
+      "bytes": 4247,
+      "sha256": "532509eabced18ffc877b9380bd0211b1f5b59fa54d711ee04563cc1d8503ca2"
+    },
+    {
+      "path": "./WSL/AddressSpace.js",
+      "bytes": 1785,
+      "sha256": "d7591ce2b6a4dbb133091ec2d150f2a506de843adf014bf04b29b6fb6a0d2b49"
+    },
+    {
+      "path": "./WSL/AnonymousVariable.js",
+      "bytes": 1848,
+      "sha256": "8f3c287849983e7da9852777087e36aae265d2e2884b2f962c85f028aaa15b89"
+    },
+    {
+      "path": "./WSL/ArrayRefType.js",
+      "bytes": 2070,
+      "sha256": "a69bac425b0f5dc8da721a502c5315849e758ba2cdedff1766f78157c84c0d18"
+    },
+    {
+      "path": "./WSL/ArrayType.js",
+      "bytes": 3134,
+      "sha256": "8a414b63cd6000c7ebcfd990e86cf57093fc79a83df061a875ba7eb3e5daaed8"
+    },
+    {
+      "path": "./WSL/Assignment.js",
+      "bytes": 1700,
+      "sha256": "bf75df8dcd22fdf112d54ba7a352b804e5817e91b757b17bad5a162aa31daff9"
+    },
+    {
+      "path": "./WSL/AutoWrapper.js",
+      "bytes": 2136,
+      "sha256": "8238a78aa4847e44e6583dc36b2a5b63af9c920ac251ad3b0982b2ea04482dc3"
+    },
+    {
+      "path": "./WSL/Block.js",
+      "bytes": 1826,
+      "sha256": "6107ab2acfe09b6a78cb0716bf9d451db2dbb04e7c4e6dee23294dbb35442952"
+    },
+    {
+      "path": "./WSL/BoolLiteral.js",
+      "bytes": 1633,
+      "sha256": "1b6f8ea70b1e99233d67ae74d50d7db591e17e998fe924ec63b4fa1806b3d893"
+    },
+    {
+      "path": "./WSL/Break.js",
+      "bytes": 1565,
+      "sha256": "aeed933de52c024c61cb95b6e35ebc18f265754c1e81eb8c377e35016407427b"
+    },
+    {
+      "path": "./WSL/CallExpression.js",
+      "bytes": 6802,
+      "sha256": "70026a0a88d16103da71cffeec40cad2cab5f93a73d7b3b5d7f964585dd61c48"
+    },
+    {
+      "path": "./WSL/CallFunction.js",
+      "bytes": 2352,
+      "sha256": "263d0260d7938cdab3c4ba3e618f1fc05dda4f149cb9358d82c39924d2110fdc"
+    },
+    {
+      "path": "./WSL/Check.js",
+      "bytes": 1417,
+      "sha256": "8291158ec104c48df9dbb486a6bb021d7d10d61f6a2b866cd701ce45bb26f867"
+    },
+    {
+      "path": "./WSL/CheckLiteralTypes.js",
+      "bytes": 1432,
+      "sha256": "6847b8736261267f651b29752fba4dc97dc834c9be3811e13229d2ffe30d84d3"
+    },
+    {
+      "path": "./WSL/CheckLoops.js",
+      "bytes": 1419,
+      "sha256": "b0445981f9383d53bc349d3331b22600df0445301abd8128cd1d8ef62676f19b"
+    },
+    {
+      "path": "./WSL/CheckRecursiveTypes.js",
+      "bytes": 1436,
+      "sha256": "7cbb70704843de57952794bbe00498e765b3c9d3b654a196f10ba4dae6043fd1"
+    },
+    {
+      "path": "./WSL/CheckRecursion.js",
+      "bytes": 1435,
+      "sha256": "44dd8f2b21f7b3d24f025f233686bf47fe238789d0a7743552ebb3a1048f9fdb"
+    },
+    {
+      "path": "./WSL/CheckReturns.js",
+      "bytes": 1430,
+      "sha256": "e88ff5f1c1c834835759daf378241c01b7bafce15f000e592970a0c8c656503c"
+    },
+    {
+      "path": "./WSL/CheckUnreachableCode.js",
+      "bytes": 1447,
+      "sha256": "cf83c6b34e175e58af3b14c8d2812f570148eaa564391076afeb742b50632cc9"
+    },
+    {
+      "path": "./WSL/CheckWrapped.js",
+      "bytes": 1531,
+      "sha256": "8010d97b7f78d83594d46a5cc364f2cd6fb43f51e7231a5b52944513b19df872"
+    },
+    {
+      "path": "./WSL/Checker.js",
+      "bytes": 29637,
+      "sha256": "40cb785bc4387d6a22e8e246e11d7718838fb61e5376dc39c0bdbd24e9cf5559"
+    },
+    {
+      "path": "./WSL/CloneProgram.js",
+      "bytes": 1740,
+      "sha256": "66091711bc7bbd4a1d93a1072da6f20c35486532355c05ab2fdb753319fe3174"
+    },
+    {
+      "path": "./WSL/CommaExpression.js",
+      "bytes": 1914,
+      "sha256": "43a122985f58398da9a55ec12ae007996b977f33dccf83d3d745805d7f0ae4c5"
+    },
+    {
+      "path": "./WSL/ConstexprFolder.js",
+      "bytes": 2072,
+      "sha256": "491af4a57260d8fe691a73052741cfcc2f631ad408f10c2f2b6eccd2a6aeffb1"
+    },
+    {
+      "path": "./WSL/ConstexprTypeParameter.js",
+      "bytes": 2465,
+      "sha256": "c403c87872405ce4e8c7f41fe1afcfa210b7c0b39cc678693354b4ed6a5526c0"
+    },
+    {
+      "path": "./WSL/Continue.js",
+      "bytes": 1571,
+      "sha256": "818976872b7869b503322797bae0c6fdfef1fc68c9f9ecf3e2901685e27328a4"
+    },
+    {
+      "path": "./WSL/ConvertPtrToArrayRefExpression.js",
+      "bytes": 1626,
+      "sha256": "63d29357f99fd516e6bac9fd7ab996f35c01abab87f520004d59928bac187ce7"
+    },
+    {
+      "path": "./WSL/DereferenceExpression.js",
+      "bytes": 1736,
+      "sha256": "f77e078ca1091a1cbf07136e82450560cd977f349e7923630fbbde49cd00e65a"
+    },
+    {
+      "path": "./WSL/DoWhileLoop.js",
+      "bytes": 1789,
+      "sha256": "0e535dbddc37bee1381b61d4afd5aafce40ad230b012974a1509bdf5d988035a"
+    },
+    {
+      "path": "./WSL/DotExpression.js",
+      "bytes": 1915,
+      "sha256": "a7e0f05ad4d15ddbd1d170281dcd19813bdfd582a1bd9a5f88bce7f8a2aa9b1e"
+    },
+    {
+      "path": "./WSL/DoubleLiteral.js",
+      "bytes": 1655,
+      "sha256": "b06233d88f9726f72f57678011f8d7dc2264fc33f2ccba7da44f274bfc18114f"
+    },
+    {
+      "path": "./WSL/DoubleLiteralType.js",
+      "bytes": 1874,
+      "sha256": "3b62870605d8de9b305e980734eb3a6afc97126270fd8b4ad026105647a2fbb5"
+    },
+    {
+      "path": "./WSL/EArrayRef.js",
+      "bytes": 1640,
+      "sha256": "9500f889070e9fe196dab93213abc739ca88a886aed5144f79b198ec8bcb8ca2"
+    },
+    {
+      "path": "./WSL/EBuffer.js",
+      "bytes": 2791,
+      "sha256": "98c87ffe19373ac20b9d77d2a63b80568d4d4a8d91a4e918437b2b7cc7b3e7b6"
+    },
+    {
+      "path": "./WSL/EBufferBuilder.js",
+      "bytes": 3757,
+      "sha256": "5918cddb443627c48172f0a1db09f85e143a48232a7532d4ac23ed099a382861"
+    },
+    {
+      "path": "./WSL/EPtr.js",
+      "bytes": 2799,
+      "sha256": "157939e1eb57d7d013555bbc00c4971de42670b9b5d9e6e54c004c38754361cd"
+    },
+    {
+      "path": "./WSL/EnumLiteral.js",
+      "bytes": 2009,
+      "sha256": "53c91fde9f06dbe3cee58e89288c029733b21dd661de41b7ddeed71c532d609f"
+    },
+    {
+      "path": "./WSL/EnumMember.js",
+      "bytes": 1771,
+      "sha256": "48b7d3caad344e323137106b382cf31a2f3e9f6386a1615fa5a41087fab7d149"
+    },
+    {
+      "path": "./WSL/EnumType.js",
+      "bytes": 2811,
+      "sha256": "232cc8b0bed1fb0e81beccb8071a78601b06420e73028015e39f7fab995d39fa"
+    },
+    {
+      "path": "./WSL/EvaluationCommon.js",
+      "bytes": 1453,
+      "sha256": "983f6992a7fd8bbe5d92bff16ac68d6e84ca22c7b84d4cba12fd9dfd8152fa01"
+    },
+    {
+      "path": "./WSL/Evaluator.js",
+      "bytes": 10583,
+      "sha256": "41c006c8d7e3f64ecc08c8892c7ab7256415683cf3c3cd5c091827f6d4d722a5"
+    },
+    {
+      "path": "./WSL/ExpressionFinder.js",
+      "bytes": 3447,
+      "sha256": "7dcd3279e4064e5a3d8f498b4ee79cf49d384999b704e1bbb77b0db267a24a28"
+    },
+    {
+      "path": "./WSL/ExternalOrigin.js",
+      "bytes": 1430,
+      "sha256": "ddf0d317103759018d8489613f5706a102accc2de60f58857096850e96a202ee"
+    },
+    {
+      "path": "./WSL/Field.js",
+      "bytes": 1725,
+      "sha256": "241c9a00312bbafb5b6a1042bb38e2a85b1697165883df33f3704269523aab49"
+    },
+    {
+      "path": "./WSL/FindHighZombies.js",
+      "bytes": 1428,
+      "sha256": "0da0608416a6e5328204c4a9886f0ad183d876ec1f85e97461de5e9fde3e4421"
+    },
+    {
+      "path": "./WSL/FlattenProtocolExtends.js",
+      "bytes": 2137,
+      "sha256": "53b67afd0022def6d2fd86b2673763e295d687cc6731464b88e6233b0a361c7d"
+    },
+    {
+      "path": "./WSL/FlattenedStructOffsetGatherer.js",
+      "bytes": 2140,
+      "sha256": "154dd72184f3c948cd50cfeaf887e634831f481af6eb3bce07d2ebb1ea267c4e"
+    },
+    {
+      "path": "./WSL/FloatLiteral.js",
+      "bytes": 1651,
+      "sha256": "4ebf724541b7e363d3990eb9544d1fb69be07979d0f39b0af86680ef821c8310"
+    },
+    {
+      "path": "./WSL/FloatLiteralType.js",
+      "bytes": 1871,
+      "sha256": "04e912cb9d1a31f9a26509de2f8f7a147f2dccbcb7dd90e760b92ce86067c9dc"
+    },
+    {
+      "path": "./WSL/FoldConstexprs.js",
+      "bytes": 1427,
+      "sha256": "af7641d05b7376b5df45193f18ee3f7cb11dddcf6319549b37cc1510c35c6260"
+    },
+    {
+      "path": "./WSL/ForLoop.js",
+      "bytes": 2110,
+      "sha256": "51c211f634d271d8d8c60ec11bb72af14527494f64714809faca7a9964c30472"
+    },
+    {
+      "path": "./WSL/Func.js",
+      "bytes": 3159,
+      "sha256": "358879672a27388f115dbec97f8c9e7f08f928d4e084752d664e8e36cc69ebbd"
+    },
+    {
+      "path": "./WSL/FuncDef.js",
+      "bytes": 2112,
+      "sha256": "70ddf481e33dd6e9dbfbfc18c25b5cda68d1984fe5bfddd6dd34c0bc10879a3a"
+    },
+    {
+      "path": "./WSL/FuncInstantiator.js",
+      "bytes": 7003,
+      "sha256": "2a17ce15242a034294af65462a1bfb2679ce6d0ae5d0ebfab53b9b90664accd6"
+    },
+    {
+      "path": "./WSL/FuncParameter.js",
+      "bytes": 1889,
+      "sha256": "cdcfff382834a7e50b426f14c23b65cb109f0888ea275482d64d6c8fcc555254"
+    },
+    {
+      "path": "./WSL/FunctionLikeBlock.js",
+      "bytes": 2062,
+      "sha256": "5f069856c559b9d3bc3a0c4d2a9d6844e75c67f9d5c7ff8d8d19716db5316980"
+    },
+    {
+      "path": "./WSL/HighZombieFinder.js",
+      "bytes": 1830,
+      "sha256": "f103295bff0278752f5c061dd01a955b5493b29317fbdb015050fc69286336d2"
+    },
+    {
+      "path": "./WSL/IdentityExpression.js",
+      "bytes": 1841,
+      "sha256": "9c699be14ecc28c87f255dfcb6acfba78bae78cca7cf42099b78235353545b33"
+    },
+    {
+      "path": "./WSL/IfStatement.js",
+      "bytes": 1978,
+      "sha256": "5c67f9d5e904b330b12062a27550526d32cb72b227121e81c4555c39934b7fb2"
+    },
+    {
+      "path": "./WSL/IndexExpression.js",
+      "bytes": 2154,
+      "sha256": "c44708b0c8349348d77561f29fb7ff8f1c87009ae965e472cce873bed3a5b1b3"
+    },
+    {
+      "path": "./WSL/InferTypesForCall.js",
+      "bytes": 3886,
+      "sha256": "ac24dcf929f5c1cb356a8441d0dbea866123aff5b808f1713cfbf28806b398e6"
+    },
+    {
+      "path": "./WSL/Inline.js",
+      "bytes": 2806,
+      "sha256": "0c8929ff29cb7990f153382dc0b54e3711e5f50678ac51c46696227186a56bcf"
+    },
+    {
+      "path": "./WSL/Inliner.js",
+      "bytes": 2276,
+      "sha256": "45ddd6e2e1f22c8cf01856aaeca39bbd971fd60ac7942a3ee465c78e79f902dd"
+    },
+    {
+      "path": "./WSL/InstantiateImmediates.js",
+      "bytes": 1857,
+      "sha256": "e7bb68ba9cf9a7cc1a1a310b89ac0a861dd9c3c009dae6f8b9fdf214c9ea7d8e"
+    },
+    {
+      "path": "./WSL/IntLiteral.js",
+      "bytes": 1649,
+      "sha256": "568ad52895320d6cab07eaf20b067dcc1bf34b12747d94808c01f8f15a766a05"
+    },
+    {
+      "path": "./WSL/IntLiteralType.js",
+      "bytes": 1874,
+      "sha256": "93393630eac0426bff4bd61890f846487d9b1091b1d03f6a87f62e37f476941f"
+    },
+    {
+      "path": "./WSL/Intrinsics.js",
+      "bytes": 25190,
+      "sha256": "d0ee0610ae674068fcf4b32b9aad16e0fce27bb83159a521a9c44b929d4f20eb"
+    },
+    {
+      "path": "./WSL/LateChecker.js",
+      "bytes": 3692,
+      "sha256": "aa493e2422466e0197206c1fe8f68820f4c27c29bfe63b69604b6c139d5789f0"
+    },
+    {
+      "path": "./WSL/Lexer.js",
+      "bytes": 6330,
+      "sha256": "1d350c05a09265443ddbca3f23b39eae46ed593bde15e5429dc9036c2007b13d"
+    },
+    {
+      "path": "./WSL/LexerToken.js",
+      "bytes": 2238,
+      "sha256": "d71053374a598b905450b4f90bbd3a41bb315fa12b58c1e297c2c005d1bcfd14"
+    },
+    {
+      "path": "./WSL/LiteralTypeChecker.js",
+      "bytes": 2307,
+      "sha256": "7f958c446e2ddf4832545e82a16a0d1b5d1ac21e3c0be21a225daff4833b74f0"
+    },
+    {
+      "path": "./WSL/LogicalExpression.js",
+      "bytes": 1784,
+      "sha256": "df95786e9da35859a737e49acfb4a2b65a51267aa9bcd4cc9c62f09943355742"
+    },
+    {
+      "path": "./WSL/LogicalNot.js",
+      "bytes": 1612,
+      "sha256": "3b66fc73ac720ce364f547cbf9b8693e08f8abe5ff90649e5a85997509083b5c"
+    },
+    {
+      "path": "./WSL/LoopChecker.js",
+      "bytes": 3461,
+      "sha256": "937d37d7ee60a9dfdcd0fddd42d505957c7c2d8038caf19c06d25cb2b0e08798"
+    },
+    {
+      "path": "./WSL/MakeArrayRefExpression.js",
+      "bytes": 1682,
+      "sha256": "a96baa08b480e6dd490d3406e136296b6c0b89aa9e4fd394e4a30174b7901ad5"
+    },
+    {
+      "path": "./WSL/MakePtrExpression.js",
+      "bytes": 1612,
+      "sha256": "3f888be2cfdaeb23d8e7db810526578b1e29f0d6c5be5c11644ae39b60431d9d"
+    },
+    {
+      "path": "./WSL/NameContext.js",
+      "bytes": 5153,
+      "sha256": "753910abb069fce19d7ebdea07b059bdfd0504f9f4df3230e70e9e74de6e6b62"
+    },
+    {
+      "path": "./WSL/NameFinder.js",
+      "bytes": 2661,
+      "sha256": "986c8b1ad9861149c283c5012b89563dd9ca194ef5e58bf04a12f07254957582"
+    },
+    {
+      "path": "./WSL/NameResolver.js",
+      "bytes": 11756,
+      "sha256": "bfc518fb9604237dd6b69b2f024010715684245146c4597da5c3104f587c4b9d"
+    },
+    {
+      "path": "./WSL/NativeFunc.js",
+      "bytes": 1987,
+      "sha256": "ecfff3e23f82495b75cad93e02055b0ffa8e84f3134b47174b6160ea5a0dc83b"
+    },
+    {
+      "path": "./WSL/NativeFuncInstance.js",
+      "bytes": 1883,
+      "sha256": "95fa2e8e5b6dc0bc859b20911d47849431681170a81600bb9960730ec0c513e4"
+    },
+    {
+      "path": "./WSL/NativeType.js",
+      "bytes": 2876,
+      "sha256": "0de0de0a384f8d667d2acb2daefbb32e72a6d266396d4d9fee060e8a9a749b44"
+    },
+    {
+      "path": "./WSL/NativeTypeInstance.js",
+      "bytes": 2240,
+      "sha256": "43607287fc06d3c81814940c188d62096b0e10d36e1f94e9a17fef392922085e"
+    },
+    {
+      "path": "./WSL/NormalUsePropertyResolver.js",
+      "bytes": 1630,
+      "sha256": "4cf33404ea05ffa44d0bed8b6150f753971a634e632a62953391d70f2cc7e880"
+    },
+    {
+      "path": "./WSL/NullLiteral.js",
+      "bytes": 1545,
+      "sha256": "5519c9fef2ba85c19d7a71d55255db79e66c70669217feb734513f2a48a68826"
+    },
+    {
+      "path": "./WSL/NullType.js",
+      "bytes": 2797,
+      "sha256": "13fd758b5d3429497bd98ebb9d8ea749f5b43ea245019df0bec87404bbc7eca2"
+    },
+    {
+      "path": "./WSL/OriginKind.js",
+      "bytes": 1551,
+      "sha256": "cbd4686ee1c5b855d9ff304cac4114fae9703a0dfe661305d98726045153a852"
+    },
+    {
+      "path": "./WSL/OverloadResolutionFailure.js",
+      "bytes": 1685,
+      "sha256": "a1b32e4ee900e843bd254c5a7ea1445aef37eb07b0378733ff64b363caef931b"
+    },
+    {
+      "path": "./WSL/Parse.js",
+      "bytes": 33329,
+      "sha256": "3bb3f92c79822984430f8bf3fd531b801a5b9dd9f942db4623301483937b5a55"
+    },
+    {
+      "path": "./WSL/Prepare.js",
+      "bytes": 3014,
+      "sha256": "254837b95a6d87521860e229c0988323d23f5de29ce7e56975b410b63186854e"
+    },
+    {
+      "path": "./WSL/Program.js",
+      "bytes": 3041,
+      "sha256": "1d652fcf2efa8603b4f489345d6044132370340cb2da29a0bf915ee6604b2c92"
+    },
+    {
+      "path": "./WSL/ProgramWithUnnecessaryThingsRemoved.js",
+      "bytes": 2387,
+      "sha256": "8fbd7382efaef39c74ea31b234fe6c8c6e6f964a7a03e6083f7eaa69cfa89505"
+    },
+    {
+      "path": "./WSL/PropertyResolver.js",
+      "bytes": 6506,
+      "sha256": "a0a464e757bd0e85a3246842e68bc0a8191f75561b3593e8af814563b156e31d"
+    },
+    {
+      "path": "./WSL/Protocol.js",
+      "bytes": 1675,
+      "sha256": "cac8dd3b2b876675bb1ad24cb1b1b64674a7e30414da26f0f39d09e52b9944c5"
+    },
+    {
+      "path": "./WSL/ProtocolDecl.js",
+      "bytes": 5569,
+      "sha256": "3ce4a85db3ca4a120e307115bf9c971e14696809f69ed24dc2736be2a7a360a6"
+    },
+    {
+      "path": "./WSL/ProtocolFuncDecl.js",
+      "bytes": 1517,
+      "sha256": "e06d4b510329fdeff0f5ceb88688f2dc3d07c69be7a2da48fce3d5f3d6f0dfae"
+    },
+    {
+      "path": "./WSL/ProtocolRef.js",
+      "bytes": 1746,
+      "sha256": "bf17a392f94b2dc053f2a0aaeb914bda96736532f958940a0b2ca308392984aa"
+    },
+    {
+      "path": "./WSL/PtrType.js",
+      "bytes": 2145,
+      "sha256": "37ea2e09009de1cf9b8f2b5b41fb8c4fc5b304a162c1fda88fd30fdc4ba6c450"
+    },
+    {
+      "path": "./WSL/ReadModifyWriteExpression.js",
+      "bytes": 2065,
+      "sha256": "1aaba07dcc10d2ae58963a96e6d79ea0e712106b87db361ca3c7843274844864"
+    },
+    {
+      "path": "./WSL/RecursionChecker.js",
+      "bytes": 1669,
+      "sha256": "1ce438779508b563d87f2557cc50355ac97c80a2445fd2fb1c8e406e2dd80526"
+    },
+    {
+      "path": "./WSL/RecursiveTypeChecker.js",
+      "bytes": 1836,
+      "sha256": "9e4eae3ef53ce39a2b4e0fe2d56e8196464f8701458b1352be406cd940534fe4"
+    },
+    {
+      "path": "./WSL/ResolveNames.js",
+      "bytes": 1940,
+      "sha256": "14aa1e928d8e0cf2d8ffc4d25c5a3dd3edd9c5becaae8ffc52f1bb31c961ced6"
+    },
+    {
+      "path": "./WSL/ResolveOverloadImpl.js",
+      "bytes": 4487,
+      "sha256": "dd2cda461a5b1c0c4fb3cd8319000f46f2f737daa8968c68e7c87c8c150cf17f"
+    },
+    {
+      "path": "./WSL/ResolveProperties.js",
+      "bytes": 1701,
+      "sha256": "8aca4c1262bdd77d44e9aa2c079723f439a14f8a509f616e10136714e92ebce4"
+    },
+    {
+      "path": "./WSL/ResolveTypeDefs.js",
+      "bytes": 1905,
+      "sha256": "1958e38b3ceed5ef807cd2399f4da3df5863eeac9b250b6119fc08b29c31dc71"
+    },
+    {
+      "path": "./WSL/Return.js",
+      "bytes": 1710,
+      "sha256": "9ddcb3b837b095cbd4a7bc4c424f45f08d2a23d9f49d647d49c3f9461b4c8b40"
+    },
+    {
+      "path": "./WSL/ReturnChecker.js",
+      "bytes": 6946,
+      "sha256": "db4d0aa542afdc1526327059b11c1ea9f4f70ff155efa682635584ce2543d4b9"
+    },
+    {
+      "path": "./WSL/ReturnException.js",
+      "bytes": 1482,
+      "sha256": "7f19027250d3631d904f2c8772aa704b8ee8ada6802e58cd1000d85af206f234"
+    },
+    {
+      "path": "./WSL/StandardLibrary.js",
+      "bytes": 10921,
+      "sha256": "97d1915d60fdc9072c2e839ae27f1fbb7faca369716e3b6dfcdfc3fa82d54ac9"
+    },
+    {
+      "path": "./WSL/StatementCloner.js",
+      "bytes": 4141,
+      "sha256": "9c5320a32de5853acf367994b2d6b2d1bdab0a7ef60f865e14eccd65b2761377"
+    },
+    {
+      "path": "./WSL/StructLayoutBuilder.js",
+      "bytes": 3007,
+      "sha256": "c15b89931ecfceb417df4ab04563ea7cf883186ca3c243e894324488fc07b486"
+    },
+    {
+      "path": "./WSL/StructType.js",
+      "bytes": 3760,
+      "sha256": "9fa55aa2626e63dacada2699495e96222538c75f0643f3d38e31132a3a372bb9"
+    },
+    {
+      "path": "./WSL/Substitution.js",
+      "bytes": 2420,
+      "sha256": "3c04d4bfc356c65fac1a6ac2da97209edeac6993b375a30d5b9646d8f2304759"
+    },
+    {
+      "path": "./WSL/SwitchCase.js",
+      "bytes": 1955,
+      "sha256": "3a892d3025884fea62101c1c52a125f9763d9d1e2d7b7087c24de06cb6f94f72"
+    },
+    {
+      "path": "./WSL/SwitchStatement.js",
+      "bytes": 1976,
+      "sha256": "4cbb2ce029bdcaae0f1fd276309c050f6eee5607d356a8d358906719e067d278"
+    },
+    {
+      "path": "./WSL/SynthesizeEnumFunctions.js",
+      "bytes": 3142,
+      "sha256": "1a24e97ccfb2cd1deb98d99bbf9b73b3ab7d678602ed810bceb2641353f62ad0"
+    },
+    {
+      "path": "./WSL/SynthesizeStructAccessors.js",
+      "bytes": 7561,
+      "sha256": "59a2c74fd7f6882104f046ebe7822712078f4d1edc73bf9c262b3c0ee7bd2a25"
+    },
+    {
+      "path": "./WSL/TrapStatement.js",
+      "bytes": 1572,
+      "sha256": "1129480fe30c169bfa3fb1efa29fcc44e4c29ca5804e7f004d56e422f0f3805b"
+    },
+    {
+      "path": "./WSL/TypeDef.js",
+      "bytes": 1893,
+      "sha256": "a6b79d563dce3a1fdee988658459b4650ef29236c1e6f04b9b05240e61f7a1da"
+    },
+    {
+      "path": "./WSL/TypeDefResolver.js",
+      "bytes": 2689,
+      "sha256": "9e10e1a90c169d0a341dbf1f6e1bf7382fc53a7caee6f52141f324157f5e0b01"
+    },
+    {
+      "path": "./WSL/TypeOrVariableRef.js",
+      "bytes": 1644,
+      "sha256": "33adfa0d13de3b0b29198ca1e214e42e5aa9fa7767e313ea792f587d089da5f6"
+    },
+    {
+      "path": "./WSL/TypeParameterRewriter.js",
+      "bytes": 1647,
+      "sha256": "daa116da26a02fd21eaa21adafeec031f66829d268ceb2e7bf8148b6619bb646"
+    },
+    {
+      "path": "./WSL/TypeRef.js",
+      "bytes": 3843,
+      "sha256": "dd9e863f14baaa2bebeaade1ee31954b6db323ccc582b38af3429bbf77e3792b"
+    },
+    {
+      "path": "./WSL/TypeVariable.js",
+      "bytes": 4084,
+      "sha256": "1a72502b9fd0537501f8dcfa5007740b66f4b414433b357b894b70ef4144ca3f"
+    },
+    {
+      "path": "./WSL/TypeVariableTracker.js",
+      "bytes": 1944,
+      "sha256": "a987b4d9f66717ebe0d902ed0d93d6aafa9898f58c1818b467d033a5480de991"
+    },
+    {
+      "path": "./WSL/TypedValue.js",
+      "bytes": 1779,
+      "sha256": "a509a0160ea15f6ecfb61a1fcedcbb942934936f64a551ccf8fb1cd9e31889fa"
+    },
+    {
+      "path": "./WSL/UintLiteral.js",
+      "bytes": 1656,
+      "sha256": "6279feb5d947cdca2dea4a96c9880b42625c641a8ea3c0247a5d341b6b3aab86"
+    },
+    {
+      "path": "./WSL/UintLiteralType.js",
+      "bytes": 2007,
+      "sha256": "e4c20ba106969addc58746ee1d6143ea66b55e2a1b7a0622bfa6409f1447c9be"
+    },
+    {
+      "path": "./WSL/UnificationContext.js",
+      "bytes": 4886,
+      "sha256": "a22a243e9bd865f5830f77fd7904b2778267829cd420f3d2342100247be49ee1"
+    },
+    {
+      "path": "./WSL/UnreachableCodeChecker.js",
+      "bytes": 2110,
+      "sha256": "d8309aba619947f4217b83e86b0a64b8389c0633852c11efdc032089d275140e"
+    },
+    {
+      "path": "./WSL/VariableDecl.js",
+      "bytes": 1932,
+      "sha256": "79e1902d514eb6dec0df77af3db216333ee0e81b2b52aa21dc86e180b5835bfe"
+    },
+    {
+      "path": "./WSL/VariableRef.js",
+      "bytes": 2051,
+      "sha256": "ce55095f18f7060a4f1d6fbdd36e37af79c5232942ae131712b1f4b46ddfacaf"
+    },
+    {
+      "path": "./WSL/VisitingSet.js",
+      "bytes": 1752,
+      "sha256": "7ea14054fd2e367aa473ea2580d9b5ad00bc8e32887a52f32fac7c98a99da5c1"
+    },
+    {
+      "path": "./WSL/WSyntaxError.js",
+      "bytes": 1588,
+      "sha256": "7b3315e2a6ca7fcf0bc723dac97a91f5d1d9c55953bf7938983bdb042ff1a14e"
+    },
+    {
+      "path": "./WSL/WTrapError.js",
+      "bytes": 1578,
+      "sha256": "c42ded00d2a698ae825c77d215ba103c4dfde903956fd3487edb0c5168e245d4"
+    },
+    {
+      "path": "./WSL/WTypeError.js",
+      "bytes": 1582,
+      "sha256": "e8ff236fa48f67f3e257ae09ec54e537e0982da5bc5e3387b278cefe147e65b6"
+    },
+    {
+      "path": "./WSL/WhileLoop.js",
+      "bytes": 1778,
+      "sha256": "b20289ca62c4466a9669ca3311e36fb0c77de7bbc177c22f11844dddde37dfb2"
+    },
+    {
+      "path": "./WSL/WrapChecker.js",
+      "bytes": 2796,
+      "sha256": "a022ee824460eb0b14bb57231a81a1ec312ec63d9e53e3aade73ec1f3a7abcba"
+    },
+    {
+      "path": "./WSL/Test.js",
+      "bytes": 182406,
+      "sha256": "c0fa797a1add5b6aa9ed112e1c41abd217d40973d7d3aaca3f11f9c1073f4c33"
+    }
+  ],
+  "concatenatedSourceSha256": "5af610976b7caec3400ee597744fee6ef3531e366eaf3882ea0dfec70f1aa110",
+  "sourceLicence": "BSD-2-Clause; Copyright (C) 2017 Apple Inc. All rights reserved.",
+  "completeOriginalOperation": {
+    "calls": 22354,
+    "stdlibCalls": 3620,
+    "mainCalls": 18734,
+    "receiverClasses": {
+      "DotExpression": 22085,
+      "IndexExpression": 83,
+      "VariableRef": 54,
+      "ReadModifyWriteExpression": 104,
+      "Assignment": 11,
+      "DereferenceExpression": 10,
+      "CallExpression": 6,
+      "MakeArrayRefExpression": 1
+    },
+    "targetClasses": {
+      "DereferenceExpression": 22020,
+      "VariableRef": 54,
+      "CommaExpression": 87,
+      "IdentityExpression": 28,
+      "CallExpression": 78,
+      "EnumLiteral": 80,
+      "GenericLiteral": 6,
+      "ConvertPtrToArrayRefExpression": 1
+    },
+    "testNames": [
+      "add1",
+      "ambiguousOverloadOverlapping",
+      "ambiguousOverloadSimple",
+      "ambiguousOverloadTieBreak",
+      "andReturnedArrayRef",
+      "anderDoesntReturnPointer",
+      "anderDoesntTakeReference",
+      "anderWithArrayRef",
+      "anderWithNothingWrong",
+      "anderWithWrongNumberOfArguments",
+      "arrayRefToArrayRef",
+      "assignLength",
+      "assignLengthHelper",
+      "assignUintToInt",
+      "badAdd",
+      "badIntLiteralForDouble",
+      "badIntLiteralForInt",
+      "badIntLiteralForUint",
+      "bitAndWrongArgumentLength",
+      "bitNotWrongArgumentLength",
+      "bitOrWrongArgumentLength",
+      "bitSubscriptAccessor",
+      "bitXorWrongArgumentLength",
+      "boolBitAnd",
+      "boolBitNot",
+      "boolBitOr",
+      "boolBitXor",
+      "booleanMath",
+      "break",
+      "buildArrayThenSumIt",
+      "buildArrayThenSumItUsingArrayReference",
+      "builtinVectors",
+      "chainConstexpr",
+      "chainGeneric",
+      "chainStruct",
+      "chainStructDevice",
+      "chainStructNewlyValid",
+      "constantPtrPtr",
+      "constexprIsNotLValueAssign",
+      "constexprIsNotLValuePtr",
+      "constexprIsNotLValueRMW",
+      "continue",
+      "decWrongArgumentLength",
+      "decWrongTypes",
+      "defaultInitializedNull",
+      "defaultInitializedNullArrayRef",
+      "defaultInitializedNullArrayRefIntLiteral",
+      "dereferenceDefaultNull",
+      "dereferenceDefaultNullArrayRef",
+      "dereferenceStore",
+      "deviceArrayLoad",
+      "deviceArrayStore",
+      "deviceArrayStoreIntLiteral",
+      "devicePtrPtr",
+      "divideEquals",
+      "divideEqualsResult",
+      "divideWrongArgumentLength",
+      "doWhile",
+      "dotOperatorSetterWrongArgumentLength",
+      "dotOperatorWrongArgumentLength",
+      "doubleGenericCallsDoubleGeneric",
+      "doubleGenericCallsSingleGeneric",
+      "doubleNot",
+      "emptyStruct",
+      "enumArrayRefBase",
+      "enumConstexprGenericFunction",
+      "enumConstexprGenericStruct",
+      "enumDuplicates",
+      "enumFloatBase",
+      "enumNoMembers",
+      "enumPtrBase",
+      "enumStructBase",
+      "enumSwitchBreakExhaustive",
+      "enumSwitchBreakNotQuiteExhaustive",
+      "enumSwitchBreakNotQuiteExhaustiveWithDefault",
+      "enumWithExplicitIntBase",
+      "enumWithManualValues",
+      "enumWithSomeManualValues",
+      "enumWithUintBase",
+      "enumWithoutZero",
+      "equality",
+      "equalityTypeFailure",
+      "equalsWrongArgumentLength",
+      "equalsWrongReturnType",
+      "exhaustiveUint8Switch",
+      "floatMath",
+      "forLoop",
+      "generalNegation",
+      "genericAccessors",
+      "genericCastInfer",
+      "genericStructInstance",
+      "greaterEqualWrongArgumentLength",
+      "greaterEqualWrongReturnType",
+      "greaterThanWrongReturnType",
+      "greaterWrongArgumentLength",
+      "identityBool",
+      "ifElseIfElseStatement",
+      "ifElseIfStatement",
+      "ifElseStatement",
+      "ifStatement",
+      "incWrongArgumentLength",
+      "incWrongTypes",
+      "indexAnderDoesntReturnPointer",
+      "indexAnderDoesntReturnPointerInProtocol",
+      "indexAnderDoesntTakeReference",
+      "indexAnderDoesntTakeReferenceInProtocol",
+      "indexAnderWithArrayRef",
+      "indexAnderWithArrayRefInProtocol",
+      "indexAnderWithNothingWrong",
+      "indexAnderWithNothingWrongInProtocol",
+      "indexAnderWithWrongNumberOfArguments",
+      "indexAnderWithWrongNumberOfArgumentsInProtocol",
+      "indexOperatorSetterWrongArgumentLength",
+      "indexOperatorSetterWrongArgumentLengthInProtocol",
+      "indexOperatorWrongArgumentLength",
+      "indexOperatorWrongArgumentLengthInProtocol",
+      "indexSetterWithMismatchedType",
+      "indexSetterWithMismatchedTypeInProtocol",
+      "indexSetterWithNoGetterOverload",
+      "indexSetterWithNoGetterOverloadFixed",
+      "indexSetterWithNoGetterOverloadFixedInProtocol",
+      "indexSetterWithNoGetterOverloadInProtocol",
+      "instantiateStructInStruct",
+      "instantiateStructInStructWithInt2",
+      "intBitAnd",
+      "intBitNot",
+      "intBitOr",
+      "intBitXor",
+      "intLShift",
+      "intLiteralGeneric",
+      "intLiteralGenericSpecific",
+      "intLiteralGenericWithProtocols",
+      "intOverloadResolution",
+      "intOverloadResolutionGeneric",
+      "intOverloadResolutionReverseOrder",
+      "intRShift",
+      "intSimpleMath",
+      "lShiftWrongArgumentLength",
+      "lessEqualWrongArgumentLength",
+      "lessEqualWrongReturnType",
+      "lessThanWrongArgumentLength",
+      "lessThanWrongReturnType",
+      "lexerKeyword",
+      "linkedList",
+      "literalBool",
+      "loadNull",
+      "loadNullArrayRef",
+      "logicalNegation",
+      "loneIndexSetter",
+      "loneIndexSetterInProtocol",
+      "loneIndexSetterPointer",
+      "loneIndexSetterPointerInProtocol",
+      "loneSetter",
+      "loneSetterPointer",
+      "makeArrayRefFromArrayRef",
+      "makeArrayRefFromLocal",
+      "makeArrayRefFromPointer",
+      "minusEquals",
+      "minusEqualsResult",
+      "minusWrongArgumentLength",
+      "moduloWrongArgumentLength",
+      "mutuallyRecursiveStruct",
+      "mutuallyRecursiveStructWithPointers",
+      "mutuallyRecursiveStructWithPointersBroken",
+      "nameResolutionFailure",
+      "nestedSubscriptLValueEmulationGeneric",
+      "nestedSubscriptLValueEmulationSimple",
+      "nonArrayRefArrayLengthFail",
+      "nonArrayRefArrayLengthSucceed",
+      "notEquality",
+      "notEqualsOverload",
+      "notLoneIndexSetter",
+      "notLoneIndexSetterInProtocol",
+      "notQuiteExhaustiveUint8Switch",
+      "notQuiteExhaustiveUint8SwitchWithDefault",
+      "nullTypeVariableUnify",
+      "operatorCastWithTypeVariableInferredFromReturnType",
+      "operatorCastWithUninferrableTypeVariable",
+      "operatorWithUninferrableTypeVariable",
+      "operatorWithoutUninferrableTypeVariable",
+      "overrideSubscriptStruct",
+      "overrideSubscriptStructAndDoStores",
+      "overrideSubscriptStructAndUsePointers",
+      "overrideSubscriptStructAndUsePointersIncorrectly",
+      "paramChainStructDevice",
+      "passNullAndNotNull",
+      "passNullAndNotNullFullPoly",
+      "passNullAndNotNullFullPolyReverse",
+      "passNullToPolymorphic",
+      "passNullToPtrMonomorphic",
+      "passNullToPtrMonomorphicArrayRef",
+      "passNullToPtrPolymorphic",
+      "passNullToPtrPolymorphicArrayRef",
+      "plusEquals",
+      "plusEqualsResult",
+      "plusWrongArgumentLength",
+      "pointerGetter",
+      "pointerIndexGetter",
+      "pointerIndexGetterInProtocol",
+      "pointerToPointer",
+      "postfixMinusMinus",
+      "postfixMinusMinusResult",
+      "postfixPlusPlus",
+      "postfixPlusPlusResult",
+      "prefixMinusMinus",
+      "prefixMinusMinusResult",
+      "prefixPlusPlus",
+      "prefixPlusPlusResult",
+      "protocolDoublePolySigDoublePolyDef",
+      "protocolDoublePolySigDoublePolyDefExplicit",
+      "protocolExtendsTwo",
+      "protocolMonoPolySigDoublePolyDefExplicit",
+      "protocolMonoSigPolyDef",
+      "protocolPolySigPolyDef",
+      "rShiftWrongArgumentLength",
+      "returnIf",
+      "returnIntLiteralDouble",
+      "returnIntLiteralUint",
+      "returnNull",
+      "returnNullArrayRef",
+      "setterWithMatchedType",
+      "setterWithMismatchedType",
+      "setterWithNoGetterOverload",
+      "setterWithNoGetterOverloadFixed",
+      "shaderTypes",
+      "simpleAssignment",
+      "simpleConstexpr",
+      "simpleDefault",
+      "simpleDereference",
+      "simpleEnum",
+      "simpleGeneric",
+      "simpleGetter",
+      "simpleLength",
+      "simpleMakePtr",
+      "simpleNoReturn",
+      "simpleProtocol",
+      "simpleProtocolExtends",
+      "simpleRecursion",
+      "simpleRecursiveStruct",
+      "simpleSetter",
+      "simpleStruct",
+      "simpleSwitch",
+      "simpleUnreachableCode",
+      "simpleVariable",
+      "simpleWhile",
+      "storeNull",
+      "storeNullArrayRef",
+      "switchBreak",
+      "switchFallThrough",
+      "swizzle",
+      "threadArrayLoad",
+      "threadArrayLoadIntLiteral",
+      "threadArrayStore",
+      "threadgroupPtrPtr",
+      "timesEquals",
+      "timesEqualsResult",
+      "timesWrongArgumentLength",
+      "trap",
+      "twoIntLiterals",
+      "typeMismatchAssignment",
+      "typeMismatchReturn",
+      "typeMismatchReturnParam",
+      "typeMismatchVariableDecl",
+      "typedefArray",
+      "uint8BitAnd",
+      "uint8BitNot",
+      "uint8BitOr",
+      "uint8BitXor",
+      "uint8LShift",
+      "uint8RShift",
+      "uint8SimpleMath",
+      "uintBitAnd",
+      "uintBitNot",
+      "uintBitOr",
+      "uintBitXor",
+      "uintLShift",
+      "uintLiteralGeneric",
+      "uintLiteralGenericWithProtocols",
+      "uintRShift",
+      "uintSimpleMath",
+      "unifyDifferentLiterals",
+      "unifyDifferentLiteralsBackwards",
+      "unifyVeryDifferentLiterals",
+      "unifyVeryDifferentLiteralsBackwards",
+      "variableShadowing"
+    ],
+    "eBuffers": 97397,
+    "anonymousVariables": 1392
+  },
+  "typedMatchesOriginal": true,
+  "freshTypedTrialsMatch": true,
+  "prototypeOperation": {
+    "source": "WSL/Value.js: Value.become",
+    "expression": "this.__proto__ = IdentityExpression.prototype",
+    "calls": 22354,
+    "stdlibCalls": 3620,
+    "mainCalls": 18734,
+    "aliasIdentityPreservedAtEveryCall": true
+  },
+  "testRegistry": {
+    "source": "WSL/Test.js",
+    "proxyConstructorsDuringInitialization": 1,
+    "setTrapsDuringInitialization": 285,
+    "proxyConstructionsDuringWork": 0,
+    "setTrapsDuringWork": 0,
+    "originalRegistryAndHandlerRetained": true
+  },
+  "typedSourceAudit": {
+    "originalDefinitions": 1254,
+    "portedDefinitions": 1273,
+    "equal": 1237,
+    "different": [
+      "Node.visit",
+      "Node.prepareToVerify",
+      "createLiteral",
+      "ArrayRefType.unifyImpl",
+      "flattenProtocolExtends",
+      "_inlineFunction",
+      "LexerToken.get_lineNumber",
+      "NameContext.add",
+      "NameContext.static_underlyingThings",
+      "NameResolver._resolveTypeArguments",
+      "NativeTypeInstance.unifyImpl",
+      "parse",
+      "var:prepare",
+      "PtrType.unifyImpl",
+      "StructType.get_isPrimitive",
+      "synthesizeStructAccessors",
+      "UnificationContext.find"
+    ],
+    "missing": [],
+    "originalTests": 285,
+    "testBodiesEqual": 285,
+    "any": 0,
+    "assertions": 0,
+    "nonNull": 369,
+    "fields": 301,
+    "classes": 116,
+    "readerCalls": {
+      "readInstance": 176,
+      "readProperty": 13,
+      "readInstances": 34,
+      "readOptionalInstance": 35,
+      "readVariable": 1,
+      "readLiteralType": 1,
+      "readOptionalValues": 2,
+      "readNumber": 79,
+      "callLegacy": 2,
+      "readString": 1,
+      "readStructImplementationData": 3
+    },
+    "suppressions": 0,
+    "allThisFieldAssignmentsHaveDeclaredOrInheritedMembers": true
+  },
+  "bodyComparisonNormalization": "Compare literal-preserving JavaScript ASTs after erasing TypeScript syntax and unwrapping the explicitly listed checked readers. Runtime checks remain in work; this is not a claim they erase. Each retained original top-level function, class constructor/method/accessor, initializer and test body is matched. Static and instance methods have separate keys.",
+  "bodyDifferences": {
+    "Node.visit": "Checked dynamic method and receiver-preserving call; validate return shapes for Rewriter, Evaluator and Checker, preserving null/undefined and WTypeError results.",
+    "Node.prepareToVerify": "Explicit return undefined replaces implicit undefined.",
+    "createLiteral": "Checked dynamic formatter lookup and callable guard; same receiver and arguments.",
+    "ArrayRefType.unifyImpl": "Checked ArrayRefType after the original isArrayRef guard.",
+    "flattenProtocolExtends": "A separate loop reference and local union express the original ProtocolRef-to-ProtocolDecl reassignment.",
+    "_inlineFunction": "Checked FuncDef after the original native/inlined early return.",
+    "LexerToken.get_lineNumber": "Explicit Number performs the same conversion as the original substring index, including the original dormant five-argument token-constructor path.",
+    "NameContext.add": "Checked named-node shape after the original absent-name early return.",
+    "NameContext.static_underlyingThings": "Checked individual-node shape after the original Func-array branch.",
+    "NameResolver._resolveTypeArguments": "Checked dynamic numeric-key read retains the original typeArgument[i] expression, including its dormant behavior.",
+    "NativeTypeInstance.unifyImpl": "Checked instance after original underlying-type equality guard.",
+    "parse": "Explicit Number before the original unsigned bitwise conversion; typed arrow parentheses have no effect.",
+    "var:prepare": "Expose a closure that clears the cached raw standard-library AST for a fresh complete trial; its parsing and pass sequence remain.",
+    "PtrType.unifyImpl": "Checked PtrType after original isPtr guard.",
+    "StructType.get_isPrimitive": "Explicit Number conversions preserve the original bitwise-AND boolean/number/null/undefined coercions.",
+    "synthesizeStructAccessors": "Checked implementation-data aliases preserve object identity, field writes and callback receivers.",
+    "UnificationContext.find": "Checked Type/Value return shape for the original unification domain; same result object."
+  },
+  "inputs": {
+    "testTemplates": {
+      "count": 365,
+      "rawTemplateArraySha256": "614ac75f3f5ffe5a28e6c359f3a524facd75b2f04b256c3610afa68f923a7f15"
+    },
+    "standardLibraryTemplates": {
+      "count": 5,
+      "rawTemplateArraySha256": "cb9d3588df9af43c8aa2bd650803f50a8d399edc765d241af0915cd124fba88e"
+    },
+    "testNamesJsonSha256": "e8f89e548db314b0da7e52c9b9344ac016692eab5b4de15a65aa224db84b5571"
+  },
+  "wrapper": {
+    "seed": 1,
+    "checksum": "For each fresh complete trial: (eBuffers * 31 + anonymousVariables) >>> 0; fold trials with (checksum * 31 + value) >>> 0.",
+    "work0": 0,
+    "work1": 3020699,
+    "work2": 96662368,
+    "reset": "Clear the original prepare closure cache; reset existing anonymousVariableCount, eBufferCount and canAllocateEBuffers module bindings. The complete bundle, generated standard-library text and original Proxy registry are initialized outside work."
+  },
+  "maintainerWork": [
+    "nts compilation/refusal recording",
+    "gate",
+    "input domains",
+    "node oracle counts",
+    "native/JVM/Wasm measurements"
+  ],
+  "localTiming": {
+    "node": "v24.20.0",
+    "seed": 1,
+    "approvedCompleteOperationException": true,
+    "processes": [
+      {
+        "process": 1,
+        "nsPerOp": 8307094613.0,
+        "msPerOp": 8307.094613,
+        "bits": "41470bcd80000000"
+      },
+      {
+        "process": 2,
+        "nsPerOp": 8635396485.0,
+        "msPerOp": 8635.396485,
+        "bits": "41470bcd80000000"
+      },
+      {
+        "process": 3,
+        "nsPerOp": 8866647351.0,
+        "msPerOp": 8866.647351,
+        "bits": "41470bcd80000000"
+      },
+      {
+        "process": 4,
+        "nsPerOp": 8336485348.0,
+        "msPerOp": 8336.485348,
+        "bits": "41470bcd80000000"
+      },
+      {
+        "process": 5,
+        "nsPerOp": 8958416256.0,
+        "msPerOp": 8958.416256,
+        "bits": "41470bcd80000000"
+      }
+    ],
+    "bestMs": 8307.094613,
+    "helper": "unchanged benchmarks/common/bench.mjs",
+    "otherHeavyChecksPaused": true
+  }
+}
