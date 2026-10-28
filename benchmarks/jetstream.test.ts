@@ -100,6 +100,53 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN THREEJS: complete r178 library and Mozilla's original 8,000 particles.
+{
+  const name = "jetstream-threejs";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+
+    test(name + ": three full original frames retain every particle and geometry value", () => {
+      const expected = [
+        [24992197, "86f2cb40ec664d62f411126b2d6c71e31e3a793164344ac43ba0a2da7d6b121e"],
+        [24992011, "2c520ca2225e238f746f55fec8eece14d68a766596f1ddc16d91695e477da0b1"],
+        [24992378, "febc2564f1c93a98ea0ee62f1af89534b161c25f5c8b795ee6a42ff6e879e41c"]
+      ];
+      for (let i = 0; i < expected.length; i++) {
+        const text = module.render(i + 1);
+        assert.equal(typeof text, "string");
+        assert.ok(typeof text === "string");
+        const frame: unknown = JSON.parse(text);
+        assert.ok(isRecord(frame));
+        assert.equal(frame.particles, 8000);
+        assert.equal(frame.objects, 8000);
+        assert.equal(frame.geometryCount, 16000);
+        assert.deepEqual(frame.render, {
+          frame: i + 1, calls: 16000, triangles: 344000, points: 0, lines: 0
+        });
+        assert.ok(Array.isArray(frame.values));
+        assert.equal(frame.values.length, 8000);
+        // Hashes were recorded from the untouched pinned library and driver.
+        // Each value includes position, velocity, both complete geometries,
+        // indices, and both world matrices, rather than sampled output.
+        const values = JSON.stringify(frame.values);
+        assert.equal(values.length, expected[i][0]);
+        assert.equal(sha256(values), expected[i][1]);
+      }
+    });
+
+    test(name + ": opaque count repeats full persistent-scene frames", () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 252155840);
+      assert.equal(module.work(2), 3774019584);
+    });
+  }
+}
+// END THREEJS.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
