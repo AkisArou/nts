@@ -41,9 +41,6 @@ export function normalizeWebSocketURL(input: unknown, context: WebSocketURLConte
   if ((parsed.protocol !== "ws:" && parsed.protocol !== "wss:") || parsed.href.includes("#")) {
     throw new DOMException("WebSocket requires a ws(s) URL without a fragment", "SyntaxError");
   }
-  if (parsed.username !== "" || parsed.password !== "") {
-    throw new DOMException("Credentials in a WebSocket URL are not supported", "SyntaxError");
-  }
   return parsed;
 }
 

@@ -28,6 +28,7 @@ import type {
 } from "./transport.ts";
 import { abortSignalSubscribe } from "../core/abort.ts";
 import { WebSocketConnectionQueue } from "./connection-queue.ts";
+import { webSocketBasicAuthorization } from "./authentication.ts";
 
 export interface RawWebSocketOptions {
   connectTimeoutMs?: number;
@@ -102,7 +103,9 @@ export class RawWebSocketTransport implements WebSocketTransport {
   private async open(
     handshake: WebSocketHandshake,
     signal: AbortSignal,
+    authorization: string | null = null,
   ): Promise<WebSocketSession> {
+    signal.throwIfAborted();
     const connection = await this.sockets.connect(
       addressOf(handshake.url, this.options.connectTimeoutMs ?? 30000, ["http/1.1"]),
       signal,
@@ -111,6 +114,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
     const timer = this.scheduler.delay(this.options.handshakeTimeoutMs ?? 30000, () =>
       connection.close(),
     );
+    let retryAuthorization: string | null = null;
     try {
       signal.throwIfAborted();
       const key = createKey(this.random);
@@ -127,6 +131,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
         "\r\nSec-WebSocket-Version: 13\r\nOrigin: " +
         handshake.origin +
         "\r\n";
+      if (authorization !== null) head += "Authorization: " + authorization + "\r\n";
       if (handshake.protocols.length !== 0)
         head += "Sec-WebSocket-Protocol: " + handshake.protocols.join(", ") + "\r\n";
       if (this.deflate !== undefined) {
@@ -141,26 +146,34 @@ export class RawWebSocketTransport implements WebSocketTransport {
           throw new LimitError("Too many interim upgrade responses");
         response = await readHead(reader);
       }
-      const validated = validateHandshake(
-        response.status,
-        new Headers(response.headers),
-        key,
-        handshake.protocols,
-        this.deflate !== undefined,
-      );
-      signal.throwIfAborted();
-      const session = new RawWebSocketSession(
-        connection,
-        reader,
-        validated,
-        this.deflate,
-        this.random,
-        this.scheduler,
-        this.options,
-        (item) => this.sessions.delete(item),
-      );
-      this.sessions.add(session);
-      return session;
+      if (authorization === null) {
+        retryAuthorization = webSocketBasicAuthorization(handshake.url, response.status, response.headers);
+      }
+      if (retryAuthorization === null) {
+        const validated = validateHandshake(
+          response.status,
+          new Headers(response.headers),
+          key,
+          handshake.protocols,
+          this.deflate !== undefined,
+        );
+        signal.throwIfAborted();
+        const session = new RawWebSocketSession(
+          connection,
+          reader,
+          validated,
+          this.deflate,
+          this.random,
+          this.scheduler,
+          this.options,
+          (item) => this.sessions.delete(item),
+        );
+        this.sessions.add(session);
+        return session;
+      }
+      // A challenge is an HTTP response, not an upgrade. Discard its connection
+      // before the one permitted retry, retaining the destination's queue slot.
+      connection.close();
     } catch (error) {
       connection.close();
       throw signal.aborted ? signal.reason : error;
@@ -168,6 +181,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
       timer.cancel();
       dispose();
     }
+    return this.open(handshake, signal, retryAuthorization);
   }
 
   close(): void {

@@ -3,13 +3,14 @@ import type { AbortSignal } from "../core/abort.ts";
 import { ProtocolError } from "../core/errors.ts";
 import { Headers } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
-import type { FetchTransport, TransportRequest } from "../fetch/transport.ts";
+import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
 import { BufferedReader } from "../http1/io.ts";
 import type { RandomSource, Scheduler } from "../provider/primitives.ts";
 import { createKey, validateHandshake } from "./handshake.ts";
 import { perMessageDeflateOffer } from "./permessage-deflate.ts";
 import { adoptClientWebSocketSession } from "./raw-transport.ts";
 import { WebSocketConnectionQueue } from "./connection-queue.ts";
+import { webSocketBasicAuthorization } from "./authentication.ts";
 import type { RawWebSocketOptions } from "./raw-transport.ts";
 import type {
   WebSocketDeflateProvider,
@@ -83,13 +84,19 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
     }
   }
 
-  async #open(handshake: WebSocketHandshake, signal: AbortSignal): Promise<WebSocketSession> {
+  async #open(
+    handshake: WebSocketHandshake,
+    signal: AbortSignal,
+    authorization: string | null = null,
+  ): Promise<WebSocketSession> {
+    signal.throwIfAborted();
     const key = createKey(this.#random);
     const headers: HeaderEntry[] = [
       ["sec-websocket-key", key],
       ["sec-websocket-version", "13"],
       ["origin", handshake.origin],
     ];
+    if (authorization !== null) headers.push(["authorization", authorization]);
     if (handshake.protocols.length !== 0) {
       headers.push(["sec-websocket-protocol", handshake.protocols.join(", ")]);
     }
@@ -112,12 +119,17 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
 
     const response = await this.#transport.dispatch(request);
     const connection = response.connection;
-    if (connection === undefined) {
+    if (response.status !== 101 || connection === undefined) {
+      await this.#discard(response, signal);
       signal.throwIfAborted();
-      // Either the server refused or the transport cannot hand over a socket. Draining
-      // the body would be tidier; leaving it is deliberate, because the caller of a
-      // WebSocket has nowhere to put a response body and a silent drain would make a
-      // refusal indistinguishable from a transport limitation.
+      const retryAuthorization = authorization === null
+        ? webSocketBasicAuthorization(handshake.url, response.status, response.headers)
+        : null;
+      if (retryAuthorization !== null) {
+        // Rebuild only the handshake: its URL, protocols, origin and upgrade
+        // metadata stay intact, while the nonce is fresh for the second attempt.
+        return this.#open(handshake, signal, retryAuthorization);
+      }
       throw new ProtocolError(
         "The WebSocket upgrade did not yield a connection (status " + response.status + ")",
       );
@@ -135,7 +147,7 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
       );
     } catch (error) {
       // The connection is ours now, and nothing else will close it.
-      connection.close();
+      await this.#discard(response, signal);
       throw error;
     }
 
@@ -156,6 +168,20 @@ export class DispatchedWebSocketTransport implements WebSocketTransport {
     });
     this.#sessions.add(session);
     return session;
+  }
+
+  async #discard(response: TransportResponse, signal: AbortSignal): Promise<void> {
+    response.connection?.close();
+    response.trailers?.catch(() => {});
+    if (response.body === null) return;
+    const canceled = Promise.withResolvers<void>();
+    const detach = signal[abortSignalSubscribe](() => canceled.reject(signal.reason));
+    response.body.cancel().then(canceled.resolve, () => canceled.resolve());
+    try {
+      await canceled.promise;
+    } finally {
+      detach();
+    }
   }
 
   close(): void {
