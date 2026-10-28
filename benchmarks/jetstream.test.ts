@@ -103,3 +103,40 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+// BEGIN UNIPOKER: complete original workload checks.
+{
+  const name = "jetstream-unipoker";
+  if (modules.has(name)) {
+    checked.add(name);
+    const port = await import("./cases/jetstream-unipoker/case.ts");
+    test("jetstream-unipoker: original validation and full output", () => {
+
+    const players = [{"name": "Player 1", "cards": ["\ud83c\udccb", "\ud83c\udcd9", "\ud83c\udca8", "\ud83c\udcd6", "\ud83c\udcb3"], "rank": 759907, "wins": 501, "handTypeCounts": [1005, 850, 84, 42, 12, 3, 4, 0, 0, 0]}, {"name": "Player 2", "cards": ["\ud83c\udcb1", "\ud83c\udcdd", "\ud83c\udcc8", "\ud83c\udcc6", "\ud83c\udcd3"], "rank": 1038435, "wins": 504, "handTypeCounts": [1003, 830, 98, 51, 10, 3, 4, 1, 0, 0]}, {"name": "Player 3", "cards": ["\ud83c\udcde", "\ud83c\udcaa", "\ud83c\udca6", "\ud83c\udca5", "\ud83c\udcc2"], "rank": 960082, "wins": 512, "handTypeCounts": [1010, 831, 92, 51, 9, 4, 3, 0, 0, 0]}, {"name": "Player 4", "cards": ["\ud83c\udcbd", "\ud83c\udccd", "\ud83c\udcc9", "\ud83c\udcb8", "\ud83c\udca4"], "rank": 1956228, "wins": 483, "handTypeCounts": [1011, 837, 92, 48, 7, 4, 1, 0, 0, 0]}];
+    assert.equal(port.seed, 1);
+    assert.equal(port.work(0), 0);
+    assert.equal(port.work(1), 2585762842);
+    assert.deepEqual(port.observation(), {iterations: 1, players, checksum: 2585762842});
+    assert.equal(port.work(2), 4242378396);
+    assert.equal(port.observation().iterations, 2);
+    assert.equal(port.work(1), 2585762842);
+    assert.deepEqual(port.render(1), players);
+
+    });
+  }
+}
+// END UNIPOKER.
+
+
+
+
