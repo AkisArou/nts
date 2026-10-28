@@ -162,7 +162,7 @@ mod tests {
             ends: u64::MAX,
             astral_ends: 0,
         };
-        assert_eq!(block.position(u32::MAX & 63), Utf16Pos(u32::MAX - 1));
+        assert_eq!(block.position(63), Utf16Pos(u32::MAX - 1));
     }
 
     #[test]
