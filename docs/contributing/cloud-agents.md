@@ -23,20 +23,28 @@ another open pull request touches.
 ## The TypeScript nts compiles
 
 nts compiles TypeScript ahead of time, with typed layouts, so it accepts a
-stricter TypeScript than node runs. Code that node runs but nts refuses is
-not done. Follow the style of the code already in `runtime/web-platform`,
-and in particular:
+stricter TypeScript than node runs. Follow the style of the code already in
+`runtime/web-platform`. Write each algorithm as its specification defines
+it, using any feature nts has decided to support even where it cannot
+compile it yet (`RegExp`, generators, reading `globalThis`, member reads by
+a run-time key on `any` and `unknown`): until that feature lands, nts
+refuses the functions that use it by name, the maintainers record those
+refusals when they land the code, and the code compiles the day the feature
+does. In particular:
 
 - **`strict` on,** and no `any` except where a specification passes an
   arbitrary value; `unknown` there, narrowed before use.
-- **No dynamic language features:** no `eval` or `new Function`, no `Proxy`
-  or `Reflect`, no `Object.defineProperty`, `freeze` or `seal`, no
-  decorators, no `arguments`, no `with`, no mutation of `globalThis`. Globals
-  are exposed by the package's provider bootstrap, never assigned.
-- **No `RegExp`** (nts has no engine yet) and **no generators** (`function*`,
-  `yield`). Write scanners and iterators by hand, as the existing code does.
-- **Member access by a name known only at run time** works on arrays and
-  index signatures (`Record<string, T>`) only.
+- **Never what nts will not compile:** `eval` or `new Function` of a
+  run-time string, `with`, sloppy-mode code, or assignment to `globalThis`.
+  Globals are exposed by the package's provider bootstrap.
+- **Not without asking in the pull request:** `Proxy`, `Reflect`,
+  `Object.defineProperty`, `freeze`, `seal` and decorators. They are later
+  work for nts, and these specifications rarely need them.
+- **Write for speed:** a `RegExp` with a literal pattern, which nts compiles
+  into a generated matcher, rather than one built from a string, unless the
+  specification builds the pattern at run time; typed arrays and simple
+  loops on hot paths; no allocation per character or per call where the
+  specification does not require one.
 - **Classes and interfaces are typed layouts:** declare every field, with its
   type, in the class body.
 - **Imports stay inside the package** or go through the provider interfaces
