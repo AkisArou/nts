@@ -1,0 +1,157 @@
+{
+  "baseCommit": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
+  "sourceCommit": "7d97f3fa7b9c0e16dbc1e41938ef5bcbb8b03233",
+  "sourceTree": "97bc705fe59d51940dac2dfe3e404338f65c95b4",
+  "node": "24.20.0",
+  "perFile": [
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 50
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 50
+      }
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      }
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
+      "before": {
+        "pass": 42,
+        "fail": 4,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 46,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 4,
+        "blocked": 7
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 7
+      }
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      }
+    }
+  ],
+  "wptTotal": {
+    "before": {
+      "pass": 48,
+      "fail": 8,
+      "blocked": 60
+    },
+    "after": {
+      "pass": 56,
+      "fail": 0,
+      "blocked": 60
+    }
+  },
+  "policy": {
+    "before": {
+      "pass": 2,
+      "fail": 7
+    },
+    "after": {
+      "pass": 9,
+      "fail": 0
+    }
+  },
+  "fullGate": {
+    "tests": 4109,
+    "pass": 3799,
+    "fail": 0,
+    "skipped": 310,
+    "upstreamPass": 2772,
+    "upstreamFail": 0,
+    "upstreamNotApplicable": 45
+  },
+  "strictTypeChecks": "both source and WPT projects pass",
+  "compiled": "not verified; compiler absent",
+  "sabotage": {
+    "mutation": "Return legacy code 0 rather than 20 for AbortError.",
+    "originalSHA256": "757cf071120a2070bded2978417109876fd79f3d2fa4d5eaed9e821c6dd9fea9",
+    "mutantSHA256": "8f4b09acdf9fdbf0931c14d40f07ed7302623548cb5d5470342d02b84783aec6",
+    "exitCode": 1,
+    "perFile": [
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 50
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
+        "pass": 45,
+        "fail": 1,
+        "blocked": 0
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 7
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      }
+    ],
+    "total": {
+      "pass": 55,
+      "fail": 1,
+      "blocked": 60
+    },
+    "restoredSHA256": "757cf071120a2070bded2978417109876fd79f3d2fa4d5eaed9e821c6dd9fea9",
+    "restoredExactly": true
+  },
+  "rawLogSHA256": {
+    "domexception-final-before.log": "69186ee21cb5c1a0f1fe74d053b89bdf3b3e2c7a15dd341f172a2e57391a1641",
+    "domexception-after.log": "cfeb4e8590aee0aedff80f246ad7408b5e16a2d4a795acb67f9dd0398f489824",
+    "domexception-sabotage.log": "4a0849e75338d46da2a6cbf8f965026293a5aaf729b577ec79f7f1b20eeed190",
+    "domexception-full.log": "3cc28861afd0525fbf10fa5f7d08e7c613daf0d6b694aa490523f15280f8280b"
+  }
+}

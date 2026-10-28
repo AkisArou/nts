@@ -9,7 +9,7 @@
     "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
     "versionsURL": "https://github.com/nodejs/node/blob/v24.20.0/test/fixtures/wpt/versions.json",
     "statusFiles": [],
-    "note": "No Node status file for this es-exceptions directory was found. All five Node-vendored JavaScript fixtures are selected; compare exact upstream directory blobs before publication."
+    "note": "No Node status file for this es-exceptions directory was found. All five Node-vendored JavaScript fixtures are selected and match the exact upstream directory blobs at the recorded revision."
   },
   "fixtures": [
     {
