@@ -100,6 +100,41 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN SHA256: add with the Stanford SHA256 case.
+interface Sha256Case extends JetStreamCase {
+  originalRounds: number;
+  runIteration(): unknown;
+}
+
+function isSha256Case(value: unknown): value is Sha256Case {
+  return isCase(value) && "originalRounds" in value && typeof value.originalRounds === "number" &&
+    "runIteration" in value && typeof value.runIteration === "function";
+}
+
+{
+  const name = "jetstream-stanford-crypto-sha256";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isSha256Case(module));
+    checked.add(name);
+    test(`${name}: all 4500 original rounds retain the source's complete digest`, () => {
+      assert.equal(module.originalRounds, 4500);
+      const result = module.runIteration();
+      assert.ok(Array.isArray(result));
+      const words: unknown[] = result;
+      const digest = words.map(word => {
+        assert.ok(typeof word === "number");
+        return (word >>> 0).toString(16).padStart(8, "0");
+      }).join("");
+      assert.equal(digest, "719043495be84b97fe4f5d7e61c99d6d1ba0cd6974a6b10c684c25a44ddd0c03");
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 3330387455);
+      assert.equal(module.work(2), 1798368510);
+    });
+  }
+}
+// END SHA256.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
