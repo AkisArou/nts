@@ -223,3 +223,37 @@ test("abort operations expose the Web IDL required-argument arity", () => {
   controller.abort(reason);
   assert.equal(controller.signal.reason, reason);
 });
+
+// Web IDL uses the abstract Call operation for iterator.next, not a property
+// named call on the supplied function: https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+for (const accessor of [false, true]) {
+  test(`AbortSignal.any ignores an iterator next function's ${accessor ? "call getter" : "own call property"}`, () => {
+    const controller = new AbortController();
+    let calls = 0;
+    function next(this: object): IteratorResult<AbortSignal> {
+      assert.equal(this, iterator);
+      calls++;
+      return calls === 1
+        ? { done: false, value: controller.signal }
+        : { done: true, value: undefined };
+    }
+    if (accessor) {
+      Object.setPrototypeOf(next, {
+        get call(): unknown {
+          throw new Error("The iterator next.call getter must not be read");
+        },
+      });
+    } else {
+      Object.assign(next, {
+        call(): never {
+          throw new Error("The iterator next.call property must not be invoked");
+        },
+      });
+    }
+    const iterator = { next };
+    const combined = anySignal({ [Symbol.iterator]: () => iterator });
+    assert.equal(calls, 2);
+    controller.abort("actual reason");
+    assert.equal(combined.reason, "actual reason");
+  });
+}
