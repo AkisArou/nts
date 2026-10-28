@@ -440,6 +440,113 @@ export interface CryptoFailure {
   readonly failure: "invalid-key" | "operation";
 }
 
+/** Operations after shared supports() normalization and wrapping fallback. */
+export type CryptoSupportOperation =
+  | "digest" | "encrypt" | "decrypt" | "sign" | "verify"
+  | "generateKey" | "importKey" | "exportKey" | "deriveBits"
+  | "wrapKey" | "unwrapKey" | "getPublicKey" | "encapsulate" | "decapsulate";
+
+export interface CryptoDigestSupport {
+  readonly kind: "digest";
+  readonly name: CryptoDigestName;
+}
+
+export interface CryptoCShakeSupport {
+  readonly kind: "cshake";
+  readonly name: "cSHAKE128" | "cSHAKE256";
+  readonly outputBits: number;
+  readonly functionNameBytes: number;
+  readonly customizationBytes: number;
+}
+
+export interface CryptoCipherSupport {
+  readonly kind: "cipher";
+  readonly name: "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW" | "AES-OCB" | "ChaCha20-Poly1305";
+  /** Undefined when the selected operation supplies no generation key length. */
+  readonly keyBits: number | undefined;
+  readonly ivBytes: number | undefined;
+  readonly additionalDataBytes: number | undefined;
+  readonly counterBits: number | undefined;
+  readonly tagBits: number | undefined;
+}
+
+export interface CryptoHmacSupport {
+  readonly kind: "hmac";
+  readonly name: "HMAC";
+  readonly hash: CryptoDigestName | undefined;
+  readonly keyBits: number | undefined;
+}
+
+export interface CryptoKmacSupport {
+  readonly kind: "kmac";
+  readonly name: "KMAC128" | "KMAC256";
+  readonly keyBits: number | undefined;
+  readonly outputBits: number | undefined;
+  readonly customizationBytes: number | undefined;
+}
+
+export interface CryptoRsaSupport {
+  readonly kind: "rsa";
+  readonly name: "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
+  readonly hash: CryptoDigestName | undefined;
+  readonly modulusBits: number | undefined;
+  /** Borrowed BigInteger bytes, only supplied for generation. */
+  readonly publicExponent: Uint8Array | undefined;
+  readonly saltBytes: number | undefined;
+  readonly labelBytes: number | undefined;
+}
+
+export interface CryptoEcSupport {
+  readonly kind: "ec";
+  readonly name: "ECDSA" | "ECDH";
+  readonly namedCurve: string | undefined;
+  readonly hash: CryptoDigestName | undefined;
+}
+
+export interface CryptoOkpSupport {
+  readonly kind: "okp";
+  readonly name: CryptoOkpCurve;
+  readonly contextBytes: number | undefined;
+}
+
+export interface CryptoKdfSupport {
+  readonly kind: "kdf";
+  readonly name: "HKDF" | "PBKDF2";
+  readonly hash: CryptoDigestName | undefined;
+  readonly saltBytes: number | undefined;
+  readonly infoBytes: number | undefined;
+  readonly iterations: number | undefined;
+}
+
+export interface CryptoArgon2Support {
+  readonly kind: "argon2";
+  readonly name: "Argon2d" | "Argon2i" | "Argon2id";
+  readonly nonceBytes: number | undefined;
+  readonly parallelism: number | undefined;
+  readonly memory: number | undefined;
+  readonly passes: number | undefined;
+  readonly secretBytes: number | undefined;
+  readonly associatedDataBytes: number | undefined;
+}
+
+export interface CryptoMlSupport {
+  readonly kind: "ml";
+  readonly name: "ML-DSA-44" | "ML-DSA-65" | "ML-DSA-87" | "ML-KEM-512" | "ML-KEM-768" | "ML-KEM-1024";
+  readonly contextBytes: number | undefined;
+}
+
+export type CryptoSupportParameters = CryptoDigestSupport | CryptoCShakeSupport
+  | CryptoCipherSupport | CryptoHmacSupport | CryptoKmacSupport | CryptoRsaSupport
+  | CryptoEcSupport | CryptoOkpSupport | CryptoKdfSupport | CryptoArgon2Support | CryptoMlSupport;
+
+/** One normalized algorithm requirement; composed operations query in specification order. */
+export interface CryptoSupportQuery {
+  readonly operation: CryptoSupportOperation;
+  readonly parameters: CryptoSupportParameters;
+  /** Requested derivation bits; null for omitted length or another operation. */
+  readonly length: number | null;
+}
+
 /**
  * Complete seam proposed for review before implementing the remaining algorithms.
  * No method performs Web Crypto's operation registration, input conversion, usage,
@@ -450,6 +557,22 @@ export interface CryptoFailure {
  * native failure. The shared caller alone selects observable errors and their order.
  */
 export interface CryptoProvider extends CryptoDigestProvider {
+  /**
+   * Read native algorithm availability and known implementation limits without
+   * generating/importing keys, deriving secrets, hashing, signing or encrypting.
+   * Shared code has already checked its registry and the specification's policy.
+   * Only primitive names, typed metadata and borrowed generation exponent bytes
+   * cross this seam; author dictionaries, CryptoKeys and JWKs never do.
+   * Return false when the operation must fail for every possible key/data due to
+   * a native limitation. Unknown key/data-dependent outcomes do not imply lack
+   * of support. A query failure is a value, which shared code maps to false.
+   * No randomness, scheduled crypto task, cryptographic probe or retained input.
+   * A composed operation first queries its additional algorithm and stops on
+   * false before normalizing or querying the primary algorithm (§3.2.6).
+   * https://wicg.github.io/webcrypto-modern-algos/#partial-subtlecrypto-interface-checking-support-for-algorithm
+   */
+  supports(query: CryptoSupportQuery): boolean | CryptoFailure;
+
   /** One whole-message cSHAKE call; SHAKE-equivalent empty N/S stays native too. */
   digestXof(parameters: CryptoCshakeParameters, bytes: Uint8Array): Uint8Array | CryptoFailure;
 

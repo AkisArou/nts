@@ -295,4 +295,7 @@ export type {
   CryptoRsaPssParameters, CryptoEd25519Parameters, CryptoEd448Parameters, CryptoSignatureParameters,
   CryptoByteSignature, CryptoEcdsaSignature, CryptoSignature, CryptoAgreementParameters,
   CryptoHkdfParameters, CryptoPbkdf2Parameters, CryptoArgon2Parameters, CryptoDerivationParameters, CryptoFailure, CryptoProvider,
+  CryptoSupportOperation, CryptoDigestSupport, CryptoCShakeSupport, CryptoCipherSupport, CryptoHmacSupport,
+  CryptoKmacSupport, CryptoRsaSupport, CryptoEcSupport, CryptoOkpSupport, CryptoKdfSupport, CryptoArgon2Support,
+  CryptoMlSupport, CryptoSupportParameters, CryptoSupportQuery,
 } from "./provider/crypto.ts";

@@ -1,0 +1,132 @@
+{
+  "specification": "https://wicg.github.io/webcrypto-modern-algos/",
+  "sections": [
+    "3.2.6",
+    "3.3"
+  ],
+  "webIdlSections": [
+    "3.6",
+    "3.7.7"
+  ],
+  "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
+  "nodeVersion": "24.20.0",
+  "integratedBase": "0ae2272efec6ec1cd805113215aa21c94bf25733",
+  "scope": "SubtleCrypto.supports over the preceding five families and the existing Web Crypto algorithms; native metadata queries only",
+  "restoredExclusions": 265,
+  "newSpecificationDiscrepancies": 0,
+  "registrationCountChanges": [],
+  "focusedControls": {
+    "total": 24,
+    "pass": 24,
+    "fail": 0,
+    "skip": 0
+  },
+  "combinedWorkerRegression": {
+    "total": 41,
+    "pass": 41,
+    "fail": 0,
+    "skip": 0
+  },
+  "typechecks": {
+    "public": 0,
+    "wpt": 0,
+    "strictStandaloneNewTest": 0
+  },
+  "commands": [
+    {
+      "command": "pnpm install --offline --frozen-lockfile",
+      "exitCode": 0,
+      "output": "8 cached packages reused; no dependencies or lockfile changes"
+    },
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --ignoreConfig --noEmit --strict --target esnext --module nodenext --allowImportingTsExtensions --types node --skipLibCheck runtime/web-platform/test/crypto-supports.test.ts",
+      "exitCode": 0
+    },
+    {
+      "command": "node --expose-gc --test runtime/web-platform/test/crypto-supports.test.ts runtime/web-platform/test/crypto-sha3-kmac.test.ts",
+      "exitCode": 0,
+      "logSha256": "13685d11cccc1bc33dfa138a2b5046ca2ce555ed3a471e97d47cf83f249f7730"
+    },
+    {
+      "command": "NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts",
+      "exitCode": 0,
+      "jsonlSha256": "5ef2876f05a354c4a6582dca84d96e1ab3df195fc912fb3dd69c037d8ae1e3c3"
+    },
+    {
+      "command": "NTS_WPT_CRYPTO_RAW=1 NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts",
+      "exitCode": 0,
+      "jsonlSha256": "e39d93baad9295b9f059322aeaab340f77a1e6445a8872573ef1e606871bf889"
+    }
+  ],
+  "scopedAffectedFiles": [
+    {
+      "mode": "scoped",
+      "path": "WebCryptoAPI/supports-modern.tentative.https.any.js",
+      "pass": 94,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "scoped",
+      "path": "WebCryptoAPI/supports.tentative.https.any.js",
+      "pass": 171,
+      "fail": 0,
+      "blocked": 0
+    }
+  ],
+  "rawAffectedFiles": [
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/supports-modern.tentative.https.any.js",
+      "pass": 94,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/supports.tentative.https.any.js",
+      "pass": 171,
+      "fail": 0,
+      "blocked": 0
+    }
+  ],
+  "nodeBindingObservations": {
+    "node": "24.20.0",
+    "cases": [
+      {
+        "name": "detached static call",
+        "thrown": "TypeError",
+        "code": "ERR_INVALID_THIS"
+      },
+      {
+        "name": "invalid length with digest",
+        "returned": true
+      },
+      {
+        "name": "invalid length with unknown operation",
+        "returned": false
+      },
+      {
+        "name": "deriveBits string length",
+        "returned": true
+      },
+      {
+        "name": "wrapKey without additional algorithm",
+        "returned": false
+      },
+      {
+        "name": "AES-OCB empty IV",
+        "returned": true
+      }
+    ]
+  },
+  "packageGate": "The parent integration records the complete ordered-stack package gate in the PR; the committed evidence here covers affected files and focused controls."
+}

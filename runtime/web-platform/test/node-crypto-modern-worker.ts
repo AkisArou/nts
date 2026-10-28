@@ -6,10 +6,27 @@ import { timingSafeEqual } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { workerData } from "node:worker_threads";
 import type { MessagePort } from "node:worker_threads";
-import type { NativeModernCryptoRequest } from "./node-crypto-modern-jobs.ts";
+import type { NativeModernCryptoCapability, NativeModernCryptoRequest } from "./node-crypto-modern-jobs.ts";
 
 interface NativeJob { run(): readonly [unknown, ArrayBuffer | boolean | undefined]; }
 interface NativeCryptoBinding {
+  readonly Argon2Job: unknown;
+  readonly RsaKeyPairGenJob: unknown;
+  readonly EcKeyPairGenJob: unknown;
+  readonly NidKeyPairGenJob: unknown;
+  readonly SignJob: unknown;
+  readonly KEMEncapsulateJob: unknown;
+  readonly KEMDecapsulateJob: unknown;
+  readonly EVP_PKEY_ED25519: number | undefined;
+  readonly EVP_PKEY_ED448: number | undefined;
+  readonly EVP_PKEY_X25519: number | undefined;
+  readonly EVP_PKEY_X448: number | undefined;
+  readonly EVP_PKEY_ML_DSA_44: number | undefined;
+  readonly EVP_PKEY_ML_DSA_65: number | undefined;
+  readonly EVP_PKEY_ML_DSA_87: number | undefined;
+  readonly EVP_PKEY_ML_KEM_512: number | undefined;
+  readonly EVP_PKEY_ML_KEM_768: number | undefined;
+  readonly EVP_PKEY_ML_KEM_1024: number | undefined;
   readonly kCryptoJobSync: number;
   readonly kSignJobModeSign: number;
   readonly CShakeJob: new (mode: number, name: string, data: Uint8Array, functionName: Uint8Array, customization: Uint8Array, outputLength: number) => NativeJob;
@@ -29,10 +46,40 @@ try {
   // the pinned native seam. Startup failure must not strand the caller's wait.
 }
 
+/** Build metadata only: never construct or run a native cryptographic job. */
+function hasNativeCapability(capability: NativeModernCryptoCapability): boolean {
+  if (binding === undefined) return false;
+  switch (capability) {
+    case "cshake": return typeof binding.CShakeJob === "function";
+    case "kmac": return typeof binding.KmacJob === "function";
+    case "argon2": return typeof binding.Argon2Job === "function";
+    case "rsa": return typeof binding.RsaKeyPairGenJob === "function";
+    case "ec": return typeof binding.EcKeyPairGenJob === "function";
+  }
+  if (typeof binding.NidKeyPairGenJob !== "function") return false;
+  switch (capability) {
+    case "Ed25519": return binding.EVP_PKEY_ED25519 !== undefined;
+    case "Ed448": return binding.EVP_PKEY_ED448 !== undefined;
+    case "X25519": return binding.EVP_PKEY_X25519 !== undefined;
+    case "X448": return binding.EVP_PKEY_X448 !== undefined;
+    case "ML-DSA-44": return binding.EVP_PKEY_ML_DSA_44 !== undefined && typeof binding.SignJob === "function";
+    case "ML-DSA-65": return binding.EVP_PKEY_ML_DSA_65 !== undefined && typeof binding.SignJob === "function";
+    case "ML-DSA-87": return binding.EVP_PKEY_ML_DSA_87 !== undefined && typeof binding.SignJob === "function";
+    case "ML-KEM-512": return binding.EVP_PKEY_ML_KEM_512 !== undefined
+      && typeof binding.KEMEncapsulateJob === "function" && typeof binding.KEMDecapsulateJob === "function";
+    case "ML-KEM-768": return binding.EVP_PKEY_ML_KEM_768 !== undefined
+      && typeof binding.KEMEncapsulateJob === "function" && typeof binding.KEMDecapsulateJob === "function";
+    case "ML-KEM-1024": return binding.EVP_PKEY_ML_KEM_1024 !== undefined
+      && typeof binding.KEMEncapsulateJob === "function" && typeof binding.KEMDecapsulateJob === "function";
+  }
+}
+
 context.port.on("message", (request: NativeModernCryptoRequest) => {
   let response: ArrayBuffer | boolean | { failure: "operation" } = { failure: "operation" };
   try {
-    if (binding !== undefined && prepareSecretKey !== undefined) {
+    if (request.kind === "supports") {
+      response = hasNativeCapability(request.capability);
+    } else if (binding !== undefined && prepareSecretKey !== undefined) {
       const p = request.parameters;
       let job: NativeJob;
       if (p.name === "cSHAKE128" || p.name === "cSHAKE256") {

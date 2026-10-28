@@ -1,7 +1,8 @@
 import { DOMException } from "../core/errors.ts";
-import { coerceToBoolean, requireArguments } from "../core/webidl.ts";
+import { coerceToBoolean, coerceToDOMString, requireArguments } from "../core/webidl.ts";
 import type { CryptoProvider } from "../provider/crypto.ts";
 import type { RandomSource, Scheduler } from "../provider/primitives.ts";
+import { currentWebPlatformRuntime, hasWebPlatformRuntime } from "../provider/environment.ts";
 import { CShakeParams, normalizeAlgorithm, supportsCryptoOperation, toAlgorithmIdentifier } from "./algorithms.ts";
 import type { AlgorithmIdentifier, NormalizedAlgorithm } from "./algorithms.ts";
 import { decryptAes, encryptAes } from "./aes.ts";
@@ -35,10 +36,12 @@ import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
 import { exportSecretKey, generateSecretKey, getSecretKeyLength, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
 import { exportKmacKey, generateKmacKey, getKmacKeyLength, importKmacKey, signKmac, verifyKmac } from "./kmac.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
+import { cryptoSupports } from "./supports.ts";
 
 const createPromiseResolvers = Promise.withResolvers.bind(Promise) as typeof Promise.withResolvers;
 const rejectedPromise = Promise.reject.bind(Promise) as typeof Promise.reject;
 const constructorToken = Symbol("SubtleCrypto construction");
+const subtleProviders = new WeakMap<SubtleCrypto, CryptoProvider>();
 
 /**
  * Execute the specification's parallel steps synchronously over native primitives,
@@ -189,6 +192,25 @@ export class SubtleCrypto {
     this.#provider = provider;
     this.#scheduler = scheduler;
     this.#random = random;
+    subtleProviders.set(this, provider);
+  }
+
+  /** Modern Algorithms §3.2.6; Web IDL §§3.6 and 3.7.7 static operation binding. */
+  static supports(operation: unknown, algorithm: unknown, lengthOrAdditionalAlgorithm: unknown = null): boolean {
+    requireArguments(arguments, 2, "SubtleCrypto.supports");
+    const operationName = coerceToDOMString(operation);
+    const identifier = toAlgorithmIdentifier(algorithm);
+    let length: number | null = null;
+    let additional: AlgorithmIdentifier | undefined;
+    // The overload is selected by the third value's type, independently of the
+    // operation name. IDL conversion errors precede the method's false result.
+    if (lengthOrAdditionalAlgorithm !== null && lengthOrAdditionalAlgorithm !== undefined) {
+      if (typeof lengthOrAdditionalAlgorithm === "number") length = toCryptoUnsignedInteger(lengthOrAdditionalAlgorithm, 32);
+      else additional = toAlgorithmIdentifier(lengthOrAdditionalAlgorithm);
+    }
+    const crypto = hasWebPlatformRuntime() ? currentWebPlatformRuntime().crypto : undefined;
+    const provider = crypto === undefined ? undefined : subtleProviders.get(crypto.subtle);
+    return cryptoSupports(provider, operationName, identifier, length, additional);
   }
 
   /** §14.3.5 and §32, https://w3c.github.io/webcrypto/#SubtleCrypto-method-digest. */

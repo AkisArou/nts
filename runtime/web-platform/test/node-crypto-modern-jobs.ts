@@ -2,12 +2,24 @@ import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_thread
 import type { KeyObject } from "node:crypto";
 import type { CryptoCshakeParameters, CryptoFailure, CryptoKmacParameters } from "../src/provider/crypto.ts";
 
-export interface NativeModernCryptoRequest {
+export interface NativeModernCryptoOperation {
+  readonly kind?: "operation";
   readonly parameters: CryptoCshakeParameters | CryptoKmacParameters;
   readonly data: Uint8Array;
   readonly key?: KeyObject;
   readonly signature?: Uint8Array;
 }
+
+export type NativeModernCryptoCapability = "cshake" | "kmac" | "argon2" | "rsa" | "ec"
+  | "Ed25519" | "Ed448" | "X25519" | "X448"
+  | "ML-DSA-44" | "ML-DSA-65" | "ML-DSA-87" | "ML-KEM-512" | "ML-KEM-768" | "ML-KEM-1024";
+
+export interface NativeModernCryptoSupportRequest {
+  readonly kind: "supports";
+  readonly capability: NativeModernCryptoCapability;
+}
+
+export type NativeModernCryptoRequest = NativeModernCryptoOperation | NativeModernCryptoSupportRequest;
 
 type NativeModernCryptoResult = ArrayBuffer | boolean | CryptoFailure;
 

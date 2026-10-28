@@ -52,9 +52,11 @@ import type {
   CryptoRsaOtherPrime,
   CryptoSignature,
   CryptoSignatureParameters,
+  CryptoSupportQuery,
 } from "../src/provider/crypto.ts";
 
 import { runNativeModernCrypto } from "./node-crypto-modern-jobs.ts";
+import { queryNodeCryptoSupport } from "./node-crypto-support.ts";
 
 const ByteArray = Uint8Array;
 // Test adapters need the same native-slot behavior as OpenSSL/JCA bindings even
@@ -508,6 +510,10 @@ function ctr(parameters: CryptoAesCtrParameters, key: KeyObject, data: Uint8Arra
  * behavior. The real bindings must report invalid mathematical material.
  */
 export class NodeCryptoProvider implements CryptoProvider {
+  supports(query: CryptoSupportQuery): boolean | CryptoFailure {
+    return queryNodeCryptoSupport(query);
+  }
+
   digest(algorithm: CryptoDigestName, bytes: Uint8Array): Uint8Array | CryptoFailure {
     try {
       return owned(createHash(hashName(algorithm)).update(bytes).digest());
