@@ -157,12 +157,13 @@
       "jetstream-json-stringify-inspector/data.ts": "c3dbc48f8506914dbe4394d3b5e2487e74149f2a3b9634a54ab148e5639ab2d3"
     }
   },
-  "status": "Draft: full input preserved; minimum positive seed exceeds requested10ms ceiling.",
+  "status": "Ready for review: complete input retained with approved seed=1 timing exception.",
   "validation": {
     "node": "v24.20.0",
     "strictTypeScript": true,
     "firstPRTests": 4,
     "ntsCompiled": false,
     "maintainerOracleCountsRecorded": false
-  }
+  },
+  "asyncPublicationPolicy": "Six eligible async ports use work(n): Promise<number> and remain drafts until maintainers add awaited harness execution."
 }
