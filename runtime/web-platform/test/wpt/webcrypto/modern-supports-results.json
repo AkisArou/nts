@@ -10,14 +10,14 @@
   ],
   "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
   "nodeVersion": "24.20.0",
-  "integratedBase": "0ae2272efec6ec1cd805113215aa21c94bf25733",
+  "integratedBase": "874f157918a9a87cfcb58ae1a5aff4422a3c6ae6",
   "scope": "SubtleCrypto.supports over the preceding five families and the existing Web Crypto algorithms; native metadata queries only",
   "restoredExclusions": 265,
   "newSpecificationDiscrepancies": 0,
   "registrationCountChanges": [],
   "focusedControls": {
-    "total": 26,
-    "pass": 26,
+    "total": 27,
+    "pass": 27,
     "fail": 0,
     "skip": 0
   },
@@ -130,8 +130,8 @@
   },
   "packageGate": "The parent integration records the complete ordered-stack package gate in the PR; the committed evidence here covers affected files and focused controls.",
   "currentCombinedRegression": {
-    "total": 51,
-    "pass": 51,
+    "total": 52,
+    "pass": 52,
     "fail": 0,
     "skip": 0
   },
@@ -170,6 +170,42 @@
         "skip": 0,
         "logSha256": "1ee6e41e324997db838b3baa44da52235c1e7a2cd368fb60f1609ff6b0cf7bde"
       }
+    },
+    {
+      "issue": "Report the Node 24.20 GCM IV maximum of 128 bytes in native support metadata while retaining the shared draft range",
+      "sections": [
+        "3.3"
+      ],
+      "control": "Native AES 128/192/256 encrypt/decrypt accept 128 IV bytes and reject 129 with ERR_CRYPTO_INVALID_IV; an accepting recording capability receives both lengths",
+      "before": {
+        "exitCode": 1,
+        "logSha256": "ef3808c09dbd74e9d4c5013d8eed91e53e9d1c7156d46adcc6ffd2db63a54eea"
+      },
+      "after": {
+        "exitCode": 0,
+        "pass": 52,
+        "fail": 0,
+        "skip": 0,
+        "logSha256": "1b4744b6ed6d042001ce19e78c182263cca58d27dc15c4a8318ef2d0ebc56864"
+      },
+      "source": "https://github.com/nodejs/node/blob/v24.20.0/deps/openssl/openssl/providers/implementations/include/prov/ciphercommon_gcm.h"
     }
-  ]
+  ],
+  "finalValidation": {
+    "publicTypecheckExitCode": 0,
+    "wptTypecheckExitCode": 0,
+    "standaloneTestTypecheckExitCode": 0,
+    "regressionPass": 52,
+    "regressionFail": 0,
+    "regressionSkip": 0,
+    "regressionLogSha256": "d9d8e5e7044d1d5c27d266cc0b23dbfd0d3397739b5defb846be95e9ab635efd",
+    "scopedAffectedPass": 265,
+    "scopedAffectedFail": 0,
+    "scopedAffectedBlocked": 0,
+    "scopedJsonlSha256": "5ef2876f05a354c4a6582dca84d96e1ab3df195fc912fb3dd69c037d8ae1e3c3",
+    "rawAffectedPass": 265,
+    "rawAffectedFail": 0,
+    "rawAffectedBlocked": 0,
+    "rawJsonlSha256": "e39d93baad9295b9f059322aeaab340f77a1e6445a8872573ef1e606871bf889"
+  }
 }

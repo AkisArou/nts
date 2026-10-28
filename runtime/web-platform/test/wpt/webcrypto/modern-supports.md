@@ -37,9 +37,10 @@ native jobs without public inventory APIs, the existing test worker reads the
 pinned binding's constructor/identifier availability without constructing or
 running a job. It also reports the existing provider restrictions: for example,
 HKDF `info` over 1,024 bytes, nonzero PBKDF2 outputs with iteration counts over
-2³¹−1, cSHAKE/KMAC customization over 512 bytes, and an empty OCB IV. Secret-key
+2³¹−1, cSHAKE/KMAC customization over 512 bytes, an empty OCB IV, and GCM IVs outside 1–128 bytes. Secret-key
 generation and import do not acquire KMAC's signing-key length restriction;
-there is no signing key in those queries.
+there is no signing key in those queries. The GCM maximum is defined by
+[`GCM_IV_MAX_SIZE` in the pinned native source](https://github.com/nodejs/node/blob/v24.20.0/deps/openssl/openssl/providers/implementations/include/prov/ciphercommon_gcm.h).
 
 ## Binding differences from Node 24.20
 
@@ -91,8 +92,8 @@ NTS_WPT_CRYPTO_RAW=1 NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-
 
 The install reuses eight cached packages without a dependency or lockfile change.
 Both project typechecks and the strict standalone new-test typecheck exit 0.
-The combined test command reports **51 tests, 51 pass, 0 fail, 0 skip**, including
-26 supports controls. The ML-DSA context control covers all three parameter sets and both signature
+The combined test command reports **52 tests, 52 pass, 0 fail, 0 skip**, including
+27 supports controls. The ML-DSA context control covers all three parameter sets and both signature
 operations: 256-byte contexts fail before any native query, while 255-byte
 contexts reach an accepting capability, as §§8.4.1–2 require. The recording
 capability refuses every cryptographic
@@ -100,7 +101,10 @@ operation, and its random source refuses entropy requests. Positive queries
 still pass, with zero primitive calls, entropy calls or pending scheduler tasks.
 A class-body getter control verifies that internal capability lookup does not
 read a public `subtle` property. A separate native-vector control verifies the
-worker's metadata/operation reply protocol. The new test file is registered in `check.sh`.
+worker's metadata/operation reply protocol. Native GCM controls establish the
+128/129-byte IV boundary for encryption and decryption with all three AES key
+widths; a recording capability confirms both lengths still reach native policy.
+The new test file is registered in `check.sh`.
 
 The parent integration records the complete ordered-stack package gate in the
 PR. nts compilation remains the maintainer's gate.
