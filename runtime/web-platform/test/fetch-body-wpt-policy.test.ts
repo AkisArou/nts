@@ -505,3 +505,16 @@ test("Body consumption and piping bypass subclass stream methods", async () => {
   assert.equal(await readTextStream(textStreamFrom(new Response(source()))), "a");
   assert.equal(overrides, 0);
 });
+
+test("ReadableStream locked keeps its receiver brand through the shared internal operation", () => {
+  const getter = Object.getOwnPropertyDescriptor(ReadableStream.prototype, "locked")!.get!;
+  for (const receiver of [null, undefined, {}, Object.create(ReadableStream.prototype)]) {
+    assert.throws(() => getter.call(receiver), TypeError);
+  }
+  const stream = new ReadableStream();
+  assert.equal(getter.call(stream), false);
+  const reader = stream.getReader();
+  assert.equal(getter.call(stream), true);
+  reader.releaseLock();
+  assert.equal(getter.call(stream), false);
+});

@@ -438,12 +438,14 @@ export class ReadableStream<T> {
   }
 
   get locked(): boolean {
-    return this[kStreamLocked];
+    return this.#locked();
   }
 
   get [kStreamLocked](): boolean {
-    return this.#currentReader !== null;
+    return this.#locked();
   }
+
+  #locked(): boolean { return this.#currentReader !== null; }
 
   get [kStreamByteStream](): boolean {
     return this.#byteState !== null;
