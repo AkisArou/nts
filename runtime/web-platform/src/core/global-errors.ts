@@ -4,6 +4,7 @@ import { requireArguments } from "./webidl.ts";
 import type {
   GlobalErrorCapabilities, GlobalErrorEventType, GlobalErrorListener,
   GlobalExceptionReporter, GlobalHandlerArguments, GlobalHandlerCallback,
+  GlobalHandlerContext,
 } from "../provider/global-errors.ts";
 
 export type GlobalErrorHandler = (
@@ -22,6 +23,7 @@ interface GlobalErrorHandlerProperties {
 
 class HandlerSlot {
   value: object | null = null;
+  context: GlobalHandlerContext | null = null;
   active = false;
 }
 
@@ -88,7 +90,12 @@ export class GlobalErrorRuntime implements GlobalExceptionReporter {
   }
 
   #setHandler(slot: HandlerSlot, type: GlobalErrorEventType, value: unknown, listener: GlobalErrorListener): void {
-    slot.value = objectValue(value);
+    const converted = objectValue(value);
+    // Web IDL callback conversion captures incumbent settings on every object
+    // assignment, independently of the callback's identity or listener position.
+    const context = converted === null ? null : this.#capabilities.captureGlobalHandlerContext();
+    slot.value = converted;
+    slot.context = context;
     if (slot.value === null) {
       if (slot.active) this.#capabilities.removeGlobalEventListener(type, listener);
       slot.active = false;
@@ -105,13 +112,17 @@ export class GlobalErrorRuntime implements GlobalExceptionReporter {
     const callback = type === "error" ? scope.onerror : type === "unhandledrejection"
       ? scope.onunhandledrejection : scope.onrejectionhandled;
     if (typeof callback !== "function") return;
+    const slot = type === "error" ? this.#errorHandler : type === "unhandledrejection"
+      ? this.#unhandledHandler : this.#handledHandler;
+    const context = slot.context;
+    if (context === null) return;
     const special = event instanceof ErrorEvent && event.type === "error";
     const args: GlobalHandlerArguments = special
       ? [event.message, event.filename, event.lineno, event.colno, event.error]
       : [event];
     // Web IDL invocation finishes callback/script cleanup before HTML processes
     // the return value. Dispatch cannot defer this to after our wrapper returns.
-    const result = this.#capabilities.invokeGlobalHandler(callback as GlobalHandlerCallback, globalThis, args);
+    const result = this.#capabilities.invokeGlobalHandler(callback as GlobalHandlerCallback, globalThis, args, context);
     if (!result.ok) throw result.error;
     if (special ? result.value === true : result.value === false) cancelEvent(event);
   }

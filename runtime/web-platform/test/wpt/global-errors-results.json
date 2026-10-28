@@ -119,7 +119,7 @@
     "FileReader two event-order cases native microtask checkpoint",
     "known 100 ms adapter load-sensitive control"
   ],
-  "initialMeasurementScope": "Fields sourceCommit, sourceAndAdapterSha256, after, sabotage and restored describe the original 308e3cc5 source. The callbackBoundaryFix object records fresh evidence for the later fix; historical measurements are not transferred.",
+  "initialMeasurementScope": "Fields sourceCommit, sourceAndAdapterSha256, after, sabotage and restored describe the original 308e3cc5 source. The callbackBoundaryFix and callbackContextCaptureFix objects record fresh evidence for their respective later fixes; historical measurements are not transferred.",
   "callbackBoundaryFix": {
     "date": "2026-10-28",
     "reviewedOriginalSourceCommit": "308e3cc5c8c339464afd3ea1cf201cc3fff83b3a",
@@ -191,6 +191,80 @@
       "https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm",
       "https://webidl.spec.whatwg.org/#invoke-a-callback-function",
       "https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script"
+    ]
+  },
+  "callbackContextCaptureFix": {
+    "date": "2026-10-28",
+    "reviewedPreviousSourceCommit": "a85dc479ffb4f9c80f9e0666baeb494cef249da7",
+    "reason": "Web IDL callback conversion captures incumbent settings at each object assignment. Neither the function creation realm nor invocation-time context recovers this per-assignment value.",
+    "capability": "GlobalErrorCapabilities.captureGlobalHandlerContext() returns an opaque GlobalHandlerContext object; invokeGlobalHandler(callback, receiver, args, context) consumes that retained assignment context before returning its result-valued completion after cleanup.",
+    "sourceSha256": {
+      "runtime/web-platform/src/core/global-errors.ts": "dab6d133ca6f378134f14d4e6ccc299939caa68d54e15ec0ed9ce106bfa2bd2f",
+      "runtime/web-platform/src/provider/global-errors.ts": "fb8d509955a662b4e3ea57f973960781bd4cb05232a7411c75550dccc1e930d0",
+      "runtime/web-platform/test/global-errors-policy.test.ts": "2dbab110af73e9fee57b6ff8050633b1bdffcebfcdf9278550b2bc45ed327a65",
+      "runtime/web-platform/test/support/global-errors-driver.ts": "9fcc2d4af2459d610a9aeb695321383534caf90087aac4dfd2134b92e7555e0a"
+    },
+    "regressionControls": {
+      "command": "node --expose-gc --test --test-reporter=tap --test-name-pattern='global handler context' runtime/web-platform/test/global-errors-policy.test.ts",
+      "previousSourceSha256": "d8ef98189c9a055f8fed84b3a691008bc82173c49eda06edb26efef5fa5c3110",
+      "previousSourceWithNewControls": {
+        "pass": 0,
+        "fail": 5,
+        "exitCode": 1
+      },
+      "fixedSourceWithNewControls": {
+        "pass": 5,
+        "fail": 0,
+        "exitCode": 0
+      },
+      "fixedSourceRestoredExactly": true,
+      "cases": [
+        "assignment context survives different later dispatch contexts",
+        "the same callback on different attributes retains independent assignment contexts",
+        "same-function replacement captures again without moving its listener; reactivation appends",
+        "non-callable object conversion captures context; nullable primitive conversion does not",
+        "self-reassignment does not change the invocation context already being cleaned up"
+      ]
+    },
+    "after": {
+      "command": "node --expose-gc --test --test-isolation=none --test-reporter=tap runtime/web-platform/test/global-errors-policy.test.ts runtime/web-platform/test/global-errors-harness-policy.test.ts runtime/web-platform/test/wpt-global-errors.test.ts runtime/web-platform/test/wpt-harness.test.ts",
+      "exitCode": 0,
+      "wptCounts": {
+        "path": "html/webappapis/scripting/reporterror.any.js",
+        "passed": 2,
+        "failed": 0,
+        "blocked": 3
+      },
+      "controls": {
+        "sourcePolicyPassed": 44,
+        "newAdapterPassed": 5,
+        "unchangedAdapterPassed": 22
+      },
+      "nodeTotals": {
+        "tests": 78,
+        "pass": 75,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 3,
+        "todo": 0
+      }
+    },
+    "typeChecks": [
+      {
+        "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+        "exitCode": 0
+      },
+      {
+        "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+        "exitCode": 0
+      }
+    ],
+    "nativeBoundary": "not verified; deterministic opaque identity tags prove source capture calls, per-assignment retention and forwarding, not native incumbent settings, realm behavior or automatic Promise hooks",
+    "specification": [
+      "https://webidl.spec.whatwg.org/#es-callback-function",
+      "https://webidl.spec.whatwg.org/#es-nullable-type",
+      "https://webidl.spec.whatwg.org/#invoke-a-callback-function",
+      "https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm"
     ]
   }
 }
