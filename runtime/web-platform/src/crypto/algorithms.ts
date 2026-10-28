@@ -1,7 +1,13 @@
 import { DOMException } from "../core/errors.ts";
 import { coerceToDOMString } from "../core/webidl.ts";
 import type { CryptoDigestName } from "../provider/crypto.ts";
-import { copyCryptoBytes, cryptoBytes, toCryptoBufferSource } from "./buffer-source.ts";
+import {
+  copyCryptoBytes,
+  cryptoBytes,
+  cryptoTypedArrayName,
+  toCryptoArrayBufferView,
+  toCryptoBufferSource,
+} from "./buffer-source.ts";
 import type { CryptoBufferSource } from "./buffer-source.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
 
@@ -44,7 +50,8 @@ export class DigestAlgorithm extends Algorithm<CryptoDigestName> {
 
 export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW";
 export type SecretAlgorithmName = AesAlgorithmName | "HMAC";
-type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName;
+export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
+type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName;
 
 /** Web Cryptography §27.5. Validation of AES key sizes is an operation step. */
 export class AesKeyGenParams extends Algorithm<AesAlgorithmName> {
@@ -121,15 +128,63 @@ export class HmacImportParams extends Algorithm<"HMAC"> {
   }
 }
 
+/** Web Cryptography §§20.3–20.4. Mathematical bounds are generate-key steps. */
+export class RsaHashedKeyGenParams extends Algorithm<RsaAlgorithmName> {
+  readonly modulusLength: number;
+  readonly publicExponent: Uint8Array;
+  readonly hash: DigestAlgorithm;
+
+  constructor(name: RsaAlgorithmName, modulusLength: number, publicExponent: Uint8Array, hash: DigestAlgorithm) {
+    super(name);
+    this.modulusLength = modulusLength;
+    this.publicExponent = publicExponent;
+    this.hash = hash;
+  }
+}
+
+/** Web Cryptography §20.8, shared by all three RSA algorithms. */
+export class RsaHashedImportParams extends Algorithm<RsaAlgorithmName> {
+  readonly hash: DigestAlgorithm;
+
+  constructor(name: RsaAlgorithmName, hash: DigestAlgorithm) {
+    super(name);
+    this.hash = hash;
+  }
+}
+
+/** Web Cryptography §21.3. Salt length is an unsigned octet count, not bits. */
+export class RsaPssParams extends Algorithm<"RSA-PSS"> {
+  readonly saltLength: number;
+
+  constructor(name: "RSA-PSS", saltLength: number) {
+    super(name);
+    this.saltLength = saltLength;
+  }
+}
+
+/** Web Cryptography §22.3. An absent label becomes empty at the operation step. */
+export class RsaOaepParams extends Algorithm<"RSA-OAEP"> {
+  readonly label: Uint8Array | undefined;
+
+  constructor(name: "RSA-OAEP", label: Uint8Array | undefined) {
+    super(name);
+    this.label = label;
+  }
+}
+
 export type NormalizedAlgorithm =
   | DigestAlgorithm
-  | Algorithm<SecretAlgorithmName>
+  | Algorithm<SecretAlgorithmName | RsaAlgorithmName>
   | AesKeyGenParams
   | AesCtrParams
   | AesCbcParams
   | AesGcmParams
   | HmacKeyGenParams
-  | HmacImportParams;
+  | HmacImportParams
+  | RsaHashedKeyGenParams
+  | RsaHashedImportParams
+  | RsaPssParams
+  | RsaOaepParams;
 
 class AlgorithmRegistration {
   readonly name: RegisteredAlgorithmName;
@@ -173,6 +228,21 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("HMAC", "generateKey"),
   new AlgorithmRegistration("HMAC", "importKey"),
   new AlgorithmRegistration("HMAC", "exportKey"),
+  new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "sign"),
+  new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "verify"),
+  new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "generateKey"),
+  new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "importKey"),
+  new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "exportKey"),
+  new AlgorithmRegistration("RSA-PSS", "sign"),
+  new AlgorithmRegistration("RSA-PSS", "verify"),
+  new AlgorithmRegistration("RSA-PSS", "generateKey"),
+  new AlgorithmRegistration("RSA-PSS", "importKey"),
+  new AlgorithmRegistration("RSA-PSS", "exportKey"),
+  new AlgorithmRegistration("RSA-OAEP", "encrypt"),
+  new AlgorithmRegistration("RSA-OAEP", "decrypt"),
+  new AlgorithmRegistration("RSA-OAEP", "generateKey"),
+  new AlgorithmRegistration("RSA-OAEP", "importKey"),
+  new AlgorithmRegistration("RSA-OAEP", "exportKey"),
 ];
 
 /** Web IDL's (object or DOMString) union conversion, before later argument conversions. */
@@ -253,6 +323,40 @@ function normalizeRegisteredAlgorithm(
     return operation === "generateKey"
       ? new HmacKeyGenParams(name, normalizedHash, length)
       : new HmacImportParams(name, normalizedHash, length);
+  }
+
+  if (name === "RSASSA-PKCS1-v1_5" || name === "RSA-PSS" || name === "RSA-OAEP") {
+    if (operation === "generateKey") {
+      const input = algorithm as {
+        readonly modulusLength?: unknown;
+        readonly publicExponent?: unknown;
+        readonly hash?: unknown;
+      };
+      // RsaKeyGenParams members precede its derived RsaHashedKeyGenParams.hash.
+      const modulusLength = toCryptoUnsignedInteger(requiredMember(input.modulusLength, "RSA.modulusLength"), 32);
+      const publicExponent = toCryptoArrayBufferView(requiredMember(input.publicExponent, "RSA.publicExponent"));
+      if (cryptoTypedArrayName(publicExponent) !== "Uint8Array") throw new TypeError("RSA.publicExponent must be a Uint8Array");
+      const hash = toAlgorithmIdentifier(requiredMember(input.hash, "RSA.hash"));
+      const normalizedHash = normalizeAlgorithm(hash, "digest");
+      // BigInteger is a Uint8Array typedef, not BufferSource. §18.4.4 does not
+      // snapshot it: recursive hash normalization can still change its bytes.
+      return new RsaHashedKeyGenParams(name, modulusLength, cryptoBytes(publicExponent), normalizedHash);
+    }
+    if (operation === "importKey") {
+      const input = algorithm as { readonly hash?: unknown };
+      const hash = toAlgorithmIdentifier(requiredMember(input.hash, "RSA.hash"));
+      return new RsaHashedImportParams(name, normalizeAlgorithm(hash, "digest"));
+    }
+    if (operation === "exportKey" || name === "RSASSA-PKCS1-v1_5") return new Algorithm(name);
+    if (name === "RSA-PSS") {
+      const input = algorithm as { readonly saltLength?: unknown };
+      const saltLength = toCryptoUnsignedInteger(requiredMember(input.saltLength, "RSA-PSS.saltLength"), 32);
+      return new RsaPssParams(name, saltLength);
+    }
+    const input = algorithm as { readonly label?: unknown };
+    const labelValue = input.label;
+    const label = labelValue === undefined ? undefined : toCryptoBufferSource(labelValue);
+    return new RsaOaepParams(name, label === undefined ? undefined : normalizedBytes(label, copyBuffers));
   }
 
   if (operation === "generateKey") {

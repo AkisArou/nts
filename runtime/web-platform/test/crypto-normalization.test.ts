@@ -14,6 +14,10 @@ import {
   DigestAlgorithm,
   HmacImportParams,
   HmacKeyGenParams,
+  RsaHashedImportParams,
+  RsaHashedKeyGenParams,
+  RsaOaepParams,
+  RsaPssParams,
   normalizeAlgorithm,
 } from "../src/crypto/algorithms.ts";
 import type { CryptoOperation } from "../src/crypto/algorithms.ts";
@@ -397,5 +401,155 @@ test("algorithm-name matching does not call a replaced String prototype method",
     assert.equal(normalized.name, "AES-KW");
   } finally {
     String.prototype.charCodeAt = charCodeAt;
+  }
+});
+
+// RSA dictionaries: Web Cryptography §§16, 20.3–20.4, 20.8, 21.3 and 22.3.
+test("RSA import and generation produce typed dictionaries for every registered hash", () => {
+  for (const name of ["RSASSA-PKCS1-v1_5", "RSA-PSS", "RSA-OAEP"] as const) {
+    for (const hash of ["SHA-1", "SHA-256", "SHA-384", "SHA-512"] as const) {
+      const exponent = new Uint8Array([0, 1, 0, 1]);
+      const input = { name: name.toLowerCase(), hash: hash.toLowerCase(), modulusLength: "2048.8", publicExponent: exponent };
+      const generated = normalizeAlgorithm(input, "generateKey");
+      assert.ok(generated instanceof RsaHashedKeyGenParams);
+      assert.equal(generated.name, name);
+      assert.equal(generated.modulusLength, 2048);
+      assert.equal(generated.publicExponent, exponent);
+      assert.ok(generated.hash instanceof DigestAlgorithm);
+      assert.equal(generated.hash.name, hash);
+      const imported = normalizeAlgorithm(input, "importKey");
+      assert.ok(imported instanceof RsaHashedImportParams);
+      assert.equal(imported.name, name);
+      assert.equal(imported.hash.name, hash);
+      assert.deepEqual(Object.keys(imported), ["name", "hash"]);
+    }
+  }
+});
+
+test("RSA inherited dictionary members convert before hash, then the nested hash normalizes", () => {
+  const reads: string[] = [];
+  const exponent = new Uint8Array([1, 0, 1]);
+  const normalized = normalizeAlgorithm({
+    get name() { reads.push("name"); return "rsa-pss"; },
+    get modulusLength() {
+      reads.push("modulusLength");
+      return { valueOf() { reads.push("modulusLength.valueOf"); return 2048; } };
+    },
+    get publicExponent() { reads.push("publicExponent"); return exponent; },
+    get hash() {
+      reads.push("hash");
+      return { get name() { reads.push("hash.name"); exponent[2] = 3; return "sha-256"; } };
+    },
+  }, "generateKey");
+  assert.ok(normalized instanceof RsaHashedKeyGenParams);
+  assert.equal(normalized.publicExponent, exponent);
+  assert.deepEqual([...normalized.publicExponent], [1, 0, 3]);
+  assert.deepEqual(reads, ["name", "name", "modulusLength", "modulusLength.valueOf", "publicExponent", "hash", "hash.name", "hash.name"]);
+});
+
+test("RSA BigInteger conversion requires a fixed, unshared Uint8Array", () => {
+  const shared = new SharedArrayBuffer(3);
+  const resizable = new ArrayBuffer(3, { maxByteLength: 8 });
+  for (const publicExponent of [
+    undefined, null, [1, 0, 1], new ArrayBuffer(3), new DataView(new ArrayBuffer(3)),
+    new Uint8ClampedArray([1, 0, 1]), new Int8Array([1, 0, 1]), new Uint16Array([3]),
+    new Uint8Array(shared), new Uint8Array(resizable),
+  ]) {
+    assert.throws(() => normalizeAlgorithm({
+      name: "RSA-PSS", modulusLength: 2048, publicExponent,
+      get hash() { throw new Error("hash must not be read after invalid exponent"); },
+    }, "generateKey"), TypeError);
+  }
+});
+
+test("RSA BigInteger conversion accepts a foreign-realm Uint8Array", { skip: "nts programs have one realm" }, () => {
+  const foreign = runInNewContext("new Uint8Array([9, 1, 0, 1, 8]).subarray(1, 4)") as Uint8Array;
+  const normalized = normalizeAlgorithm({ name: "RSA-OAEP", modulusLength: 2048, publicExponent: foreign, hash: "SHA-1" }, "generateKey");
+  assert.ok(normalized instanceof RsaHashedKeyGenParams);
+  assert.equal(normalized.publicExponent, foreign);
+});
+
+test("RSA exponent borrowing uses internal slots despite JavaScript accessor shadows", {
+  skip: "nts reads buffer properties as internal slots; ordinary-Node accessor spoofing is not the runtime model",
+}, () => {
+  const exponent = new Uint8Array([1, 0, 1]);
+  const fail = () => { throw new Error("author accessor must not be read"); };
+  Object.defineProperties(exponent, {
+    buffer: { get: fail }, byteLength: { get: fail }, byteOffset: { get: fail },
+    constructor: { get: fail }, [Symbol.toStringTag]: { get: fail }, [Symbol.iterator]: { get: fail },
+  });
+  const result = normalizeAlgorithm({ name: "RSA-PSS", modulusLength: 2048, publicExponent: exponent, hash: "SHA-256" }, "generateKey");
+  assert.ok(result instanceof RsaHashedKeyGenParams);
+  assert.equal(result.publicExponent, exponent);
+});
+
+test("RSA exponent detachment during nested hash normalization yields an empty integer", () => {
+  const buffer = new ArrayBuffer(3);
+  const detachedExponent = new Uint8Array(buffer);
+  const detached = normalizeAlgorithm({
+    name: "RSA-PSS", modulusLength: 2048, publicExponent: detachedExponent,
+    hash: { get name() { if (!buffer.detached) structuredClone(buffer, { transfer: [buffer] }); return "SHA-256"; } },
+  }, "generateKey");
+  assert.ok(detached instanceof RsaHashedKeyGenParams);
+  assert.equal(detached.publicExponent.byteLength, 0);
+});
+
+test("RSA modulus and PSS salt use unsigned-long EnforceRange without algorithm-policy narrowing", () => {
+  for (const [value, expected] of [[0, 0], [-0.5, 0], ["31.9", 31], [null, 0], [4_294_967_295, 4_294_967_295]] as const) {
+    const generated = normalizeAlgorithm({ name: "RSA-OAEP", modulusLength: value, publicExponent: new Uint8Array(), hash: "SHA-1" }, "generateKey");
+    assert.ok(generated instanceof RsaHashedKeyGenParams);
+    assert.equal(generated.modulusLength, expected);
+    for (const operation of ["sign", "verify"] as const) {
+      const pss = normalizeAlgorithm({ name: "rsa-pss", saltLength: value }, operation);
+      assert.ok(pss instanceof RsaPssParams);
+      assert.equal(pss.name, "RSA-PSS");
+      assert.equal(pss.saltLength, expected);
+    }
+  }
+  for (const value of [undefined, NaN, Infinity, -Infinity, -1, 4_294_967_296, 0n, Symbol("0")]) {
+    assert.throws(() => normalizeAlgorithm({
+      name: "RSA-PSS", modulusLength: value,
+      get publicExponent() { throw new Error("exponent must not be read"); },
+    }, "generateKey"), TypeError);
+    assert.throws(() => normalizeAlgorithm({ name: "RSA-PSS", saltLength: value }, "sign"), TypeError);
+  }
+});
+
+test("RSA parameterless operations ignore hash, salt and label properties", () => {
+  for (const [name, operation] of [
+    ["RSASSA-PKCS1-v1_5", "sign"], ["RSASSA-PKCS1-v1_5", "verify"],
+    ["RSASSA-PKCS1-v1_5", "exportKey"], ["RSA-PSS", "exportKey"], ["RSA-OAEP", "exportKey"],
+  ] as const) {
+    const normalized = normalizeAlgorithm({
+      name,
+      get hash() { throw new Error("unused hash"); },
+      get saltLength() { throw new Error("unused salt"); },
+      get label() { throw new Error("unused label"); },
+      get publicExponent() { throw new Error("unused exponent"); },
+    }, operation);
+    assert.equal(normalized.constructor, Algorithm);
+    assert.equal(normalized.name, name);
+  }
+});
+
+test("OAEP label is optional and preserves BufferSource view bounds", () => {
+  for (const operation of ["encrypt", "decrypt"] as const) {
+    const empty = normalizeAlgorithm("rsa-oaep", operation);
+    assert.ok(empty instanceof RsaOaepParams);
+    assert.equal(empty.label, undefined);
+    const storage = new Uint8Array([9, 1, 2, 3, 8]);
+    const borrowed = normalizeAlgorithm({ name: "RSA-OAEP", label: storage.subarray(1, 4) }, operation);
+    assert.ok(borrowed instanceof RsaOaepParams);
+    assert.equal(borrowed.label!.buffer, storage.buffer);
+    assert.equal(borrowed.label!.byteOffset, 1);
+    assert.equal(borrowed.label!.byteLength, 3);
+    const copied = normalizeAlgorithm({ name: "RSA-OAEP", label: new DataView(storage.buffer, 1, 3) }, operation, true);
+    assert.ok(copied instanceof RsaOaepParams);
+    storage.fill(5);
+    assert.deepEqual([...copied.label!], [1, 2, 3]);
+    assert.equal(copied.label!.buffer.byteLength, 3);
+    assert.throws(() => normalizeAlgorithm({ name: "RSA-OAEP", label: null }, operation), TypeError);
+    assert.throws(() => normalizeAlgorithm({ name: "RSA-OAEP", label: new Uint8Array(new SharedArrayBuffer(0)) }, operation), TypeError);
+    assert.throws(() => normalizeAlgorithm({ name: "RSA-OAEP", label: new Uint8Array(new ArrayBuffer(0, { maxByteLength: 1 })) }, operation), TypeError);
   }
 });

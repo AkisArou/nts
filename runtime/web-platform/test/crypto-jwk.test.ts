@@ -314,6 +314,39 @@ test("generated oct JWK serialization is independent and may pad for AES-KW", ()
   assert.throws(() => serializeWrappedJwk(new JsonWebKey(), false), TypeError);
 });
 
+test("RSA JWK serialization includes public and private members in dictionary order", () => {
+  for (const input of [
+    { kty: "RSA", n: "N", e: "E", alg: "RS256", key_ops: ["verify"], ext: true },
+    { kty: "RSA", n: "N", e: "E", d: "D", p: "P", q: "Q", dp: "DP", dq: "DQ", qi: "QI",
+      alg: "PS384", key_ops: ["sign"], ext: false },
+    { kty: "RSA", n: "N", e: "E", d: "D", p: "P", q: "Q", dp: "DP", dq: "DQ", qi: "QI",
+      oth: [{ r: "R", d: "D2", t: "T" }, { r: "R3", d: "D3", t: "T3" }],
+      alg: "RSA-OAEP", key_ops: ["decrypt", "unwrapKey"], ext: true },
+  ]) {
+    const dictionary = toJsonWebKey(input);
+    const object = toJsonWebKeyObject(dictionary);
+    const serialized = serializeWrappedJwk(dictionary, false);
+    assert.equal(text(serialized), JSON.stringify(object));
+    assert.deepEqual(toJsonWebKeyObject(parseWrappedJwk(serialized)), object);
+    const padded = serializeWrappedJwk(dictionary, true);
+    assert.equal(padded.byteLength % 8, 0);
+    assert.deepEqual(toJsonWebKeyObject(parseWrappedJwk(padded)), object);
+  }
+});
+
+test("RSA JWK export objects and other-prime dictionaries own independent arrays", () => {
+  const source = toJsonWebKey({ kty: "RSA", n: "N", e: "E", key_ops: ["sign"], oth: [{ r: "R", d: "D", t: "T" }] });
+  const first = toJsonWebKeyObject(source);
+  const second = toJsonWebKeyObject(source);
+  first.key_ops!.push("decrypt");
+  first.oth![0]!.r = "changed";
+  first.oth!.length = 0;
+  assert.deepEqual(second.key_ops, ["sign"]);
+  assert.deepEqual(second.oth, [{ d: "D", r: "R", t: "T" }]);
+  assert.deepEqual(source.key_ops, ["sign"]);
+  assert.equal(source.oth![0]!.r, "R");
+});
+
 test("wrapped JWK serialization never calls JSON.stringify or toJSON hooks", () => {
   const key = toJsonWebKey({ kty: "oct", k: "AA", alg: "HS256", key_ops: ["sign"], ext: true });
   const originalStringify = JSON.stringify;

@@ -18,6 +18,9 @@ import {
   toKeyUsages,
 } from "./jwk.ts";
 import type { JsonWebKeyObject, KeyFormat } from "./jwk.ts";
+import { decryptRsa, encryptRsa, signRsa, verifyRsa } from "./rsa.ts";
+import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
+import type { CryptoKeyPair } from "./rsa-key.ts";
 import { exportSecretKey, generateSecretKey, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
 
 const createPromiseResolvers = Promise.withResolvers.bind(Promise) as typeof Promise.withResolvers;
@@ -66,9 +69,44 @@ function normalizeWrappingAlgorithm(identifier: AlgorithmIdentifier, unwrap: boo
   }
 }
 
+function isRsaAlgorithm(name: string): boolean {
+  return name === "RSASSA-PKCS1-v1_5" || name === "RSA-PSS" || name === "RSA-OAEP";
+}
+
+function encryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
+  return algorithm.name === "RSA-OAEP"
+    ? encryptRsa(provider, algorithm, key, bytes)
+    : encryptAes(provider, algorithm, key, bytes);
+}
+
+function decryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
+  return algorithm.name === "RSA-OAEP"
+    ? decryptRsa(provider, algorithm, key, bytes)
+    : decryptAes(provider, algorithm, key, bytes);
+}
+
+function importKeyMaterial(
+  provider: CryptoProvider,
+  format: KeyFormat,
+  data: Uint8Array | JsonWebKey,
+  algorithm: NormalizedAlgorithm,
+  extractable: boolean,
+  usages: readonly KeyUsage[],
+): CryptoKey {
+  return isRsaAlgorithm(algorithm.name)
+    ? importRsaKey(provider, format, data, algorithm, extractable, usages)
+    : importSecretKey(provider, format, data, algorithm, extractable, usages);
+}
+
+function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: CryptoKeySlots): Uint8Array | JsonWebKey {
+  return isRsaAlgorithm(key.algorithm.name)
+    ? exportRsaKey(provider, format, key)
+    : exportSecretKey(provider, format, key);
+}
+
 /**
- * Web Cryptography §14. Item 2 supplies digests and the HMAC/AES operations.
- * Derivation and asymmetric algorithms arrive in their separate handoff items.
+ * Web Cryptography §14. Digests, HMAC, AES and RSA operations.
+ * Derivation and the remaining asymmetric algorithms are separate handoff items.
  * Members are plain declarations; descriptor-only Web IDL shape is deferred.
  */
 export class SubtleCrypto {
@@ -116,7 +154,7 @@ export class SubtleCrypto {
       const bytes = cryptoBytes(source);
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "encrypt");
-        return encryptAes(provider, normalized, slots, bytes).buffer as ArrayBuffer;
+        return encryptBytes(provider, normalized, slots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
       return rejectedPromise(error);
@@ -136,14 +174,14 @@ export class SubtleCrypto {
       const bytes = cryptoBytes(source);
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "decrypt");
-        return decryptAes(provider, normalized, slots, bytes).buffer as ArrayBuffer;
+        return decryptBytes(provider, normalized, slots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
       return rejectedPromise(error);
     }
   }
 
-  /** §14.3.3 and §31.6.1. */
+  /** §14.3.3 and the registered HMAC/RSA signing operation. */
   sign(algorithm: unknown, key: unknown, data: unknown): Promise<ArrayBuffer> {
     try {
       const provider = this.#provider;
@@ -156,14 +194,16 @@ export class SubtleCrypto {
       const bytes = cryptoBytes(source);
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "sign");
-        return signHmac(provider, slots, bytes).buffer as ArrayBuffer;
+        const signature = normalized.name === "HMAC"
+          ? signHmac(provider, slots, bytes) : signRsa(provider, normalized, slots, bytes);
+        return signature.buffer as ArrayBuffer;
       });
     } catch (error) {
       return rejectedPromise(error);
     }
   }
 
-  /** §14.3.4 and §31.6.2; the primitive performs constant-time MAC comparison. */
+  /** §14.3.4; the primitive checks signatures and performs constant-time MAC comparison. */
   verify(algorithm: unknown, key: unknown, signature: unknown, data: unknown): Promise<boolean> {
     try {
       const provider = this.#provider;
@@ -178,7 +218,9 @@ export class SubtleCrypto {
       const dataBytes = cryptoBytes(dataSource);
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "verify");
-        return verifyHmac(provider, slots, signatureBytes, dataBytes);
+        return normalized.name === "HMAC"
+          ? verifyHmac(provider, slots, signatureBytes, dataBytes)
+          : verifyRsa(provider, normalized, slots, signatureBytes, dataBytes);
       });
     } catch (error) {
       return rejectedPromise(error);
@@ -186,7 +228,7 @@ export class SubtleCrypto {
   }
 
   /** §14.3.6. */
-  generateKey(algorithm: unknown, extractable: unknown, keyUsages: unknown): Promise<CryptoKey> {
+  generateKey(algorithm: unknown, extractable: unknown, keyUsages: unknown): Promise<CryptoKey | CryptoKeyPair> {
     try {
       const provider = this.#provider;
       const scheduler = this.#scheduler;
@@ -196,7 +238,9 @@ export class SubtleCrypto {
       const canExport = coerceToBoolean(extractable);
       const usages = toKeyUsages(keyUsages);
       const normalized = normalizeAlgorithm(identifier, "generateKey");
-      return cryptoTask(scheduler, () => generateSecretKey(provider, random, normalized, canExport, usages));
+      return cryptoTask<CryptoKey | CryptoKeyPair>(scheduler, () => isRsaAlgorithm(normalized.name)
+        ? generateRsaKey(provider, normalized, canExport, usages)
+        : generateSecretKey(provider, random, normalized, canExport, usages));
     } catch (error) {
       return rejectedPromise(error);
     }
@@ -217,7 +261,7 @@ export class SubtleCrypto {
       const dictionary = source instanceof JsonWebKey;
       if ((keyFormat === "jwk") !== dictionary) throw new TypeError("The key data does not match its format");
       const data = dictionary ? source : cryptoBytes(source);
-      return cryptoTask(scheduler, () => importSecretKey(provider, keyFormat, data, normalized, canExport, usages));
+      return cryptoTask(scheduler, () => importKeyMaterial(provider, keyFormat, data, normalized, canExport, usages));
     } catch (error) {
       return rejectedPromise(error);
     }
@@ -233,7 +277,7 @@ export class SubtleCrypto {
       const slots = getCryptoKeySlots(key);
       return cryptoTask(scheduler, () => {
         requireExportableKey(slots);
-        const result = exportSecretKey(provider, keyFormat, slots);
+        const result = exportKeyMaterial(provider, keyFormat, slots);
         return result instanceof JsonWebKey ? toJsonWebKeyObject(result) : result.buffer as ArrayBuffer;
       });
     } catch (error) {
@@ -255,12 +299,12 @@ export class SubtleCrypto {
       return cryptoTask(scheduler, () => {
         requireKeyUsage(wrappingSlots, normalized, "wrapKey");
         requireExportableKey(slots);
-        const exported = exportSecretKey(provider, keyFormat, slots);
-        // Serializing our generated octet dictionary invokes no author code, so
+        const exported = exportKeyMaterial(provider, keyFormat, slots);
+        // Serializing our generated key dictionary invokes no author code, so
         // the normalized parameters can stay borrowed on this operation.
         const bytes = exported instanceof JsonWebKey
           ? serializeWrappedJwk(exported, normalized.name === "AES-KW") : exported;
-        return encryptAes(provider, normalized, wrappingSlots, bytes).buffer as ArrayBuffer;
+        return encryptBytes(provider, normalized, wrappingSlots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
       return rejectedPromise(error);
@@ -293,9 +337,9 @@ export class SubtleCrypto {
       const wrappedBytes = cryptoBytes(source);
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "unwrapKey");
-        const bytes = decryptAes(provider, normalized, slots, wrappedBytes);
+        const bytes = decryptBytes(provider, normalized, slots, wrappedBytes);
         const data = keyFormat === "jwk" ? parseWrappedJwk(bytes) : bytes;
-        return importSecretKey(provider, keyFormat, data, normalizedKey, canExport, usages);
+        return importKeyMaterial(provider, keyFormat, data, normalizedKey, canExport, usages);
       });
     } catch (error) {
       return rejectedPromise(error);
