@@ -1,5 +1,8 @@
 # FileAPI, FormData and URL-encoded WPT conformance
 
+The original A4 import and its measurements are recorded here. The subsequent
+DataURL implementation and fresh results are in [the HTML base64 report](base64-conformance.md).
+
 Item A4 is stacked on [Fetch PR #18](https://github.com/AkisArou/nts/pull/18),
 branch `chatgpt/wpt-fetch-data`, at
 `8f23f225c90e7d461dd0f3d0d157edf2b2b64d27`, including its approved

@@ -1,0 +1,258 @@
+{
+  "axis": "ordinary-node source conformance",
+  "versions": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "base": {
+    "commit": "852a0525b4e740674c3789ffaaaa1b3ac41a4676",
+    "tree": "a7e7b274d13fee8072259ab72e45c14c454afeb3",
+    "pr": 47,
+    "branch": "chatgpt/wpt-encoding"
+  },
+  "candidate": {
+    "commit": "dc5f92eb3e83881c586dd7720898dd3c2f75e54c",
+    "tree": "dfdb61f6bc31b881dfb358298c40cf8f630aad90",
+    "branch": "chatgpt/html-base64",
+    "publishedCommit": "8f33780791a19cf0178714d13aac2c30c8d426ef",
+    "publishedTreeMatchesTestedTree": true
+  },
+  "install": {
+    "command": "pnpm install --frozen-lockfile",
+    "exitCode": 0
+  },
+  "typechecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0,
+      "evidence": "Executed successfully by check.sh before host tests."
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    }
+  ],
+  "focused": {
+    "command": "node --expose-gc --test --test-reporter=tap runtime/web-platform/test/base64-policy.test.ts runtime/web-platform/test/wpt-base64.test.ts runtime/web-platform/test/wpt-base64-harness.test.ts runtime/web-platform/test/file-reader-wpt-policy.test.ts runtime/web-platform/test/wpt-files-forms.test.ts runtime/web-platform/test/proxy.test.ts runtime/web-platform/test/wpt-versions.test.ts",
+    "exitCode": 0,
+    "host": {
+      "tests": 1012,
+      "pass": 1004,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 8,
+      "todo": 0
+    }
+  },
+  "full": {
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 1,
+    "before": {
+      "host": {
+        "tests": 9286,
+        "pass": 8698,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 588,
+        "todo": 0
+      },
+      "sharedWpt": {
+        "files": 239,
+        "pass": 7016,
+        "fail": 0,
+        "blocked": 564
+      },
+      "upstream": {
+        "upstreamTests": 2817,
+        "applicableTests": 2772,
+        "passed": 2761,
+        "failed": 11,
+        "notApplicable": 45
+      }
+    },
+    "after": {
+      "host": {
+        "tests": 9702,
+        "pass": 9123,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 579,
+        "todo": 0
+      },
+      "sharedWpt": {
+        "files": 240,
+        "pass": 7405,
+        "fail": 0,
+        "blocked": 555
+      },
+      "upstream": {
+        "upstreamTests": 2817,
+        "applicableTests": 2772,
+        "passed": 2761,
+        "failed": 11,
+        "notApplicable": 45
+      }
+    },
+    "inheritedLegacyFailures": [
+      "encoding/idlharness.any.js :: TextDecoder interface: operation decode(optional AllowSharedBufferSource, optional TextDecodeOptions)",
+      "encoding/idlharness.any.js :: TextDecoder interface: attribute encoding",
+      "encoding/idlharness.any.js :: TextDecoder interface: attribute fatal",
+      "encoding/idlharness.any.js :: TextDecoder interface: attribute ignoreBOM",
+      "encoding/idlharness.any.js :: TextEncoder interface: operation encode(optional USVString)",
+      "encoding/idlharness.any.js :: TextEncoder interface: operation encodeInto(USVString, Uint8Array)",
+      "encoding/idlharness.any.js :: TextEncoder interface: attribute encoding",
+      "encoding/idlharness.any.js :: TextDecoderStream interface: attribute encoding",
+      "encoding/idlharness.any.js :: TextDecoderStream interface: attribute fatal",
+      "encoding/idlharness.any.js :: TextDecoderStream interface: attribute ignoreBOM",
+      "encoding/idlharness.any.js :: TextEncoderStream interface: attribute encoding"
+    ],
+    "legacyFailureSetUnchanged": true,
+    "compiled": {
+      "status": "skipped",
+      "reason": "No nts compiler is available."
+    }
+  },
+  "changedWptFiles": [
+    {
+      "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_result.any.js",
+      "before": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 12,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "html/webappapis/atob/base64.any.js",
+      "before": null,
+      "after": {
+        "pass": 380,
+        "fail": 0,
+        "blocked": 0
+      }
+    }
+  ],
+  "unchangedExistingWptFiles": 235,
+  "removedNamedBase64Dependencies": [
+    {
+      "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+      "name": "test FileReader InvalidStateError exception for readAsDataURL"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "name": "FileReader readyState during readAsDataURL"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "name": "readAsDataURL result for Blob with specified MIME type"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "name": "readAsDataURL result for Blob with unspecified MIME type"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "name": "readAsDataURL result for empty Blob"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+      "name": "FileAPI Test: filereader_readystate"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_result.any.js",
+      "name": "readAsDataURL"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_result.any.js",
+      "name": "result is null during \"loadstart\" event for readAsDataURL"
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_result.any.js",
+      "name": "result is null during \"progress\" event for readAsDataURL"
+    }
+  ],
+  "retainedFileReaderCheckpoint": {
+    "path": "FileAPI/reading-data-section/filereader_events.any.js",
+    "pass": 0,
+    "fail": 0,
+    "blocked": 2
+  },
+  "codecReview": {
+    "originalDecoderUnchanged": true,
+    "encoderBodyMovedUnchangedFrom": "runtime/web-platform/src/dispatch/proxy.ts",
+    "newByteAndBinaryStringLoopsConfinedTo": "runtime/web-platform/src/core/base64.ts"
+  },
+  "logs": [
+    {
+      "name": "check-852a0525b-complete.log",
+      "sha256": "a32c7b021d14d010b171ad1790d698a183a846fb6adefb9889ee97792b2f47fb"
+    },
+    {
+      "name": "base64-install.log",
+      "sha256": "5fde4fd32b2a865f2318cb23619dfbdc7d1a95a924b93612ce20399b8c4e67e4"
+    },
+    {
+      "name": "base64-focused-dc5f92eb3.log",
+      "sha256": "bbd32c541d01f15757c40312053bf9c3a3a249c268de25b7e9fa67862af914b8"
+    },
+    {
+      "name": "base64-wpt-tsc.log",
+      "sha256": "7125f194612fcff2f454c05d848e7cb71facc1967b4d5017e25b34fdee3ba74f"
+    },
+    {
+      "name": "base64-check-dc5f92eb3.log",
+      "sha256": "f1b290ac604cbcf9dd227ad62373ac9a626bd075498506cf8ef3dd1aea8a2612"
+    }
+  ],
+  "limitations": [
+    "The eleven inherited Encoding IDL enumerability failures will become named exclusions in the maintainer landing of #47; this branch does not change the legacy runner or those cases.",
+    "The new HTML fixture was not previously imported; its before result is absent, not a fabricated pass/fail measurement.",
+    "Window/Worker global installation and receiver identity are provider-bootstrap responsibilities outside this source-host profile.",
+    "The FileReader empty MIME fallback matches pinned WPT; current File API prose says to omit the media type and leaves serialization precision to issue #104.",
+    "No native SIMD, compiled execution, performance, legacy codec, or callback-cleanup microtask support is claimed."
+  ]
+}
