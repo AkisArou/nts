@@ -1,12 +1,17 @@
-// Compression §§4–5 and Web IDL constructor/enum conversion, exercised through
+// Compression §§3–5 and Web IDL constructor/enum conversion, exercised through
 // the canonical public classes and the existing environment-owned runtime.
+// https://compression.spec.whatwg.org/#supported-formats
 // https://compression.spec.whatwg.org/#compressionstream
 // https://compression.spec.whatwg.org/#decompressionstream
+// https://www.rfc-editor.org/rfc/rfc7932#section-1.4
 // https://webidl.spec.whatwg.org/#es-enumeration
 import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deflateRawSync, deflateSync, gzipSync, gunzipSync, inflateRawSync, inflateSync } from "node:zlib";
+import {
+  brotliCompressSync, brotliDecompressSync,
+  deflateRawSync, deflateSync, gzipSync, gunzipSync, inflateRawSync, inflateSync,
+} from "node:zlib";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import * as PublicAPI from "../src/index.ts";
@@ -68,7 +73,7 @@ class CountingProvider extends NodeCompressionProvider {
   }
 }
 
-const formats: readonly PublicCompressionFormat[] = ["gzip", "deflate", "deflate-raw"];
+const formats: readonly PublicCompressionFormat[] = ["gzip", "deflate", "deflate-raw", "brotli"];
 const constructors = [PublicAPI.CompressionStream, PublicAPI.DecompressionStream];
 type ByteTransform = PublicAPI.CompressionStream | PublicAPI.DecompressionStream;
 
@@ -77,6 +82,7 @@ function nativeCompress(format: CompressionFormat, input: Uint8Array): Uint8Arra
     case "gzip": return gzipSync(input);
     case "deflate": return deflateSync(input);
     case "deflate-raw": return deflateRawSync(input);
+    case "brotli": return brotliCompressSync(input);
   }
 }
 
@@ -85,6 +91,7 @@ function nativeDecompress(format: CompressionFormat, input: Uint8Array): Uint8Ar
     case "gzip": return new Uint8Array(gunzipSync(input));
     case "deflate": return new Uint8Array(inflateSync(input));
     case "deflate-raw": return new Uint8Array(inflateRawSync(input));
+    case "brotli": return new Uint8Array(brotliDecompressSync(input));
   }
 }
 
@@ -150,8 +157,10 @@ test("an absent compression capability never falls back to ambient Node construc
   await withRuntime(undefined, async (runtime) => {
     assert.equal(runtime.compression, undefined);
     for (const Constructor of constructors) {
-      assert.throws(() => new Constructor("gzip"), TypeError);
-      assert.throws(() => new Constructor("gzip", Symbol("guessed token"), injected), TypeError);
+      for (const format of formats) {
+        assert.throws(() => new Constructor(format), TypeError);
+        assert.throws(() => new Constructor(format, Symbol("guessed token"), injected), TypeError);
+      }
     }
   });
   assert.deepEqual(injected.attempts, []);
@@ -236,46 +245,48 @@ test("public compression exports preserve canonical identities and keep native f
   });
 });
 
-test("runtime replacement and option mutation do not retarget existing compression contexts", async () => {
-  const previous = hasWebPlatformRuntime() ? currentWebPlatformRuntime() : undefined;
-  const first = new CountingProvider();
-  const second = new CountingProvider();
-  const options: WebPlatformOptions = { compression: first };
-  const firstRuntime = new WebPlatformRuntime(createHostNodePrimitives(), options);
-  const secondRuntime = new WebPlatformRuntime(createHostNodePrimitives(), { compression: second });
-  const input = new Uint8Array([1, 2, 3, 4, 5]);
-  try {
-    installWebPlatformRuntime(firstRuntime);
-    const originalCompressor = new PublicAPI.CompressionStream("gzip");
-    const originalDecompressor = new PublicAPI.DecompressionStream("gzip");
-    options.compression = second;
-    installWebPlatformRuntime(secondRuntime);
-    const replacement = new PublicAPI.CompressionStream("deflate");
-    installWebPlatformRuntime(firstRuntime);
-    const laterFirst = new PublicAPI.CompressionStream("deflate-raw");
-    installWebPlatformRuntime(secondRuntime);
-    const outputs = await Promise.all([
-      transform(originalCompressor, input),
-      transform(originalDecompressor, gzipSync(input)),
-      transform(replacement, input),
-      transform(laterFirst, input),
-    ]);
-    assert.deepEqual(nativeDecompress("gzip", outputs[0]!), input);
-    assert.deepEqual(outputs[1], input);
-    assert.deepEqual(nativeDecompress("deflate", outputs[2]!), input);
-    assert.deepEqual(nativeDecompress("deflate-raw", outputs[3]!), input);
-    assert.equal(firstRuntime.compression, first);
-    assert.equal(first.contexts.length, 3);
-    assert.equal(second.contexts.length, 1);
-    for (const context of [...first.contexts, ...second.contexts]) {
-      assert.equal(context.processCalls, 3);
-      assert.equal(context.closeCalls, 1);
+for (const format of formats) {
+  test(format + " contexts survive runtime replacement and option mutation", async () => {
+    const previous = hasWebPlatformRuntime() ? currentWebPlatformRuntime() : undefined;
+    const first = new CountingProvider();
+    const second = new CountingProvider();
+    const options: WebPlatformOptions = { compression: first };
+    const firstRuntime = new WebPlatformRuntime(createHostNodePrimitives(), options);
+    const secondRuntime = new WebPlatformRuntime(createHostNodePrimitives(), { compression: second });
+    const input = new Uint8Array([1, 2, 3, 4, 5]);
+    try {
+      installWebPlatformRuntime(firstRuntime);
+      const originalCompressor = new PublicAPI.CompressionStream(format);
+      const originalDecompressor = new PublicAPI.DecompressionStream(format);
+      options.compression = second;
+      installWebPlatformRuntime(secondRuntime);
+      const replacement = new PublicAPI.CompressionStream("deflate");
+      installWebPlatformRuntime(firstRuntime);
+      const laterFirst = new PublicAPI.CompressionStream("deflate-raw");
+      installWebPlatformRuntime(secondRuntime);
+      const outputs = await Promise.all([
+        transform(originalCompressor, input),
+        transform(originalDecompressor, nativeCompress(format, input)),
+        transform(replacement, input),
+        transform(laterFirst, input),
+      ]);
+      assert.deepEqual(nativeDecompress(format, outputs[0]!), input);
+      assert.deepEqual(outputs[1], input);
+      assert.deepEqual(nativeDecompress("deflate", outputs[2]!), input);
+      assert.deepEqual(nativeDecompress("deflate-raw", outputs[3]!), input);
+      assert.equal(firstRuntime.compression, first);
+      assert.equal(first.contexts.length, 3);
+      assert.equal(second.contexts.length, 1);
+      for (const context of [...first.contexts, ...second.contexts]) {
+        assert.equal(context.processCalls, 3);
+        assert.equal(context.closeCalls, 1);
+      }
+    } finally {
+      if (previous !== undefined) installWebPlatformRuntime(previous);
+      firstRuntime.close(); secondRuntime.close();
     }
-  } finally {
-    if (previous !== undefined) installWebPlatformRuntime(previous);
-    firstRuntime.close(); secondRuntime.close();
-  }
-});
+  });
+}
 
 test("public compression converts the format before selecting the current runtime", async () => {
   const first = new CountingProvider();
@@ -284,20 +295,22 @@ test("public compression converts the format before selecting the current runtim
   try {
     await withRuntime(first, async (firstRuntime) => {
       for (const Constructor of constructors) {
-        installWebPlatformRuntime(firstRuntime);
-        let conversions = 0;
-        const stream = new Constructor({
-          toString(): string {
-            conversions++;
-            installWebPlatformRuntime(secondRuntime);
-            return "gzip";
-          },
-        });
-        assert.equal(conversions, 1);
-        await stream.readable.cancel();
+        for (const format of formats) {
+          installWebPlatformRuntime(firstRuntime);
+          let conversions = 0;
+          const stream = new Constructor({
+            toString(): string {
+              conversions++;
+              installWebPlatformRuntime(secondRuntime);
+              return format;
+            },
+          });
+          assert.equal(conversions, 1);
+          await stream.readable.cancel();
+        }
       }
       assert.deepEqual(first.attempts, []);
-      assert.equal(second.contexts.length, 2);
+      assert.equal(second.contexts.length, constructors.length * formats.length);
     });
   } finally { secondRuntime.close(); }
 });
@@ -308,7 +321,7 @@ test("public compression preserves format-conversion exceptions and rejects inva
     for (const Constructor of constructors) {
       // @ts-expect-error Missing the required Web IDL argument.
       assert.throws(() => new Constructor(), TypeError);
-      for (const value of [undefined, null, "GZIP", "brotli", Symbol("gzip")]) {
+      for (const value of [undefined, null, "GZIP", "br", "BROTLI", " brotli", "brotli ", Symbol("gzip")]) {
         assert.throws(() => new Constructor(value), TypeError);
       }
       const sentinel = new Error("format conversion failed");
@@ -339,9 +352,11 @@ test("public compression maps native creation failure values to TypeError", asyn
   await withRuntime(provider, async () => {
     for (const failure of ["unsupported", "operation"] as const) {
       provider.failure = { failure };
-      for (const Constructor of constructors) assert.throws(() => new Constructor("gzip"), TypeError);
+      for (const Constructor of constructors) {
+        for (const format of formats) assert.throws(() => new Constructor(format), TypeError);
+      }
     }
-    assert.equal(provider.attempts.length, 4);
+    assert.equal(provider.attempts.length, 2 * constructors.length * formats.length);
     assert.deepEqual(provider.contexts, []);
   });
 });

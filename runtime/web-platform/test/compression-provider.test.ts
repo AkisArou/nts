@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deflateRawSync, deflateSync, gzipSync, gunzipSync, inflateRawSync, inflateSync } from "node:zlib";
+import {
+  brotliCompressSync,
+  brotliDecompressSync,
+  constants,
+  deflateRawSync,
+  deflateSync,
+  gzipSync,
+  gunzipSync,
+  inflateRawSync,
+  inflateSync,
+} from "node:zlib";
 import type {
   CompressionContext,
   CompressionFailure,
@@ -12,9 +22,11 @@ import { NodeCompressionProvider } from "./node-compression-provider.ts";
 // Original capability controls for Compression §§2–5 and RFC 7692 §7.2:
 // https://compression.spec.whatwg.org/#supported-formats
 // https://www.rfc-editor.org/rfc/rfc7692#section-7.2
-// Format parsing, checksums, and DEFLATE work all remain in native node:zlib.
+// https://www.rfc-editor.org/rfc/rfc7932
+// Format parsing, checksums, DEFLATE, and Brotli remain in native node:zlib.
 
-const formats: readonly CompressionFormat[] = ["gzip", "deflate", "deflate-raw"];
+const deflateFormats: readonly CompressionFormat[] = ["gzip", "deflate", "deflate-raw"];
+const formats: readonly CompressionFormat[] = [...deflateFormats, "brotli"];
 const empty = new Uint8Array(0);
 const provider = new NodeCompressionProvider();
 
@@ -45,6 +57,7 @@ function encode(format: CompressionFormat, bytes: Uint8Array): Uint8Array {
     case "gzip": return gzipSync(bytes);
     case "deflate": return deflateSync(bytes);
     case "deflate-raw": return deflateRawSync(bytes);
+    case "brotli": return brotliCompressSync(bytes);
   }
 }
 
@@ -53,6 +66,7 @@ function decode(format: CompressionFormat, bytes: Uint8Array): Uint8Array {
     case "gzip": return gunzipSync(bytes);
     case "deflate": return inflateSync(bytes);
     case "deflate-raw": return inflateRawSync(bytes);
+    case "brotli": return brotliDecompressSync(bytes);
   }
 }
 
@@ -139,6 +153,17 @@ for (const format of formats) {
     assert.deepEqual(chunks, saved);
   });
 
+  test(`${format}: invalid output budgets are terminal failure values`, () => {
+    for (const limit of [-1, 0.5, NaN, Number.MAX_SAFE_INTEGER + 1, -Infinity]) {
+      const compressor = context(provider.createCompressor(format, 15));
+      failure(compressor.process(empty, "none", limit), "operation");
+      failure(compressor.reset(), "operation");
+      compressor.close();
+    }
+  });
+}
+
+for (const format of deflateFormats) {
   test(`${format}: unsupported window settings fail without changing them`, () => {
     for (const bits of [0, 7, 8, 16, 8.5, NaN, Infinity]) {
       failure(provider.createCompressor(format, bits), "unsupported");
@@ -156,16 +181,198 @@ for (const format of formats) {
       decompressor.close();
     }
   });
-
-  test(`${format}: invalid output budgets are terminal failure values`, () => {
-    for (const limit of [-1, 0.5, NaN, Number.MAX_SAFE_INTEGER + 1, -Infinity]) {
-      const compressor = context(provider.createCompressor(format, 15));
-      failure(compressor.process(empty, "none", limit), "operation");
-      failure(compressor.reset(), "operation");
-      compressor.close();
-    }
-  });
 }
+
+test("brotli: empty and multipart input produces complete native streams", () => {
+  for (const bytes of [empty, dictionaryMessage()]) {
+    const compressor = context(provider.createCompressor("brotli", 15));
+    const split = Math.floor(bytes.length / 2);
+    const first = success(compressor.process(bytes.subarray(0, split), "none", Infinity));
+    const gap = success(compressor.process(empty, "none", Infinity));
+    const last = success(compressor.process(bytes.subarray(split), "finish", Infinity));
+    assert.equal(first.consumed, split);
+    assert.equal(gap.consumed, 0);
+    assert.equal(last.consumed, bytes.length - split);
+    const encoded = Buffer.concat([...first.chunks, ...gap.chunks, ...last.chunks]);
+    assert.deepEqual(brotliDecompressSync(encoded), Buffer.from(bytes));
+    compressor.close();
+
+    const decompressor = context(provider.createDecompressor("brotli", 15));
+    const boundary = Math.floor(encoded.length / 2);
+    const head = success(decompressor.process(encoded.subarray(0, boundary), "none", Infinity));
+    const emptyWrite = success(decompressor.process(empty, "none", Infinity));
+    const tail = success(decompressor.process(encoded.subarray(boundary), "finish", Infinity));
+    assert.equal(head.consumed, boundary);
+    assert.equal(emptyWrite.consumed, 0);
+    assert.equal(tail.consumed, encoded.length - boundary);
+    assert.deepEqual(Buffer.concat([...head.chunks, ...emptyWrite.chunks, ...tail.chunks]), Buffer.from(bytes));
+    decompressor.close();
+  }
+});
+
+test("brotli: sync flush preserves a live stream and reset starts a fresh one", () => {
+  const compressor = context(provider.createCompressor("brotli", 15));
+  const decompressor = context(provider.createDecompressor("brotli", 15));
+  const message = dictionaryMessage();
+  const first = join(success(compressor.process(message, "sync", Infinity)));
+  assert.deepEqual(join(success(decompressor.process(first, "sync", Infinity))), Buffer.from(message));
+  const second = join(success(compressor.process(message, "sync", Infinity)));
+  assert.deepEqual(join(success(decompressor.process(second, "sync", Infinity))), Buffer.from(message));
+  const last = join(success(compressor.process(empty, "finish", Infinity)));
+  assert.equal(join(success(decompressor.process(last, "finish", Infinity))).length, 0);
+  assert.deepEqual(brotliDecompressSync(Buffer.concat([first, second, last])), Buffer.concat([message, message]));
+
+  assert.equal(compressor.reset(), undefined);
+  assert.equal(decompressor.reset(), undefined);
+  const reset = join(success(compressor.process(message, "sync", Infinity)));
+  assert.deepEqual(reset, first);
+  assert.deepEqual(join(success(decompressor.process(reset, "sync", Infinity))), Buffer.from(message));
+  const resetLast = join(success(compressor.process(empty, "finish", Infinity)));
+  assert.equal(join(success(decompressor.process(resetLast, "finish", Infinity))).length, 0);
+  compressor.close();
+  decompressor.close();
+});
+
+test("brotli: compressor output budgets include the final stream bytes", () => {
+  const bytes = dictionaryMessage();
+  const reference = context(provider.createCompressor("brotli", 15));
+  const encoded = join(success(reference.process(bytes, "finish", Infinity)));
+  reference.close();
+  for (const maximum of [0, encoded.length - 1, encoded.length]) {
+    const compressor = context(provider.createCompressor("brotli", 15));
+    const result = compressor.process(bytes, "finish", maximum);
+    if (maximum < encoded.length) {
+      failure(result, "output-limit");
+      failure(compressor.reset(), "operation");
+    } else {
+      assert.deepEqual(join(success(result)), encoded);
+    }
+    compressor.close();
+  }
+});
+
+test("brotli: incomplete finish returns valid output and then closes the context", () => {
+  const bytes = dictionaryMessage();
+  const nonfinal = brotliCompressSync(bytes, { finishFlush: constants.BROTLI_OPERATION_FLUSH });
+  const decoder = context(provider.createDecompressor("brotli", 15));
+  const result = decoder.process(nonfinal, "finish", bytes.length);
+  assert.ok("failure" in result && result.failure === "incomplete");
+  const saved = result.chunks.map((chunk) => chunk.slice());
+  assert.deepEqual(Buffer.concat(result.chunks), Buffer.from(bytes));
+  failure(decoder.process(empty, "finish", Infinity), "operation");
+  failure(decoder.reset(), "operation");
+  decoder.close();
+  decoder.close();
+  assert.deepEqual(result.chunks, saved);
+
+  const partial = context(provider.createDecompressor("brotli", 15));
+  assert.deepEqual(join(success(partial.process(nonfinal, "none", bytes.length))), Buffer.from(bytes));
+  const missingEnd = partial.process(empty, "finish", 0);
+  assert.ok("failure" in missingEnd && missingEnd.failure === "incomplete");
+  assert.deepEqual(missingEnd.chunks, []);
+  partial.close();
+
+  const limited = context(provider.createDecompressor("brotli", 15));
+  failure(limited.process(nonfinal, "finish", bytes.length - 1), "output-limit");
+  limited.close();
+  const complete = context(provider.createDecompressor("brotli", 15));
+  assert.deepEqual(join(success(complete.process(brotliCompressSync(bytes), "finish", bytes.length))), Buffer.from(bytes));
+  complete.close();
+});
+
+test("brotli: absent and malformed streams have distinct native failure values", () => {
+  const absent = context(provider.createDecompressor("brotli", 15));
+  const incomplete = absent.process(empty, "finish", Infinity);
+  assert.ok("failure" in incomplete && incomplete.failure === "incomplete");
+  assert.deepEqual(incomplete.chunks, []);
+  absent.close();
+  // RFC 7932's padding and window bits are parsed by Brotli's native decoder.
+  for (const bytes of [Uint8Array.of(255), Uint8Array.of(17)]) {
+    const invalid = context(provider.createDecompressor("brotli", 15));
+    failure(invalid.process(bytes, "finish", Infinity), "invalid-data");
+    failure(invalid.process(empty, "none", Infinity), "operation");
+    failure(invalid.reset(), "operation");
+    invalid.close();
+  }
+});
+
+test("brotli: first stream end leaves same-call and later trailing input unconsumed", () => {
+  const bytes = dictionaryMessage();
+  const encoded = brotliCompressSync(bytes);
+  for (const trailing of [Uint8Array.of(0), brotliCompressSync(Uint8Array.of(42))]) {
+    for (const flush of ["none", "finish"] as const) {
+      const decoder = context(provider.createDecompressor("brotli", 15));
+      const result = success(decoder.process(Buffer.concat([encoded, trailing]), flush, bytes.length));
+      assert.equal(result.consumed, encoded.length);
+      assert.deepEqual(join(result), Buffer.from(bytes));
+      decoder.close();
+    }
+    const decoder = context(provider.createDecompressor("brotli", 15));
+    assert.equal(success(decoder.process(encoded, "none", bytes.length)).consumed, encoded.length);
+    assert.deepEqual(success(decoder.process(empty, "none", 0)), { chunks: [], consumed: 0 });
+    assert.deepEqual(success(decoder.process(trailing, "none", 0)), { chunks: [], consumed: 0 });
+    assert.deepEqual(success(decoder.process(empty, "finish", 0)), { chunks: [], consumed: 0 });
+    failure(decoder.process(empty, "none", Infinity), "operation");
+    decoder.close();
+  }
+});
+
+test("brotli: independent contexts survive another context's reset, failure and close", () => {
+  const bytes = dictionaryMessage();
+  const first = context(provider.createCompressor("brotli", 15));
+  const second = context(provider.createCompressor("brotli", 15));
+  const start = success(second.process(bytes.subarray(0, 1024), "none", Infinity));
+  success(first.process(bytes, "sync", Infinity));
+  assert.equal(first.reset(), undefined);
+  first.close();
+  first.close();
+  failure(first.process(empty, "none", Infinity), "operation");
+  const end = success(second.process(bytes.subarray(1024), "finish", Infinity));
+  const encoded = Buffer.concat([...start.chunks, ...end.chunks]);
+  assert.deepEqual(brotliDecompressSync(encoded), Buffer.from(bytes));
+  second.close();
+
+  const invalid = context(provider.createDecompressor("brotli", 15));
+  const valid = context(provider.createDecompressor("brotli", 15));
+  const boundary = Math.floor(encoded.length / 2);
+  const head = success(valid.process(encoded.subarray(0, boundary), "none", Infinity));
+  failure(invalid.process(Uint8Array.of(255), "finish", Infinity), "invalid-data");
+  invalid.close();
+  const tail = success(valid.process(encoded.subarray(boundary), "finish", Infinity));
+  assert.deepEqual(Buffer.concat([...head.chunks, ...tail.chunks]), Buffer.from(bytes));
+  valid.close();
+});
+
+test("brotli: native RFC 7932 windows ignore DEFLATE settings and reject Large Window", () => {
+  const bytes = dictionaryMessage();
+  for (const bits of [0, 8, 9, 15, 24, 8.5, NaN, Infinity]) {
+    const compressor = context(provider.createCompressor("brotli", bits));
+    const decoder = context(provider.createDecompressor("brotli", bits));
+    const encoded = join(success(compressor.process(bytes, "finish", Infinity)));
+    assert.deepEqual(join(success(decoder.process(encoded, "finish", Infinity))), Buffer.from(bytes));
+    compressor.close();
+    decoder.close();
+  }
+  const standard = brotliCompressSync(bytes, {
+    params: { [constants.BROTLI_PARAM_LGWIN]: constants.BROTLI_MAX_WINDOW_BITS },
+  });
+  const extended = brotliCompressSync(bytes, {
+    params: {
+      [constants.BROTLI_PARAM_LARGE_WINDOW]: true,
+      [constants.BROTLI_PARAM_LGWIN]: constants.BROTLI_MAX_WINDOW_BITS + 1,
+    },
+  });
+  assert.deepEqual(brotliDecompressSync(extended, {
+    params: { [constants.BROTLI_DECODER_PARAM_LARGE_WINDOW]: true },
+  }), Buffer.from(bytes));
+  assert.throws(() => brotliDecompressSync(extended));
+  const standardDecoder = context(provider.createDecompressor("brotli", 15));
+  assert.deepEqual(join(success(standardDecoder.process(standard, "finish", Infinity))), Buffer.from(bytes));
+  standardDecoder.close();
+  const extendedDecoder = context(provider.createDecompressor("brotli", 15));
+  failure(extendedDecoder.process(extended, "finish", Infinity), "invalid-data");
+  extendedDecoder.close();
+});
 
 // Original fixed fixture for "optional gzip fields": FTEXT, FEXTRA (an empty
 // BC subfield), FNAME, FCOMMENT and FHCRC, with nondefault MTIME/XFL/OS. Payload
