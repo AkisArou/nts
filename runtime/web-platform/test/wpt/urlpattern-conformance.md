@@ -119,11 +119,15 @@ there are 370 registrations in each file. They are reported separately, not as
 
 The source baseline is PR #27 at
 `5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f`. An isolated worktree received the same
-final adapter, manifest and fixtures, with the unavailable URLPattern global left
+adapter at test commit `a01743e0a7b7a9700242be4c51bf2706fdc6b890`, manifest and
+fixtures, with the unavailable URLPattern global left
 absent. It did not receive Node's URLPattern. The only baseline passes are the two
 data-loader tests. Source implementation commit `5139a3767770b0990002c5051b6bfc50d2795c72`
 and test commit `a01743e0a7b7a9700242be4c51bf2706fdc6b890` produced the after result.
-These are the pre-integration validation pins; stack integration is a separate step.
+These are the original pre-integration validation pins. The baseline, selected-corpus
+comparison and sabotage below predate the two later adapter integrity fixes; they
+must not be attributed to the later adapter. Those fixes have their own failing
+controls and validation pins below. Stack integration is a separate step.
 
 | WPT file | Before pass / fail / blocked | After pass / fail / blocked |
 | --- | ---: | ---: |
@@ -158,8 +162,16 @@ The adapter changes are:
    registering promise chain that would starve timer callbacks. Direct harness
    users have a default safety limit of 100000 registrations. This is an adapter
    safety bound, not a WPT specification limit or a skip mechanism.
-4. The WPT TypeScript project includes the two new test files; `check.sh` lists
-   them in the ordinary host lane.
+4. The WPT TypeScript project and `check.sh` include the source WPT driver, the
+   policy controls and the later subprocess adapter controls.
+5. Registration validation failures persist in the harness before being rethrown.
+   A provider that consumes a duplicate-name or after-done exception cannot turn
+   the file into a pass, even when its legitimate uncaught-global reports are
+   configured to be ignored.
+6. The runner checks recorded harness/cleanup errors after awaited provider
+   `close()`, before Node completes the file. Reporting an ordinary error during
+   teardown without throwing now fails the file and process. The check does not
+   reinterpret or record allowed uncaught-global reports.
 
 These changes are additive to the shared adapter. Any concurrent change to setup
 options or a provider's uncaught-error channel must preserve its separate error
@@ -176,13 +188,96 @@ source bytes were restored in a `finally` block, with matching SHA-256 hashes
 before and after restoration, followed by the successful complete corpus run.
 This shows the cases exercise this package's class rather than a host URLPattern.
 
-There are **28 new policy/provider/adapter controls**, including Web IDL dictionary
+At the original test pin there were **28 new policy/provider/adapter controls**, including Web IDL dictionary
 read order and abrupt completion, incompatible receivers, default `file` ports,
 empty canonicalized pieces, Unicode identifiers, malformed and duplicate groups,
 UnicodeSets regex, ignoreCase scope, optional captures, own `__proto__` group names,
 fresh results, base inheritance and capability refusals. Together with **36 existing
 adapter/HTML/FileAPI harness controls**, the targeted regression command reports
-**64 pass / 0 fail / 0 skipped**.
+**64 pass / 0 fail / 0 skipped** at that original pin.
+
+### Adapter integrity review and follow-up validation
+
+The independent integration review found two concrete false-pass paths:
+
+- A provider-caught duplicate registration could be suppressed by an allowed
+  uncaught-global channel, after which valid registrations still satisfied the
+  exact inventory. After-done registration had the same problem. At parent
+  `84e7baadf770e9a5c3fd2a663a385c074525d342`, adding the two swallowed-exception
+  controls produced **28 pass / 2 fail** in the policy file. Fix
+  `38cfd1890988c8756d044c0c2abca47f3ad8343b` persists validation failures before
+  rethrowing. The policy file then has **30 passing controls**; together with the
+  existing adapter controls, the focused command reports **66 pass / 0 fail**.
+- `environment.close()` could call the ordinary `reportError` callback after
+  `harness.finish()` had already checked errors. The callback returned normally
+  and the file/process passed. Three new subprocess controls run the real fixture
+  runner against the two-case constructor fixture. At parent `38cfd189`, they
+  produced **2 pass / 1 fail**: the reported-error child's exit status incorrectly
+  remained zero. Fix `731de6abe81b3f694eec017544b23876a263144b` awaits close and calls
+  `harness.assertNoErrors()` from the file teardown hook. All three controls pass:
+  reported and thrown close errors cause process failure, and clean close succeeds.
+
+The focused command at `731de6ab` reports **69 pass / 0 fail / 0 skipped**:
+30 source/provider/adapter policy controls, 3 subprocess teardown controls and
+36 existing adapter controls. The strict WPT TypeScript project exits zero without
+diagnostics at that pin. The original source and WPT hashes, measurements and
+sabotage are retained separately; no measurement is transferred to a new adapter
+pin. The root integration task owns the later full gate of the stacked branch.
+
+## Additional Node v24.20.0 differences outside the selected corpus
+
+Separate review probes compared the source class with Node's actual URLPattern.
+They are **not extra selected WPT passes** and are not included in the 745-case
+table. The source class used the explicitly installed test-only URL capability
+described above; Node's URLPattern was used only as an independent comparison.
+The exact inputs and observed results are in `nodeDivergences` in
+[`urlpattern-results.json`](./urlpattern-results.json).
+
+For every row, call `new URLPattern().exec(input)`. A successful output below is
+the named component's `.input`; `null` means the entire match returned null.
+Inputs and string outputs use JSON escaping, so `\t`, `\\` and `\u0000` denote
+an actual tab, backslash and NUL respectively.
+
+| Input | Component | Source with test URL capability | Node v24.20.0 |
+| --- | --- | --- | --- |
+| `{"protocol":"https","port":"\t"}` | `port` | `null` | `""` |
+| `{"protocol":"https","pathname":"\\path"}` | `pathname` | `"/path"` | `"\\path"` |
+| `{"protocol":"x","pathname":"/a/../b"}` | `pathname` | `"/a/../b"` | `"/b"` |
+| `{"protocol":"x","pathname":" a "}` | `pathname` | `" a "` | `" a"` |
+| `{"protocol":"x","pathname":"a\u0000"}` | `pathname` | `"a%00"` | `"a"` |
+| `{"protocol":"x","pathname":"\u0000"}` | `pathname` | `"%00"` | `""` |
+
+The source outputs follow these primary algorithms:
+
+- **Tab-only port:** [canonicalize a port](https://urlpattern.spec.whatwg.org/#canonicalize-a-port)
+  checks the original nonempty value, then invokes the basic URL parser with a
+  supplied URL and port state override. The
+  [basic parser](https://url.spec.whatwg.org/#concept-basic-url-parser) removes ASCII
+  tabs/newlines. In [port state](https://url.spec.whatwg.org/#port-state), an empty
+  buffer under an override returns failure. The URLPattern match is therefore null.
+- **Hierarchical leading backslash:**
+  [process pathname for init](https://urlpattern.spec.whatwg.org/#process-pathname-for-init)
+  selects [canonicalize a pathname](https://urlpattern.spec.whatwg.org/#canonicalize-a-pathname)
+  for `https`. That callback uses the specified temporary `/-` prefix and a
+  [dummy HTTPS URL](https://urlpattern.spec.whatwg.org/#url-pattern-create-a-dummy-url).
+  URL's [path state](https://url.spec.whatwg.org/#path-state) treats a backslash as a
+  separator for a special URL; removing the temporary prefix leaves `/path`.
+- **Non-special opaque path:**
+  [process pathname for init](https://urlpattern.spec.whatwg.org/#process-pathname-for-init)
+  selects [canonicalize an opaque pathname](https://urlpattern.spec.whatwg.org/#canonicalize-an-opaque-pathname)
+  for `x`. This supplies an existing URL and an opaque-path state override.
+  The [basic parser](https://url.spec.whatwg.org/#concept-basic-url-parser) only
+  strips leading/trailing C0/space when a URL is not supplied. Its
+  [opaque path state](https://url.spec.whatwg.org/#cannot-be-a-base-url-path-state)
+  does not normalize slash/dot segments, preserves a trailing space when it is
+  not followed by `?` or `#`, and percent-encodes NUL using the C0 set.
+
+These expectations were verified by following the linked algorithms and by the
+recorded source-class probes. Producing them through an nts native state-override
+binding remains **not verified** because that binding is not present. The source
+handoff requires the specification's algorithms, so the implementation does not
+silently copy these Node differences. Agreement on the selected corpus is not a
+claim of bit-for-bit agreement with Node on every possible input.
 
 ## Deliberate exclusions
 
@@ -214,9 +309,11 @@ node --expose-gc --test --test-reporter=tap \
   runtime/web-platform/test/wpt-harness.test.ts \
   runtime/web-platform/test/wpt-html-support.test.ts \
   runtime/web-platform/test/wpt-file-harness.test.ts \
-  runtime/web-platform/test/urlpattern-policy.test.ts
+  runtime/web-platform/test/urlpattern-policy.test.ts \
+  runtime/web-platform/test/urlpattern-adapter-policy.test.ts
 ```
 
-Both strict TypeScript checks exit zero without diagnostics. The full project gate
-and nts compiled axis were not run in this source-area task. The compiler-side
+Both strict TypeScript checks exited zero without diagnostics at the original test
+pin; the WPT project was checked again after the integrity fixes. The full project
+gate and nts compiled axis were not run in this source-area task. The compiler-side
 validation and final stacked-branch integration remain with the maintainers.
