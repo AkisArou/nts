@@ -2492,11 +2492,11 @@
           "players": [
             {
               "_cards": [
-                "\ud83c\udccb",
-                "\ud83c\udcd9",
-                "\ud83c\udca8",
-                "\ud83c\udcd6",
-                "\ud83c\udcb3"
+                "🃋",
+                "🃙",
+                "🂨",
+                "🃖",
+                "🂳"
               ],
               "_rank": 759907,
               "_name": "Player 1",
@@ -2516,11 +2516,11 @@
             },
             {
               "_cards": [
-                "\ud83c\udcb1",
-                "\ud83c\udcdd",
-                "\ud83c\udcc8",
-                "\ud83c\udcc6",
-                "\ud83c\udcd3"
+                "🂱",
+                "🃝",
+                "🃈",
+                "🃆",
+                "🃓"
               ],
               "_rank": 1038435,
               "_name": "Player 2",
@@ -2540,11 +2540,11 @@
             },
             {
               "_cards": [
-                "\ud83c\udcde",
-                "\ud83c\udcaa",
-                "\ud83c\udca6",
-                "\ud83c\udca5",
-                "\ud83c\udcc2"
+                "🃞",
+                "🂪",
+                "🂦",
+                "🂥",
+                "🃂"
               ],
               "_rank": 960082,
               "_name": "Player 3",
@@ -2564,11 +2564,11 @@
             },
             {
               "_cards": [
-                "\ud83c\udcbd",
-                "\ud83c\udccd",
-                "\ud83c\udcc9",
-                "\ud83c\udcb8",
-                "\ud83c\udca4"
+                "🂽",
+                "🃍",
+                "🃉",
+                "🂸",
+                "🂤"
               ],
               "_rank": 1956228,
               "_name": "Player 4",
@@ -3268,7 +3268,7 @@
           "paths": [
             "SeaMonster/ai-astar.js"
           ],
-          "description": "Complete literal500\u00d7500 grid; start[0][0], end[123][321].",
+          "description": "Complete literal500×500 grid; start[0][0], end[123][321].",
           "replaced": false,
           "truncated": false
         }
@@ -3392,7 +3392,7 @@
           "paths": [
             "SeaMonster/gaussian-blur.js"
           ],
-          "description": "Original800\u00d7450 Uint32Array, radius15; local Jenkins generator seed49734321 fills every pixel.",
+          "description": "Original800×450 Uint32Array, radius15; local Jenkins generator seed49734321 fills every pixel.",
           "replaced": false,
           "truncated": false
         }
@@ -3415,7 +3415,7 @@
         }
       ],
       "requiredAdaptations": [
-        "Declare fields/types; retain800\u00d7450 pixels, radius15, original generator and Float32 intermediate rounding."
+        "Declare fields/types; retain800×450 pixels, radius15, original generator and Float32 intermediate rounding."
       ],
       "originalValidation": {
         "original": {
@@ -5097,7 +5097,7 @@
           "spdx": "MIT",
           "scope": "Complete algorithm bundle and embedded fixed inputs",
           "copyrightHolders": [
-            "Juan Hern\u00e1ndez Serrano 2018"
+            "Juan Hernández Serrano 2018"
           ],
           "evidence": [
             {
@@ -11326,6 +11326,26 @@
             "endLine": 184,
             "description": "The Proxy set trap rejects duplicate static test names. It is not used during compiler or evaluator execution."
           }
+        },
+        {
+          "kind": "prototype-replacement",
+          "status": "active-core-compiler",
+          "evidence": {
+            "path": "WSL/Value.js",
+            "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/Value.js",
+            "startLine": 41,
+            "endLine": 48,
+            "description": "Value.become assigns this.__proto__ = IdentityExpression.prototype. An entire original run invokes it 22,354 times: 3,620 in buildStdlib and 18,734 in run; all 285 original tests pass."
+          },
+          "relatedSources": [
+            "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/IdentityExpression.js",
+            "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/Node.js",
+            "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/PropertyResolver.js",
+            "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/Checker.js",
+            "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/ConstexprFolder.js",
+            "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/WSL/NameResolver.js"
+          ],
+          "portability": "Blocked by the current fixed-layout/no-prototype rule. Replacing the active object reclassification with tags, replacement objects or forwarding changes representation/dispatch and needs an explicit scope decision. The static Proxy-registration adaptation alone is insufficient."
         }
       ],
       "requiredAdaptations": [
@@ -11337,7 +11357,9 @@
         "Preserve every registered Test.js assertion and benchmark test run; buildStdlib still precedes run."
       ],
       "category": "Large real programs",
-      "portOrder": 41
+      "portOrder": 41,
+      "portStatus": "blocked-active-prototype-replacement",
+      "portStatusEvidence": "wsl-prototype-audit.json"
     },
     {
       "name": "prismjs-startup-es6",
@@ -11864,7 +11886,7 @@
           "path": "intl/src/DateTimeFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales\u00d74dateStyles\u00d74timeStyles;100dates from local1800-12-05T13:06 with1234569ms increments;17format+formatToParts pairs and7formatRange attempts per option."
+          "description": "25locales×4dateStyles×4timeStyles;100dates from local1800-12-05T13:06 with1234569ms increments;17format+formatToParts pairs and7formatRange attempts per option."
         }
       ],
       "dependencies": [
@@ -11918,7 +11940,7 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 445369,
-          "lastResult": "\u0441\u0443\u0431\u0431\u043e\u0442\u0430, 6 \u0434\u0435\u043a\u0430\u0431\u0440\u044f 1800 \u0433. \u0432 22:42:27sexta-feira, 5 de dezembro de 1800 \u00e0s 13:06:00\u2009\u2013\u2009s\u00e1bado, 6 de dezembro de 1800 \u00e0s 11:44:01"
+          "lastResult": "суббота, 6 декабря 1800 г. в 22:42:27sexta-feira, 5 de dezembro de 1800 às 13:06:00 – sábado, 6 de dezembro de 1800 às 11:44:01"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
@@ -12033,7 +12055,7 @@
           "path": "intl/src/ListFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales\u00d73styles\u00d73types;10iterations per option over original5lists including all25locales and100generated numeric strings."
+          "description": "25locales×3styles×3types;10iterations per option over original5lists including all25locales and100generated numeric strings."
         }
       ],
       "dependencies": [
@@ -12087,7 +12109,7 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 508496,
-          "lastResult": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98 \u0438\u043b\u0438 99"
+          "lastResult": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98 или 99"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
@@ -12202,7 +12224,7 @@
           "path": "intl/src/RelativeTimeFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales\u00d73styles\u00d72numeric modes;100values per option,8original units, randomvalue=Math.random()*100-50; format and formatToParts."
+          "description": "25locales×3styles×2numeric modes;100values per option,8original units, randomvalue=Math.random()*100-50; format and formatToParts."
         }
       ],
       "dependencies": [
@@ -12256,7 +12278,7 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 434328,
-          "lastResult": "2,665 \u0441\u0435\u043a\u0443\u043d\u0434\u044b \u043d\u0430\u0437\u0430\u0434"
+          "lastResult": "2,665 секунды назад"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
@@ -12371,7 +12393,7 @@
           "path": "intl/src/NumberFormat.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "Full2050-option generator (25locales,5currencies\u00d74display styles,first20units\u00d73styles,decimal/percent); original shuffled first200options,10values each from counter+=599 and modulo10000."
+          "description": "Full2050-option generator (25locales,5currencies×4display styles,first20units×3styles,decimal/percent); original shuffled first200options,10values each from counter+=599 and modulo10000."
         }
       ],
       "dependencies": [
@@ -12425,7 +12447,7 @@
         "consoleErrors": [],
         "observation": {
           "totalLength": 40860,
-          "lastResult": "8.001\u00b0"
+          "lastResult": "8.001°"
         }
       },
       "category": "Strings, RegExp, Unicode and tokenizing",
@@ -12540,7 +12562,7 @@
           "path": "intl/src/PluralRules.js",
           "kind": "inline-generated-format-inputs",
           "license": "BSD-2-Clause",
-          "description": "25locales\u00d72types;1000values per option:0..3 then996original random integers below1000."
+          "description": "25locales×2types;1000values per option:0..3 then996original random integers below1000."
         }
       ],
       "dependencies": [
@@ -12783,7 +12805,7 @@
           "paths": [
             "SunSpider/3d-raytrace.js"
           ],
-          "description": "Original30\u00d730 scene/pixels and canvas-command text generation, eight complete runs.",
+          "description": "Original30×30 scene/pixels and canvas-command text generation, eight complete runs.",
           "replaced": false,
           "truncated": false
         }
@@ -21101,5 +21123,17 @@
       "workSignature": "work(n: number): Promise<number>",
       "pullRequestState": "draft until awaited harness execution lands"
     }
-  ]
+  ],
+  "portabilityFindings": {
+    "selectedByInitialInventory": 43,
+    "unaffectedSelectedWorkloads": 42,
+    "blockedWorkloads": [
+      {
+        "name": "WSL",
+        "reason": "Blocked by the current fixed-layout/no-prototype rule. Replacing the active object reclassification with tags, replacement objects or forwarding changes representation/dispatch and needs an explicit scope decision. The static Proxy-registration adaptation alone is insufficient.",
+        "evidence": "wsl-prototype-audit.json"
+      }
+    ],
+    "note": "The accepted 90-workload selection is retained as the initial inventory. This additional confirmed implementation constraint blocks one selected port; it is not silently omitted or rewritten."
+  }
 }
