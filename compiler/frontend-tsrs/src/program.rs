@@ -78,11 +78,11 @@ pub enum DiagnosticCategory {
     Message,
 }
 
-/// Effective native settings that can change emitted runtime semantics.
+/// Effective native checker settings and emitted-runtime settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "these six independent effective compiler settings are semantic booleans"
+    reason = "independent effective compiler settings are semantic booleans"
 )]
 pub struct ProjectSemantics {
     pub use_define_for_class_fields: bool,
@@ -91,6 +91,10 @@ pub struct ProjectSemantics {
     pub verbatim_module_syntax: bool,
     pub preserve_const_enums: bool,
     pub isolated_modules: bool,
+    pub strict: bool,
+    pub strict_null_checks: bool,
+    pub no_unchecked_indexed_access: bool,
+    pub exact_optional_property_types: bool,
 }
 
 /// Files to check for diagnostics. Config, program/options and global errors
@@ -834,6 +838,12 @@ impl<'s, S: ViewPhase> Project<'s, S> {
             verbatim_module_syntax: options.verbatim_module_syntax.is_true(),
             preserve_const_enums: options.should_preserve_const_enums(),
             isolated_modules: options.get_isolated_modules(),
+            // Use the same effective default/inheritance as the native checker
+            // (CompilerOptions::get_strict_option_value), not tsconfig text.
+            strict: options.get_strict_option_value(options.strict),
+            strict_null_checks: options.get_strict_option_value(options.strict_null_checks),
+            no_unchecked_indexed_access: options.no_unchecked_indexed_access.is_true(),
+            exact_optional_property_types: options.exact_optional_property_types.is_true(),
         }
     }
     #[must_use]
@@ -1320,6 +1330,67 @@ mod tests {
                 .diagnose_fixture_files()
                 .finish();
             assert!(checked.plain_js_unfiltered().iter().any(|d| d.code == 2451));
+        });
+    }
+
+    #[test]
+    fn strictness_uses_effective_native_defaults_inheritance_and_overrides() {
+        for (settings, expected) in [
+            ("", [true, true, false, false]),
+            (r#""strict":false"#, [false, false, false, false]),
+            (
+                r#""strict":true,"strictNullChecks":false"#,
+                [true, false, false, false],
+            ),
+            (
+                r#""strict":false,"strictNullChecks":true,"noUncheckedIndexedAccess":true,"exactOptionalPropertyTypes":true"#,
+                [false, true, true, true],
+            ),
+        ] {
+            run(options(1), |session| {
+                let mut spec = ProjectSpec::new("tsconfig.json");
+                spec.overlays.insert(
+                    "tsconfig.json".into(),
+                    format!(r#"{{"compilerOptions":{{{settings}}},"files":["index.ts"]}}"#),
+                );
+                spec.overlays
+                    .insert("index.ts".into(), "export const value = 1;".into());
+                let checked = session.open(spec).expect("strictness config");
+                let semantics = checked
+                    .projects()
+                    .next()
+                    .expect("requested program")
+                    .semantics();
+                assert_eq!(
+                    [
+                        semantics.strict,
+                        semantics.strict_null_checks,
+                        semantics.no_unchecked_indexed_access,
+                        semantics.exact_optional_property_types
+                    ],
+                    expected,
+                    "{settings}"
+                );
+                assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
+            });
+        }
+        run(options(1), |session| {
+            let mut spec = ProjectSpec::new("tsconfig.json");
+            spec.overlays.insert("base.json".into(), r#"{"compilerOptions":{"strict":true,"noUncheckedIndexedAccess":true,"exactOptionalPropertyTypes":true}}"#.into());
+            spec.overlays.insert("tsconfig.json".into(), r#"{"extends":"./base.json","compilerOptions":{"noUncheckedIndexedAccess":false},"files":["index.ts"]}"#.into());
+            spec.overlays
+                .insert("index.ts".into(), "export const value = 1;".into());
+            let checked = session.open(spec).expect("strictness config");
+            let semantics = checked
+                .projects()
+                .next()
+                .expect("requested program")
+                .semantics();
+            assert!(semantics.strict);
+            assert!(semantics.strict_null_checks);
+            assert!(!semantics.no_unchecked_indexed_access);
+            assert!(semantics.exact_optional_property_types);
+            assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
         });
     }
 

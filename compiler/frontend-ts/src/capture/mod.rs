@@ -66,6 +66,10 @@ impl<'p, 'r> Capture<'p, 'r> {
                     verbatim_module_syntax: semantics.verbatim_module_syntax,
                     preserve_const_enums: semantics.preserve_const_enums,
                     isolated_modules: semantics.isolated_modules,
+                    strict: semantics.strict,
+                    strict_null_checks: semantics.strict_null_checks,
+                    no_unchecked_indexed_access: semantics.no_unchecked_indexed_access,
+                    exact_optional_property_types: semantics.exact_optional_property_types,
                 },
                 ..SemanticSnapshot::default()
             },

@@ -1888,6 +1888,19 @@ fn frontend(tsconfig: &Utf8Path) -> Result<()> {
     println!("modules          {}", stats.modules);
     println!("calls resolved   {}", stats.calls_resolved);
     println!("constants folded {}", stats.constants_folded);
+    println!("tsconfig.strict {}", snapshot.semantics.strict);
+    println!(
+        "tsconfig.strictNullChecks {}",
+        snapshot.semantics.strict_null_checks
+    );
+    println!(
+        "tsconfig.noUncheckedIndexedAccess {}",
+        snapshot.semantics.no_unchecked_indexed_access
+    );
+    println!(
+        "tsconfig.exactOptionalPropertyTypes {}",
+        snapshot.semantics.exact_optional_property_types
+    );
     report_graph_health(&stats);
     println!("elapsed          {} ms", stats.elapsed_ms);
     println!("snapshot digest  {}", hex(&snapshot.digest()?));

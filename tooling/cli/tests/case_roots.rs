@@ -54,6 +54,38 @@ fn frontend_load_failure_is_distinct_from_completed_diagnostics() {
     assert_eq!(output.status.code(), Some(1));
 }
 
+#[test]
+fn frontend_reports_effective_strictness_without_imposing_a_policy() {
+    let base = Path::new(env!("CARGO_TARGET_TMPDIR")).join("reported-checker-strictness");
+    for (index, (extends, settings, expected)) in [
+        (false, serde_json::json!({}), [true, true, false, false]),
+        (false, serde_json::json!({"strict":false}), [false, false, false, false]),
+        (false, serde_json::json!({"strict":true,"strictNullChecks":false}), [true, false, false, false]),
+        (false, serde_json::json!({"strict":false,"strictNullChecks":true,"noUncheckedIndexedAccess":true,"exactOptionalPropertyTypes":true}), [false, true, true, true]),
+        (true, serde_json::json!({"noUncheckedIndexedAccess":false}), [true, true, false, true]),
+    ].into_iter().enumerate() {
+        let dir = base.join(index.to_string());
+        std::fs::create_dir_all(&dir).expect("strictness project directory");
+        std::fs::write(dir.join("base.json"), r#"{"compilerOptions":{"strict":true,"noUncheckedIndexedAccess":true,"exactOptionalPropertyTypes":true}}"#).expect("inherited options");
+        let mut config = serde_json::json!({"compilerOptions":settings,"files":["main.ts"]});
+        if extends { config["extends"] = "./base.json".into(); }
+        std::fs::write(dir.join("tsconfig.json"), config.to_string()).expect("project config");
+        std::fs::write(dir.join("main.ts"), "export const value = 1;").expect("source");
+        let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("frontend").arg(dir.join("tsconfig.json")).arg("--no-acquire")
+            .env("NTS_CHECKERS", "1").output().expect("frontend report");
+        let stdout = String::from_utf8(output.stdout).expect("report text");
+        let stderr = String::from_utf8(output.stderr).expect("diagnostics text");
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        for (name, value) in ["strict", "strictNullChecks", "noUncheckedIndexedAccess", "exactOptionalPropertyTypes"].into_iter().zip(expected) {
+            let prefix = format!("tsconfig.{name} ");
+            let lines: Vec<_> = stdout.lines().filter_map(|line| line.strip_prefix(&prefix)).collect();
+            assert_eq!(lines, [value.to_string()], "{name}: {stdout}");
+        }
+        assert!(!stdout.contains("Warning") && !stderr.contains("Warning"), "metadata does not impose strictness policy: {stdout}\n{stderr}");
+    }
+}
+
 fn assert_frontend_capture(text: &str, errors: usize) {
     let repo = repository();
     let unique = std::time::SystemTime::now()

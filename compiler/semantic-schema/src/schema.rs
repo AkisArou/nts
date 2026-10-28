@@ -63,7 +63,8 @@ use crate::origin::Origin;
 /// native frontend switch: nts-owned semantic facts, exact property keys,
 /// lossless JavaScript text, and removal of unused predicate-subject fields.
 /// 48: effective project settings and governed-construct lowering checks.
-pub const SCHEMA_VERSION: u32 = 48;
+/// 49: effective checker strictness options, reported without nts policy.
+pub const SCHEMA_VERSION: u32 = 49;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -85,11 +86,11 @@ pub struct NodeId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ModuleId(pub u32);
 
-/// Effective project settings that govern emitted runtime semantics.
+/// Effective project settings used by the checker and runtime-semantic checks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "six independent effective TypeScript settings"
+    reason = "independent effective TypeScript settings"
 )]
 pub struct ProjectSemantics {
     pub use_define_for_class_fields: bool,
@@ -98,6 +99,12 @@ pub struct ProjectSemantics {
     pub verbatim_module_syntax: bool,
     pub preserve_const_enums: bool,
     pub isolated_modules: bool,
+    /// The native checker's effective strict bundle; individual options can
+    /// override it. This records checker configuration, not an nts requirement.
+    pub strict: bool,
+    pub strict_null_checks: bool,
+    pub no_unchecked_indexed_access: bool,
+    pub exact_optional_property_types: bool,
 }
 
 impl Default for ProjectSemantics {
@@ -109,6 +116,10 @@ impl Default for ProjectSemantics {
             verbatim_module_syntax: false,
             preserve_const_enums: false,
             isolated_modules: false,
+            strict: true,
+            strict_null_checks: true,
+            no_unchecked_indexed_access: false,
+            exact_optional_property_types: false,
         }
     }
 }
@@ -1496,6 +1507,31 @@ mod tests {
 
     use super::*;
     use nts_diagnostics::{Location, SourceId, Span};
+
+    #[test]
+    fn checker_strictness_options_are_serialized_and_hashed_independently() {
+        let baseline = snapshot(Vec::new());
+        for option in 0..4 {
+            let mut changed = baseline.clone();
+            let semantics = &mut changed.semantics;
+            match option {
+                0 => semantics.strict = !semantics.strict,
+                1 => semantics.strict_null_checks = !semantics.strict_null_checks,
+                2 => semantics.no_unchecked_indexed_access = !semantics.no_unchecked_indexed_access,
+                3 => {
+                    semantics.exact_optional_property_types =
+                        !semantics.exact_optional_property_types;
+                }
+                _ => unreachable!(),
+            }
+            changed.validate().unwrap();
+            assert_ne!(changed.digest().unwrap(), baseline.digest().unwrap());
+            let bytes = postcard::to_allocvec(&changed).unwrap();
+            let loaded: SemanticSnapshot = postcard::from_bytes(&bytes).unwrap();
+            assert_eq!(loaded.semantics, changed.semantics);
+            assert_eq!(loaded.digest().unwrap(), changed.digest().unwrap());
+        }
+    }
 
     #[test]
     fn receiver_parameter_fact_survives_the_cache_and_changes_the_digest() {
