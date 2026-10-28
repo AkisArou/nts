@@ -1,0 +1,474 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "webidl/ecmascript-binding/es-exceptions": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "nodeCompatibilityContext": {
+    "version": "v24.20.0",
+    "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+    "versionsURL": "https://github.com/nodejs/node/blob/v24.20.0/test/fixtures/wpt/versions.json",
+    "statusFiles": [],
+    "note": "No Node status file for this es-exceptions directory was found. All five Node-vendored JavaScript fixtures are selected; compare exact upstream directory blobs before publication."
+  },
+  "fixtures": [
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
+      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
+      "sha256": "b85850f07bd97c6424439f0c79e2297a2321d4e3989001f9e217192474b0827e",
+      "gitBlob": "9b6978783723ebaa1e925873d71db85c11d927f7",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 51,
+      "expectedRunnableTests": 1,
+      "blockedTests": {
+        "Constant INDEX_SIZE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INDEX_SIZE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant DOMSTRING_SIZE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant DOMSTRING_SIZE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant HIERARCHY_REQUEST_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant HIERARCHY_REQUEST_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant WRONG_DOCUMENT_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant WRONG_DOCUMENT_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_CHARACTER_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_CHARACTER_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NO_DATA_ALLOWED_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NO_DATA_ALLOWED_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NO_MODIFICATION_ALLOWED_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NO_MODIFICATION_ALLOWED_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NOT_FOUND_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NOT_FOUND_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NOT_SUPPORTED_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NOT_SUPPORTED_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INUSE_ATTRIBUTE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INUSE_ATTRIBUTE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_STATE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_STATE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant SYNTAX_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant SYNTAX_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_MODIFICATION_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_MODIFICATION_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NAMESPACE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NAMESPACE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_ACCESS_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_ACCESS_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant VALIDATION_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant VALIDATION_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant TYPE_MISMATCH_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant TYPE_MISMATCH_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant SECURITY_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant SECURITY_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NETWORK_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant NETWORK_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant ABORT_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant ABORT_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant URL_MISMATCH_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant URL_MISMATCH_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant QUOTA_EXCEEDED_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant QUOTA_EXCEEDED_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant TIMEOUT_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant TIMEOUT_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_NODE_TYPE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant INVALID_NODE_TYPE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant DATA_CLONE_ERR on DOMException constructor object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        },
+        "Constant DATA_CLONE_ERR on DOMException prototype object": {
+          "category": "excluded-language-feature",
+          "reason": "This unchanged case combines the constant value with data-property descriptor flags. nts declares fixed-layout constants plainly and does not reproduce writable/enumerable/configurable flags. Dedicated source controls check all constructor and instance constant values."
+        }
+      },
+      "registrations": [
+        "unnamed test 1",
+        "Constant INDEX_SIZE_ERR on DOMException constructor object",
+        "Constant INDEX_SIZE_ERR on DOMException prototype object",
+        "Constant DOMSTRING_SIZE_ERR on DOMException constructor object",
+        "Constant DOMSTRING_SIZE_ERR on DOMException prototype object",
+        "Constant HIERARCHY_REQUEST_ERR on DOMException constructor object",
+        "Constant HIERARCHY_REQUEST_ERR on DOMException prototype object",
+        "Constant WRONG_DOCUMENT_ERR on DOMException constructor object",
+        "Constant WRONG_DOCUMENT_ERR on DOMException prototype object",
+        "Constant INVALID_CHARACTER_ERR on DOMException constructor object",
+        "Constant INVALID_CHARACTER_ERR on DOMException prototype object",
+        "Constant NO_DATA_ALLOWED_ERR on DOMException constructor object",
+        "Constant NO_DATA_ALLOWED_ERR on DOMException prototype object",
+        "Constant NO_MODIFICATION_ALLOWED_ERR on DOMException constructor object",
+        "Constant NO_MODIFICATION_ALLOWED_ERR on DOMException prototype object",
+        "Constant NOT_FOUND_ERR on DOMException constructor object",
+        "Constant NOT_FOUND_ERR on DOMException prototype object",
+        "Constant NOT_SUPPORTED_ERR on DOMException constructor object",
+        "Constant NOT_SUPPORTED_ERR on DOMException prototype object",
+        "Constant INUSE_ATTRIBUTE_ERR on DOMException constructor object",
+        "Constant INUSE_ATTRIBUTE_ERR on DOMException prototype object",
+        "Constant INVALID_STATE_ERR on DOMException constructor object",
+        "Constant INVALID_STATE_ERR on DOMException prototype object",
+        "Constant SYNTAX_ERR on DOMException constructor object",
+        "Constant SYNTAX_ERR on DOMException prototype object",
+        "Constant INVALID_MODIFICATION_ERR on DOMException constructor object",
+        "Constant INVALID_MODIFICATION_ERR on DOMException prototype object",
+        "Constant NAMESPACE_ERR on DOMException constructor object",
+        "Constant NAMESPACE_ERR on DOMException prototype object",
+        "Constant INVALID_ACCESS_ERR on DOMException constructor object",
+        "Constant INVALID_ACCESS_ERR on DOMException prototype object",
+        "Constant VALIDATION_ERR on DOMException constructor object",
+        "Constant VALIDATION_ERR on DOMException prototype object",
+        "Constant TYPE_MISMATCH_ERR on DOMException constructor object",
+        "Constant TYPE_MISMATCH_ERR on DOMException prototype object",
+        "Constant SECURITY_ERR on DOMException constructor object",
+        "Constant SECURITY_ERR on DOMException prototype object",
+        "Constant NETWORK_ERR on DOMException constructor object",
+        "Constant NETWORK_ERR on DOMException prototype object",
+        "Constant ABORT_ERR on DOMException constructor object",
+        "Constant ABORT_ERR on DOMException prototype object",
+        "Constant URL_MISMATCH_ERR on DOMException constructor object",
+        "Constant URL_MISMATCH_ERR on DOMException prototype object",
+        "Constant QUOTA_EXCEEDED_ERR on DOMException constructor object",
+        "Constant QUOTA_EXCEEDED_ERR on DOMException prototype object",
+        "Constant TIMEOUT_ERR on DOMException constructor object",
+        "Constant TIMEOUT_ERR on DOMException prototype object",
+        "Constant INVALID_NODE_TYPE_ERR on DOMException constructor object",
+        "Constant INVALID_NODE_TYPE_ERR on DOMException prototype object",
+        "Constant DATA_CLONE_ERR on DOMException constructor object",
+        "Constant DATA_CLONE_ERR on DOMException prototype object"
+      ]
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
+      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
+      "sha256": "76fcec262583b0902408b1cc5341290c34c8b0b6a465ca73c29b88500289c35d",
+      "gitBlob": "011521652654c93a2d9b8a7915e432b55b9f2084",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "expectedRunnableTests": 0,
+      "blockedTests": {
+        "existence and property descriptor of DOMException": {
+          "category": "excluded-language-feature",
+          "reason": "Descriptor-only global/constructor/prototype shape is outside the fixed-layout profile in docs/contributing/cloud-agents.md; the canonical class is supplied explicitly in the VM."
+        },
+        "existence and property descriptor of DOMException.prototype": {
+          "category": "excluded-language-feature",
+          "reason": "Descriptor-only global/constructor/prototype shape is outside the fixed-layout profile in docs/contributing/cloud-agents.md; the canonical class is supplied explicitly in the VM."
+        },
+        "existence and property descriptor of DOMException.prototype.constructor": {
+          "category": "excluded-language-feature",
+          "reason": "Descriptor-only global/constructor/prototype shape is outside the fixed-layout profile in docs/contributing/cloud-agents.md; the canonical class is supplied explicitly in the VM."
+        }
+      },
+      "registrations": [
+        "existence and property descriptor of DOMException",
+        "existence and property descriptor of DOMException.prototype",
+        "existence and property descriptor of DOMException.prototype.constructor"
+      ]
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
+      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
+      "sha256": "8f1ed376832ce0d8baad20fa114bbf42e25d2e1cbb082185abf09c139fc1cf20",
+      "gitBlob": "c4ddabdafd4597aac6f13ad5182b78566045c09a",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 46,
+      "expectedRunnableTests": 46,
+      "blockedTests": {},
+      "registrations": [
+        "new DOMException()",
+        "new DOMException(): inherited-ness",
+        "new DOMException(null)",
+        "new DOMException(undefined)",
+        "new DOMException(undefined): inherited-ness",
+        "new DOMException(\"foo\")",
+        "new DOMException(\"foo\"): inherited-ness",
+        "new DOMException(\"bar\", undefined)",
+        "new DOMException(\"bar\", \"NotSupportedError\")",
+        "new DOMException(\"bar\", \"NotSupportedError\"): inherited-ness",
+        "new DOMException(\"bar\", \"foo\")",
+        "new DOMexception(\"msg\", \"IndexSizeError\")",
+        "new DOMexception(\"msg\", \"HierarchyRequestError\")",
+        "new DOMexception(\"msg\", \"WrongDocumentError\")",
+        "new DOMexception(\"msg\", \"InvalidCharacterError\")",
+        "new DOMexception(\"msg\", \"NoModificationAllowedError\")",
+        "new DOMexception(\"msg\", \"NotFoundError\")",
+        "new DOMexception(\"msg\", \"NotSupportedError\")",
+        "new DOMexception(\"msg\", \"InUseAttributeError\")",
+        "new DOMexception(\"msg\", \"InvalidStateError\")",
+        "new DOMexception(\"msg\", \"SyntaxError\")",
+        "new DOMexception(\"msg\", \"InvalidModificationError\")",
+        "new DOMexception(\"msg\", \"NamespaceError\")",
+        "new DOMexception(\"msg\", \"InvalidAccessError\")",
+        "new DOMexception(\"msg\", \"TypeMismatchError\")",
+        "new DOMexception(\"msg\", \"SecurityError\")",
+        "new DOMexception(\"msg\", \"NetworkError\")",
+        "new DOMexception(\"msg\", \"AbortError\")",
+        "new DOMexception(\"msg\", \"URLMismatchError\")",
+        "new DOMexception(\"msg\", \"QuotaExceededError\")",
+        "new DOMexception(\"msg\", \"TimeoutError\")",
+        "new DOMexception(\"msg\", \"InvalidNodeTypeError\")",
+        "new DOMexception(\"msg\", \"DataCloneError\")",
+        "new DOMexception(\"msg\", \"DOMStringSizeError\")",
+        "new DOMexception(\"msg\", \"NoDataAllowedError\")",
+        "new DOMexception(\"msg\", \"ValidationError\")",
+        "new DOMexception(\"msg\", \"EncodingError\")",
+        "new DOMexception(\"msg\", \"NotReadableError\")",
+        "new DOMexception(\"msg\", \"UnknownError\")",
+        "new DOMexception(\"msg\", \"ConstraintError\")",
+        "new DOMexception(\"msg\", \"DataError\")",
+        "new DOMexception(\"msg\", \"TransactionInactiveError\")",
+        "new DOMexception(\"msg\", \"ReadOnlyError\")",
+        "new DOMexception(\"msg\", \"VersionError\")",
+        "new DOMexception(\"msg\", \"OperationError\")",
+        "new DOMexception(\"msg\", \"NotAllowedError\")"
+      ]
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
+      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
+      "sha256": "2e343b3449e4140cabee7440538353a85881414ab026cbd0b632662bd02106b5",
+      "gitBlob": "d1c86930d4cd8ef57fdc6e6b8bcff03049a389ca",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 15,
+      "expectedRunnableTests": 8,
+      "blockedTests": {
+        "inherits from Error: prototype-side": {
+          "category": "excluded-language-feature",
+          "reason": "This case tests only runtime prototype reflection, excluded by the current fixed-layout profile. Error identity and inherited functional toString behavior remain tested."
+        },
+        "does not inherit from Error: class-side": {
+          "category": "excluded-language-feature",
+          "reason": "This case tests only runtime prototype reflection, excluded by the current fixed-layout profile. Error identity and inherited functional toString behavior remain tested."
+        },
+        "message property descriptor": {
+          "category": "excluded-language-feature",
+          "reason": "Web IDL writable/enumerable/configurable descriptor flags are outside the fixed-layout profile. Functional inherited getters, their private state and receiver brand checks remain runnable."
+        },
+        "name property descriptor": {
+          "category": "excluded-language-feature",
+          "reason": "Web IDL writable/enumerable/configurable descriptor flags are outside the fixed-layout profile. Functional inherited getters, their private state and receiver brand checks remain runnable."
+        },
+        "code property descriptor": {
+          "category": "excluded-language-feature",
+          "reason": "Web IDL writable/enumerable/configurable descriptor flags are outside the fixed-layout profile. Functional inherited getters, their private state and receiver brand checks remain runnable."
+        },
+        "code property is not affected by shadowing the name property": {
+          "category": "excluded-language-feature",
+          "reason": "This case mutates instance descriptors with Object.defineProperty, excluded by the current fixed-layout profile. Ordinary subclass overrides are covered separately without descriptor mutation."
+        },
+        "toString() behavior from Error.prototype applies as expected": {
+          "category": "excluded-language-feature",
+          "reason": "This case mutates instance descriptors with Object.defineProperty, excluded by the current fixed-layout profile. Ordinary subclass overrides are covered separately without descriptor mutation."
+        }
+      },
+      "registrations": [
+        "Cannot construct without new",
+        "inherits from Error: prototype-side",
+        "does not inherit from Error: class-side",
+        "message property descriptor",
+        "message getter performs brand checks (i.e. is not [LegacyLenientThis])",
+        "name property descriptor",
+        "name getter performs brand checks (i.e. is not [LegacyLenientThis])",
+        "code property descriptor",
+        "code getter performs brand checks (i.e. is not [LegacyLenientThis])",
+        "code property is not affected by shadowing the name property",
+        "Object.prototype.toString behavior is like other interfaces",
+        "Inherits its toString() from Error.prototype",
+        "toString() behavior from Error.prototype applies as expected",
+        "DOMException.prototype.toString() applied to DOMException.prototype throws because of name/message brand checks",
+        "If the implementation has a stack property on normal errors, it also does on DOMExceptions"
+      ]
+    },
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
+      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
+      "sha256": "2db2086cc369fc230b476c921809cc953e9d486fdeccde888f25abdef694dc68",
+      "gitBlob": "6f3097b222ed1feb56e1b53606b403944421029d",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "expectedRunnableTests": 1,
+      "blockedTests": {},
+      "registrations": [
+        "unnamed test 1"
+      ]
+    }
+  ],
+  "support": [],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "excluded": [
+    {
+      "path": "webidl/ecmascript-binding/es-exceptions/exceptions.html",
+      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/exceptions.html",
+      "sha256": "4e9834e668f97231d73ae6e5ed3ba1fca4486d5ff496c82a45b55d8f9315ed28",
+      "gitBlob": "d26c66266994b2e349b4c81d42bc2f66353e6840",
+      "reason": "Requires real Document tree mutation, a browser Window, an iframe navigation and cross-realm native DOM exceptions; none is supplied by this package. Its dynamic browser registrations are not counted as executed or blocked."
+    }
+  ],
+  "summary": {
+    "fixtureFiles": 5,
+    "registered": 116,
+    "runnable": 56,
+    "blocked": 60,
+    "excludedSourcePaths": 1
+  }
+}
