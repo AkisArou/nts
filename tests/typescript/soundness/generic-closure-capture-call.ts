@@ -1,0 +1,24 @@
+/*---
+description: Explicit generic widening leaves a string in a numeric closure capture through a numeric parameter.
+features: [ts-unsound-generic-widening, ts-closures, ts-typeof-operator, ts-conversions, ts-functions, ts-generics, ts-objects]
+---*/
+// TypeScript accepts the numeric method at an explicit unknown instantiation
+// by bivariance. The captured number receives a string; node preserves it.
+function describe(value: number): string {
+  return typeof value + ":" + String(value + 1);
+}
+function inject<T>(sink: { put(value: T): void }, value: T): void {
+  sink.put(value);
+}
+function exercise(): void {
+  let value: number = 2;
+  const sink = {
+    put(next: number): void { value = next; }
+  };
+  function inspect(): string {
+    return describe(value);
+  }
+  inject<unknown>(sink, "7");
+  assert.sameValue(inspect(), "string:71");
+}
+exercise();
