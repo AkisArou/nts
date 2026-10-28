@@ -1,8 +1,7 @@
 import { trimASCIIWhitespace } from "../core/ascii.ts";
 import { concatBytes, latin1, TextDecoder } from "../core/encoding.ts";
 import { DOMException } from "../core/errors.ts";
-import { Event, EventTarget, eventTargetDispatchTrusted, eventTargetSetHandler } from "../core/events.ts";
-import type { EventHandlerSlot } from "../core/events.ts";
+import { Event, EventTarget, eventTargetDispatchTrusted } from "../core/events.ts";
 import { ProgressEvent } from "../core/progress-event.ts";
 import { coerceToDOMString, requireArguments } from "../core/webidl.ts";
 import { parseMIMEType } from "../forms/mime.ts";
@@ -20,7 +19,7 @@ export type FileReaderEventHandlerValue = FileReaderEventHandler | object | null
 
 class ReaderHandlerSlot {
   value: object | null = null;
-  readonly registration: EventHandlerSlot<FileReader, Event> = { callback: null, listener: null };
+  active = false;
 }
 
 class ReadOperation {
@@ -101,13 +100,15 @@ async function cancelRead(reader: ReadableStreamDefaultReader<Uint8Array>): Prom
   }
 }
 
-function acceptsEvent(_event: Event): _event is Event {
-  return true;
-}
-
 const callHandler: (handler: FileReaderEventHandler, receiver: FileReader, event: Event) => unknown =
   Function.prototype.call.bind(Function.prototype.call);
 const cancelEvent: (event: Event) => void = Function.prototype.call.bind(Event.prototype.preventDefault);
+// HTML activates handler listeners through internal listener operations. Calling
+// the canonical operations also avoids dispatch through a subclass override.
+const addHandlerListener: (target: FileReader, type: string, listener: FileReaderEventHandler) => void =
+  Function.prototype.call.bind(EventTarget.prototype.addEventListener);
+const removeHandlerListener: (target: FileReader, type: string, listener: FileReaderEventHandler) => void =
+  Function.prototype.call.bind(EventTarget.prototype.removeEventListener);
 let invokeHandler!: (reader: FileReader, index: number, event: Event) => void;
 
 function onLoadstart(this: FileReader, event: Event): void { invokeHandler(this, 0, event); }
@@ -177,7 +178,13 @@ export class FileReader extends EventTarget {
     const slot = this.#handlers[index];
     if (slot === undefined) throw new Error("FileReader handler slot is missing");
     slot.value = value !== null && (typeof value === "object" || typeof value === "function") ? value : null;
-    this[eventTargetSetHandler](this, slot.registration, type, slot.value === null ? null : callback, acceptsEvent);
+    if (slot.value === null) {
+      if (slot.active) removeHandlerListener(this, type, callback);
+      slot.active = false;
+    } else if (!slot.active) {
+      addHandlerListener(this, type, callback);
+      slot.active = true;
+    }
   }
 
   readAsArrayBuffer(blob: Blob): void {
