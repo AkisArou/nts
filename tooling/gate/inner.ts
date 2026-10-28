@@ -161,7 +161,8 @@ function main(argv: readonly string[]): number {
     return unknown.length > 0 ? 2 : 0;
   }
   const at = argv.indexOf("--base");
-  const base = at >= 0 ? argv[at + 1] : "main";
+  const asked = at >= 0 ? argv[at + 1] : "main";
+  const base = text("git", ["rev-parse", "--verify", `${asked}^{commit}`]).trim();
   const agree = !argv.includes("--no-agree");
   const keepGoing = argv.includes("--keep-going");
   const changed = changedPaths(base);
@@ -202,7 +203,7 @@ function main(argv: readonly string[]): number {
         break;
       }
       fine = step(`agree ${backend}${rc === "1" ? " rc" : ""}`, () =>
-        heavy("agree", "12G", "node", ["tooling/differential/agree.mjs", before, after], {
+        heavy("agree", "12G", "node", ["tooling/differential/agree.mjs", before, after, `--base=${base}`], {
           NTS_BACKEND: backend,
           NTS_RC: rc,
           NTS_AGREE_JOBS: "4",

@@ -85,6 +85,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
+import { newlyRecordedProjects, newBeforeProject, fullyMeasuredAgreement } from "./new-projects.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -138,6 +139,8 @@ export function classify(status, out) {
   const reached = /^checked (\d+) of (\d+) cases/m.exec(out);
   const full = /^checked (\d+) cases across/m.exec(out);
   const record = {
+    status,
+    missingPopulation: /oracle not measured: (?:recorded count for )?(.+?) \([a-z]+\) (?:has no unique recorded population|is not its full generated count)/.exec(out)?.[1] ?? null,
     checked: Number(reached?.[1] ?? full?.[1] ?? 0),
     expected: Number(reached?.[2] ?? full?.[1] ?? 0),
     declined: count(/^(\d+) case\(s\) the compiled program declined/m),
@@ -351,9 +354,10 @@ if (args.includes("--self-test")) {
 
 const verdictsFile = args.find((a) => a.startsWith("--verdicts="))?.slice("--verdicts=".length);
 const only = args.find((a) => a.startsWith("--only="))?.slice("--only=".length).split(",").filter(Boolean);
+const comparisonBase = args.find((a) => a.startsWith("--base="))?.slice("--base=".length);
 const binaries = args.filter((a) => !a.startsWith("--"));
 if (binaries.length < 1 || binaries.length > 2) {
-  console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>] [--one-change]");
+  console.log("  usage: agree.mjs <nts> [<nts-after>] [--only=example,...] [--verdicts=<file>] [--one-change] [--base=<before-commit>]");
   process.exit(2);
 }
 if (args.includes("--one-change")) {
@@ -434,6 +438,16 @@ function prune(keep) {
 }
 
 const pins = binaries.map(pin);
+let newProjects = new Set();
+if (comparisonBase !== undefined) {
+  try {
+    if (pins.length !== 2 || !comparisonBase) throw new Error("--base requires two binaries and a before commit");
+    newProjects = newlyRecordedProjects(ROOT, binaries[0], comparisonBase, process.env.NTS_BACKEND || "c");
+  } catch (error) {
+    console.log(`  NOT MEASURED: ${error.message}`);
+    process.exit(2);
+  }
+}
 prune(6);
 if (pins.length === 2 && pins[0].hash === pins[1].hash) {
   console.log(`  NOT MEASURED: both arguments are the same binary (sha256 ${pins[0].hash.slice(0, 16)}) --`);
@@ -568,18 +582,25 @@ if (pins.length === 1) {
 
 // Two binaries: confirm each difference, then attribute it.
 const verdicts = [];
-const differing = examples.filter((e) => !same(...runs.get(e)));
+const differing = examples.filter((e) => !same(...runs.get(e)) || newBeforeProject(e, newProjects, runs.get(e)[0]));
 for (const example of differing) {
   const [before, after] = runs.get(example);
   const again = [await check(pins[0], example), await check(pins[1], example)];
-  if (!same(before, again[0]) || !same(after, again[1])) {
+  const isNew = newBeforeProject(example, newProjects, before);
+  if (!same(before, again[0]) || !same(after, again[1]) || (isNew && !newBeforeProject(example, newProjects, again[0]))) {
     verdicts.push({ example, tag: "UNSTABLE", before, after, note: !same(before, again[0]) ? "before disagrees with itself" : "after disagrees with itself" });
+    continue;
+  }
+  if (isNew) {
+    const complete = fullyMeasuredAgreement(after) && fullyMeasuredAgreement(again[1]);
+    verdicts.push({ example, tag: complete ? "NEW" : WRONG.has(after.outcome) ? "REGRESSED" : "NOT MEASURED", before, after,
+      note: complete ? "before: not comparable (new)" : "new project's after arm must be fully measured and agree" });
     continue;
   }
   const tag = before.outcome === Outcome.NOT_MEASURED || after.outcome === Outcome.NOT_MEASURED ? "NOT MEASURED" : attribute(before, after);
   verdicts.push({ example, tag, before, after });
 }
-const ORDER = ["REGRESSED", "CHANGED", "UNSTABLE", "NOT MEASURED", "FIXED"];
+const ORDER = ["REGRESSED", "CHANGED", "UNSTABLE", "NOT MEASURED", "FIXED", "NEW"];
 verdicts.sort((a, b) => ORDER.indexOf(a.tag) - ORDER.indexOf(b.tag) || a.example.localeCompare(b.example));
 for (const v of verdicts) {
   print(v.tag, v.example, v.note ?? "");
@@ -600,5 +621,5 @@ const count = (tag) => verdicts.filter((v) => v.tag === tag).length;
 const failing = count("REGRESSED") + count("CHANGED") + count("UNSTABLE");
 const unmeasured = count("NOT MEASURED") + bothUnmeasured.length;
 console.log(`  ${examples.length - differing.length} unchanged, ${count("FIXED")} fixed, ${count("REGRESSED")} regressed, ` +
-  `${count("CHANGED")} changed, ${count("UNSTABLE")} unstable, ${unmeasured} not measured, in ${seconds()} s`);
+  `${count("CHANGED")} changed, ${count("UNSTABLE")} unstable, ${count("NEW")} not comparable (new), ${unmeasured} not measured, in ${seconds()} s`);
 process.exit(failing > 0 ? 1 : unmeasured > 0 ? 2 : 0);
