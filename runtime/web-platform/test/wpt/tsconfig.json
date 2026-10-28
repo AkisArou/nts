@@ -21,6 +21,9 @@
     "../streams-wpt-policy.test.ts",
     "../wpt-harness.test.ts",
     "../wpt-html-support.test.ts",
-    "../wpt-fetch-data.test.ts"
+    "../wpt-fetch-data.test.ts",
+    "../fetch-headers-wpt-policy.test.ts",
+    "../fetch-body-wpt-policy.test.ts",
+    "../fetch-multipart-wpt-policy.test.ts"
   ]
 }
