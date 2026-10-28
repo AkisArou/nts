@@ -5,6 +5,7 @@
 use camino::Utf8PathBuf;
 use nts_frontend_ts::{Frontend, transform::NodeReferences};
 use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SnapshotError, syntax};
+use std::fmt::Write;
 use std::num::NonZeroU16;
 
 struct Project {
@@ -386,7 +387,7 @@ fn swapped_symbol_declarations_do_not_validate() {
 fn large_merged_declarations_validate_independently_of_site_order() {
     let mut source = String::new();
     for i in 0..512 {
-        source.push_str(&format!("export interface Shared {{ field{i}: number }}\n"));
+        writeln!(source, "export interface Shared {{ field{i}: number }}").unwrap();
     }
     let project = Project::new("large-merge", &source);
     let mut snapshot = project.snapshot("tsconfig.json");
