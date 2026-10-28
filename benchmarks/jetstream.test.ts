@@ -100,6 +100,37 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN CRYPTO SHA1 SP: complete original workload checks.
+{
+  const name = "jetstream-crypto-sha1-sp";
+  if (modules.has(name)) {
+    checked.add(name);
+    // Proposed additions to the coordinator-owned JetStream test.
+    // This is a typed transcription of Paul Johnston's JavaScript SHA-1 implementation and the complete SunSpider workload.
+    const { hex_sha1, hex_hmac_sha1, sha1_vm_test, render, observation, seed, work } = await import("./cases/jetstream-crypto-sha1-sp/case.ts");
+
+    test('crypto-sha1-sp retains the complete input and original inner repetitions', () => {
+      assert.equal(render(1), '2524d264def74cce2498bf112bedf00e6c0b796d');
+      assert.deepEqual(observation(), { digest: '2524d264def74cce2498bf112bedf00e6c0b796d', inputLength: 10064 });
+      assert.equal(sha1_vm_test(), true);
+    });
+
+    test('crypto-sha1-sp retains the original digest and HMAC helpers', () => {
+      assert.equal(hex_sha1('abc'), 'a9993e364706816aba3e25717850c26c9cd0d89d');
+      assert.equal(hex_hmac_sha1('key', 'The quick brown fox jumps over the lazy dog'), 'de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9');
+    });
+
+    test('crypto-sha1-sp repeats complete original iterations', () => {
+      assert.equal(seed, 1);
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 2278502454);
+      assert.equal(work(2), 4192601792);
+      assert.equal(work(1), 2278502454);
+    });
+  }
+}
+// END CRYPTO SHA1 SP.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });

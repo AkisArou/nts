@@ -1,0 +1,144 @@
+{
+  "benchmark": "crypto-sha1-SP",
+  "case": "jetstream-crypto-sha1-sp",
+  "identification": "This is a typed transcription of Paul Johnston's JavaScript SHA-1 implementation and the complete SunSpider workload.",
+  "source": {
+    "repository": "WebKit/JetStream",
+    "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "path": "SunSpider/crypto-sha1.js",
+    "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/SunSpider/crypto-sha1.js",
+    "bytes": 6594,
+    "sha256": "40373456ed4f3ad965df265b6b671d36f42a91d0b6e14d1a534dd76e5ec0a60e",
+    "gitBlob": "1ed248bb128bfb92d68cf747f31fc23d498633b6"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause",
+    "originalHeaderAndCreditsRetained": true,
+    "fullAuthorBsdNoticeIncluded": true,
+    "additionalRsaMd5NoticeIncluded": false,
+    "authorLegalUrl": "https://pajhome.org.uk/site/legal.html#bsdlicense",
+    "authorLegalEvidenceSha256": "2f5fb66a6a44fd8f1cb1dd30a103d71e331bfc2b8b11f88d82d88ee0b7fdc5cc",
+    "jetstreamGlueLicense": "BSD-2-Clause",
+    "companionText": "../LICENSE-jetstream"
+  },
+  "originalInput": {
+    "baseInputCharacters": 629,
+    "baseInputSha256": "f5cfc733d52a41e8532428ce14cd468be9744b6ac0835616916a1cf953619712",
+    "completeInputCharacters": 10064,
+    "completeInputSha256": "6a332c2e52c0bcc3aa8fa313658f239546c163e05cb1021ffbc3640a8bdce9c2",
+    "rawInputLiteralSha256": "20be26f76af232fbeb33b98621a4c6d76fcd25f7ba51e59e467f29ff096f97e8"
+  },
+  "workload": {
+    "doublingsInsideEveryRun": 4,
+    "runsPerOriginalIteration": 25,
+    "originalExpectedDigest": "2524d264def74cce2498bf112bedf00e6c0b796d",
+    "rng": null,
+    "inputChanges": false
+  },
+  "lifecycle": "The stateless original Benchmark is constructed once outside work. Every inner run retains its complete original string construction, hash and validation; only the small digest and input length are observed afterward.",
+  "adapter": {
+    "seed": 1,
+    "meaning": "Complete original benchmark iterations",
+    "checksum": "Hash every digest character with multiplication by 31 and unsigned truncation; mix that hash once per complete original iteration using the same operation."
+  },
+  "sourceBodyAudit": {
+    "retainedOriginalFunctions": [
+      "hex_sha1",
+      "b64_sha1",
+      "str_sha1",
+      "hex_hmac_sha1",
+      "b64_hmac_sha1",
+      "str_hmac_sha1",
+      "sha1_vm_test",
+      "core_sha1",
+      "sha1_ft",
+      "sha1_kt",
+      "core_hmac_sha1",
+      "safe_add",
+      "rol",
+      "str2binb",
+      "binb2str",
+      "binb2hex",
+      "binb2b64",
+      "run"
+    ],
+    "allOriginalFunctionBodiesEqualAfterErasureAndRemovingTwoObservationAssignments": true,
+    "completeOriginalBenchmarkAstEqual": true,
+    "rawInputLiteralIdentical": true,
+    "forbiddenExecutableFeatures": []
+  },
+  "validation": {
+    "algorithm": "sha1",
+    "node": "v24.20.0",
+    "sourceModified": false,
+    "originalCompleteIterationValidationPassed": true,
+    "originalRunsPerIteration": 25,
+    "originalInputCharacters": 10064,
+    "expectedDigest": "2524d264def74cce2498bf112bedf00e6c0b796d",
+    "knownInputCases": 16,
+    "hmacCases": 4,
+    "comparedEncodings": [
+      "hex",
+      "unpadded-base64",
+      "8-bit-string"
+    ],
+    "outputComparisons": 60,
+    "exactUpstreamAndIndependentNativeOracleAgreement": true,
+    "checksums": {
+      "work0": 0,
+      "work1": 2278502454,
+      "work2": 4192601792
+    },
+    "traceSha256": "537c03ae41dd9311346cca060b833d9f25f77848cc2f1ce5649c9d04078dc4e3",
+    "timingPerformed": false,
+    "strictTypeScriptPassed": true,
+    "strictCommand": "taskset -c 1,2 ./node_modules/.bin/tsc --project ../jetstream-validation/ports-air/crypto-sha1-sp/tsconfig.json --pretty false",
+    "strictExitCode": 0
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 3.2288495263,
+    "processes": [
+      {
+        "nsPerOp": 3272197.7353,
+        "bits": "41e0f9e606c00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 4865717.3889,
+        "bits": "41e0f9e606c00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 3240380.6667,
+        "bits": "41e0f9e606c00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 3672196.0,
+        "bits": "41e0f9e606c00000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 3228849.5263,
+        "bits": "41e0f9e606c00000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "240af0e9ee87d32bce53c2bcad8d09d62af7f5c6ae64633f386524539d68c7be",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": false
+  },
+  "portFile": {
+    "bytes": 10358,
+    "sha256": "240af0e9ee87d32bce53c2bcad8d09d62af7f5c6ae64633f386524539d68c7be",
+    "gitBlob": "88a7ed872028c2be2e1e76970cd02443e5ecc99c"
+  },
+  "rulesRead": {
+    "repository": "AkisArou/nts",
+    "ref": "main",
+    "path": "docs/contributing/cloud-agents.md",
+    "gitBlob": "6ad6f54854b8189fad9315c8db9aa8dab97b4525"
+  }
+}
