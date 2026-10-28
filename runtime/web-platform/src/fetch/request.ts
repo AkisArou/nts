@@ -440,11 +440,18 @@ export class Request extends Body {
     const headers = convertedInit.headers === undefined
       ? source === null ? new Headers() : copyHeaders(source.requestHeaders)
       : createHeadersFromConvertedInit(convertedInit.headers);
-    const state = hasNewBody
+    let state = hasNewBody
       ? BodyState.fromConvertedBody(convertedInit.body, context.random, context.bodyPolicy)
       : source === null
         ? BodyState.empty(context.bodyPolicy)
-        : source.getState().transfer();
+        : source.bodyState;
+    // A source-less body must use same-origin or cors. Check the selected body
+    // before proxying an inherited stream, which disturbs and locks the source.
+    // https://fetch.spec.whatwg.org/#dom-request (steps 39 and 41)
+    if (!state.replayable && mode !== "same-origin" && mode !== "cors") {
+      throw new TypeError("A streaming request body requires same-origin or cors mode");
+    }
+    if (!hasNewBody && source !== null) state = state.transfer();
     if (!headers.has("content-type") && state.type !== null)
       headers.set("content-type", state.type);
     super(state);
