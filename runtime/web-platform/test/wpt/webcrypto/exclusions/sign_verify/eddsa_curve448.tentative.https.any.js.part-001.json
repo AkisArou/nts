@@ -1,0 +1,15 @@
+{
+  "fixture": "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "EdDSA Ed448 verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "EdDSA Ed448 with transferred data during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    }
+  ]
+}

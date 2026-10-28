@@ -1,0 +1,20 @@
+{
+  "fixture": "WebCryptoAPI/serialization/aes-kw.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test {length: 128, name: AES-KW}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {length: 192, name: AES-KW}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {length: 256, name: AES-KW}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    }
+  ]
+}

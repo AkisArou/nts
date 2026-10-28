@@ -1,0 +1,35 @@
+{
+  "fixture": "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test {length: 128, name: KMAC128}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 160, name: KMAC128}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 256, name: KMAC128}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 128, name: KMAC256}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 160, name: KMAC256}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {length: 256, name: KMAC256}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    }
+  ]
+}

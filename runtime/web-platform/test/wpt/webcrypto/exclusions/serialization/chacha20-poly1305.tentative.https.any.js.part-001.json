@@ -1,0 +1,15 @@
+{
+  "fixture": "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test ChaCha20-Poly1305",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "serialization test {name: ChaCha20-Poly1305}",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    }
+  ]
+}

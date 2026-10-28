@@ -1,0 +1,20 @@
+{
+  "fixture": "WebCryptoAPI/historical.any.js",
+  "blockedTests": [
+    {
+      "name": "Non-secure context window does not have access to crypto.subtle",
+      "category": "insecure-global-exposure",
+      "reason": "Tests insecure Window/Worker exposure. Global installation and secure-context policy belong to provider bootstrap; this secure package test environment exposes its explicit crypto capability."
+    },
+    {
+      "name": "Non-secure context window does not have access to SubtleCrypto",
+      "category": "insecure-global-exposure",
+      "reason": "Tests insecure Window/Worker exposure. Global installation and secure-context policy belong to provider bootstrap; this secure package test environment exposes its explicit crypto capability."
+    },
+    {
+      "name": "Non-secure context window does not have access to CryptoKey",
+      "category": "insecure-global-exposure",
+      "reason": "Tests insecure Window/Worker exposure. Global installation and secure-context policy belong to provider bootstrap; this secure package test environment exposes its explicit crypto capability."
+    }
+  ]
+}

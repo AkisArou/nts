@@ -21,7 +21,8 @@
     "performance-timeline": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
     "user-timing": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
     "urlpattern": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
-    "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218"
+    "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+    "WebCryptoAPI": "ec2fee39a4ca3c13afd55236795547eedd7f165d"
   },
   "files": {
     "common/blank.html": {
@@ -2268,6 +2269,746 @@
     "xhr/resources/content-in-chunks.py": {
       "sha256": "8df4246ec0f20fce0550045278844a5ab18a39ff1b497548a7dec0157bf7e394",
       "gitBlob": "57a8e5805149fceaf7025d82006ff5c50cbdfcb9"
+    },
+    "WebCryptoAPI/META.yml": {
+      "sha256": "e4c8c179cf11865d991591385f19034b2032e193d0d3723e73077842f7e2b6a7",
+      "gitBlob": "27a11a1fe47c39baa6f8ea9390f4e9be1777e77e"
+    },
+    "WebCryptoAPI/README.md": {
+      "sha256": "b8024db2f00e15405b8cb26dd01c1590b733019a7bc727e1bac8b1bcce6f8d68",
+      "gitBlob": "5546cf2b6f2a1b9d06054a515cc0bfc851a3c998"
+    },
+    "WebCryptoAPI/WEB_FEATURES.yml": {
+      "sha256": "55fa64e1f86b17df21a276af97623a1ae309bbeaa382d69aea9050a630b9810c",
+      "gitBlob": "6f47b86ed48fd52c46e5b4b7715e9e9f42fe3b41"
+    },
+    "WebCryptoAPI/algorithm-discards-context.https.window.js": {
+      "sha256": "4faa25b0b0082ab8a3f210208c1eb6672cf8979d1ec105815110ae12a7186425",
+      "gitBlob": "e648bc2f230f0c6f0b84ae629d96853b3cb8cd58"
+    },
+    "WebCryptoAPI/crypto_key_cached_slots.https.any.js": {
+      "sha256": "13879e3b7d244e2fd7fc2cfe36331dd4766dc0c9568f05e69e6c9eba0c431364",
+      "gitBlob": "f573fac1c9660654244db110f55c1352f086681a"
+    },
+    "WebCryptoAPI/derive_bits_keys/argon2.js": {
+      "sha256": "6f17ef06a8629905992fcfe8d1e9d72202d6ab260bf88fe3e3cdf0ca022b1c8f",
+      "gitBlob": "de3b4b5920df273c383b8909cce4f1c56bfac6fa"
+    },
+    "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js": {
+      "sha256": "1638e7ab1773ca157a44b19d48ebe0648fa41439b2b5c25b9219d6fd545e48be",
+      "gitBlob": "9422c39c958a06339561799877c52033195f39ef"
+    },
+    "WebCryptoAPI/derive_bits_keys/argon2_vectors.js": {
+      "sha256": "884bed29703e39f68157ee82a29d2eca0bfd6cf2c11073a6bf5a6c0dc1a57fd5",
+      "gitBlob": "93d26b5eb969808caee163eec76b4ac93d10bf41"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits.js": {
+      "sha256": "ea744c9a383d031755b3e3f9102d35e21725a3e898dfeeb666618e6109ecb5d9",
+      "gitBlob": "1406e8bf0a19289a47aa9d80b8a147fa67cc5e4e"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js": {
+      "sha256": "6c8b0469d3eb77a9ee7d84a658779b17d46519ea8ef0d7806d05edbc39abd314",
+      "gitBlob": "5684d7624076c70a769099d39a1ad68886cb4fa8"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js": {
+      "sha256": "fe76687d34e9a53867f4569c65855789ece9e7ae8adc78b8d0d55692652f08ca",
+      "gitBlob": "5e482ef0b9d8041f0200301ff215bfa111a964df"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_fixtures.js": {
+      "sha256": "1a8043165de6e7f20c6259a137ffd77b52ff30dda29da39c2fbd73a03104fe4a",
+      "gitBlob": "c376c75bfe6cf83db77c00dd7b7d47dccd29d142"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys.js": {
+      "sha256": "e1b31b15ac771fb56b88019f447a61413eaf43b6cffb9539f0e2d63843a0c0a0",
+      "gitBlob": "cefc45ac6929033beae7c9c6edaefb98d4babf38"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js": {
+      "sha256": "552b76aefb533933d48b0d6e00ff71473dcea41f0de78f268ef2ec3fc91e3804",
+      "gitBlob": "8bcc201d4e95ec15bcf6218ac37c5b2dd966a4f1"
+    },
+    "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js": {
+      "sha256": "88327d693b84a99ee16559b4cec2293b6b992aa97035cccd4b098fb32e1509c4",
+      "gitBlob": "0ed3954ac200b53464ca1213c96341e0877dca8d"
+    },
+    "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.https.any.js": {
+      "sha256": "b45b11318f586bc07834e029aa1225c0f0b3c51b6b8d626f368b4de4a110ad76",
+      "gitBlob": "5edc832b6163bd8976c02ddbf42a375a8a36e87d"
+    },
+    "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.js": {
+      "sha256": "fde8ba2610cdc23d4fab73637261c54da0b61bfc7828e059b0c75468b3a3c6a2",
+      "gitBlob": "5963a852fcfbe1ff42cf4a936ae5bcff86bc7635"
+    },
+    "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js": {
+      "sha256": "5363cfd8ff063e5699b6f53eca97990bbea6f8ed8e142d9f5842c9d7d709e6a5",
+      "gitBlob": "862945c6a316c696deebe602e2856991800b788f"
+    },
+    "WebCryptoAPI/derive_bits_keys/derived_bits_length.js": {
+      "sha256": "23615ded6d586bb0b4005dec19eeaf0e93a5087a8d8cb332a0118b2b7d4588e3",
+      "gitBlob": "5a7ed7eb50a0a0b683c1631b639be89b2e428a1c"
+    },
+    "WebCryptoAPI/derive_bits_keys/derived_bits_length_testcases.js": {
+      "sha256": "7681e69b46cdc9e9dc066b3eefee5b7d460ff07ba7502267e2189b26b2e3b339",
+      "gitBlob": "2679fa79e2a044d8f7955e0b4372a0ae6a8178c3"
+    },
+    "WebCryptoAPI/derive_bits_keys/derived_bits_length_vectors.js": {
+      "sha256": "d816b0ad68eb4cdc2866b74f35244081a9ac2f67fa42cb56ca7dda9870eb8f30",
+      "gitBlob": "391f81d1871d7683d800b4df83b7bfa41a782874"
+    },
+    "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js": {
+      "sha256": "f643d21dcb358da58a68bc59f58123b0866349d3fc73167ebd90ae7183ffea1e",
+      "gitBlob": "58a0cecd5efed686be5d0792e8c16f4eb6acb51d"
+    },
+    "WebCryptoAPI/derive_bits_keys/ecdh_bits.js": {
+      "sha256": "926d6eff521db2726191d4d76f9e02800afb7df22f5fd08e90581605b945af60",
+      "gitBlob": "8e79909020d398c6c04c2f4497c59e5f2e60180b"
+    },
+    "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js": {
+      "sha256": "3aa1a2cb071ec28dd8e1fcc58e6017870a0f2549bc0f31c8214b08f3f67e352b",
+      "gitBlob": "6464dacfe3aa81463f3fa623460bd09179969efa"
+    },
+    "WebCryptoAPI/derive_bits_keys/ecdh_keys.js": {
+      "sha256": "14d879807b6145c12e08095b6b6cd253251000384930669fc744e910f60f008c",
+      "gitBlob": "8c3d2aeb5a497680a81f7b242531cedfdec88613"
+    },
+    "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js": {
+      "sha256": "fcc9b5be72586ce394b7ac29073af25713fa51b894cc39a2d456315727e8a4e6",
+      "gitBlob": "3879ddb14b903aa7ef95416de3f8f4c3bc940f6e"
+    },
+    "WebCryptoAPI/derive_bits_keys/hkdf.js": {
+      "sha256": "9d5d126e181adfa2d0d689070ba7f4ecb40027de51db095713efcb3baafd53ff",
+      "gitBlob": "08e8c0c8974617ffa03ac33f8c3bed73806b632f"
+    },
+    "WebCryptoAPI/derive_bits_keys/hkdf_vectors.js": {
+      "sha256": "6ae0b9b75525020e897d06b07219f257c6a823afec4243658207b33ddc5ea800",
+      "gitBlob": "ef448ec5f2a6543cd7324443ae3691e909aeb821"
+    },
+    "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js": {
+      "sha256": "910ba13a88f82b905bc949657f5a2d9c2119acea5079dc0db3fe400e15058131",
+      "gitBlob": "cc2ed9b9cef8721dd7523387c29c899981fce049"
+    },
+    "WebCryptoAPI/derive_bits_keys/pbkdf2.js": {
+      "sha256": "5e2b0a2cd95c7ad0693f353630e07b738957a0dd33a27e6aab50e2295f3976bd",
+      "gitBlob": "4d5b0137a387c856cbcb3786ea59b43a62d2cfe8"
+    },
+    "WebCryptoAPI/derive_bits_keys/pbkdf2_vectors.js": {
+      "sha256": "69b064b17954ad2626a6db32e38461b8f4bdf607a19cf8db34537c9aedcebd82",
+      "gitBlob": "b074f874ada0c02b0eeb6a1a23b416264f489214"
+    },
+    "WebCryptoAPI/digest/cshake.tentative.https.any.js": {
+      "sha256": "23df884b9c3451d9ca57ba709f5029210a2b8d0da36dfb99755f947a4cb03e4a",
+      "gitBlob": "81793666294c2320cf5e1861cfa5e6fbe637960e"
+    },
+    "WebCryptoAPI/digest/digest.https.any.js": {
+      "sha256": "e7212ef77e909d91b6a1d3ff79ce22f076fcd89bfaaed461aeae9dd756789f84",
+      "gitBlob": "38ce85ec06cfc3231821802bc27c620d8005d617"
+    },
+    "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js": {
+      "sha256": "5ab9219690b69027efe6ba69a5f0ac5ed57006baf778c93136cf0bb02e0d5a67",
+      "gitBlob": "9f800b7937876aee8dcff02c051be0159b247c4b"
+    },
+    "WebCryptoAPI/digest/sha3.tentative.https.any.js": {
+      "sha256": "43d32ae16cd1c777c4fa7e679cbde8f3db0c815ac15235e0342f7902d1390044",
+      "gitBlob": "f9f38eadc2c39a04f01ad90176e5fc34ff78777b"
+    },
+    "WebCryptoAPI/digest/turboshake.tentative.https.any.js": {
+      "sha256": "c44fdc123af5216e48c1f129522dd58fe9e025a88c9df6e68e61fe7e461a7550",
+      "gitBlob": "243931cd119802e5ec0afdabb6e47a1af7cd6bb3"
+    },
+    "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js": {
+      "sha256": "84fc43cc0bc36e409610a875aee16a6df76a882082d810ae8119865b5a35b993",
+      "gitBlob": "5a669753cd2701bdc355eb2dfa2ce557c0ffd774"
+    },
+    "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js": {
+      "sha256": "3ff31e8026e7b2a99299cf450499429e208d6ae10cd3d9494870c614e5588e0e",
+      "gitBlob": "0a45c1fc4e9f6fd1582577db152af9a094d30cba"
+    },
+    "WebCryptoAPI/encap_decap/ml_kem_vectors.js": {
+      "sha256": "627a56d9e8c475a2e04b145effb782ff515f5d34dcca6fbddf550c3a33f1c8c5",
+      "gitBlob": "3e04fda6a3b3da4bd2dbc32bd5009354d5b027d8"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes.js": {
+      "sha256": "dd146416c8c539b81dcb813985e4c2eefa8db48f52805bc118e3969cc7f6fea6",
+      "gitBlob": "879a6efe257e496acb3f1c4af3ffda925a382e16"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js": {
+      "sha256": "3fe584cbd585792e7161f001f45d0e69763dfa16b940f498074682f18ece15f0",
+      "gitBlob": "ec09aae5a954a730aff9c0f80f983834de04c81e"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_cbc_vectors.js": {
+      "sha256": "b2a6feb5234456d85aff91553201176879161cf2551ffea8a2e1f48a538f643e",
+      "gitBlob": "96445a96325a557e53438b8f9dfd280d9c694bb6"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js": {
+      "sha256": "337666fad09ce36205d7169bc36b3edc578e9bc07b726ab80c6211bddc0691ae",
+      "gitBlob": "f9d85bb6c93b7763e8726473814652fafbff1aa7"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_ctr_vectors.js": {
+      "sha256": "9181ae74291231f2fa915623883917b18bc7e4bdb203bb8ccfe524ea4ee2615b",
+      "gitBlob": "201dff83ce9cacbd3f61f6a0b16eeb3105fa9ab2"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js": {
+      "sha256": "13e42da0c753fccbae66f8c88c8f281e5429bb9255e102af18651e2fff3756ad",
+      "gitBlob": "b3e6b5f0d2c1ff1b643319b1beaf1ea6b7aeafea"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js": {
+      "sha256": "b6ca5fc4f8251b69cf5884f9ca4625f927e0c2810b4912ad9cb7e20588db64c5",
+      "gitBlob": "196a8ea94fb1c4ffcf6073902d741c617a3834ff"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv_fixtures.js": {
+      "sha256": "6e792fb479838aee9561999a091ef5f354af43b2630eb052ea4a8c775cfb663b",
+      "gitBlob": "9cdbbbb79075c0a90d4a55caf18157fe485a5609"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_gcm_96_iv_fixtures.js": {
+      "sha256": "22e00bb22c137dd8230c46277f3da0536cf4b6ea840c6158385e44afb0c705be",
+      "gitBlob": "bb00e2d7dd92cbd780d48273e065e95d5c38e181"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_gcm_vectors.js": {
+      "sha256": "9004d32bd2f0e1107ef09257744a40a780c65d8740c1a4e9845ebfb4fc86e655",
+      "gitBlob": "f0d88a93620f0f9d1fc4b4b6d4c49367782c91c2"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js": {
+      "sha256": "58bd9da373c17f384462988264fc3abad7538bb7bf9ddc510f7bd6a4e869cf51",
+      "gitBlob": "cca34e9e54e70af21de2be9a567b5b2250a8d28a"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_ocb_fixtures.js": {
+      "sha256": "bcb288e854d8116471b32de83dce479ef11e9ee5b6c71c2436f470ee69230400",
+      "gitBlob": "a5795195f163ce4c759700374b0991751bd70559"
+    },
+    "WebCryptoAPI/encrypt_decrypt/aes_ocb_vectors.js": {
+      "sha256": "abb7937d6153a1a3730ba7d6d74f59d0d1a0c607485d1697b0414612d87c2ba1",
+      "gitBlob": "eba4ecfcc5d72c0682c8c7a07173333135063263"
+    },
+    "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js": {
+      "sha256": "b4bd14cad29b0047f014f3ccc4ae874f54526e2072c8986f2632f921e041ee99",
+      "gitBlob": "d03f7c03099919a2a1f6ef1a56f4950995001240"
+    },
+    "WebCryptoAPI/encrypt_decrypt/rsa.js": {
+      "sha256": "5f7623aff00c0a3f0f29b730f7f5a4e9b98e76b27523eb30f5ce33cc722281d9",
+      "gitBlob": "071c086b3c4dfaeb1af21cd07e7831f2253324ab"
+    },
+    "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js": {
+      "sha256": "69983398977990974fe2de1f3289bbe704db6d7a2135cb34db40b1158be0f2d4",
+      "gitBlob": "3550f5eec287934dac9ef69bc175f11345d914b2"
+    },
+    "WebCryptoAPI/encrypt_decrypt/rsa_vectors.js": {
+      "sha256": "60a92cb302e73512c594416534ae658877a1da2563362d9c2d488638df50c9f3",
+      "gitBlob": "fcc732eddc1d63d90cdb95c457c8b6e81d8cb464"
+    },
+    "WebCryptoAPI/generateKey/failures.js": {
+      "sha256": "ef5f3b36bf20c50c236594db6316f341f50784321a934d9ab8c219d782d8c193",
+      "gitBlob": "a3258ae0dd7788241a971d746e0ffa2c843e4954"
+    },
+    "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js": {
+      "sha256": "38ba9dd4ff68f1235063bcbc1ca4fbff5489c2d1b996b797408e32fcc9aef07a",
+      "gitBlob": "38bed1cc702819852e3a7185f66c18b671eb91da"
+    },
+    "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js": {
+      "sha256": "61a97d87eec7175d477d574fff2eaf47e850bae0f0651f9cea1dd0692bd27573",
+      "gitBlob": "0e7940775fe0f51ede2264c5c96d6e4cb7033387"
+    },
+    "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js": {
+      "sha256": "bb34608baf2a5aafc0ea847ef92dcca15c0ae5bcf7d0730c7eb40cc31a77382f",
+      "gitBlob": "a394c8b629c57906f2c5ba0a1fcb8b9199f3b4bf"
+    },
+    "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js": {
+      "sha256": "8c974f7e6e3cf377fa450be063368bc715688abd56b265c780f321b4c0c73031",
+      "gitBlob": "40c199b29a5c6eb8198aa1ae82968858a3ef79e0"
+    },
+    "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js": {
+      "sha256": "e61a2376972932b3e4d77ef717e22006de7f001c179530f5c7cb7d38c71624e2",
+      "gitBlob": "d4a2cd868ff51a6f8d94bbabd2c997652fe84cd7"
+    },
+    "WebCryptoAPI/generateKey/failures_ECDH.https.any.js": {
+      "sha256": "cbf853408a851949059d21180e7eb1b1def4409726e1042dae830f948d14d4a8",
+      "gitBlob": "e522254d743aa469507be0919832fc74a120ce8e"
+    },
+    "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js": {
+      "sha256": "16ed5495132e1903f359006c0ec8b4cf162a7e15eb2737520d8b6f30f50395a9",
+      "gitBlob": "e19974ff488cc05b20e04008751685bf34da2a1c"
+    },
+    "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js": {
+      "sha256": "cf18c6d86e875eedd6aa2b36a1e331f87c9e431eba3d3c88ddc77231b87fc5c9",
+      "gitBlob": "8f18fb1efe09500697c976a62afef1ca219948a3"
+    },
+    "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js": {
+      "sha256": "269924fe2088b6cd2d14e0cf47f200576892f6e4dd32c114196f51a0e8a09f36",
+      "gitBlob": "b25dcd14909410125fe147a883e98f41ab281b96"
+    },
+    "WebCryptoAPI/generateKey/failures_HMAC.https.any.js": {
+      "sha256": "f9ae6faf0c8c422f35c97773a14425b70935e5c8ffe7d44203c1178f596c8492",
+      "gitBlob": "43ce1c026fc74e618bdff87a242858519b2dfb86"
+    },
+    "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js": {
+      "sha256": "5114232ceae76f59afde31cc9691e65fdf9e8960f6c99e55323e0937bdc42829",
+      "gitBlob": "91e20bc6148fa32d01736b7412210088d48ce70a"
+    },
+    "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js": {
+      "sha256": "0157cdac600c06e9d175b44d07740b9eb74b8d7f1e79c5dcf211f3c89153535f",
+      "gitBlob": "9cd347d00f815c105f83c58c37b7c254ba305e06"
+    },
+    "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js": {
+      "sha256": "cce0a46fe8d250888bbd9b1d00c4c37abb34e30cb3cbf25cc46c8645244cfd61",
+      "gitBlob": "1d2bca96b18c7e37e3c87ddc11a4935057ba43ea"
+    },
+    "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js": {
+      "sha256": "1f568099093383a49d1f575c6c1058462af545fd984cee5739e04e407b194ae4",
+      "gitBlob": "562f66697c9f63d052d3154cddd43ec18564d7ae"
+    },
+    "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js": {
+      "sha256": "f00e748dcffb4d56f228ba926ff0ca1a739f8a9dad62c0a0e0b8725211cf726f",
+      "gitBlob": "fb19308de6f7a2940bed164a8d7e693237aa5b6e"
+    },
+    "WebCryptoAPI/generateKey/failures_X25519.https.any.js": {
+      "sha256": "aa329a32a5119e862744d24086ffd0f02f08649964d6b72c7063936fa7b4d10a",
+      "gitBlob": "2662d8697a9a6f41809386f83b9af2fc2460109a"
+    },
+    "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js": {
+      "sha256": "395b7d61fbc2ffe89e53dee2c98f5f66f03d998ad6044e009b75e6e7173f5001",
+      "gitBlob": "455e260d1fe920b9d7982f1a91abd56bf842ecee"
+    },
+    "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js": {
+      "sha256": "dd6366787a20e629c3901a57bf25072fc31950e385237e964969a50b366f92b1",
+      "gitBlob": "c9a278cdfc2b18bf1e2dc9595c9bcc03f459f5f1"
+    },
+    "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js": {
+      "sha256": "3f1ea1b7fe48210374d46b7d553473ee518295029e5639a14459814cdad8c652",
+      "gitBlob": "f906038c7d3f4aad489e5c1ec8328c6419a921a9"
+    },
+    "WebCryptoAPI/generateKey/successes.js": {
+      "sha256": "010f194a53d5cb2da4d32de4d850c0ee95f25d10c43790ee9f33bb02885f804c",
+      "gitBlob": "c72384b7b93bf466a911ec1363192ab108db1353"
+    },
+    "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js": {
+      "sha256": "6f3ba0cc17ddc1d90202e0e057592cbfc622571b3d744e3b6d3e84f7da75d077",
+      "gitBlob": "80f92c2cb7d7a6bf5e47649ce9b13042f53fd54d"
+    },
+    "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js": {
+      "sha256": "f5783ac15988cf9ea3615004c2ba1b2438b048618b28f2ba36ae96b0f1c0118d",
+      "gitBlob": "243a104b606dc8f165a59b9fe356a2ed29ed6eb2"
+    },
+    "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js": {
+      "sha256": "0f14b4f51862c82819a0bd63f11e857ed1c5e1971c4de3db7268bed33acf09cb",
+      "gitBlob": "f0f947c8160f90a704970c1835953fa8688fc7a2"
+    },
+    "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js": {
+      "sha256": "13b3014e3a35ea763e3ddab296345fd7527ab938f192bb0195920c145231e2ef",
+      "gitBlob": "dbc040fdc5cb4f671bbc9633cb0f8b9e5d51b6a4"
+    },
+    "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js": {
+      "sha256": "4972cf074d9fae0e69b4189a87d9a203e5fbc7aeaadaddab539d3c959a25e816",
+      "gitBlob": "b43abc4edb41c45b7989761538b6ccd801d85861"
+    },
+    "WebCryptoAPI/generateKey/successes_ECDH.https.any.js": {
+      "sha256": "ff6bcba5f6a4062c1fad5018609d177c2c5175b084433b348ea2718bf3d69152",
+      "gitBlob": "e9dee526149da6ca9cef49a8a9d65bbb50d77cef"
+    },
+    "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js": {
+      "sha256": "e67d5dd45f71c729a13fef8e22b3487e1c27ed5e2245b327d1b9b26a500fbf10",
+      "gitBlob": "a022f31fe9d119bb763b71622b93b001bce33313"
+    },
+    "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js": {
+      "sha256": "2cf6427842302933f325955912a9a862ddd4d013a108b531a774fa35848e18cf",
+      "gitBlob": "6b3bc460f60f2f7e9ce2b3070b10d825a69b4268"
+    },
+    "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js": {
+      "sha256": "b14e0da497adb7c184b966b665103b2d7b7e6c4745cc4412acc7d3f002990a97",
+      "gitBlob": "8e37f57b244b582149261003109e0c2c199d6936"
+    },
+    "WebCryptoAPI/generateKey/successes_HMAC.https.any.js": {
+      "sha256": "7cd8c26d46d27754c580be5015cf7bf9b25931f6f105cd37bba53f7d27e6f8eb",
+      "gitBlob": "18e0b271226ff64969ce6986845774fdf896a6fc"
+    },
+    "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js": {
+      "sha256": "fb67c539a274e1436a222bc71069883a1d2cc26abcb9404e947466255f558d11",
+      "gitBlob": "15d52f2a5059f545ba29960eae701cc6d5ca4ce8"
+    },
+    "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js": {
+      "sha256": "105baff9792ee398e71f76618ace38aa0d0378f57c4c0e997bba425084bb9f1a",
+      "gitBlob": "68a0d97b97553762fd78800b4d28383ccfd8db59"
+    },
+    "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js": {
+      "sha256": "6d25b4e8f2a3504e8614e70baeeadbcc34dc0a53d40d06a486f57e97fbe2722b",
+      "gitBlob": "d933fd981d4a33ba82fb2b000234859bdda1494e"
+    },
+    "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js": {
+      "sha256": "a890b71ecf2db1ad99bbf7e3c7c892df4b69194a4464bb7c47215d4e20b5cebb",
+      "gitBlob": "cb43e3de3de36438b80c882c86c61bb2f1a04893"
+    },
+    "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js": {
+      "sha256": "8d81197894c347f506f18e1c16f505e19f081fadcc05fd3d3c6d2f3cee387a39",
+      "gitBlob": "b8db5972284d1ac6bbda0da81621d9bca5d04ee7"
+    },
+    "WebCryptoAPI/generateKey/successes_X25519.https.any.js": {
+      "sha256": "2f2817a9c235a1d05bb121136f7a69f01325e4b9d8cc23665243ce08ec8c18a6",
+      "gitBlob": "0e87cf50108e69608c2ec76cfb424b093316a0e8"
+    },
+    "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js": {
+      "sha256": "62c5bca37897e7c8a6567736d5e1fc8a78dd7d1670e3bdf7fbfed35e28e547a4",
+      "gitBlob": "e7dbe32696d8fe4dc47445f6f0fa10f756f958aa"
+    },
+    "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js": {
+      "sha256": "9280a89b1f336765fd2193105cf3b6d158f7b57d3f769098a48900e7baef7328",
+      "gitBlob": "a1cef25c2f24fba7582b883e1d01e7986d53794a"
+    },
+    "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js": {
+      "sha256": "b0b92af3acf379dabc720c68689325d4c1852fca6c32ba4aa7b34b617df3e664",
+      "gitBlob": "9f881f92bc17ccd859dfe73922b3c2fabec52e07"
+    },
+    "WebCryptoAPI/getPublicKey.tentative.https.any.js": {
+      "sha256": "c99355560ff23c200e54868f39faafe9c19ff35e749314d598fca8d46d6f0407",
+      "gitBlob": "f67b11a47e63703bc165f4bcdc55f60b49510d3a"
+    },
+    "WebCryptoAPI/getRandomValues.any.js": {
+      "sha256": "3005469d1476a539baf222afac08d4d9a8221100b0909f54858978e6b6f3ab3b",
+      "gitBlob": "aecd38efd60bac63a28673241039d2743e5b911f"
+    },
+    "WebCryptoAPI/historical.any.js": {
+      "sha256": "6e76019fc3b93c95732517054351bf98b23cab2cb33398e61bacf2854c22c6c1",
+      "gitBlob": "67ca9d9767df9d37c841bece0127f04cc5218f56"
+    },
+    "WebCryptoAPI/idlharness.https.any.js": {
+      "sha256": "4eabf69c3f9ce91660ef2c9a7084bd41ed7f47c991faa079e06c0c656db8afc6",
+      "gitBlob": "5ddf7eab6dba2116d0d3bbc6826b176463107eb0"
+    },
+    "WebCryptoAPI/idlharness.tentative.https.any.js": {
+      "sha256": "c3c9d9927d86d331808d4e0c602e28b1cea10ef3468ecf9ba8a81367b672f4a8",
+      "gitBlob": "150228aef0341a67472ceba32592255a23ee4f87"
+    },
+    "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js": {
+      "sha256": "27438c990c30cce0489c0886d7eb168c7d6e92bc288c9592ed37b7bac257d8d1",
+      "gitBlob": "7fa028aa5a03f0905e666c78f65d751b85b4d991"
+    },
+    "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js": {
+      "sha256": "577a93216175785c60fa200f86bd4f9adaf0884931d8dd01f65b3649fe0f7a66",
+      "gitBlob": "a3edc3896308e339b1d8cb007b8f64fe085636ba"
+    },
+    "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js": {
+      "sha256": "772e5557183e55449c5095957098f0f175237e58d8ac156883d939cd8276cbd2",
+      "gitBlob": "620f22d4aecc35de6c8cd52a4558ab2822b4c91f"
+    },
+    "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js": {
+      "sha256": "825cdb54a06d209f8d50251fa4fa0a15be944d73ac075bff52f3bbea881130b5",
+      "gitBlob": "83995bca37acb60013d9fd455c2bd439d641e672"
+    },
+    "WebCryptoAPI/import_export/ML-DSA_importKey.js": {
+      "sha256": "c408ca60dd5d7b3bb1f0961fac305d0ff2dacea4e7fd349bed44ab82dda5a920",
+      "gitBlob": "d9257ac698250529a0475800ffac9045e3d84c82"
+    },
+    "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js": {
+      "sha256": "ee22297e53cc6697c5ff608641751e2489b6ece844c71e3e98166cdf49bfb318",
+      "gitBlob": "5ce13d858d6fff4ce72f743d9c0334bb80361ce5"
+    },
+    "WebCryptoAPI/import_export/ML-DSA_importKey_fixtures.js": {
+      "sha256": "97beb60f9f766818ed401161f4a9de6c88826119bc4d43fbf68dbe935f7cead5",
+      "gitBlob": "ef1f5a1f51a9446c93d027dbbb66fd18a158e1eb"
+    },
+    "WebCryptoAPI/import_export/ML-KEM_importKey.js": {
+      "sha256": "c408ca60dd5d7b3bb1f0961fac305d0ff2dacea4e7fd349bed44ab82dda5a920",
+      "gitBlob": "d9257ac698250529a0475800ffac9045e3d84c82"
+    },
+    "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js": {
+      "sha256": "e1b2b9ac4514a40ea79eb7b510ac1d37d09f7f6583736d6e34fcb6e69bd04e5a",
+      "gitBlob": "8b459c17e2d329d66e9af4ca5efe7892972db8bf"
+    },
+    "WebCryptoAPI/import_export/ML-KEM_importKey_fixtures.js": {
+      "sha256": "4e60134f5810d2f1177938e0e165d0527cf946a1ea35002ae800818286150553",
+      "gitBlob": "f3a5f6687dc5e199d434e8f381e1e8249e35fea3"
+    },
+    "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js": {
+      "sha256": "64d7fa5fe3f69fb126dbad27a517c7fd52f1603dab65801fe7148f1424bb462b",
+      "gitBlob": "0ceeea390ebf97d65f22fa20a41e22b0eac68d68"
+    },
+    "WebCryptoAPI/import_export/ec_importKey.https.any.js": {
+      "sha256": "f7d3b1adc52fa16956013414c920f209934897670dc6a35d11b03176b2383fce",
+      "gitBlob": "3b78bab4e74132580fed81f7acebd245dc29bac1"
+    },
+    "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js": {
+      "sha256": "ee7a06a9d3a2419602024deef2c825af19bf05234e20da2f5121d4e9bcc92d4f",
+      "gitBlob": "423d399f19def4cb2bb21696636fa839968b94d2"
+    },
+    "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js": {
+      "sha256": "05925a0bfcc5b088c9e1ab53865b55c226b4e038fc5ee9d1e92bac87c4b92ce2",
+      "gitBlob": "527940798a42a56d831a188691ce8aade1aacb66"
+    },
+    "WebCryptoAPI/import_export/ec_importKey_failures_fixtures.js": {
+      "sha256": "072196eca4705f68f8e065ac630fe8070430e6e245f1158e1f8e729c6d7bf7c8",
+      "gitBlob": "dc0e11d551a92271e31dc9f000b18601deb9d53e"
+    },
+    "WebCryptoAPI/import_export/importKey_failures.js": {
+      "sha256": "658055dc54c91b6494b0827ee4ed4564f623d011aa47a6779c209870f122c18f",
+      "gitBlob": "f45da96cf6b01ca6a01e13459619b0cc2880e007"
+    },
+    "WebCryptoAPI/import_export/okp_importKey.js": {
+      "sha256": "0e10fca264b0c85f10dd98f0e6e38faa7201f19d416ee8e15e63e63302dad009",
+      "gitBlob": "665c9c1d9a3c4f387db18d136c99ab8c0feb9224"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js": {
+      "sha256": "01c759f2b57bbc216ab71f4b63fa67e30d4192cea9d5fac73759a974cfa14051",
+      "gitBlob": "49656489d425dd4c54ec854756edfc6dacdf4765"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js": {
+      "sha256": "8fe51e0f12a5ca19b5367f0d20131c2e210e9f9ce68ee22f364c424cfe03bbc8",
+      "gitBlob": "5bb7460c1fbc9333435925790cf8eacad7648611"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js": {
+      "sha256": "4c4bcc565734cac968928620a29655eb57fbeea634b2db2931c66ce818343b7c",
+      "gitBlob": "de1431d6cc24675e6ac7864c1e93d36b70a79765"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js": {
+      "sha256": "08b67796aada757c1222f0eca152438db11ab601dffe66313dd0b67aa658b59e",
+      "gitBlob": "f8552be3c826dcf1f3511a5ad8cba295c62c1923"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js": {
+      "sha256": "5f8cf05197f761f386d95cf12828e1f84e6e523d97893792bd621da9c902eb01",
+      "gitBlob": "e07b796df83d19bc78f17c035dcf02299c90e1fe"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js": {
+      "sha256": "0c91e0cce3625e69f909cd4bc98b0c2dd459b7abbcfb5729029d4d31491ebf46",
+      "gitBlob": "8ff3de5c79d3ab8f59f17051d5560b3e61371b11"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js": {
+      "sha256": "432b88a50e444530d3a66bf3b7cf906cfff1039a2f98ac9a065cd24cfcc60063",
+      "gitBlob": "a0116bee8885129924cde1cd62e65b640b076595"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js": {
+      "sha256": "e2026167cfa21177d68de41c405e3aa3fa6801b2714e4e21218801a63d657c0c",
+      "gitBlob": "eccce68fac731cd751f7b8819fe24401055fe3a9"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_failures_fixtures.js": {
+      "sha256": "57ace6faadc7a0def9d877172e09123e5501bf268046cda130059da8f16684de",
+      "gitBlob": "6a7f583e0165c5661baaad12afed7fbd5fe013f7"
+    },
+    "WebCryptoAPI/import_export/okp_importKey_fixtures.js": {
+      "sha256": "f1264fda446fda6768fa43bd1f45e4dbef5323c0e9b028ab2efa362068e6caa4",
+      "gitBlob": "58b41d52601eb9b7175d546a87027639887f9a75"
+    },
+    "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js": {
+      "sha256": "c15656479f89c3a688ffe112ec156b60c60184e69b9023f79c02a24e257b7705",
+      "gitBlob": "646ae1b0de7428ff8b218faf69aab3b6c6fe8699"
+    },
+    "WebCryptoAPI/import_export/rsa_importKey.https.any.js": {
+      "sha256": "43e40e5e45338b4487e8651572a61220b7366c2e964afb7324f4f940fd19843e",
+      "gitBlob": "049f50cebbb7b2b9a238d4bcc4a0fa2fc47e5e20"
+    },
+    "WebCryptoAPI/import_export/symmetric_importKey.https.any.js": {
+      "sha256": "0b50423abd7c975e2b58ab6f6793d95ff8ec7a1c9365d7016eb418b36429dfe5",
+      "gitBlob": "a1a4b5e1ea38f2d6435ffd887562189d6c09a9c9"
+    },
+    "WebCryptoAPI/import_export/symmetric_importKey.js": {
+      "sha256": "758a2d93b40decc42d2c1f2544809f9a5dc95668acd93e808a9a73bcec590b80",
+      "gitBlob": "795d90ffbff4fd990a85883aa0976bc845d3a673"
+    },
+    "WebCryptoAPI/normalize-algorithm-name.https.any.js": {
+      "sha256": "30c25a2876fe7722dc37775181ffc3640b3e750ba6817b3da60f25fd272f8b4d",
+      "gitBlob": "5f9779c9dba1684ad7fbaaa1ab410b8bbec9eb27"
+    },
+    "WebCryptoAPI/randomUUID.https.any.js": {
+      "sha256": "e23fb613b2b1494f8a8dc7156c874df9ee2129e8e2f2ed327f0e4cdfafad5842",
+      "gitBlob": "600a9728f0b1474c4443f5d0406af5aad4b43d52"
+    },
+    "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html": {
+      "sha256": "8f104ac24996865fcfe22d6f392538a0182d1e84bcf2a5237db66e92f5f78194",
+      "gitBlob": "cc3617c37ad27ff5edecd8a1aa898982c2c467aa"
+    },
+    "WebCryptoAPI/serialization/aes-cbc.https.any.js": {
+      "sha256": "0a53b1f16c009b8e96abe0de1b9495cbb99c6049d7cb70bbbb4ed2f91f4255f6",
+      "gitBlob": "840566639cd799ff86d95a19a6acacc23d07e365"
+    },
+    "WebCryptoAPI/serialization/aes-ctr.https.any.js": {
+      "sha256": "44f289c33e6e005fe480c9b115764dd9909e421a321e08c49414b626bcae4afc",
+      "gitBlob": "3b3fb6822043f3f8b1532d1c74113bf3b20055f0"
+    },
+    "WebCryptoAPI/serialization/aes-gcm.https.any.js": {
+      "sha256": "4400b15eef8e836752f94ab3ce9781e0f55d8af542fbed4fde4f865748292a06",
+      "gitBlob": "b54eba677b965ba37309376492be6202e28da075"
+    },
+    "WebCryptoAPI/serialization/aes-kw.https.any.js": {
+      "sha256": "4a3b58a47438f6742f74c259d9f4c92e0f0c6a4fa0ccebb7688f54db8332fd6a",
+      "gitBlob": "9948dce9b395e7c8a3f93a10af614221f1f557ee"
+    },
+    "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js": {
+      "sha256": "12bbd90253d3e1a65ac70de68a162340e5ce740714773502016ce825fd740920",
+      "gitBlob": "33b814410c3ff4a7e3b2279e933f2e3f16c69364"
+    },
+    "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js": {
+      "sha256": "332858e897b31114f6c724069cf0f1c67b01c020176408bd592a1cce952ba4bb",
+      "gitBlob": "aaaa24a0b662bccc775980c8defa6c44ad02f02d"
+    },
+    "WebCryptoAPI/serialization/ecdh.https.any.js": {
+      "sha256": "36061108b918225f83c3a94b2f5edfadeededbafd0b56355b817b66d41c12665",
+      "gitBlob": "17df8a87ba6ffb67f6b80152dfad44747cd2f35e"
+    },
+    "WebCryptoAPI/serialization/ecdsa.https.any.js": {
+      "sha256": "122803e915d68034198242ac17fa05028200668fc7bda53e475ca9ba6ed57d92",
+      "gitBlob": "679dc066f53193d29d554b2375246f00cf4a92b9"
+    },
+    "WebCryptoAPI/serialization/ed25519.https.any.js": {
+      "sha256": "f49c8ea26fb3b6ade1c3aa1770514241edba8d589522130e89aea07106634639",
+      "gitBlob": "831e91725b6bae562cd5ee8a3bdb9aaffb33bf0f"
+    },
+    "WebCryptoAPI/serialization/ed448.tentative.https.any.js": {
+      "sha256": "df64bf1b1aeaf1e899a2ee38d2b920b72cae129fe8e0d387e78b87a502e07c5a",
+      "gitBlob": "4abe56285689b8b899268b02a3a14d69f72957e4"
+    },
+    "WebCryptoAPI/serialization/hmac.https.any.js": {
+      "sha256": "f157351f0a68d0c920a97803465dc7acef513fa9ba6b02d6d9852c2b7f8cc120",
+      "gitBlob": "99efea6bcaa996cd00535cf1b5456b66cf5cc07a"
+    },
+    "WebCryptoAPI/serialization/kmac.tentative.https.any.js": {
+      "sha256": "7f35f18b6500ab45e313dfd5085078e2f2f9498e8c79468673220f986539c558",
+      "gitBlob": "645d16bec776fb87b6d31c59d7e3242718064d5e"
+    },
+    "WebCryptoAPI/serialization/mldsa.tentative.https.any.js": {
+      "sha256": "30baba290f5ed003636ad492a1b9b373c450ebdbf47a946841cf62342fea7b7b",
+      "gitBlob": "3f61248b3d9e49194bf984dbdd2563f110c2b5a9"
+    },
+    "WebCryptoAPI/serialization/mlkem.tentative.https.any.js": {
+      "sha256": "6c8dd2d6b76758878b1bd2fd9e87536cf2ea154a018db9bdddf7a7a9ce500dcc",
+      "gitBlob": "62a210f0cda218cf61073993026eb02fb0e4a8ce"
+    },
+    "WebCryptoAPI/serialization/rsa-oaep.https.any.js": {
+      "sha256": "0145ba1e6ba6352f3f335a437b17a0f9a29428390433d281ac6ced7071e5fbb8",
+      "gitBlob": "42469307155d504de6ce865be4dab29b0d37160a"
+    },
+    "WebCryptoAPI/serialization/rsa-pss.https.any.js": {
+      "sha256": "59867ecca19d62bb4518ac26486657ba6de87318b550024b08f512854773a587",
+      "gitBlob": "a1255b7638bc37f3f227edc8c24d78835076a8fd"
+    },
+    "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js": {
+      "sha256": "41b5d7a0ef1883edb27bba73de10317a24145ecfa440b1d5897bbb76960ec9da",
+      "gitBlob": "051eb87e07856e9b03b45b5ea42812fa789ebd8f"
+    },
+    "WebCryptoAPI/serialization/serialization.js": {
+      "sha256": "22c9af56fdfb8a8c7497e4498846804bb08f5cdff77786b242c19547941b8867",
+      "gitBlob": "a9444032503268c6e28f734e95f57892be89784a"
+    },
+    "WebCryptoAPI/serialization/x25519.https.any.js": {
+      "sha256": "ceb06c3a0e78cc5531d73ca980224a034becc951f464d3e465f15176ca15d76c",
+      "gitBlob": "618bf29ebfe206169c84de2ee86aa96c32ae7381"
+    },
+    "WebCryptoAPI/serialization/x448.tentative.https.any.js": {
+      "sha256": "e3aa79c15375e125c037a6d8aa777cb0881c85883e5d240a25d2845d2504b909",
+      "gitBlob": "cafc00144a3ce7b6c4476f3fdd6484cf124b7dab"
+    },
+    "WebCryptoAPI/sign_verify/ecdsa.https.any.js": {
+      "sha256": "6145658d02a6da77d901f6579d187d36aa25ce24d4ed308acb436815ada53a6b",
+      "gitBlob": "3f1e2e5ea9d8a7ae6954c993a08ea927ea13c4fb"
+    },
+    "WebCryptoAPI/sign_verify/ecdsa.js": {
+      "sha256": "c9dd04f0604b38d84dff9073385b2d510eb6c221ba5cbd2d7efcc2584a72b7ee",
+      "gitBlob": "cc13b1bd9c3cae79afb1b170726ea541752e44ba"
+    },
+    "WebCryptoAPI/sign_verify/ecdsa_vectors.js": {
+      "sha256": "67e47c27b1aada50ceb62689b149bc7aa0dfa273f3dd122f91fd6eb5daa78426",
+      "gitBlob": "aa9b81ba8a4bd11a5a27adab005aaf5727be18d1"
+    },
+    "WebCryptoAPI/sign_verify/eddsa.js": {
+      "sha256": "224ba9c39a4cb87d474c23ea765935359a6947a881d2c73e1877b0861e9e54ee",
+      "gitBlob": "77961566d9a60202cadbd66b1d5e21973cedfdc6"
+    },
+    "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js": {
+      "sha256": "702cab8df283adcf765324406e16b1b4cc240a79f51d44cb48f4a5fa7de34b5a",
+      "gitBlob": "b012b64733ef9d9319a1158cd2cbf99586ef4367"
+    },
+    "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js": {
+      "sha256": "fb94096a7de2d4440734e344791ca37d58eaf043900f3b6c9d40c6c8192be951",
+      "gitBlob": "281bb63ad659f7eaa489e8db37c9e1ca0c923988"
+    },
+    "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js": {
+      "sha256": "dafaa9008bd1ff1645a050da4d939a7e1ee6ce11acf387dc3d5ddcab18f3bf31",
+      "gitBlob": "5192b562706c619b4ca415016ea11557841838e5"
+    },
+    "WebCryptoAPI/sign_verify/eddsa_small_order_points.js": {
+      "sha256": "59f9401b1258f2da9fb31d6af6111930ccacd1d6fa6b0f6ddd741703a6e16cbf",
+      "gitBlob": "ae973155992c87a9f659ff50d548cd6836745f68"
+    },
+    "WebCryptoAPI/sign_verify/eddsa_vectors.js": {
+      "sha256": "74fa523933c1b6f461f98876eb864df20a703cc60c26be9ab7666da484671040",
+      "gitBlob": "78240586c2e34c9a02f9c315c3f2f47d823817a1"
+    },
+    "WebCryptoAPI/sign_verify/hmac.https.any.js": {
+      "sha256": "cfbb8d020b5bf611b131f529ad260b7512fe1995ef24e19f663a0825d1a3fa0e",
+      "gitBlob": "a6c88f80ed99ee20495bdd3dcf0189ef002ffa38"
+    },
+    "WebCryptoAPI/sign_verify/hmac.js": {
+      "sha256": "23483e39fb7bb2465268094fcf515a683d1e3781fa503662653f18ce0837d794",
+      "gitBlob": "929d9464e171cbaa37f24fa8ccefa0a0d79d7920"
+    },
+    "WebCryptoAPI/sign_verify/hmac_vectors.js": {
+      "sha256": "88a14ad2a5cd8eb6c4e5087bf08ac11aa9801d7eaa3d65f64ec7693e60b1788f",
+      "gitBlob": "de9642b181cc15a6893a1e6bb5c23307104776db"
+    },
+    "WebCryptoAPI/sign_verify/kmac.js": {
+      "sha256": "36d09d06088e8bcb5cc364caf37d09548a90fc01eee502c2c2f51fd4d0ee0eee",
+      "gitBlob": "d9d82d150b39335c5f1428549c652626176a6e4c"
+    },
+    "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js": {
+      "sha256": "d156568c1613e75cec584f09adf52207edd60a1283280726d2f5a76d0d402850",
+      "gitBlob": "3d34c5752137a8c910e178d298f8038aeb0508f0"
+    },
+    "WebCryptoAPI/sign_verify/kmac_vectors.js": {
+      "sha256": "ae075017bf3c8ea9d81eeab3952e4b3692f67baacef2c717d5bdd1579225e993",
+      "gitBlob": "6b35cab168c9c674dbdaf3155c4dfb828c82e758"
+    },
+    "WebCryptoAPI/sign_verify/mldsa.js": {
+      "sha256": "1c5f3feae48b9ba411404fefc3d5b339398ab7ddf13a4d407d6d0cf379307e1b",
+      "gitBlob": "10879273c1c3f4e16faa576686f55ff8717ae9a4"
+    },
+    "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js": {
+      "sha256": "0c6a793cd4571d9ec1ce984da148aa62a4cb3c06af1f41ce1a8a82ea052e2f4a",
+      "gitBlob": "be336b3498462c66daf2b66646394d94440351ac"
+    },
+    "WebCryptoAPI/sign_verify/mldsa_vectors.js": {
+      "sha256": "ea138b2ca8c391525cdba9e10e7497c3f615391e9c3ba30f3b0b0d5c6081399a",
+      "gitBlob": "a035821b7e35931f24069c5b7a326f98b2e27ac0"
+    },
+    "WebCryptoAPI/sign_verify/rsa.js": {
+      "sha256": "03fdbf6e198543b9c78ab86976c0dd77bd9b573efb6251e36ae0b41308ff8de3",
+      "gitBlob": "667f5d2793e48c07fa423113fa4f49ef6ae8fc61"
+    },
+    "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js": {
+      "sha256": "75dd877bb4e89d60fcfc1fe79f67bbd17ef2a8fc28d4e7280aa9cfb5f823d327",
+      "gitBlob": "3e3a8c23bf53cf87608b5a7299c013e9e4a78457"
+    },
+    "WebCryptoAPI/sign_verify/rsa_pkcs_vectors.js": {
+      "sha256": "63cd2f3fb4c1205a5506df2d628d481cd4d4a665088d2e26ea9103dd2e1a885f",
+      "gitBlob": "71e5d8571bc8ef96ca9b23fb9887a76d9f7812c6"
+    },
+    "WebCryptoAPI/sign_verify/rsa_pss.https.any.js": {
+      "sha256": "86dc2ae5928d5375f8cc2764406d9f937ccd8f11ac5b2cd85696e7bfdb1b4b1a",
+      "gitBlob": "399baba784687d921aeccf4e22cbd15122a72aee"
+    },
+    "WebCryptoAPI/sign_verify/rsa_pss_vectors.js": {
+      "sha256": "b7924b7fb64ef3a89001803b3d71764e0f9dc94384314351ee70b6ebb52297d4",
+      "gitBlob": "c3ce77960629b211836dd201dc6b318eab3a97ac"
+    },
+    "WebCryptoAPI/supports-modern.tentative.https.any.js": {
+      "sha256": "539146862f98283a20c021192357a89239f46359480cc95075455a46eca861ea",
+      "gitBlob": "ca23b782317762d14243a9d58c721c41cd1aa8c9"
+    },
+    "WebCryptoAPI/supports.tentative.https.any.js": {
+      "sha256": "f0ffc9373c86ea3d1db25b74443a5486ccdd00c3229e24b5decf2eddcffb5a52",
+      "gitBlob": "ac3a32c741000cda53e2e2550f594df137d93acc"
+    },
+    "WebCryptoAPI/tools/generate.py": {
+      "sha256": "0ace7708e5cc4f777f521a4421dc5f065b7ab6f9ad568c0a8dd975b972415714",
+      "gitBlob": "35ba0f0031555faa013c60b5fd6b7efb77569254"
+    },
+    "WebCryptoAPI/util/helpers.js": {
+      "sha256": "4bccb58e91d78a490a65a5f96e48805d786225be3bd220a912738ca4f5916d22",
+      "gitBlob": "3d44b7a7550e86eff62155406b62114d1c60b3ca"
+    },
+    "WebCryptoAPI/util/worker-report-crypto-subtle-presence.js": {
+      "sha256": "ed40229ce6df2e46b53e074c7120117e01fe8343b8f29e75c80e8a491a9cc300",
+      "gitBlob": "22cca7b6236f1502abbaec6e2952caf09c7269d2"
+    },
+    "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js": {
+      "sha256": "2e34d4e5e8e099c6652ae2532cf9d89c001ff6542d501ed63cf1babfddb4731b",
+      "gitBlob": "9fa3bb775d4243b75779f8a8be663567dddc79a6"
+    },
+    "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey_vectors.js": {
+      "sha256": "04e4666357e250991011d33b5cf980e4ca6b7498aa77c040f2ca3d1ba92e950c",
+      "gitBlob": "cf799a8a8ce3ea48abc50d1eb4e7b5465fe2c0d4"
     }
   }
 }

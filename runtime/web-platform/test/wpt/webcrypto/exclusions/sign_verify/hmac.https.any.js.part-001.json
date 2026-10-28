@@ -1,0 +1,45 @@
+{
+  "fixture": "WebCryptoAPI/sign_verify/hmac.https.any.js",
+  "blockedTests": [
+    {
+      "name": "HMAC with SHA-1 verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-256 verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-384 verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-512 verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-1 with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-256 with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-384 with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "HMAC with SHA-512 with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    }
+  ]
+}

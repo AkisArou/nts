@@ -83,6 +83,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/wpt-html-support.test.ts \
   runtime/web-platform/test/wpt-file-harness.test.ts \
   runtime/web-platform/test/wpt-events-abort.test.ts \
+  runtime/web-platform/test/wpt-webcrypto.test.ts \
   runtime/web-platform/test/wpt-streams.test.ts \
   runtime/web-platform/test/wpt-fetch-data.test.ts \
   runtime/web-platform/test/wpt-files-forms.test.ts \

@@ -1,0 +1,245 @@
+{
+  "fixture": "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "SHA3-256 with empty source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with empty source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with empty source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with short source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with short source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with short source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with short source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with short source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with short source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with short source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with short source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with short source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with short source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with short source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with short source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with short source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with short source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with short source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with medium source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with medium source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with medium source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with medium source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with medium source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with medium source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with medium source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with medium source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with medium source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with medium source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with medium source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with medium source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with medium source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with medium source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with medium source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with long source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with long source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with long source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with long source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-256 with long source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with long source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with long source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with long source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with long source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-384 with long source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with long source data",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with long source data and altered buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with long source data and altered buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with long source data and transferred buffer during call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "SHA3-512 with long source data and transferred buffer after call",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    }
+  ]
+}

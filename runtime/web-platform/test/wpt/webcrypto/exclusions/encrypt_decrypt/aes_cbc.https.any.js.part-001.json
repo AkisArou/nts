@@ -1,0 +1,35 @@
+{
+  "fixture": "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+  "blockedTests": [
+    {
+      "name": "AES-CBC 128-bit key with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "AES-CBC 192-bit key with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "AES-CBC 256-bit key with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "AES-CBC 128-bit key decryption with transferred ciphertext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "AES-CBC 192-bit key decryption with transferred ciphertext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    },
+    {
+      "name": "AES-CBC 256-bit key decryption with transferred ciphertext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
+    }
+  ]
+}

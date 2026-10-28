@@ -71,19 +71,26 @@ case and missing capability, and stale exclusions fail the run.
 
 The shared surface includes `test`, `async_test`, serialized `promise_test`,
 test steps, global and test-owned `step_timeout`, FIFO cleanup invocation with
-awaited promise cleanups, and `setup(callback?, { explicit_done })`. With `explicit_done`, asynchronous
-registration stays open until global `done()`; without it, register cases while
-their scripts execute. Provider-reported errors retain their test ownership
-across `await`.
+awaited promise cleanups, and `setup(callback?, { explicit_done, explicit_timeout })`.
+With `explicit_done`, asynchronous registration stays open until global `done()`.
+Otherwise, a pending registered test may register further tests; automatic
+registration closes when scripts are loaded and the last registered test completes.
+An unrelated background promise does not keep registration open. The adapter's
+external VM/test/cleanup deadlines remain active with `explicit_timeout`; global
+`timeout()` forces a harness failure only when that option is enabled.
+Provider-reported errors retain their test ownership across `await`.
 Timeout callbacks preserve their receiver and additional arguments. Global
 timer exceptions reach the owning test or the harness, and outstanding global
 timers are cleared when the fixture finishes.
 
-Assertions cover exact equality, numeric/bigint `assert_greater_than`, arrays and
-enumerable object contents, JavaScript and injected DOM exception classes, and the `promise_rejects_js`,
-`promise_rejects_dom` and `promise_rejects_exactly` forms. `promise_setup`,
-optional-feature status helpers, QuotaExceededError-specific assertions,
-browser/worker aggregation and other setup options are not implemented; using
+Assertions cover exact equality, numeric/bigint `assert_greater_than`, arrays,
+`assert_in_array`, enumerable object contents, JavaScript and injected DOM
+exception classes, `assert_throws_quotaexceedederror`, and the `promise_rejects_js`,
+`promise_rejects_dom` and `promise_rejects_exactly` forms. The genuine assertion
+error constructor is exposed to fixture helpers. `assert_implements_optional`
+reports unsupported optional features as blocked, never passing; its error still
+runs the owning test's cleanup. `promise_setup`, browser/worker aggregation and
+other setup options are not implemented; using
 them fails explicitly. Extend the adapter with specification controls when a
 new corpus requires one, without altering that corpus's cases.
 

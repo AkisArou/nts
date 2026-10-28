@@ -1,0 +1,15 @@
+{
+  "fixture": "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test {hash: SHA-1, modulusLength: 2048, name: RSASSA-PKCS1-v1_5, publicExponent: {0: 1, 1: 0, 2: 1}}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {hash: SHA-256, modulusLength: 2048, name: RSASSA-PKCS1-v1_5, publicExponent: {0: 1, 1: 0, 2: 1}}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    }
+  ]
+}

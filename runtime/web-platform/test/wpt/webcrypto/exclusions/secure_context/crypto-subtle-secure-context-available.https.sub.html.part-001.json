@@ -1,0 +1,10 @@
+{
+  "fixture": "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+  "blockedTests": [
+    {
+      "name": "Secure context worker has access to crypto.subtle",
+      "category": "browser-worker",
+      "reason": "Requires a real secure Worker and worker script loading; the package VM does not fabricate a Worker."
+    }
+  ]
+}

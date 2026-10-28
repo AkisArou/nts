@@ -1,0 +1,70 @@
+{
+  "fixture": "WebCryptoAPI/algorithm-discards-context.https.window.js",
+  "blockedTests": [
+    {
+      "name": "Context is discarded in generateKey",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in importKey",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in encrypt",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in decrypt",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in digest",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in sign",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in verify",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in deriveBits",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in deriveKey",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in deriveKey (2)",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in wrapKey",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in unwrapKey",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    },
+    {
+      "name": "Context is discarded in unwrapKey (2)",
+      "category": "browser-document-realm",
+      "reason": "Requires a real document, iframe browsing context and discarded realm; this package-only VM environment supplies none."
+    }
+  ]
+}

@@ -1,0 +1,2146 @@
+{
+  "implementationCommit": "6f4425a68",
+  "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
+  "note": "Initial unfiltered census, before package fixes or named capability exclusions. Each executable fixture used the package Crypto in an isolated process. Three explicitly listed files cannot provide a valid run under this host. Counts include setup registrations; no support script or metadata file is counted as a test.",
+  "totals": {
+    "pass": 27393,
+    "fail": 8889,
+    "blocked": 48
+  },
+  "files": [
+    {
+      "path": "WebCryptoAPI/algorithm-discards-context.https.window.js",
+      "pass": 0,
+      "fail": 13,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: document is not defined",
+          "count": 13
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/crypto_key_cached_slots.https.any.js",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
+      "pass": 0,
+      "fail": 1,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
+      "pass": 19,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js",
+      "pass": 18,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js",
+      "pass": 17,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js",
+      "pass": 16,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.https.any.js",
+      "category": "upstream-asynchronous-registration",
+      "reason": "Unedited define_tests starts importKeys().then(register tests) but returns a separate resolved promise; registrations arrive after its setup test completes. Initial execution reports late registration. No timer delay or fixture rewrite is used to hide the missing await.",
+      "pass": null,
+      "fail": null,
+      "blocked": null
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js",
+      "pass": 29,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+      "pass": 38,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not OperationError: The elliptic-curve operation failed",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js",
+      "pass": 31,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js",
+      "pass": 3661,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js",
+      "pass": 8632,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/digest/cshake.tentative.https.any.js",
+      "pass": 0,
+      "fail": 88,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 88
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/digest.https.any.js",
+      "pass": 116,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js",
+      "pass": 0,
+      "fail": 148,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 148
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+      "pass": 0,
+      "fail": 48,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 48
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
+      "pass": 0,
+      "fail": 135,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 135
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+      "pass": 0,
+      "fail": 9,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 3
+        },
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+      "pass": 0,
+      "fail": 120,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 30
+        },
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 90
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+      "pass": 55,
+      "fail": 6,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 3
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CBC 128-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CBC 192-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CBC 256-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js",
+      "pass": 46,
+      "fail": 6,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt error for test AES-CTR 128-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt error for test AES-CTR 192-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt error for test AES-CTR 256-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CTR 128-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CTR 192-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CTR 256-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js",
+      "pass": 493,
+      "fail": 84,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 42
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js",
+      "pass": 493,
+      "fail": 84,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 42
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+      "pass": 1,
+      "fail": 276,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 129-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 24-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 48-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 72-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 95-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, illegal iv length 0-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, illegal iv length 128-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, no additional data, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, no additional data, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, no additional data, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 129-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 24-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 48-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 72-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 95-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, illegal iv length 0-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, illegal iv length 128-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, no additional data, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, no additional data, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, no additional data, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 129-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 24-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 48-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 72-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 95-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, illegal iv length 0-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, illegal iv length 128-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, no additional data, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, no additional data, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, no additional data, 96-bit tag, 120-bit iv",
+          "count": 13
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 28,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt failed unexpectedly: AssertionError [ERR_ASSERTION]: importKey failed unexpectedly: TypeError: Unknown key format",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt failed unexpectedly: AssertionError [ERR_ASSERTION]: importKey failed unexpectedly: TypeError: Unknown key format",
+          "count": 12
+        },
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
+      "pass": 157,
+      "fail": 24,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-1 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-1 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-1 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-256 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-256 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-256 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-384 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-384 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-384 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-512 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-512 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-512 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js",
+      "pass": 516,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+      "pass": 360,
+      "fail": 414,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad algorithm property not supported",
+          "count": 204
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported",
+          "count": 204
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
+      "pass": 476,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js",
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js",
+      "pass": 412,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js",
+      "pass": 412,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_HMAC.https.any.js",
+      "pass": 616,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js",
+      "pass": 360,
+      "fail": 156,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported",
+          "count": 144
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+      "pass": 360,
+      "fail": 684,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported",
+          "count": 672
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
+      "pass": 532,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js",
+      "pass": 428,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js",
+      "pass": 428,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X25519.https.any.js",
+      "pass": 424,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js",
+      "pass": 424,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+      "pass": 360,
+      "fail": 140,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported",
+          "count": 136
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
+      "pass": 360,
+      "fail": 192,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported",
+          "count": 180
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
+      "pass": 0,
+      "fail": 288,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 288
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js",
+      "pass": 0,
+      "fail": 288,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 288
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js",
+      "pass": 0,
+      "fail": 288,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 288
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js",
+      "pass": 0,
+      "fail": 72,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 72
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+      "pass": 0,
+      "fail": 288,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 288
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
+      "pass": 0,
+      "fail": 72,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 72
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js",
+      "pass": 0,
+      "fail": 54,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 54
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js",
+      "pass": 0,
+      "fail": 36,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js",
+      "pass": 0,
+      "fail": 36,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_HMAC.https.any.js",
+      "pass": 0,
+      "fail": 192,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 192
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js",
+      "pass": 0,
+      "fail": 108,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 108
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+      "pass": 0,
+      "fail": 468,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: TypeError: Unknown key usage",
+          "count": 468
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
+      "pass": 0,
+      "fail": 156,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 156
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js",
+      "pass": 0,
+      "fail": 36,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js",
+      "pass": 0,
+      "fail": 36,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X25519.https.any.js",
+      "pass": 0,
+      "fail": 32,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 32
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js",
+      "pass": 0,
+      "fail": 32,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 32
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 192,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 192
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
+      "pass": 0,
+      "fail": 144,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 144
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 37,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: getPublicKey method exists on SubtleCrypto",
+          "count": 1
+        },
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 6
+        },
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 6
+        },
+        {
+          "message": "TypeError: crypto.subtle.getPublicKey is not a function",
+          "count": 24
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/getRandomValues.any.js",
+      "pass": 30,
+      "fail": 9,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: inject the implementation's QuotaExceededError constructor",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/historical.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope.",
+      "pass": null,
+      "fail": null,
+      "blocked": null
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.tentative.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope.",
+      "pass": null,
+      "fail": null,
+      "blocked": null
+    },
+    {
+      "path": "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 72,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not NotSupportedError: The algorithm is not supported for importKey",
+          "count": 6
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format",
+          "count": 6
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 24
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 45,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format",
+          "count": 9
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 24,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not NotSupportedError: The algorithm is not supported for importKey",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 8
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 144,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not NotSupportedError: The algorithm is not supported for importKey",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 48
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 72
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 180,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 120
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 60
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 324,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 24
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 108
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key usage",
+          "count": 192
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+      "pass": 24,
+      "fail": 192,
+      "blocked": 48,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 192
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js",
+      "pass": 620,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js",
+      "pass": 620,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js",
+      "pass": 20,
+      "fail": 52,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 52
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js",
+      "pass": 20,
+      "fail": 52,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 52
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js",
+      "pass": 10,
+      "fail": 44,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 44
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js",
+      "pass": 10,
+      "fail": 44,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 44
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js",
+      "pass": 530,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js",
+      "pass": 530,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js",
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js",
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
+      "pass": 0,
+      "fail": 20,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 20
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
+      "pass": 144,
+      "fail": 912,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 912
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/symmetric_importKey.https.any.js",
+      "pass": 198,
+      "fail": 408,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 408
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/normalize-algorithm-name.https.any.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/randomUUID.https.any.js",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+      "pass": 1,
+      "fail": 1,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: Worker is not defined",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-cbc.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ctr.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-gcm.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-kw.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdh.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdsa.https.any.js",
+      "pass": 0,
+      "fail": 3,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed25519.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed448.tentative.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/hmac.https.any.js",
+      "pass": 0,
+      "fail": 8,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+      "pass": 0,
+      "fail": 6,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mldsa.tentative.https.any.js",
+      "pass": 0,
+      "fail": 6,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+      "pass": 0,
+      "fail": 6,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-oaep.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-pss.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x25519.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/ecdsa.https.any.js",
+      "pass": 301,
+      "fail": 24,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js",
+      "pass": 17,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error EdDSA Ed25519: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+      "pass": 17,
+      "fail": 2,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error EdDSA Ed448: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js",
+      "pass": 14,
+      "fail": 0,
+      "blocked": 0,
+      "failures": []
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/hmac.https.any.js",
+      "pass": 57,
+      "fail": 8,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
+      "pass": 1,
+      "fail": 102,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC128 with customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC128 with large data and customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC128 with no customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC256 with customization and 512-bit output. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC256 with large data and customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC256 with large data and no customization. Message: ''Unknown key format''",
+          "count": 17
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
+      "pass": 1,
+      "fail": 57,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-44 basic test. Message: ''The algorithm is not supported for importKey''",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-44 invalid signature. Message: ''The algorithm is not supported for importKey''",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-65 basic test. Message: ''The algorithm is not supported for importKey''",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-65 invalid signature. Message: ''The algorithm is not supported for importKey''",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-87 basic test. Message: ''The algorithm is not supported for importKey''",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-87 invalid signature. Message: ''The algorithm is not supported for importKey''",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js",
+      "pass": 61,
+      "fail": 8,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pss.https.any.js",
+      "pass": 129,
+      "fail": 16,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-1 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-1, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-256 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-256, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-384 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-384, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-512 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-512, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/supports-modern.tentative.https.any.js",
+      "pass": 0,
+      "fail": 94,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: SubtleCrypto.supports should be a function",
+          "count": 1
+        },
+        {
+          "message": "TypeError: SubtleCrypto.supports is not a function",
+          "count": 93
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/supports.tentative.https.any.js",
+      "pass": 0,
+      "fail": 171,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: SubtleCrypto.supports should be a function",
+          "count": 1
+        },
+        {
+          "message": "TypeError: SubtleCrypto.supports is not a function",
+          "count": 170
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+      "pass": 54,
+      "fail": 303,
+      "blocked": 0,
+      "failures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: has the expected Symbol.toStringTag",
+          "count": 303
+        }
+      ]
+    }
+  ]
+}

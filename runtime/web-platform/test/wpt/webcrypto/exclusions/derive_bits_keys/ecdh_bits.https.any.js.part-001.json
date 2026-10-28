@@ -1,0 +1,15 @@
+{
+  "fixture": "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+  "blockedTests": [
+    {
+      "name": "P-521 mismatched curves",
+      "category": "upstream-spec-order",
+      "reason": "Web Cryptography Level 2 ED (2026-10-22) §24.4.2 steps 4-8 checks the public peer's output bound before curve equality. This case requests more than its P-256 peer's 256 bits, so the required OperationError precedes the pinned WPT's expected InvalidAccessError. Existing crypto-ec.test.ts paired controls exercise both orders."
+    },
+    {
+      "name": "P-384 mismatched curves",
+      "category": "upstream-spec-order",
+      "reason": "Web Cryptography Level 2 ED (2026-10-22) §24.4.2 steps 4-8 checks the public peer's output bound before curve equality. This case requests more than its P-256 peer's 256 bits, so the required OperationError precedes the pinned WPT's expected InvalidAccessError. Existing crypto-ec.test.ts paired controls exercise both orders."
+    }
+  ]
+}

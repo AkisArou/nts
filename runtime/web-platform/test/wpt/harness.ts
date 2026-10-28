@@ -11,13 +11,17 @@ type Callback = (this: unknown, ...args: unknown[]) => unknown;
 type Cleanup = () => unknown;
 type TestKind = "sync" | "async" | "promise";
 
+class OptionalFeatureUnsupportedError extends assert.AssertionError {
+  constructor(message?: string) { super({ message }); }
+}
+
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return ((typeof value === "object" && value !== null) || typeof value === "function") &&
     "then" in value && typeof value.then === "function";
 }
 
 // Names and legacy codes accepted by the pinned assert_throws_dom implementation.
-// QuotaExceededError uses a separate assertion there and is deliberately unsupported here.
+// QuotaExceededError uses its separate assertion below, never this legacy table.
 const domExceptionCodes: Readonly<Record<string, number>> = {
   IndexSizeError: 1, HierarchyRequestError: 3, WrongDocumentError: 4,
   InvalidCharacterError: 5, NoModificationAllowedError: 7, NotFoundError: 8,
@@ -271,6 +275,10 @@ class WptTest {
       if (this.result.status === "pass") this.harness.recordError(error);
       return;
     }
+    if (error instanceof OptionalFeatureUnsupportedError) {
+      this.block(`optional feature unsupported: ${error.message}`);
+      return;
+    }
     this.result.status = "fail";
     this.result.error = error;
     this.done();
@@ -413,8 +421,10 @@ export class WptHarness {
   private readonly asyncTest = new AsyncLocalStorage<WptTest>();
   private promiseQueue: Promise<void> = Promise.resolve();
   private explicitDone = false;
+  private explicitTimeout = false;
   private readonly registrationDone = Promise.withResolvers<void>();
   private registrationClosed = false;
+  private loaded = false;
   private readonly timeout: number;
   private readonly inactivity: WptInactivityGuard;
   private readonly pending = new Map<WptTest, "test" | "cleanup">();
@@ -540,11 +550,59 @@ export class WptHarness {
       void result.catch((error: unknown) => test.fail(error));
       return result;
     };
+    const throwsQuota = (
+      callbackOrConstructor: Callback, requestedOrCallback: unknown,
+      quotaOrRequested: unknown, messageOrQuota?: unknown, maybeMessage?: string,
+    ): void => {
+      const explicit = callbackOrConstructor.name === "QuotaExceededError";
+      const constructor = explicit ? callbackOrConstructor : globals.QuotaExceededError;
+      const callback = explicit ? requestedOrCallback : callbackOrConstructor;
+      const requested = explicit ? quotaOrRequested : requestedOrCallback;
+      const quota = explicit ? messageOrQuota : quotaOrRequested;
+      const message = explicit ? maybeMessage : messageOrQuota;
+      assert.equal(typeof constructor, "function", "inject the implementation's QuotaExceededError constructor");
+      assert.equal(typeof callback, "function", "expected a throwing callback");
+      assert.ok(message === undefined || typeof message === "string", "expected an assertion description");
+      if (!explicit) assert.equal(maybeMessage, undefined, "unexpected quota assertion argument");
+      let exception: unknown;
+      let thrown = false;
+      try { (callback as Callback).call(fixtureGlobal); }
+      catch (error) {
+        // Upstream never accepts an assertion failure as the expected exception.
+        if (error instanceof assert.AssertionError || error instanceof OptionalFeatureUnsupportedError) throw error;
+        exception = error;
+        thrown = true;
+      }
+      assert.ok(thrown, message ?? "expected callback to throw QuotaExceededError");
+      assert.ok(typeof exception === "object" && exception !== null, message);
+      const validExpectation = (value: unknown): boolean =>
+        value === null || typeof value === "number" || typeof value === "function";
+      assert.ok(validExpectation(requested), "requested must be null, a number, or a predicate");
+      assert.ok(validExpectation(quota), "quota must be null, a number, or a predicate");
+      const error = exception as Record<string, unknown>;
+      // The pinned assertion requires presence and uses == for all fixed values.
+      assert.ok("code" in error && error.code == 22, message);
+      assert.ok("name" in error && error.name == "QuotaExceededError", message);
+      if (typeof requested !== "function") assert.ok("requested" in error && error.requested == requested, message);
+      if (typeof quota !== "function") assert.ok("quota" in error && error.quota == quota, message);
+      if (typeof requested === "function") assert.ok(requested(error.requested), message);
+      if (typeof quota === "function") assert.ok(quota(error.quota), message);
+      assert.equal(error.constructor, constructor, message);
+    };
     Object.assign(this.context, hostErrors, {
+      AssertionError: assert.AssertionError,
+      OptionalFeatureUnsupportedError,
       assert_equals: assert.strictEqual,
       assert_not_equals: assert.notStrictEqual,
       // WPT capability assertions fail normally; they do not mark a test skipped.
       assert_implements: (value: unknown, message?: string) => assert.ok(value, message),
+      assert_in_array: (actual: unknown, expected: readonly unknown[], message?: string) => {
+        // Upstream uses indexOf: NaN never matches and signed zeros do match.
+        assert.ok(expected.indexOf(actual) !== -1, message);
+      },
+      assert_implements_optional: (condition: unknown, message?: string) => {
+        if (!condition) throw new OptionalFeatureUnsupportedError(message);
+      },
       // resources/testharness.js at a8f306ee4399724f33399dfdcac7da296f3cc05a:
       // primitive numeric types must match; no string/boxed-number coercion.
       assert_approx_equals: (actual: unknown, expected: number, epsilon: number, message?: string) => {
@@ -601,6 +659,7 @@ export class WptHarness {
       },
       assert_throws_js: throwsJs,
       assert_throws_dom: throwsDom,
+      assert_throws_quotaexceedederror: throwsQuota,
       promise_rejects_js: (test: WptTest, constructor: ErrorConstructor, promise: unknown, message?: string) =>
         rejects(test, promise, (reason) => throwsJs(constructor, () => { throw reason; }, message)),
       promise_rejects_exactly: (test: WptTest, expected: unknown, promise: unknown, message?: string) =>
@@ -657,10 +716,12 @@ export class WptHarness {
         if (properties !== undefined) {
           assert.ok(typeof properties === "object" && properties !== null, "setup options must be an object");
           for (const [key, value] of Object.entries(properties)) {
-            assert.ok(key === "explicit_done" || key === "allow_uncaught_exception",
+            assert.ok(key === "explicit_done" || key === "explicit_timeout" || key === "allow_uncaught_exception",
               `unsupported WPT setup option: ${key}`);
             assert.ok(typeof value === "boolean", `${key} must be boolean`);
             if (key === "explicit_done") this.explicitDone = value;
+            // Upstream's explicit_timeout does not disable external host guards.
+            else if (key === "explicit_timeout") { if (value) this.explicitTimeout = true; }
             else {
               assert.equal(this.uncaughtExceptionChannel, true,
                 "allow_uncaught_exception requires a connected uncaught-global reporting channel");
@@ -671,6 +732,11 @@ export class WptHarness {
         if (callback !== undefined) this.checkSynchronousResult(callback.apply(undefined, []), "setup callback");
       },
       done: () => this.closeRegistration(),
+      timeout: () => {
+        if (!this.explicitTimeout) return;
+        this.observeHung(this.filename, "<explicit timeout>", "explicit timeout");
+        this.closeRegistration();
+      },
       step_timeout: stepTimeout,
     });
     // Alias the actual context global, not the host's globals dictionary. This
@@ -709,6 +775,7 @@ export class WptHarness {
     this.names.add(name);
     const test = new WptTest(this, name, kind);
     this.tests.push(test);
+    this.pending.set(test, "test");
     this.touch();
     const blocked = this.blocks[name];
     if (blocked !== undefined) {
@@ -766,7 +833,10 @@ export class WptHarness {
   }
 
   completed(test: WptTest): void {
-    this.pending.delete(test);
+    assert.ok(this.pending.delete(test), "completed WPT test was not pending");
+    // The same pending inventory drives inactivity attribution and upstream
+    // automatic completion, including promise tests still queued to start.
+    if (this.loaded && !this.explicitDone && this.pending.size === 0) this.closeRegistration();
     this.touch();
   }
 
@@ -809,21 +879,10 @@ export class WptHarness {
   }
 
   private async drain(): Promise<WptResult[]> {
-    if (this.errors.length !== 0) this.closeRegistration();
+    this.loaded = true;
+    if ((!this.explicitDone && this.pending.size === 0) || this.errors.length !== 0) this.closeRegistration();
     this.touch();
-    if (this.explicitDone) await this.registrationDone.promise;
-    else {
-      // An outstanding upstream test may register further tests, for example
-      // after loading a JSON corpus. Implicit completion waits for that work;
-      // explicit done() still closes registration immediately when called.
-      while (!this.registrationClosed) {
-        const queue = this.promiseQueue;
-        const count = this.tests.length;
-        await queue;
-        await Promise.all(this.tests.map((test) => test.completed));
-        if (queue === this.promiseQueue && count === this.tests.length) this.closeRegistration();
-      }
-    }
+    await this.registrationDone.promise;
     await this.promiseQueue;
     await Promise.all(this.tests.map((test) => test.completed));
     for (const name of Object.keys(this.blocks)) {

@@ -1,0 +1,15 @@
+{
+  "fixture": "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "serialization test X448",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    },
+    {
+      "name": "serialization test {name: X448}",
+      "category": "native-structured-clone",
+      "reason": "CryptoKey serialization requires the native structured-clone capability. The Node test host cannot clone this package's opaque CryptoKey slots, and cloud agents must not implement structuredClone in TypeScript."
+    }
+  ]
+}

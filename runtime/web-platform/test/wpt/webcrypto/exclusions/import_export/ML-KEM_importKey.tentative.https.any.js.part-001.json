@@ -1,0 +1,725 @@
+{
+  "fixture": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+  "blockedTests": [
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, true, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, true, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, true, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, true, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, true, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, true, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, true, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, true, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, true, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, true, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, true, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, true, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, true, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, true, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, true, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, true, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, true, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, true, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, false, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, false, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, false, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, false, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, false, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, false, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, false, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, false, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, false, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, false, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, false, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, false, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, false, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, false, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, false, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, false, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, false, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, false, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, false, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, false, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, false, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, false, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, false, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, false, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), {name: ML-KEM-512}, false, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (spki, buffer(822), ML-KEM-512, false, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), {name: ML-KEM-512}, false, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(kty, alg, pub), ML-KEM-512, false, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), {name: ML-KEM-512}, false, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-public, buffer(800), ML-KEM-512, false, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, false, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, false, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, false, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, false, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, false, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, false, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, false, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, false, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, false, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, false, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, false, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, false, [decapsulateKey, decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, false, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, false, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, false, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, false, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, false, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, false, [decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), {name: ML-KEM-512}, false, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (pkcs8, buffer(86), ML-KEM-512, false, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-512}, false, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (jwk, object(priv, kty, alg, pub), ML-KEM-512, false, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), {name: ML-KEM-512}, false, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-512 bits (raw-seed, buffer(64), ML-KEM-512, false, [decapsulateBits, decapsulateKey, decapsulateBits, decapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), {name: ML-KEM-768}, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), ML-KEM-768, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), {name: ML-KEM-768}, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), ML-KEM-768, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), {name: ML-KEM-768}, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), ML-KEM-768, true, [encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), {name: ML-KEM-768}, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), ML-KEM-768, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), {name: ML-KEM-768}, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), ML-KEM-768, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), {name: ML-KEM-768}, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), ML-KEM-768, true, [encapsulateKey, encapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), {name: ML-KEM-768}, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), ML-KEM-768, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), {name: ML-KEM-768}, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), ML-KEM-768, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), {name: ML-KEM-768}, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), ML-KEM-768, true, [encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), {name: ML-KEM-768}, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), ML-KEM-768, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), {name: ML-KEM-768}, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), ML-KEM-768, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), {name: ML-KEM-768}, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), ML-KEM-768, true, [])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), {name: ML-KEM-768}, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (spki, buffer(1206), ML-KEM-768, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), {name: ML-KEM-768}, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(kty, alg, pub), ML-KEM-768, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), {name: ML-KEM-768}, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-public, buffer(1184), ML-KEM-768, true, [encapsulateBits, encapsulateKey, encapsulateBits, encapsulateKey])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (pkcs8, buffer(86), {name: ML-KEM-768}, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (pkcs8, buffer(86), ML-KEM-768, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(priv, kty, alg, pub), {name: ML-KEM-768}, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (jwk, object(priv, kty, alg, pub), ML-KEM-768, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-seed, buffer(64), {name: ML-KEM-768}, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    },
+    {
+      "name": "Good parameters: ML-KEM-768 bits (raw-seed, buffer(64), ML-KEM-768, true, [decapsulateBits])",
+      "category": "outside-assigned-algorithms",
+      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+    }
+  ]
+}
