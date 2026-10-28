@@ -100,6 +100,57 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN AES: add with the stanford-crypto-aes case.
+{
+  const name = "jetstream-stanford-crypto-aes";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { seed, originalPasses, runIteration, work } = await import("./cases/jetstream-stanford-crypto-aes/case.ts");
+    const { Aes } = await import("./cases/jetstream-stanford-crypto-aes/aes.ts");
+    const { data } = await import("./cases/jetstream-stanford-crypto-aes/data.ts");
+    // Independent original oracles; root retains absent-directory gating/import policy.
+    
+    test("JetStream AES retains its full fixed vector input", () => {
+      assert.equal(seed, 1);
+      assert.equal(originalPasses, 3);
+      assert.equal(data.length, 2100);
+      assert.equal(createHash("sha256").update(JSON.stringify(data)).digest("hex"), "2a34d64805ad45326d9cb7bfaffbecac4c46bc0faa2f51a0c11247969b175ed2");
+    });
+    
+    test("JetStream AES matches every original encrypted and decrypted block", () => {
+      const hash = createHash("sha256");
+      for (const item of data) {
+        const aes = new Aes(item.key);
+        hash.update(JSON.stringify([aes.encrypt(item.pt), aes.decrypt(item.ct)]) + "\n");
+      }
+      assert.equal(hash.digest("hex"), "349e6787437b8417393058090f8968d75a6c39dc9a599d0f18bcafbfbacb0f72");
+    });
+    
+    test("JetStream AES validates all three passes and observes computed words", () => {
+      assert.equal(runIteration(), 2427518650);
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 2427518650);
+      assert.equal(work(2), 371185472);
+      assert.equal(work(1), 2427518650);
+    });
+  }
+}
+// END AES.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
