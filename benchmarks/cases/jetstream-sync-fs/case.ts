@@ -30,6 +30,9 @@
 // Preserve all 5,000 directories, 1,200 generated files, byte-order operations,
 // recursive generators, visitor passes, deletions, and source validation.
 // n controls complete original outer iterations only. No source input is scaled.
+// Like the source driver, work keeps one Benchmark and its previous filesystem
+// alive until setupDirectory finishes and runIteration replaces that filesystem.
+// Only numeric totals/hash reset between work calls for a stable n checksum.
 // The original listing object is split by its existing instanceof condition so
 // TypeScript can track the correlated entry and isDirectory types truthfully.
 // Typed-only declarations are erased; original class-field initializers remain.
@@ -336,6 +339,8 @@ export class Benchmark {
 export const originalIterations = 80;
 export const seed = 1;
 
+const benchmark = new Benchmark();
+
 export function state(n: number): Benchmark {
     const benchmark = new Benchmark();
     for (let i = 0; i < n; ++i) {
@@ -347,10 +352,19 @@ export function state(n: number): Benchmark {
 }
 
 export function work(n: number): number {
-    const benchmark = state(n);
-    // The source validator establishes lastFileHash before this numeric checksum.
+    benchmark.totalFileCount = 0;
+    benchmark.totalDirCount = 0;
+    benchmark.lastFileHash = undefined;
+    for (let i = 0; i < n; ++i) {
+        benchmark.prepareForNextIteration();
+        benchmark.runIteration();
+    }
+    benchmark.validate(n);
+    const lastFileHash = benchmark.lastFileHash;
+    if (lastFileHash === undefined)
+        throw new Error("Missing validated file hash");
     return ((benchmark.totalFileCount * 31 + benchmark.totalDirCount) * 31
-        + benchmark.lastFileHash!) >>> 0;
+        + lastFileHash) >>> 0;
 }
 
 export interface FileSnapshot {
@@ -392,10 +406,14 @@ function snapshotDirectory(directory: Directory): EntrySnapshot[] {
 // Test-only observation. Byte serialization is outside work's timed path.
 export function render(n: number): FilesystemSnapshot {
     const benchmark = state(n);
+    const lastFileHash = benchmark.lastFileHash;
+    const fs = benchmark.fs;
+    if (lastFileHash === undefined || fs === undefined)
+        throw new Error("Missing validated filesystem result");
     return {
         totalFileCount: benchmark.totalFileCount,
         totalDirCount: benchmark.totalDirCount,
-        lastFileHash: benchmark.lastFileHash!,
-        entries: snapshotDirectory(benchmark.fs!),
+        lastFileHash,
+        entries: snapshotDirectory(fs),
     };
 }
