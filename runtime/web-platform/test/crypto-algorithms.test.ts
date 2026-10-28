@@ -1,0 +1,64 @@
+// Web Cryptography Level 2 §§18.4.2–18.4.4 and 32.2:
+// https://w3c.github.io/webcrypto/#algorithm-normalization
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DOMException } from "../src/core/errors.ts";
+import {
+  Algorithm,
+  DigestAlgorithm,
+  normalizeAlgorithm,
+  toAlgorithmIdentifier,
+} from "../src/crypto/algorithms.ts";
+import type { CryptoOperation } from "../src/crypto/algorithms.ts";
+
+const hashes = ["SHA-1", "SHA-256", "SHA-384", "SHA-512"];
+const otherOperations: readonly CryptoOperation[] = [
+  "encrypt", "decrypt", "sign", "verify", "generateKey", "deriveBits",
+  "importKey", "exportKey", "wrapKey", "unwrapKey", "get key length",
+];
+
+for (const operation of otherOperations) {
+  test("the SHA registry does not register " + operation, () => {
+    for (const name of hashes) {
+      let reads = 0;
+      assert.throws(
+        () => normalizeAlgorithm({ get name() { reads++; return name; } }, operation),
+        (error: unknown) => error instanceof DOMException && error.name === "NotSupportedError",
+      );
+      assert.equal(reads, 1, "unsupported operations stop before the second dictionary conversion");
+    }
+  });
+}
+
+test("normalization produces a new typed dictionary for each operation", () => {
+  for (const name of hashes) {
+    const input = new Algorithm(name.toLowerCase());
+    const first = normalizeAlgorithm(input, "digest");
+    const second = normalizeAlgorithm(input, "digest");
+    assert.ok(first instanceof DigestAlgorithm);
+    assert.equal(first.name, name);
+    assert.notEqual(first, second);
+    assert.equal(input.name, name.toLowerCase());
+    assert.deepEqual(Object.keys(first), ["name"]);
+  }
+});
+
+test("algorithm matching is ASCII-only and does not trim or accept aliases", () => {
+  for (const name of ["ſHA-1", "ＳＨＡ-256", " SHA-256", "SHA-256 ", "SHA256", "sha_256", "SHA-256\0"]) {
+    assert.throws(
+      () => normalizeAlgorithm(name, "digest"),
+      (error: unknown) => error instanceof DOMException && error.name === "NotSupportedError",
+    );
+  }
+});
+
+test("AlgorithmIdentifier preserves objects without consulting coercion hooks", () => {
+  const input = { [Symbol.toPrimitive]() { throw new Error("must not coerce an object"); } };
+  assert.equal(toAlgorithmIdentifier(input), input);
+  const callable = () => {};
+  assert.equal(toAlgorithmIdentifier(callable), callable);
+  assert.equal(toAlgorithmIdentifier(null), "null");
+  assert.equal(toAlgorithmIdentifier(undefined), "undefined");
+  assert.equal(toAlgorithmIdentifier(12n), "12");
+  assert.throws(() => toAlgorithmIdentifier(Symbol("SHA-256")), TypeError);
+});

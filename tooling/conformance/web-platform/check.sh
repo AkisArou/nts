@@ -30,6 +30,9 @@ node --expose-gc \
   runtime/web-platform/test/accept-loop.test.ts \
   runtime/web-platform/test/agent.test.ts \
   runtime/web-platform/test/core.test.ts \
+  runtime/web-platform/test/crypto.test.ts \
+  runtime/web-platform/test/crypto-key.test.ts \
+  runtime/web-platform/test/crypto-algorithms.test.ts \
   runtime/web-platform/test/authenticate.test.ts \
   runtime/web-platform/test/cache-storage.test.ts \
   runtime/web-platform/test/cache.test.ts \
