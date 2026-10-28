@@ -62,8 +62,12 @@ export function convertQueuingStrategyHighWaterMark(
   ) {
     throw new TypeError(constructorName + " init must be a dictionary");
   }
-  if (!("highWaterMark" in init)) {
+  // Required dictionary members are missing when their retrieved value is
+  // undefined, regardless of whether an own or inherited property exists.
+  // https://webidl.spec.whatwg.org/#es-dictionary
+  const highWaterMark = init.highWaterMark;
+  if (highWaterMark === undefined) {
     throw new TypeError(constructorName + " init.highWaterMark is required");
   }
-  return +init.highWaterMark;
+  return +highWaterMark;
 }
