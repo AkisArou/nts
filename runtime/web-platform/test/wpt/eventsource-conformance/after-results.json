@@ -1,0 +1,610 @@
+{
+  "label": "after-full-gate",
+  "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "sourceCommit": "af3200fcd39b8cfd20d5a8f6369c6af9a31370a2",
+  "sourceTree": "8818cf4b3995a239a131b0a0ba6deaf5fffefbfb",
+  "command": "sh tooling/conformance/web-platform/check.sh",
+  "tools": {
+    "node": "v24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "manifestSha256": "3109c5efcb712b7f7fabf1d3d03cf0bdb98b8323731f4efa0d62ca528ee42abf",
+  "logSha256": "e02d9470aa37e50a428063798aff7aa1287ca8ceb42955885a1f996eb8f57099",
+  "summary": {
+    "runs": 45,
+    "pass": 76,
+    "fail": 0,
+    "blocked": 3
+  },
+  "files": [
+    {
+      "file": "eventsource/dedicated-worker/eventsource-constructor-no-new.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/dedicated-worker/eventsource-eventtarget.worker.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/event-data.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-close.window.js",
+      "variants": 1,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-empty-url.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-non-same-origin.window.js",
+      "variants": 1,
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-stringify.window.js",
+      "variants": 1,
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-url-bogus.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-cross-origin-redirect-origin.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-cross-origin.window.js",
+      "variants": 1,
+      "pass": 3,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "file": "eventsource/eventsource-eventtarget.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-onmessage-trusted.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-onmessage.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-onopen.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-reconnect.window.js",
+      "variants": 1,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-url.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom-2.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom-split.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom-utf-16.any.js",
+      "variants": 1,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-comments.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-data-before-final-empty-line.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-data.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-event-empty.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-event.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-2.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-3.window.js",
+      "variants": 1,
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-null.window.js",
+      "variants": 1,
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-redirect.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-parsing.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-retry-empty.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-unknown.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-leading-space.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-mime-bogus.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-mime-trailing-semicolon.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-mime-valid-bogus.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-newlines.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-null-character.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-utf-8.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-accept.any.js",
+      "variants": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-cache-control.any.js",
+      "variants": 1,
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-credentials.window.js",
+      "variants": 1,
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-redirect.window.js",
+      "variants": 1,
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-status-error.window.js",
+      "variants": 1,
+      "pass": 7,
+      "fail": 0,
+      "blocked": 0
+    }
+  ],
+  "runs": [
+    {
+      "file": "eventsource/dedicated-worker/eventsource-constructor-no-new.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/dedicated-worker/eventsource-eventtarget.worker.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/event-data.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-close.window.js",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-empty-url.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-non-same-origin.window.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-stringify.window.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-constructor-url-bogus.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-cross-origin-redirect-origin.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-cross-origin.window.js",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "file": "eventsource/eventsource-eventtarget.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-onmessage-trusted.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-onmessage.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-onopen.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-reconnect.window.js",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/eventsource-url.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom-2.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom-split.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom-utf-16.any.js",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-bom.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-comments.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-data-before-final-empty-line.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-data.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-event-empty.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-event.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-2.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-3.window.js",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-null.window.js",
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id-redirect.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-id.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-parsing.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-retry-empty.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-field-unknown.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-leading-space.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-mime-bogus.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-mime-trailing-semicolon.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-mime-valid-bogus.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-newlines.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-null-character.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/format-utf-8.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-accept.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-cache-control.any.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-credentials.window.js",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-redirect.window.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "eventsource/request-status-error.window.js",
+      "pass": 7,
+      "fail": 0,
+      "blocked": 0
+    }
+  ],
+  "note": "The same 45 unchanged fixture bodies register the same 79 leaves. Four unsupported-scheme failures are fixed. The three observed negative CORS failures are now named Fetch-policy blocks, never passing cases. File/suite wrappers are excluded."
+}

@@ -1,0 +1,254 @@
+{
+  "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "specification": {
+    "name": "HTML Standard: Server-sent events",
+    "sourceURL": "https://html.spec.whatwg.org/multipage/server-sent-events.html",
+    "reviewedDate": "2026-10-28",
+    "lastUpdated": "2026-10-26",
+    "sections": [
+      "9.2.2 The EventSource interface",
+      "9.2.3 Processing model",
+      "9.2.4 The Last-Event-ID header",
+      "9.2.5 Parsing an event stream",
+      "9.2.6 Interpreting an event stream"
+    ]
+  },
+  "tools": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "typechecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --ignoreConfig --types node --lib esnext --noEmit --strict --noUncheckedIndexedAccess --noImplicitReturns --noUnusedLocals --noUnusedParameters --target ESNext --module preserve --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck runtime/web-platform/test/wpt-eventsource.test.ts runtime/web-platform/test/eventsource-wpt-policy.test.ts",
+      "exitCode": 0
+    }
+  ],
+  "packageGate": {
+    "sourceCommit": "af3200fcd39b8cfd20d5a8f6369c6af9a31370a2",
+    "sourceTree": "8818cf4b3995a239a131b0a0ba6deaf5fffefbfb",
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 0,
+    "node": {
+      "tests": 2709,
+      "pass": 2663,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 46,
+      "todo": 0
+    },
+    "eventSourceWpt": {
+      "runs": 45,
+      "pass": 76,
+      "fail": 0,
+      "blocked": 3
+    },
+    "existingWebSocketWpt": {
+      "pass": 846,
+      "fail": 0,
+      "blocked": 25
+    },
+    "existingWebSocketStreamWpt": {
+      "pass": 97,
+      "fail": 0,
+      "blocked": 10
+    },
+    "existingUpstreamRunner": {
+      "upstreamTests": 2817,
+      "applicableTests": 2772,
+      "passed": 2772,
+      "failed": 0,
+      "notApplicable": 45
+    },
+    "compiledAxis": {
+      "status": "skipped",
+      "reason": "No nts compiler is available. Host evidence does not establish compilation or native behavior."
+    },
+    "logSha256": "e02d9470aa37e50a428063798aff7aa1287ca8ceb42955885a1f996eb8f57099",
+    "note": "The reporting commit changes only evidence and documentation. The 46 skips are three EventSource CORS blocks plus 43 inherited Stream/WebSocket/deferred-control skips."
+  },
+  "sourcePolicy": {
+    "file": "runtime/web-platform/test/eventsource-wpt-policy.test.ts",
+    "sha256": "3b7dae605c881ff3bfc24e0a6a991528278add647cd482ddb37eca121455b2a3",
+    "before": {
+      "sourceCommit": "7e921998998a6ef6402b6d8eb8b4986c8bc6885f",
+      "sourceTree": "64c38760ae6b6b9d9f5a0744344d3d0441b41e49",
+      "pass": 7,
+      "fail": 8,
+      "cancelled": 0,
+      "skipped": 0,
+      "logSha256": "f59fef925be51759e258e8189eb0103869ef50f90e40d5b1ec5e73e625369f85"
+    },
+    "after": {
+      "sourceCommit": "af3200fcd39b8cfd20d5a8f6369c6af9a31370a2",
+      "sourceTree": "8818cf4b3995a239a131b0a0ba6deaf5fffefbfb",
+      "pass": 15,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "logSha256": "e02d9470aa37e50a428063798aff7aa1287ca8ceb42955885a1f996eb8f57099"
+    },
+    "note": "The same final 15-control file runs against original and fixed EventSource source. Eleven controls cover scheme policy, valid local resources, transient HTTP(S) recovery and public/runtime close. Four cover line/event parser limits with successful or rejected cancellation. This is two source fixes; these are supplemental controls, not additional WPT registrations."
+  },
+  "fixes": [
+    {
+      "commit": "93713944ee2a681e55c409213ead721b4f5902b7",
+      "title": "Fail EventSource requests with known unsupported schemes",
+      "specification": [
+        "HTML 9.2.2, constructor step 15.2",
+        "HTML 9.2.3, fail the connection"
+      ],
+      "wptReduction": {
+        "file": "eventsource/eventsource-constructor-non-same-origin.window.js",
+        "before": {
+          "pass": 0,
+          "fail": 4
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0
+        }
+      }
+    },
+    {
+      "commit": "732ba52402a3ef676123bea9f564f7038c87ab1a",
+      "title": "Retire the EventSource Fetch after fatal parser limits",
+      "specification": [
+        "HTML 9.2.2, EventSource Fetch ownership",
+        "HTML 9.2.3, terminal failure"
+      ],
+      "note": "Implementation line/event limits are unchanged policy. The acquired reader is cancelled with the original LimitError and released, then the request is aborted with the same error; a cancellation rejection cannot suppress the terminal CLOSED error. Covered by four supplemental controls, not a WPT reduction."
+    }
+  ],
+  "profile": {
+    "upstreamFiles": 98,
+    "upstreamFixtureFiles": 66,
+    "upstreamRegistrations": 106,
+    "fixtureFiles": 45,
+    "fixtureVariants": 45,
+    "expectedRegisteredTests": 79,
+    "expectedRunnableTests": 76,
+    "explicitlyBlockedTests": 3,
+    "excludedPaths": 21,
+    "excludedRegistrations": 27,
+    "serverResourcePaths": 13,
+    "workerSupportPaths": 16,
+    "metadataPaths": 3,
+    "externalSupportPaths": 1,
+    "externalServerResourcePaths": 2,
+    "currentManifestSha256": "3109c5efcb712b7f7fabf1d3d03cf0bdb98b8323731f4efa0d62ca528ee42abf",
+    "baselineManifestSha256": "b6f61fa94162d8db8f8341300760185d110db814dfb0e280f840cf04c5a45057",
+    "afterManifestSha256": "3109c5efcb712b7f7fabf1d3d03cf0bdb98b8323731f4efa0d62ca528ee42abf",
+    "unchangedFixtureBodies": true,
+    "negativeCorsBlocks": [
+      {
+        "file": "eventsource/eventsource-cross-origin.window.js",
+        "name": "EventSource: cross-origin allow-origin: http://example.org should fail",
+        "reason": {
+          "category": "fetch-cors-policy",
+          "reason": "Requires Fetch to reject a cross-origin response with missing or mismatched Access-Control-Allow-Origin. The ordinary-host Fetch policy does not enforce browser CORS; Fetch source is owned by the separate task and network Fetch remains deferred. Positive resource/origin cases still run."
+        }
+      },
+      {
+        "file": "eventsource/eventsource-cross-origin.window.js",
+        "name": "EventSource: cross-origin allow-origin:'' should fail",
+        "reason": {
+          "category": "fetch-cors-policy",
+          "reason": "Requires Fetch to reject a cross-origin response with missing or mismatched Access-Control-Allow-Origin. The ordinary-host Fetch policy does not enforce browser CORS; Fetch source is owned by the separate task and network Fetch remains deferred. Positive resource/origin cases still run."
+        }
+      },
+      {
+        "file": "eventsource/eventsource-cross-origin.window.js",
+        "name": "EventSource: cross-origin No allow-origin should fail",
+        "reason": {
+          "category": "fetch-cors-policy",
+          "reason": "Requires Fetch to reject a cross-origin response with missing or mismatched Access-Control-Allow-Origin. The ordinary-host Fetch policy does not enforce browser CORS; Fetch source is owned by the separate task and network Fetch remains deferred. Positive resource/origin cases still run."
+        }
+      }
+    ],
+    "note": "All 98 upstream directory paths and all 58 vendored EventSource paths (45 fixtures plus 13 existing resources) were independently checked against the pinned revision. Browser exposure, realms and lifecycle are not claimed. The eight document.title-only fixtures receive verified title metadata solely for test names."
+  },
+  "sabotage": {
+    "candidate": "af3200fcd39b8cfd20d5a8f6369c6af9a31370a2",
+    "candidateTree": "8818cf4b3995a239a131b0a0ba6deaf5fffefbfb",
+    "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "nodeVersion": "v24.20.0",
+    "command": "NTS_WPT_EVENTSOURCE_FILTER=format-field-data.any.js node --expose-gc --test --test-reporter=spec runtime/web-platform/test/wpt-eventsource.test.ts",
+    "change": {
+      "path": "runtime/web-platform/src/eventsource/event-source.ts",
+      "originalLine": "data: event.data,",
+      "sabotagedLine": "data: event.data + \"!\",",
+      "originalGitBlob": "5c2d5d4c3d62d568f5b4613f4bd0be48a805616b",
+      "originalSha256": "d6f15815f0d80453d8f0eaad24d40d51ef9902ad1f96ffd1fa3f520846ef57b2",
+      "sabotagedGitBlob": "68fe137066fa68d23c77dcd9b8ef596951fcc1e6",
+      "sabotagedSha256": "2a22d610716ff87b2eabbcf1508d3f11499cf26e9e1361969990ab993200f570",
+      "restoredGitBlob": "5c2d5d4c3d62d568f5b4613f4bd0be48a805616b",
+      "restoredSha256": "d6f15815f0d80453d8f0eaad24d40d51ef9902ad1f96ffd1fa3f520846ef57b2"
+    },
+    "manifestSha256": "3109c5efcb712b7f7fabf1d3d03cf0bdb98b8323731f4efa0d62ca528ee42abf",
+    "driverSha256": "b42ae276a1db06747e034fe3249760bb9b1055510ea7a4e42097b7bc80032b3d",
+    "sabotage": {
+      "exit": 1,
+      "wpt": {
+        "pass": 0,
+        "fail": 1,
+        "blocked": 0
+      },
+      "node": {
+        "tests": 3,
+        "pass": 0,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "files": [
+        {
+          "path": "eventsource/format-field-data.any.js",
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        }
+      ],
+      "log": "eventsource-sabotage-data.log",
+      "logSha256": "bceeaa4bd60cba1f5f508ae57875f715f7c416c720a55bf105ad334da9b9bc89"
+    },
+    "restored": {
+      "exit": 0,
+      "wpt": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "node": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "files": [
+        {
+          "path": "eventsource/format-field-data.any.js",
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      ],
+      "log": "eventsource-sabotage-restored.log",
+      "logSha256": "198124022e131e86c4d85a9540a67cb3107cd6e7abdc10c0f3bac6a86f0e4809"
+    },
+    "restoredByteForByte": true,
+    "worktreeCleanBeforeRemoval": true,
+    "worktreeRemoved": true
+  }
+}
