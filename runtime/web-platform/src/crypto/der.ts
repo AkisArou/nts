@@ -3,6 +3,8 @@ import type { CryptoEcComponents, CryptoNamedCurve, CryptoOkpCurve, CryptoRsaCom
 import { cryptoByteSubarray, cryptoViewByteLength } from "./buffer-source.ts";
 import { ecCurveByteLength } from "./ec-curve.ts";
 import { okpCurveByteLength } from "./okp-curve.ts";
+import type { CryptoMlAlgorithmName } from "../provider/crypto.ts";
+import { mlExpandedKeyLength, mlPublicKeyLength, mlSeedLength } from "./ml-parameters.ts";
 
 function invalidDer(): never {
   throw new DOMException("The key is not a valid DER encoding", "DataError");
@@ -439,4 +441,66 @@ export function parseOkpDer(format: "spki" | "pkcs8", bytes: Uint8Array): OkpDer
   privateOctets.complete();
   if (cryptoViewByteLength(d) !== okpCurveByteLength(namedCurve)) invalidDer();
   return { namedCurve, x: undefined, d };
+}
+
+export interface MlDerKey {
+  readonly name: CryptoMlAlgorithmName;
+  readonly pub: Uint8Array | undefined;
+  readonly seed: Uint8Array | undefined;
+  readonly expanded: Uint8Array | undefined;
+}
+
+function mlAlgorithm(reader: DerReader): CryptoMlAlgorithmName {
+  const algorithm = reader.read(0x30);
+  const oid = algorithm.read(0x06).content();
+  algorithm.complete(); // Parameters must be absent, including NULL.
+  const prefix = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03];
+  if (oid.byteLength !== prefix.length + 1) invalidDer();
+  for (let index = 0; index < prefix.length; index++) if (oid[index] !== prefix[index]) invalidDer();
+  if (oid[8] === 17) return "ML-DSA-44";
+  if (oid[8] === 18) return "ML-DSA-65";
+  if (oid[8] === 19) return "ML-DSA-87";
+  invalidDer();
+}
+
+/**
+ * Modern Algorithms §8.4.4, RFC 9881: validate the original envelope exactly.
+ * Seed expansion and validation of the optional expanded material stay native.
+ * Expanded-only private keys are valid encodings but outside the seed profile.
+ */
+export function parseMlDer(format: "spki" | "pkcs8", bytes: Uint8Array): MlDerKey {
+  const source = new DerReader(bytes);
+  const envelope = source.read(0x30);
+  source.complete();
+  if (format === "spki") {
+    const name = mlAlgorithm(envelope);
+    const publicKey = envelope.read(0x03);
+    if (publicKey.done() || publicKey.bytes[publicKey.position++] !== 0) invalidDer();
+    const pub = publicKey.content();
+    if (pub.byteLength !== mlPublicKeyLength(name)) invalidDer();
+    envelope.complete();
+    return { name, pub, seed: undefined, expanded: undefined };
+  }
+  const version = envelope.integer(true);
+  if (version.byteLength !== 1 || version[0] !== 0) invalidDer();
+  const name = mlAlgorithm(envelope);
+  const privateOctets = envelope.read(0x04);
+  if (!envelope.done()) attributes(envelope);
+  envelope.complete();
+  let seed: Uint8Array | undefined;
+  let expanded: Uint8Array | undefined;
+  if (privateOctets.peek() === 0x80) {
+    seed = privateOctets.read(0x80).content();
+  } else if (privateOctets.peek() === 0x04) {
+    expanded = privateOctets.read(0x04).content();
+  } else {
+    const both = privateOctets.read(0x30);
+    seed = both.read(0x04).content();
+    expanded = both.read(0x04).content();
+    both.complete();
+  }
+  privateOctets.complete();
+  if (seed !== undefined && seed.byteLength !== mlSeedLength(name)) invalidDer();
+  if (expanded !== undefined && expanded.byteLength !== mlExpandedKeyLength(name)) invalidDer();
+  return { name, pub: undefined, seed, expanded };
 }

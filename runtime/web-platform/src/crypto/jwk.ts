@@ -6,7 +6,7 @@ import type { JsonValue } from "../json/value.ts";
 import { cryptoViewByteLength } from "./buffer-source.ts";
 import type { KeyUsage } from "./crypto-key.ts";
 
-export type KeyFormat = "raw" | "raw-secret" | "spki" | "pkcs8" | "jwk";
+export type KeyFormat = "raw-public" | "raw-private" | "raw-seed" | "raw-secret" | "raw" | "spki" | "pkcs8" | "jwk";
 
 /** Web Cryptography §15. Fields are optional; algorithms check required members. */
 export class RsaOtherPrimesInfo {
@@ -29,6 +29,8 @@ export class JsonWebKey {
   n: string | undefined;
   oth: RsaOtherPrimesInfo[] | undefined;
   p: string | undefined;
+  priv: string | undefined;
+  pub: string | undefined;
   q: string | undefined;
   qi: string | undefined;
   use: string | undefined;
@@ -89,6 +91,8 @@ export interface JsonWebKeyObject {
   n?: string;
   oth?: RsaOtherPrimesInfoObject[];
   p?: string;
+  priv?: string;
+  pub?: string;
   q?: string;
   qi?: string;
   use?: string;
@@ -110,6 +114,8 @@ interface JsonWebKeyInput {
   readonly n?: unknown;
   readonly oth?: unknown;
   readonly p?: unknown;
+  readonly priv?: unknown;
+  readonly pub?: unknown;
   readonly q?: unknown;
   readonly qi?: unknown;
   readonly use?: unknown;
@@ -191,6 +197,8 @@ export function toJsonWebKey(value: unknown): JsonWebKey {
   const primes = source.oth;
   if (primes !== undefined) result.oth = sequence(primes, otherPrime);
   result.p = optionalString(source.p);
+  result.priv = optionalString(source.priv);
+  result.pub = optionalString(source.pub);
   result.q = optionalString(source.q);
   result.qi = optionalString(source.qi);
   result.use = optionalString(source.use);
@@ -211,7 +219,7 @@ export function toJsonWebKeyObject(key: JsonWebKey): JsonWebKeyObject {
       key.k !== undefined && operations !== undefined && key.crv === undefined &&
       key.d === undefined && key.dp === undefined && key.dq === undefined &&
       key.e === undefined && key.n === undefined && key.oth === undefined &&
-      key.p === undefined && key.q === undefined && key.qi === undefined &&
+      key.p === undefined && key.priv === undefined && key.pub === undefined && key.q === undefined && key.qi === undefined &&
       key.use === undefined && key.x === undefined && key.y === undefined) {
     return { alg: key.alg, ext: key.ext, k: key.k, key_ops: operations, kty: key.kty };
   }
@@ -230,7 +238,7 @@ export function toJsonWebKeyObject(key: JsonWebKey): JsonWebKeyObject {
   const result: JsonWebKeyObject = {
     alg: key.alg, crv: key.crv, d: key.d, dp: key.dp, dq: key.dq, e: key.e,
     ext: key.ext, k: key.k, key_ops: operations, kty: key.kty, n: key.n, oth: primes,
-    p: key.p, q: key.q, qi: key.qi, use: key.use, x: key.x, y: key.y,
+    p: key.p, priv: key.priv, pub: key.pub, q: key.q, qi: key.qi, use: key.use, x: key.x, y: key.y,
   };
   if (result.alg === undefined) delete result.alg;
   if (result.crv === undefined) delete result.crv;
@@ -245,6 +253,8 @@ export function toJsonWebKeyObject(key: JsonWebKey): JsonWebKeyObject {
   if (result.n === undefined) delete result.n;
   if (result.oth === undefined) delete result.oth;
   if (result.p === undefined) delete result.p;
+  if (result.priv === undefined) delete result.priv;
+  if (result.pub === undefined) delete result.pub;
   if (result.q === undefined) delete result.q;
   if (result.qi === undefined) delete result.qi;
   if (result.use === undefined) delete result.use;
@@ -255,7 +265,7 @@ export function toJsonWebKeyObject(key: JsonWebKey): JsonWebKeyObject {
 
 export function toKeyFormat(value: unknown): KeyFormat {
   const format = coerceToDOMString(value);
-  if (format === "raw" || format === "raw-secret" || format === "spki" || format === "pkcs8" || format === "jwk") return format;
+  if (format === "raw-public" || format === "raw-private" || format === "raw-seed" || format === "raw-secret" || format === "raw" || format === "spki" || format === "pkcs8" || format === "jwk") return format;
   throw new TypeError("Unknown key format");
 }
 
@@ -448,6 +458,8 @@ export function parseWrappedJwk(bytes: Uint8Array): JsonWebKey {
     result.oth = others;
   }
   result.p = optionalJsonString(member(node, "p"));
+  result.priv = optionalJsonString(member(node, "priv"));
+  result.pub = optionalJsonString(member(node, "pub"));
   result.q = optionalJsonString(member(node, "q"));
   result.qi = optionalJsonString(member(node, "qi"));
   result.use = optionalJsonString(member(node, "use"));
@@ -486,8 +498,9 @@ export function serializeWrappedJwk(key: JsonWebKey, padToEight: boolean): Uint8
   if ((key.kty !== "oct" || key.k === undefined) &&
       (key.kty !== "RSA" || key.n === undefined || key.e === undefined) &&
       (key.kty !== "EC" || key.crv === undefined || key.x === undefined || key.y === undefined) &&
-      (key.kty !== "OKP" || key.crv === undefined || key.x === undefined)) {
-    throw new TypeError("Expected an exported octet, RSA, EC or OKP JWK");
+      (key.kty !== "OKP" || key.crv === undefined || key.x === undefined) &&
+      (key.kty !== "AKP" || key.alg === undefined || key.pub === undefined)) {
+    throw new TypeError("Expected an exported octet, RSA, EC, OKP or AKP JWK");
   }
   // Match dictionary-to-object's lexicographic member order. These are internal
   // typed dictionaries from export, so no caller-owned toJSON, replacer, prototype
@@ -525,6 +538,8 @@ export function serializeWrappedJwk(key: JsonWebKey, padToEight: boolean): Uint8
     text += "]";
   }
   text = stringJsonMember(text, "p", key.p);
+  text = stringJsonMember(text, "priv", key.priv);
+  text = stringJsonMember(text, "pub", key.pub);
   text = stringJsonMember(text, "q", key.q);
   text = stringJsonMember(text, "qi", key.qi);
   text = stringJsonMember(text, "use", key.use);

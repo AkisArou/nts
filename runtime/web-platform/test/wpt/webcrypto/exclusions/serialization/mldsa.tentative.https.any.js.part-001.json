@@ -3,33 +3,33 @@
   "blockedTests": [
     {
       "name": "serialization test ML-DSA-44",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test {name: ML-DSA-44}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test ML-DSA-65",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test {name: ML-DSA-65}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test ML-DSA-87",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test {name: ML-DSA-87}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     }
   ]
 }

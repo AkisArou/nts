@@ -310,6 +310,8 @@ export type {
 } from "./provider/web-platform-runtime.ts";
 
 export type {
+  CryptoMlDsaName, CryptoMlAlgorithmName, CryptoMlKeyInfo, CryptoMlComponents,
+  CryptoRawMlImport, CryptoMlGeneration, CryptoMlDsaParameters,
   CryptoDigestName, CryptoDigestProvider, CryptoCshakeParameters, CryptoKmacParameters, CryptoKeyHandle, CryptoKeyType,
   CryptoNamedCurve, CryptoOkpCurve, CryptoSecretKeyInfo, CryptoRsaKeyInfo,
   CryptoEcKeyInfo, CryptoOkpKeyInfo, CryptoKeyInfo, CryptoKeyRecord, CryptoKeyPairRecord,

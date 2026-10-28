@@ -322,7 +322,7 @@ export function exportRsaKey(provider: CryptoProvider, format: KeyFormat, key: C
   const nativeFormat = key.type === "public" ? "spki" : "pkcs8";
   const result = provider.exportKey(key.handle, nativeFormat);
   if ("failure" in result) throw new DOMException("The RSA key cannot be exported", "OperationError");
-  if (format === "raw") throw new DOMException("Raw RSA export is not supported", "NotSupportedError");
+  if (format !== "spki" && format !== "pkcs8") throw new DOMException("This RSA export format is not supported", "NotSupportedError");
   if (format !== nativeFormat) throw new DOMException("The RSA key type does not match the export format", "InvalidAccessError");
   try {
     const components = parseRsaDer(format, result, true);

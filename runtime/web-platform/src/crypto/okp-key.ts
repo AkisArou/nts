@@ -135,6 +135,7 @@ export function importOkpKey(
     components = data.d === undefined ? { family: "OKP", namedCurve: name, x }
       : { family: "OKP", namedCurve: name, x, d: jwkOctets(data.d, name) };
   } else {
+    if (format !== "pkcs8" && format !== "spki" && format !== "raw") throw new DOMException("The key format is not supported", "NotSupportedError");
     type = format === "pkcs8" ? "private" : "public";
     validateUsages(name, type, usages);
     if (data instanceof JsonWebKey) throw new DOMException("Expected octet key-pair bytes", "DataError");
@@ -174,9 +175,11 @@ export function exportOkpKey(provider: CryptoProvider, format: KeyFormat, key: C
     jwk.ext = key.extractable;
     return jwk;
   }
+  const unsupported = format !== "raw" && format !== "spki" && format !== "pkcs8";
   const nativeFormat = key.type === "private" ? "pkcs8" : format === "raw" ? "raw" : "spki";
   const result = provider.exportKey(key.handle, nativeFormat);
   if ("failure" in result) throw new DOMException("The key cannot be exported", "OperationError");
+  if (unsupported) throw new DOMException("The key format is not supported", "NotSupportedError");
   if (format !== nativeFormat) throw new DOMException("The key type does not match the export format", "InvalidAccessError");
   try {
     if (format === "raw") {
