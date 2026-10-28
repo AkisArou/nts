@@ -4,7 +4,7 @@ import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts"
 import { DOMException, LimitError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import { utf8Length } from "../core/utf8.ts";
-import { requireArguments, toUSVString } from "../core/webidl.ts";
+import { coerceToUSVString, requireArguments, toUSVString } from "../core/webidl.ts";
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { Blob } from "../file/blob.ts";
@@ -266,12 +266,19 @@ export class WebSocket extends EventTarget {
   }
 
   send(data: WebSocketSendData): void {
+    // Web IDL converts the required union argument before the send() steps run.
+    requireArguments(arguments, 1, "WebSocket.send");
+    if (typeof data === "string") data = toUSVString(data);
+    else if (
+      !(data instanceof Blob) &&
+      !(data instanceof ArrayBuffer) &&
+      !ArrayBuffer.isView(data)
+    ) data = coerceToUSVString(data);
     if (this.state === this.CONNECTING)
       throw new DOMException("WebSocket is still connecting", "InvalidStateError");
     let pending: PendingSend;
     if (typeof data === "string") {
-      const value = toUSVString(data);
-      pending = { value, size: utf8Length(value) };
+      pending = { value: data, size: utf8Length(data) };
     } else if (data instanceof Blob) pending = { value: data, size: data.size };
     else {
       const source =
