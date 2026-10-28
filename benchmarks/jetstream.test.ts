@@ -100,6 +100,54 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN AI ASTAR: complete original workload checks.
+{
+  const name = "jetstream-ai-astar";
+  if (modules.has(name)) {
+    checked.add(name);
+    // Independent original oracles; root retains absent-directory gating/import policy.
+    const { seed, runIteration, work } = await import("./cases/jetstream-ai-astar/case.ts");
+    const { createGrid } = await import("./cases/jetstream-ai-astar/data.ts");
+
+    test("JetStream A* retains the full original 500 by 500 grid", () => {
+      const grid = createGrid();
+      assert.equal(seed, 1);
+      assert.equal(grid.length, 500);
+      assert.ok(grid.every(row => row.length === 500));
+      assert.equal(createHash("sha256").update(JSON.stringify(grid)).digest("hex"), "9e12a9d5b72e2561fb185c590cc81ad61cd18c59699a7fc1651b7cbb405a20ab");
+    });
+
+    test("JetStream A* returns the complete original path", () => {
+      const path = runIteration().map(node => [node.x, node.y]);
+      assert.equal(path.length, 446);
+      assert.deepEqual(path.at(-1), [123, 321]);
+      assert.equal(createHash("sha256").update(JSON.stringify(path)).digest("hex"), "d216285ce66675288825a03fe8680ca47f95bf2ab6078e6f301c98abd9d890c8");
+    });
+
+    test("JetStream A* retains graph reuse and stable repeated output", () => {
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 4060484377);
+      assert.equal(work(2), 3967396530);
+      assert.equal(work(1), 4060484377);
+    });
+  }
+}
+// END AI ASTAR.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
