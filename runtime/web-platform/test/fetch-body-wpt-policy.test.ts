@@ -235,3 +235,96 @@ test("Response json serializes its value before filling converted headers", () =
   assert.throws(() => globalThis.Response.json(data, init), (error) => error === marker);
   assert.throws(() => Response.json(data, init), (error) => error === marker);
 });
+
+// https://fetch.spec.whatwg.org/#dom-response-ok
+// https://fetch.spec.whatwg.org/#dom-response-clone
+// Node's declarations model IDL getters as fields; use the actual accessor shape
+// when deriving the oracle subclasses below.
+const OracleResponse = globalThis.Response as unknown as typeof Response;
+
+test("Response internal status determines ok even when the status getter is shadowed", () => {
+  class Subject extends Response { override get status(): number { return 503; } }
+  class Oracle extends OracleResponse { override get status(): number { return 503; } }
+  const subject = new Subject(null, { status: 201 });
+  const oracle = new Oracle(null, { status: 201 });
+  assert.equal(oracle.ok, true);
+  assert.equal(subject.ok, oracle.ok);
+});
+
+test("Response internal clone ignores shadowed status, statusText, and headers getters", async () => {
+  let shadow = false;
+  let reads = 0;
+  const rejectShadow = (): void => {
+    if (shadow) { reads++; throw new Error("public Response getter was read"); }
+  };
+  class Subject extends Response {
+    override get status(): number { rejectShadow(); return super.status; }
+    override get statusText(): string { rejectShadow(); return super.statusText; }
+    override get headers(): Response["headers"] { rejectShadow(); return super.headers; }
+  }
+  class Oracle extends OracleResponse {
+    override get status(): number { rejectShadow(); return super.status; }
+    override get statusText(): string { rejectShadow(); return super.statusText; }
+    override get headers(): Response["headers"] { rejectShadow(); return super.headers; }
+  }
+  const init = { status: 201, statusText: "Created", headers: { "x-original": "yes" } };
+  const subject = new Subject("original", init);
+  const oracle = new Oracle("original", init);
+  shadow = true;
+  const expected = oracle.clone();
+  const actual = subject.clone();
+  assert.equal(reads, 0);
+  assert.equal(actual.status, expected.status);
+  assert.equal(actual.statusText, expected.statusText);
+  assert.equal(actual.headers.get("x-original"), expected.headers.get("x-original"));
+  assert.equal(await actual.text(), await expected.text());
+  assert.equal(await subject.text(), await oracle.text());
+});
+
+test("Response internal clone copies the header list without calling a shadowed iterator", () => {
+  const subject = new Response(null, { headers: { "x-original": "yes" } });
+  const oracle = new globalThis.Response(null, { headers: { "x-original": "yes" } });
+  let iterations = 0;
+  const replacement = function* (): Generator<[string, string]> {
+    iterations++;
+    yield ["x-injected", "wrong"];
+  };
+  subject.headers[Symbol.iterator] = replacement;
+  (oracle.headers as { [Symbol.iterator](): Iterator<[string, string]> })[Symbol.iterator] = replacement;
+  const actual = subject.clone();
+  const expected = oracle.clone();
+  assert.deepEqual(Array.from(actual.headers), Array.from(expected.headers));
+  assert.equal(iterations, 0);
+  actual.headers.set("x-original", "copy");
+  assert.equal(subject.headers.get("x-original"), "yes");
+});
+
+test("Response internal MIME lookup ignores a shadowed Headers.get", async () => {
+  const subject = new Response("value", { headers: { "content-type": "text/plain" } });
+  const oracle = new globalThis.Response("value", { headers: { "content-type": "text/plain" } });
+  let calls = 0;
+  const replacement = (): never => { calls++; throw new Error("public Headers.get was called"); };
+  subject.headers.get = replacement;
+  (oracle.headers as { get(name: string): string | null }).get = replacement;
+  const expected = await oracle.blob();
+  const actual = await subject.blob();
+  assert.equal(actual.type, expected.type);
+  assert.equal(await actual.text(), await expected.text());
+  assert.equal(calls, 0);
+});
+
+test("Response internal clone preserves error and redirect status and immutable headers", () => {
+  for (const [subject, oracle] of [
+    [Response.error(), globalThis.Response.error()],
+    [Response.redirect("https://example.test/"), globalThis.Response.redirect("https://example.test/")],
+  ] as const) {
+    const actual = subject.clone();
+    const expected = oracle.clone();
+    assert.equal(actual.status, expected.status);
+    assert.equal(actual.type, expected.type);
+    assert.equal(actual.body, expected.body);
+    assert.deepEqual(Array.from(actual.headers), Array.from(expected.headers));
+    assert.throws(() => actual.headers.set("x-test", "value"), TypeError);
+    assert.throws(() => expected.headers.set("x-test", "value"), TypeError);
+  }
+});

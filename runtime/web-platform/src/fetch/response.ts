@@ -11,7 +11,13 @@ import { Blob } from "../file/blob.ts";
 import { stringifyPlain } from "../json/plain.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
-import { Headers, convertHeadersInit, createHeadersFromConvertedInit } from "./headers.ts";
+import {
+  Headers,
+  convertHeadersInit,
+  copyHeaders,
+  createHeadersFromConvertedInit,
+  getHeaderValue,
+} from "./headers.ts";
 import type { ConvertedHeadersInit, HeaderEntry, HeadersInit } from "./headers.ts";
 import { headersGuardIsImmutable, headersMakeImmutable } from "./headers.ts";
 import { bodyContentType } from "./body.ts";
@@ -40,6 +46,7 @@ interface ConvertedResponseInit {
 interface InternalResponseConstruction {
   readonly context: ResponseContext;
   readonly init?: ConvertedResponseInit;
+  readonly headers?: Headers;
 }
 
 function convertResponseInit(init: ResponseInit | null | undefined): ConvertedResponseInit {
@@ -79,7 +86,7 @@ export class Response extends Body {
   private responseType: ResponseType = "default";
 
   constructor(body?: BodyInit | null, init?: ResponseInit);
-  /** @internal Reached only through {@link createInternalResponse}. */ constructor(
+  /** @internal Reached only through this module's factories. */ constructor(
     body: BodyInit | null | undefined,
     init: ResponseInit | null | undefined,
     key: typeof responseConstructorKey,
@@ -108,8 +115,8 @@ export class Response extends Body {
       const c = statusText.charCodeAt(i);
       if ((c < 0x20 && c !== 9) || c > 255 || c === 0x7f) throw new TypeError("Invalid statusText");
     }
-    const headers = convertedInit.headers === undefined
-      ? new Headers() : createHeadersFromConvertedInit(convertedInit.headers);
+    const headers = internal?.headers ?? (convertedInit.headers === undefined
+      ? new Headers() : createHeadersFromConvertedInit(convertedInit.headers));
     if (convertedBody !== null && convertedBody !== undefined && nullBodyStatus(status))
       throw new TypeError("This response status cannot have a body");
     if (!headers.has("content-type") && state.type !== null)
@@ -126,7 +133,7 @@ export class Response extends Body {
   }
 
   get ok(): boolean {
-    return this.status >= 200 && this.status <= 299;
+    return this.responseStatus >= 200 && this.responseStatus <= 299;
   }
 
   get statusText(): string {
@@ -150,26 +157,26 @@ export class Response extends Body {
   }
 
   protected override [bodyContentType](): string | null {
-    return this.headers.get("content-type");
+    return getHeaderValue(this.responseHeaders, "content-type");
   }
 
   clone(): Response {
     const state = this.bodyState.clone();
-    const copy = createInternalResponse(
-      null,
-      {
-        status: this.status === 0 ? 200 : this.status,
-        statusText: this.statusText,
-        headers: this.headers,
+    const copy = new Response(null, undefined, responseConstructorKey, {
+      context: this.context,
+      init: {
+        status: this.responseStatus === 0 ? 200 : this.responseStatus,
+        statusText: this.responseStatusText,
+        headers: undefined,
       },
-      this.context,
-    );
+      headers: copyHeaders(this.responseHeaders),
+    });
     copy.responseStatus = this.responseStatus;
     copy.responseURL = this.responseURL;
     copy.wasRedirected = this.wasRedirected;
     copy.responseType = this.responseType;
     copy.bodyState = state;
-    if (this.headers[headersGuardIsImmutable]) copy.headers[headersMakeImmutable]();
+    if (this.responseHeaders[headersGuardIsImmutable]) copy.responseHeaders[headersMakeImmutable]();
     return copy;
   }
 
@@ -177,7 +184,7 @@ export class Response extends Body {
     const result = new Response();
     result.responseStatus = 0;
     result.responseType = "error";
-    result.headers[headersMakeImmutable]();
+    result.responseHeaders[headersMakeImmutable]();
     return result;
   }
 
@@ -194,7 +201,7 @@ export class Response extends Body {
       status: convertedStatus,
       headers: [["location", absolute]],
     });
-    result.headers[headersMakeImmutable]();
+    result.responseHeaders[headersMakeImmutable]();
     return result;
   }
 
@@ -227,7 +234,7 @@ export class Response extends Body {
     const result = createInternalResponse(null, { status, statusText, headers }, context);
     result.bodyState = new BodyState(
       stream,
-      result.headers.get("content-type"),
+      getHeaderValue(result.responseHeaders, "content-type"),
       null,
       null,
       context.bodyPolicy,
@@ -235,7 +242,7 @@ export class Response extends Body {
     result.responseURL = url;
     result.wasRedirected = redirected;
     result.responseType = "basic";
-    result.headers[headersMakeImmutable]();
+    result.responseHeaders[headersMakeImmutable]();
     return result;
   }
 
@@ -259,7 +266,7 @@ export class Response extends Body {
     result.responseURL = url;
     result.wasRedirected = redirected;
     result.responseType = type;
-    result.headers[headersMakeImmutable]();
+    result.responseHeaders[headersMakeImmutable]();
     return result;
   }
 
