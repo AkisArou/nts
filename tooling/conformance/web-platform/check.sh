@@ -31,6 +31,7 @@ node --expose-gc \
   runtime/web-platform/test/agent.test.ts \
   runtime/web-platform/test/core.test.ts \
   runtime/web-platform/test/wpt-harness.test.ts \
+  runtime/web-platform/test/wpt-runner.test.ts \
   runtime/web-platform/test/wpt-events-abort.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \
   runtime/web-platform/test/abort-wpt-policy.test.ts \

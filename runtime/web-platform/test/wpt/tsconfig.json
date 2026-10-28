@@ -15,6 +15,7 @@
     "../event-wpt-policy.test.ts",
     "../abort-wpt-policy.test.ts",
     "../wpt-events-abort.test.ts",
-    "../wpt-harness.test.ts"
+    "../wpt-harness.test.ts",
+    "../wpt-runner.test.ts"
   ]
 }
