@@ -1,0 +1,1932 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revision": "fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee",
+  "inventoryNote": "Pinned upstream sources are copied byte-for-byte and hash-verified at execution. Expected registrations and capability exclusions are explicit; actual pass/fail counts are reported by wpt-events-abort.test.ts.",
+  "scope": [
+    "dom/events/",
+    "dom/abort/"
+  ],
+  "fixtures": [
+    {
+      "path": "dom/events/AddEventListenerOptions-once.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/AddEventListenerOptions-once.any.js",
+      "sha256": "9446ac20ed90dba10bb2cad56ae9fb67e57677b8930ce1703218564e172cd302",
+      "gitBlob": "b4edd4345c5e3431d77a6ed56dc573d4000f4c43",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 4,
+      "blockedTests": {},
+      "expectedRunnableTests": 4
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-passive.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/AddEventListenerOptions-passive.any.js",
+      "sha256": "521c3c08a44b4aaab640dc5fdd0140afed0b9d3f5c290327aeed8824f4482e3c",
+      "gitBlob": "8e59cf5b379f2e806fa52b82d87dd09f90c212d7",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 5,
+      "blockedTests": {},
+      "expectedRunnableTests": 5
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-signal.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/AddEventListenerOptions-signal.any.js",
+      "sha256": "26d439086c069f05f930ee3a3fda181e0034b489a89a7031696106cbdd97bc4c",
+      "gitBlob": "e6a34261594bcaf43057fc46ed734bcf105d68ee",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 11,
+      "blockedTests": {},
+      "expectedRunnableTests": 11
+    },
+    {
+      "path": "dom/events/Event-constructors.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-constructors.any.js",
+      "sha256": "860c64f2813cc3e31547aeb49f0a56ec9dde1e1bdfe0a4be7d94155bfbc1028b",
+      "gitBlob": "faa623ea92991b72742477a18471449f5382f1a8",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 14,
+      "blockedTests": {},
+      "expectedRunnableTests": 14
+    },
+    {
+      "path": "dom/events/Event-isTrusted.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-isTrusted.any.js",
+      "sha256": "73925cca5b100206b4070406e0666fa8516373af4a0285132af1fc40d5880084",
+      "gitBlob": "00bcecd0ed67a07128a2555820d6e12f72aee990",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1
+    },
+    {
+      "path": "dom/events/EventTarget-add-remove-listener.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-add-remove-listener.any.js",
+      "sha256": "f1c1c806afb2a3fa88e8fc8e8c1fbbe2c1c9d3d5b7a5cc0df96680717f46f830",
+      "gitBlob": "b1d7ffb3e07fbe2038f0e33a8e63173edf12234c",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1
+    },
+    {
+      "path": "dom/events/EventTarget-addEventListener.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-addEventListener.any.js",
+      "sha256": "7045782f35952ce90ee537a23a8e19b8623c03c2e42714c2097102b2a029783e",
+      "gitBlob": "e22da4aff850a2f0042c5ecda4c844cc1852f2ec",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1
+    },
+    {
+      "path": "dom/events/EventTarget-constructible.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-constructible.any.js",
+      "sha256": "f345e70db0bfcfe8a6a5e0ba4251ad55c79ce6955998991243d6e3277b80ae0e",
+      "gitBlob": "4125d23f0c965066c91d95c9ba83ac711fdabbc3",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/generic-events-stay-cancelable.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/generic-events-stay-cancelable.html",
+      "sha256": "aff6673d9bf93b2c535d8098a88cee4f88696eda24c8d6ee79bb61f3bb1e8d4b",
+      "gitBlob": "961794728d3799a2096bad18dd60e79f619533a4",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "expectedRunnableTests": 1
+    },
+    {
+      "path": "dom/abort/AbortSignal.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/AbortSignal.any.js",
+      "sha256": "64be009f125bb0111362b70540f752ae5a1b176746f9941380f48d1e66630c81",
+      "gitBlob": "ab238ebc0cd581f090906c66b1464374f3c4d8bc",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {},
+      "expectedRunnableTests": 2
+    },
+    {
+      "path": "dom/abort/abort-signal-any.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/abort-signal-any.any.js",
+      "sha256": "12e161d042d8cc270663eca7eccb80443dc66fc21ce812ad7f2228f379410665",
+      "gitBlob": "b4abb14c1a3eff64cee0c171c1ca03cf89ccc9af",
+      "format": "javascript",
+      "support": [
+        "dom/abort/resources/abort-signal-any-tests.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 14,
+      "blockedTests": {},
+      "expectedRunnableTests": 14
+    },
+    {
+      "path": "dom/abort/event.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/event.any.js",
+      "sha256": "d67dcb62c7959d541ab6fe9fd3e2bfe1fb9ffcb27290f8c51d37a32074d844c5",
+      "gitBlob": "00ff74af05b9eb4e2c342637c5ada6bdedadf58a",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 16,
+      "blockedTests": {},
+      "expectedRunnableTests": 16
+    },
+    {
+      "path": "dom/abort/timeout.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/timeout.any.js",
+      "sha256": "c0388b0d5c0bab8785ab1421124706d4b70a16c981b5bb5c6d8477398f336911",
+      "gitBlob": "61b595e717c844259b6f75d9bd8b1cbd9b66d8d2",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 3,
+      "blockedTests": {},
+      "expectedRunnableTests": 3
+    },
+    {
+      "path": "dom/events/Event-returnValue.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-returnValue.html",
+      "sha256": "cdab17047c6c3b8b9f673d4927f500f24ea887d2cb86a46921fb8e4324798586",
+      "gitBlob": "08df2d41416ffccf65c9fe606469181a9f95f6a8",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 7,
+      "blockedTests": {
+        "initEvent should unset returnValue.": {
+          "category": "document",
+          "reason": "Requires Document.createEvent; the package exposes no Document provider."
+        }
+      },
+      "expectedRunnableTests": 6
+    },
+    {
+      "path": "dom/events/Event-type.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-type.html",
+      "sha256": "bf6d1fd2dbbed77e8b75008dfb5d17a83cd6ac1fbae6c9fc6fba9db56bf60635",
+      "gitBlob": "22792f5c6c7883c97e71c7adec1c2d873cf608b8",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 3,
+      "blockedTests": {
+        "Event.type should initially be the empty string": {
+          "category": "document",
+          "reason": "Requires Document.createEvent and its uninitialized-event construction semantics."
+        },
+        "Event.type should be initialized by initEvent": {
+          "category": "document",
+          "reason": "Requires Document.createEvent; do not replace the upstream construction with new Event."
+        }
+      },
+      "expectedRunnableTests": 1
+    },
+    {
+      "path": "dom/events/passive-by-default-non-node.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/passive-by-default-non-node.html",
+      "sha256": "22d3e32720d164c3f1ebf5bfa6907adcf0430fdbd34922abe2bcbe8041827053",
+      "gitBlob": "1c4ca07c5d25d511146a32057751366a89375147",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 2,
+      "blockedTests": {
+        "wheel listeners on Performance are not passive by default": {
+          "category": "performance",
+          "reason": "Requires the package Performance EventTarget, which is item B7 and is not implemented at this base revision."
+        }
+      },
+      "expectedRunnableTests": 1
+    },
+    {
+      "path": "dom/events/EventTarget-removeEventListener.any.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-removeEventListener.any.js",
+      "sha256": "5575deb3d90c09224a002a78fa398c0b16ca3ec856348467b642bb45bcefd384",
+      "gitBlob": "289dfcfbabde0f68d739a093985f4f2601665126",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {
+        "removing a null event listener should succeed": {
+          "category": "global-bootstrap",
+          "reason": "Calls globalThis.removeEventListener; the provider bootstrap does not expose a global EventTarget in the ordinary-node environment."
+        }
+      },
+      "expectedRunnableTests": 0
+    },
+    {
+      "path": "dom/events/CustomEvent.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/CustomEvent.html",
+      "sha256": "4aaf8d6fdedafb2522239727d463734e0053546f858dd346c643ef83936d7bf5",
+      "gitBlob": "87050943f9bffac8c17b85e1dba977eaebc78ec5",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 3,
+      "blockedTests": {
+        "CustomEvent dispatching.": {
+          "category": "document",
+          "reason": "Requires Document.createElement and Document.createEvent(\"CustomEvent\")."
+        },
+        "First parameter to initCustomEvent should be mandatory.": {
+          "category": "document",
+          "reason": "Requires Document.createEvent(\"CustomEvent\")."
+        },
+        "initCustomEvent's default parameter values.": {
+          "category": "document",
+          "reason": "Requires Document.createEvent(\"CustomEvent\")."
+        }
+      },
+      "expectedRunnableTests": 0
+    }
+  ],
+  "support": [
+    {
+      "path": "dom/abort/resources/abort-signal-any-tests.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/resources/abort-signal-any-tests.js",
+      "sha256": "2459485339b8f8096e9c39f280cfa9ea6fdf2e62291ad28681fa2b9da00866f2",
+      "gitBlob": "8f897c934e87eab427004268299c1c547a957727"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md",
+    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/LICENSE.md",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
+    "identifier": "BSD-3-Clause",
+    "note": "Copy upstream LICENSE.md unchanged; retain existing per-file headers without inserting new text into fixtures."
+  },
+  "excluded": [
+    {
+      "path": "dom/events/Body-FrameSet-Event-Handlers.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Body-FrameSet-Event-Handlers.html",
+      "sha256": "02e6560936a4953b96ad6b34b10cc0a62b707940a05bf6814bb7afbaeb4f8751",
+      "gitBlob": "3a891158d5f8637c24b5efd270e5c920e6c7c1dd",
+      "category": "global-bootstrap",
+      "reason": "Requires real Window event/error-handler globals or browser global-event dispatch; standalone EventTarget does not supply them."
+    },
+    {
+      "path": "dom/events/Event-cancelBubble.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-cancelBubble.html",
+      "sha256": "863af4ba15f1dba39423e91ff1d96f9a1b1fbf176c0156a0137829eaea08a372",
+      "gitBlob": "d8d2d7239d025f7cd39aaa67197c6a51a41c287e",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-constants.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-constants.html",
+      "sha256": "68e38865775319d0800cc4a55a263104671a0e71a09dd7d0cdafb21701f0e16a",
+      "gitBlob": "635e9894d9a3a4c2dd473893665d8f528dfc5559",
+      "category": "document-setup",
+      "reason": "setup constructs Document-created events before testConstants registers cases; there is no Document.createEvent provider."
+    },
+    {
+      "path": "dom/events/Event-defaultPrevented-after-dispatch.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-defaultPrevented-after-dispatch.html",
+      "sha256": "e0b40af0ba403151d2d3cb3f254a4254764229066bbe1f3e02f705b8470e755b",
+      "gitBlob": "8fef005eb57772ada0260a469eca5de95cd7e183",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-defaultPrevented.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-defaultPrevented.html",
+      "sha256": "49f29907bddebfe35070e8fff23adcceba8c98b689948a0cdf77dd3947af8ac4",
+      "gitBlob": "2548fa3e064bb1911b52025273975f02614ffefc",
+      "category": "document-shared-state",
+      "reason": "All cases share ev created by the first Document.createEvent case; skipping it does not make later cases independently runnable."
+    },
+    {
+      "path": "dom/events/Event-dispatch-bubble-canceled.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-bubble-canceled.html",
+      "sha256": "afa7b61cd7cc2ebd6dea7ae6c0412006bab1665ae1b1c21298e543a1430af193",
+      "gitBlob": "20f398f66f9bcf5d755304bc36fa60493d1ab023",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-bubbles-false.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-bubbles-false.html",
+      "sha256": "f4a5214354110d1618aa10935c0f8449439ee5f22dd5bb840b9e2c9dba207682",
+      "gitBlob": "0f43cb0275662d2a777376c510f09f23b36bf78d",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-bubbles-true.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-bubbles-true.html",
+      "sha256": "5b5dd38907cb8edda62a2c4ec909009c9648e6fd586a5ebc4e5fadc24ca400eb",
+      "gitBlob": "b23605a1ebc3188e237c48c376b579f88fb59e58",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-click.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-click.html",
+      "sha256": "bf3e928837789e2dbd7396b51595e78178bd749b4dc9fa2a75de6ef0a86a7643",
+      "gitBlob": "ab4a24a5ad5096497ef65b075db89a146b38c115",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-dispatch-click.tentative.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-click.tentative.html",
+      "sha256": "5199b94f2ba763698c95e2097b314c97d5ecb6abbd2292861c6cf649e7f0ffef",
+      "gitBlob": "cfdae55ef2ab48df0842c050b7844b3e52996de4",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-dispatch-detached-click.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-detached-click.html",
+      "sha256": "79c405a7ddc7a4538013c378fce548e0ca0f09cefa49b1d806441ce184b3b1bb",
+      "gitBlob": "76ea3d78ba74e027c7a9148257f437b52b73250a",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-dispatch-detached-input-and-change.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-detached-input-and-change.html",
+      "sha256": "ed4305aab5837ef933d90fb483d8ccc64ff141db2ee22fde611fa54e959d147f",
+      "gitBlob": "a53ae71ac2a08d901b9ac8aaf35912cbbdcb7746",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-dispatch-handlers-changed.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-handlers-changed.html",
+      "sha256": "e82c9bfe361197b9f5133be216ede190e2f7b54c09c804529251d06ea59e3864",
+      "gitBlob": "24e6fd70cb4ec4d44905ba8624280a526ef888c6",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-listener-order.window.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-listener-order.window.js",
+      "sha256": "9154fe480941d2e9e283fb2db1dbff3453c740f48cd4172cef88de8c0466f3e7",
+      "gitBlob": "a01a472872b9278267814a0d317e87ee0e290786",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-multiple-cancelBubble.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-multiple-cancelBubble.html",
+      "sha256": "cffd6288cfd153d28dda1eed4e8777dd80f126547e8a57bbb79f6dff84a32769",
+      "gitBlob": "2873fd7794b782c22735a4e414e63c1ceb161732",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-dispatch-multiple-stopPropagation.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-multiple-stopPropagation.html",
+      "sha256": "6d01d79dbeae450e1fa86d5feba1605f7024feb434d9825a2fe3a57172adc16f",
+      "gitBlob": "72644bd861ea1d6a872b9599ea9f770c04747c5f",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-dispatch-omitted-capture.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-omitted-capture.html",
+      "sha256": "b19131d2ddd6ec92e2f6407fb9d37579727b6b88d6f4ed82a6fcef54c1dcaf80",
+      "gitBlob": "77074d9a3ec2b3cc8529524e06ac870bfb9f4e39",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-on-disabled-elements.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-on-disabled-elements.html",
+      "sha256": "8de029d452db5ccf9f84d504bf908f6d4bbbe9f6f1e2b8e7daedd715bee02b78",
+      "gitBlob": "e7d6b455bbcaab8c485c56fe63e309215dac31a8",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-dispatch-order-at-target.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-order-at-target.html",
+      "sha256": "d72bc5e562a1a77d3ff3d99b012deea151d6f0c5f9528297d7d8d39eb17b1321",
+      "gitBlob": "79673c32564cbe785858266d4737de6bd5f7bade",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-dispatch-order.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-order.html",
+      "sha256": "eab3c16fe04011aab013c4454f80bd56b7117e4d6e01c3b182dd18a2386b0bbf",
+      "gitBlob": "ca94434595c6ee19fb0f6982f56da0d005b4586c",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-dispatch-other-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-other-document.html",
+      "sha256": "81584891e6519d91ab74d4e62ef0eb23ae333e8b49cab9361ada4fc3f769c783",
+      "gitBlob": "689b48087a0327f5297620f43115c1257fdc7e49",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-propagation-stopped.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-propagation-stopped.html",
+      "sha256": "c6fb9c7d4bbaf127cf1cd64f8447486af52013c75f7b3f06ab38e015c7aee78f",
+      "gitBlob": "889f8cfe11489d0bd070c7550037e83a9e48cbe5",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-redispatch.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-redispatch.html",
+      "sha256": "685d33602c1819cad1062a1ed28998d6f54dc809f77f8aff07d45787984c8e22",
+      "gitBlob": "cf861ca17744c24b507e3fdf1e4a8c4e28485fd8",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-dispatch-reenter.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-reenter.html",
+      "sha256": "f0da38c1b27415c9f374b0923b766ab4e416cf0539f1d734a9aaebd45aa06483",
+      "gitBlob": "71f8517bdd9dbebdd407452bc13a27f53303faa3",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-single-activation-behavior.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-single-activation-behavior.html",
+      "sha256": "e2344a2de2f5fe3bb2b01786326d7ebfe8bd9c9b5ff2f570facd425e0dfa818b",
+      "gitBlob": "f734893fadb308a0d98b940e535796b93938f9c1",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-dispatch-target-moved.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-target-moved.html",
+      "sha256": "4bea9c1e8d599aa06d6f833d35a6dc60fb94c6a0be34301b0a961cc94ec4a8ce",
+      "gitBlob": "facb2c7b9568f632f93ab904d094eabb04b3529d",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-target-removed.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-target-removed.html",
+      "sha256": "b5c3166a0ec16ffc4a482e83f416f3ad01ef4acd7b46f045c5486bfbed08d189",
+      "gitBlob": "531799c3ade6b629f407dcc238e39caef1903512",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-throwing-multiple-globals.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-throwing-multiple-globals.html",
+      "sha256": "4ede7579c66a6a6f3a21c2ee5f260fa958f11f5cf26fd225ca82c4c98ebe255e",
+      "gitBlob": "a56fdf6af865812e387fc36c4fba94e6118b335a",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/Event-dispatch-throwing.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-dispatch-throwing.html",
+      "sha256": "3dfd628b864a8d187819b8e3bb62a5c65d6d617af7478eecd449b64034a4eb7f",
+      "gitBlob": "7d1c0d94a0845b5351c50f5255bcff381cee17a6",
+      "category": "global-bootstrap",
+      "reason": "Requires real Window event/error-handler globals or browser global-event dispatch; standalone EventTarget does not supply them."
+    },
+    {
+      "path": "dom/events/Event-init-while-dispatching.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-init-while-dispatching.html",
+      "sha256": "e7632d0f6684b38aadbfde9591d48618eab05e68cddfd64498ecd4c436899542",
+      "gitBlob": "2aa1f6701c4c4bae28c6308d95bd4c6edbf13026",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-initEvent.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-initEvent.html",
+      "sha256": "053c70ec17a994c038eb91f11952258a9198aa823fd9af0b439aad3b457287c2",
+      "gitBlob": "ad1018d4daf7ba665a658119e2e6954a1a7edce2",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/Event-propagation.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-propagation.html",
+      "sha256": "19e0e500eecd965fde092939c948d6d32280f22ace2dcd007fb2d5cd3d726bab",
+      "gitBlob": "33989eb4bf95262b8beba6b760a7b2fa62a5499b",
+      "category": "document-top-level",
+      "reason": "Top-level code creates Document events and dispatches through document.head; no safe standalone registrations remain."
+    },
+    {
+      "path": "dom/events/Event-stopImmediatePropagation.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-stopImmediatePropagation.html",
+      "sha256": "ac5c519602c7ce47d2827c2a06d448c934e73daf3af807287b471782df371bff",
+      "gitBlob": "b75732257a89dd1174d9904239e7899ce7b85fab",
+      "category": "document-top-level",
+      "reason": "Single-test top-level code queries a DOM element and dispatches through it."
+    },
+    {
+      "path": "dom/events/Event-stopPropagation-cancel-bubbling.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-stopPropagation-cancel-bubbling.html",
+      "sha256": "cbe9851dcaacd3feeba56053c3c8383b1258dd4b0ce58b28bd2b331f067510bb",
+      "gitBlob": "5c2c49f33826a94418a2bcb65ca781e246adbd4b",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/Event-subclasses-constructors.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-subclasses-constructors.html",
+      "sha256": "a8f6483d991ba5e6cefef9e7a3e599d04c4855a8ba93633992e83c4ac2ae7e98",
+      "gitBlob": "08a5ded011635c66151d22a09330f9341eb48c91",
+      "category": "browser-ui-top-level",
+      "reason": "The top-level expected-value table reads window and document and tests UI event interfaces not provided by this package."
+    },
+    {
+      "path": "dom/events/Event-timestamp-cross-realm-getter.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-timestamp-cross-realm-getter.html",
+      "sha256": "eed730a208609292db3c145cca10d7da3e7e5cad5bb3d51f261dcfef3bc91192",
+      "gitBlob": "45823de26b27f963d3a5b594e8c2e5f3946d6693",
+      "category": "cross-realm",
+      "reason": "Requires an iframe realm and cross-realm timestamp getter behavior."
+    },
+    {
+      "path": "dom/events/Event-timestamp-high-resolution.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-timestamp-high-resolution.html",
+      "sha256": "3255edeed5e307dece8ed6cfc7d528392e794254cda49e8a164d9a4cee2c17cf",
+      "gitBlob": "a049fef64b4c7de261abf8857c36973b4562d429",
+      "category": "performance-ui",
+      "reason": "Requires Performance, Window interface lookup, and UI event constructors; browser timing integration is unavailable."
+    },
+    {
+      "path": "dom/events/Event-timestamp-high-resolution.https.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-timestamp-high-resolution.https.html",
+      "sha256": "afdd513af6b6e1425c3cb6dc37dbcd950ca52f4f6506b4265b0e3f576dcc56ac",
+      "gitBlob": "70f974294796b51aaaeeef13b53e2cb60e6c2571",
+      "category": "performance-ui",
+      "reason": "Requires Performance and Window.GamepadEvent in a secure browser context."
+    },
+    {
+      "path": "dom/events/Event-timestamp-safe-resolution.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-timestamp-safe-resolution.html",
+      "sha256": "571c5965d411cdd81aeb43418405698ef03b7083fa796d4e00f8b36f33a4c96f",
+      "gitBlob": "24f2dec93c5ae8563206367d917411c64b051efd",
+      "category": "performance-ui",
+      "reason": "Requires MouseEvent and browser timestamp-coarsening guarantees, beyond the standalone Event constructor checks."
+    },
+    {
+      "path": "dom/events/Event-type-empty.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/Event-type-empty.html",
+      "sha256": "db62300e80bb6452b84312c438bb55920fd493e35312253e66ab690b034c5731",
+      "gitBlob": "225b85a613a6557c581a5989c7ed54c5641576ab",
+      "category": "document-helper",
+      "reason": "Both constructor and initEvent cases call do_test, which creates and dispatches through a Document element."
+    },
+    {
+      "path": "dom/events/EventListener-addEventListener.sub.window.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-addEventListener.sub.window.js",
+      "sha256": "014d61417dac1b8b2f4402882fc2f1717cb3916e46e277075b017836d2da24d4",
+      "gitBlob": "b44bc332859da52fad9015a06119b8dd93782c7a",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/EventListener-handleEvent-cross-realm.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-handleEvent-cross-realm.html",
+      "sha256": "d8980df24be09305fccc37c74e6845288feb8a0f89cad31dad8ecda38b3d8798",
+      "gitBlob": "663d04213f82bbcfabe420d3b738a706e0fd86e0",
+      "category": "cross-realm",
+      "reason": "Requires an iframe realm and error reporting on the listener's associated Window."
+    },
+    {
+      "path": "dom/events/EventListener-handleEvent.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-handleEvent.html",
+      "sha256": "6e70daac4ad17084d097fcddfe3a2e3c0246eebe6541b3ed44accfcf39d8d12d",
+      "gitBlob": "06bc1f6e2ab267e36c3d15da9e278db2aced85c0",
+      "category": "document-global-error",
+      "reason": "Every case creates a Document element; error cases also require Window error events and EventWatcher."
+    },
+    {
+      "path": "dom/events/EventListener-incumbent-global-1.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-incumbent-global-1.sub.html",
+      "sha256": "a7128fb0e98968dfc14c3ce641cf264b19428390b639b8b7a8f3898f87cf9cbe",
+      "gitBlob": "9d941385cbc483adab3e74c5518ec3d0291b730a",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/EventListener-incumbent-global-2.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-incumbent-global-2.sub.html",
+      "sha256": "adfe7f7179351926f3bbc779d4871686a8ce8df1d5cf2595aa2c1849ae3d7b14",
+      "gitBlob": "4433c098d75c58c1c6cec4d4613d43a17c566d01",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/EventListener-incumbent-global-subframe-1.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-incumbent-global-subframe-1.sub.html",
+      "sha256": "3b6fdca1512bf10b374d0eb7914aee1d40872f572a3d77d14529ca3c48bc470c",
+      "gitBlob": "25487cc5e0bcb1b14439c9cb77d93182ef812229",
+      "category": "cross-realm-support",
+      "reason": "Iframe support document for excluded incumbent-global tests; requires parent/frames and cross-origin browser messaging."
+    },
+    {
+      "path": "dom/events/EventListener-incumbent-global-subframe-2.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-incumbent-global-subframe-2.sub.html",
+      "sha256": "f052fd6ff7c6d1c5897c26c4e3dfc939d6fb2b749d3f0bd73a7dc5f63bee8f44",
+      "gitBlob": "9c7235e2ad435885c9bff4c18eb7c6e2d9d77529",
+      "category": "cross-realm-support",
+      "reason": "Iframe support document for excluded incumbent-global tests; requires parent/frames and cross-origin browser messaging."
+    },
+    {
+      "path": "dom/events/EventListener-incumbent-global-subsubframe.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-incumbent-global-subsubframe.sub.html",
+      "sha256": "11d4495492a01ef82e8067afc9e77e00d5eff2eea92f9a790a206a04869e6665",
+      "gitBlob": "dd683f6f65f89f097ca70594e4a02c2027fdb66b",
+      "category": "cross-realm-support",
+      "reason": "Iframe support document for excluded incumbent-global tests; requires parent/frames and cross-origin browser messaging."
+    },
+    {
+      "path": "dom/events/EventListener-invoke-legacy.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListener-invoke-legacy.html",
+      "sha256": "956c32d6d29e2a77cf18dc550e42a6316c348b162afc8841609400364a18d753",
+      "gitBlob": "a01afcd8d1985c04a18d9f22f1f158331f5c22f0",
+      "category": "browser-ui",
+      "reason": "Requires browser DOM elements and legacy CSS/UI event dispatch behavior."
+    },
+    {
+      "path": "dom/events/EventListenerOptions-capture.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventListenerOptions-capture.html",
+      "sha256": "25e3e924ccd5bde16468d5bb7ee013fe34f67eec73d787fe49f0e2a82b01c0fb",
+      "gitBlob": "f72cf3ca5463f1306c12fb137b84f693345466dc",
+      "category": "document-tree",
+      "reason": "All helpers dispatch from document.body through document, testing capture/bubble propagation."
+    },
+    {
+      "path": "dom/events/EventTarget-add-listener-platform-object.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-add-listener-platform-object.html",
+      "sha256": "154c5d4765e20ed038833b12a3edacecfbd118343d1f6f2d5f7b3daa7a2b6efe",
+      "gitBlob": "d5565c22b3d5afc06310dec58a6de183ebe17eb8",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/EventTarget-dispatchEvent-returnvalue.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-dispatchEvent-returnvalue.html",
+      "sha256": "a1892b3d3f67f32c7c623768ac3d080e92fa3138b42fa52e8a4f0f4a2ece29e6",
+      "gitBlob": "c4466e0d6cdada90be82a95a208c1ee025cfb96a",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/EventTarget-dispatchEvent.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-dispatchEvent.html",
+      "sha256": "e4901dcbc2b8607a8ac6b41a5c65d711369f3a1f0691fba6312159ca7c34ac68",
+      "gitBlob": "783561f5fb59432a240fe552042927b84f8c6454",
+      "category": "document-tree",
+      "reason": "Requires Document-created uninitialized events, DOM Node targets and propagation, plus /dom/nodes/Document-createEvent.js."
+    },
+    {
+      "path": "dom/events/EventTarget-this-of-listener.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-this-of-listener.html",
+      "sha256": "e972d5d702242bb7219dd91476bdd9fe6aecb21c372ce88317d314b2364da086",
+      "gitBlob": "506564c4133ce6606f328d3d739e0818d6a10e79",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/EventTarget-window-constructor.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/EventTarget-window-constructor.html",
+      "sha256": "174831ca7588de119336348f92b82f1358543d2cad100d2ecfcf08ee2855e17f",
+      "gitBlob": "9993e0a79cf7d7918abe6d06b059dca14bbba665",
+      "category": "window-tree",
+      "reason": "Requires a real Window, mutation of its constructor property, and bubbling from document.body."
+    },
+    {
+      "path": "dom/events/KeyEvent-initKeyEvent.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/KeyEvent-initKeyEvent.html",
+      "sha256": "29a768f4dbb976e6b6997c5f228d5b03b7d31a42bb5752aeeb254f6218a88bff",
+      "gitBlob": "3fffaba0143c787d7ad048139fed40b37aeb5539",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/click-on-absolute-pseudo.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/click-on-absolute-pseudo.html",
+      "sha256": "5ce91ae6a5366b300ab32a7ead5862ca59c98a334c300f90d7fc98827e40bef4",
+      "gitBlob": "6c572f500983362e84a93e58ac5a74b9db433c69",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/element-click.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/element-click.html",
+      "sha256": "df075b89eff6027d552c51926303e9a2aa99bf67b903b582477cc87bf3cc6092",
+      "gitBlob": "11d4664ebdb79fe5df89391501a671def3640b02",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/event-disabled-dynamic.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-disabled-dynamic.html",
+      "sha256": "2e4a601eadcf8c2439b41e4233546a973ce016715a9461491616c10103feb0e5",
+      "gitBlob": "3f995b02f1b421f376dc6037d42c442307503fb2",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/event-global-event-targets.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global-event-targets.html",
+      "sha256": "9623130186a3e0cef6ff23abdcf9045adfc21b96c8c70bb2cc6167864e4c6b8d",
+      "gitBlob": "f57351bed15056bbe7ae84e89cc94aead6e4dfab",
+      "category": "global-bootstrap",
+      "reason": "Requires real Window event/error-handler globals or browser global-event dispatch; standalone EventTarget does not supply them."
+    },
+    {
+      "path": "dom/events/event-global-extra.window.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global-extra.window.js",
+      "sha256": "7eead4179d56cfa0ceda2568cabbb7a9631a6a3ca86655ed71b290c8dd2657bc",
+      "gitBlob": "0f14961c40a650a911a1d451e216e27d12195eb5",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-global-is-still-set-when-coercing-beforeunload-result.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global-is-still-set-when-coercing-beforeunload-result.html",
+      "sha256": "4190c122470d63f601e1d9a330bdf3a7d01bb55f4464865e1b8413f141046783",
+      "gitBlob": "a64c8b6b8b6d5fd39ab4f1a4ad1a8bd432fab7c8",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-global-is-still-set-when-reporting-exception-onerror.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global-is-still-set-when-reporting-exception-onerror.html",
+      "sha256": "7cdcf30dc08dbb86172479e7cf9dc6b4087636aade61a23aad56a62b2ded9e48",
+      "gitBlob": "ceaac4fe2b2408e3ac06ab5191fee8f1573294e6",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-global-replaceable.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global-replaceable.html",
+      "sha256": "0777d7f303939ad0d658cc23af93e2d6268559bbae7b796354722e61eb620bf7",
+      "gitBlob": "5fe48bcad28e79f381f05c7a5b75a96d2ef9cdc9",
+      "category": "global-bootstrap",
+      "reason": "Requires real Window event/error-handler globals or browser global-event dispatch; standalone EventTarget does not supply them."
+    },
+    {
+      "path": "dom/events/event-global-set-before-handleEvent-lookup.window.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global-set-before-handleEvent-lookup.window.js",
+      "sha256": "b82b93e4a5f9282e8da0e5fc2bdfccf87f54d388b70789fb38623adf07a2b6dc",
+      "gitBlob": "8f934bcea97fe10a4195d18ab11066bb2c655084",
+      "category": "global-bootstrap",
+      "reason": "Requires real Window event/error-handler globals or browser global-event dispatch; standalone EventTarget does not supply them."
+    },
+    {
+      "path": "dom/events/event-global.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global.html",
+      "sha256": "21bac83bc416dc1a5f3fb9f43a6f75388dcd5133a3c55499921836cf160c95e6",
+      "gitBlob": "f70606fb65496a689515f0e01719a86a98c8b371",
+      "category": "global-bootstrap",
+      "reason": "Requires real Window event/error-handler globals or browser global-event dispatch; standalone EventTarget does not supply them."
+    },
+    {
+      "path": "dom/events/event-global.worker.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-global.worker.js",
+      "sha256": "054dffbb9dfa4aa10aa3dd19236cf3c3b337ebbab5ec922ca97d3243df6bbf53",
+      "gitBlob": "116cf32932bd8dd0efba8b56a573028a9770d07b",
+      "category": "worker-global",
+      "reason": "Requires WorkerGlobalScope importScripts, global EventTarget methods, and worker-specific self.event behavior."
+    },
+    {
+      "path": "dom/events/event-handler-attribute-replace-preserves-passive.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-handler-attribute-replace-preserves-passive.html",
+      "sha256": "4d141747ee8757eeacb40cb4059a09fd2736ce0ed2774d5579ba62ec8fafb7fb",
+      "gitBlob": "c4289da757ca6323632cdb34e2f80a584038a4f9",
+      "category": "document-tree",
+      "reason": "Requires Document/Node targets and DOM tree propagation or activation behavior."
+    },
+    {
+      "path": "dom/events/event-listener-not-fully-active-adopted-node.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-listener-not-fully-active-adopted-node.html",
+      "sha256": "90cc8ea5fca278b9e8912038193e8e8f62e26bdd57bf5f61bea75318b81288c8",
+      "gitBlob": "0e5642f2e6a3eb267a4b8ad7e486578ed6ed03d9",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-listener-not-fully-active-callback.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-listener-not-fully-active-callback.html",
+      "sha256": "1b674ebf527698e75685532619cddd15a6b6eff3b1480aa13a5d966b54451af5",
+      "gitBlob": "3f8b890dc434d9a2b0b4f6ec31b949a1f89f75b7",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-listener-not-fully-active-navigated.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-listener-not-fully-active-navigated.html",
+      "sha256": "c97dcb489a4071c84888d4c545ca6d0b5a4b7225bd804b76d0324d37d1459338",
+      "gitBlob": "3b8b410e66f65593aee259f9381084d84aa0de88",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-listener-not-fully-active-target.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-listener-not-fully-active-target.html",
+      "sha256": "c31ceab8d2d9be6ed3579bb367e66b5351247b2f3f786fad961ed79823cc5f53",
+      "gitBlob": "ece406c4643b73ed01702709f805b1eda6b0d6b3",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/event-src-element-nullable.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/event-src-element-nullable.html",
+      "sha256": "53c49fef294af5ed509b47a3848808fd3a8442d8c7911567b8e925d724af7575",
+      "gitBlob": "528d4688c3b9f5c921416257c8db38c3847828ee",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/focus-event-document-move.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/focus-event-document-move.html",
+      "sha256": "c51cf9c4c05942eba34acf2458207f740cf544db654a772d8fe3bc2115a956ac",
+      "gitBlob": "2943761ce132e3503b424134237f6a98b046c7ce",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/handler-count.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/handler-count.html",
+      "sha256": "6253d3a5df7452198259e172fa06c8107221b5eb4697ea1f7de444398d5a3790",
+      "gitBlob": "deabdaa4df7b51aad448abd8dac77a590dce9010",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/keypress-dispatch-crash.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/keypress-dispatch-crash.html",
+      "sha256": "8c63877ae096f8761ca139504abe68a83bf95870b1971bc10ffd248d5b078950",
+      "gitBlob": "3207adbd8c891903b1c6edd65edc41de9b9e7312",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/label-default-action.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/label-default-action.html",
+      "sha256": "8ec831b7a213b383dfed7790b1fef939c1cb591015c395899bbe9b888f7ef75b",
+      "gitBlob": "5ac5ab548f490b445168f68140d1f0ebf157aa12",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/legacy-pre-activation-behavior.window.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/legacy-pre-activation-behavior.window.js",
+      "sha256": "8619ec7ba45d9d9ba0f2f9ff57b547c35e4bdf14c25df59104f933fa5bfdc8b6",
+      "gitBlob": "e9e84bfad1e6f769262cb3b53ca5c201cc77aa38",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/mouse-event-retarget.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/mouse-event-retarget.html",
+      "sha256": "3b8b58a5e6c3747d85808025014ff1e29b9d197281bffeca9b71250d9314e7f6",
+      "gitBlob": "c9ce6240d40cc8e877a0c1f8299a2215e50841cc",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/no-focus-events-at-clicking-editable-content-in-link.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/no-focus-events-at-clicking-editable-content-in-link.html",
+      "sha256": "dae0216aada357c875f9d8d4574c0f0d37f229e1f6ed59462a42fe573dbe6b84",
+      "gitBlob": "dc08636c467fdfa23caedc2cccb1e5f570a90b82",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-body.html",
+      "sha256": "e1cb04b96e2da29691afbf07278157cbc0c9c36dce29b2dae7dffec2fe6d8859",
+      "gitBlob": "5574fe0acbcccb64ff05213fa518c49d4149e7e4",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-div.html",
+      "sha256": "5b9cb32530fc931c05e945e3571075bd8b54f95e4a39b5c409147df332ce987d",
+      "gitBlob": "6fbf692cd79d768443492402584de4d30e519248",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-document.html",
+      "sha256": "464070aa686578427d8797a4098eb6ccc167a6967d633a43367cb56843769694",
+      "gitBlob": "7d07393c699dd51422b65c518d6e2ae42e7936e6",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-root.html",
+      "sha256": "43b6be30c86d881d24d1f7c9e19eb876e405884fc6537c4c043008f5d74878fa",
+      "gitBlob": "e85fbacaba6a975953a8537439c188e89cabc133",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-mousewheel-event-listener-on-window.html",
+      "sha256": "2242e429d54b1438fb8fc714cfa3e20105762cbb6b311b4b734d3586917613b7",
+      "gitBlob": "29b09f85615d61195fa678487c8e9f5011dc9fcb",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-body.html",
+      "sha256": "6ca8f7e371d24f6f4694ff9a0aa5d27927ea303e1b784b02cf8fedf509482a0c",
+      "gitBlob": "f417bdd0a6681712d9dbb8189b5bd7e18fbe96c4",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-div.html",
+      "sha256": "e4c6dbf3a4112d41ba3f1b2bab4bfda7649bc9c86fd783a4e6dacd4542e09376",
+      "gitBlob": "11c9345407566d006ab73ee542a45233b27d0616",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-document.html",
+      "sha256": "977a51773e1a04554490bc0a00d55a169c5fad6f53700b2eeef6911291d6bc6a",
+      "gitBlob": "8b95a8d492be36bcd1aced7b03ddaf7b0ecdb4ee",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-root.html",
+      "sha256": "96dda84c3d8cd580b26abe74abbc1d70dcdff53a7aa3ca988e2d75c4aab0250d",
+      "gitBlob": "c41ab72bd8c645b12525f2fe9391a0baab0ae228",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchmove-event-listener-on-window.html",
+      "sha256": "f106eef9024edd551ba6c9814fa5d96d522cb694cca56ec35b6f96759bdcae85",
+      "gitBlob": "3d6675c56615ebe7b51076576169cdd0e1c73510",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-body.html",
+      "sha256": "8352ee2e9c98e05a91c08a14544e2662e63eb54787a3d5a78a3f21629256f59a",
+      "gitBlob": "f6e6ecb06d9c557a55a2ee026adf050cac189fea",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-div.html",
+      "sha256": "700687bcb83b000370ebf0291181a33f4cab8b56880ac4bfe7ccd11019488e70",
+      "gitBlob": "2e7c6e6b3b6992c0f1f85c94df9afe092a316277",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-document.html",
+      "sha256": "33fa9a9f5eb06cded991e770f755ef940e385ef5144d6de3989e52ece6f4563c",
+      "gitBlob": "22fcbdc322ca27e12d0e6c152182510fbbdde4e3",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-root.html",
+      "sha256": "9a98431ee5d0a5b0a98b5fbf66565d24326ed9abf3e67a0d7ad3742c1e449317",
+      "gitBlob": "56c51349a04f3875d38cab2a00cc5183fe1d2f9d",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-touchstart-event-listener-on-window.html",
+      "sha256": "e1aed48fd2e893d2ab890790bb2429b2896412278d2a52ef6097bc4c5d3945da",
+      "gitBlob": "4e9d424a9ded160d8dc2b7267f9fd7472557add0",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-body.html",
+      "sha256": "5954d09b0866d4ace4c22ec59645624e7408f355e2f6b073fd1b7318b2c76487",
+      "gitBlob": "070cadc29187af4d8b7403f07e5cfcc8056d2efa",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-div.html",
+      "sha256": "32da0394c0fb0c3e63b677486106ad18711f718e7c638b75c7f2b745fc1b859a",
+      "gitBlob": "c49d18ac139a55ac984f27a5edc8b9c9e82292e2",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-document.html",
+      "sha256": "8bf10b935c6d345215d93eb82fdfd63f0737927b97ec9439f2e37b86607c06a0",
+      "gitBlob": "31a55cad43e17d2fce71c8ea51bbbbe0c613bf9a",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-root.html",
+      "sha256": "01e499b342317a7e266571dbbcd5bcf7255edf8a73cd6b42b547ea7d2b941860",
+      "gitBlob": "b7bacbfc7ceb3843267c1c3677e57782c94f9d27",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/non-passive-wheel-event-listener-on-window.html",
+      "sha256": "6d8e29814c0a4a031dcf2c0ff72602fb5a002fef65b9165a9c3ad39d6b51589e",
+      "gitBlob": "c236059df4dac95f90513dc8a691ecd5917ea9e9",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-body.html",
+      "sha256": "be5e02a7e63d006bc96b287a060767a1110111f735426f859eb0aa3c18f6672e",
+      "gitBlob": "9db12cfbdc73430a6e3461e185d33a4a94d459b5",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-div.html",
+      "sha256": "3381fba195fda6080b54616b56744f1536226802b3b92847ba05997a231de048",
+      "gitBlob": "373670856b833e96a128385e31f3cc5c3413993d",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-document.html",
+      "sha256": "45ff18ce76510c2e8e0aeac08294510b05187537b1245528811c23b7bd5a701f",
+      "gitBlob": "71262280b6fec6fcdd63d4809455ce372cbcbbc3",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-root.html",
+      "sha256": "4aa2c580447691f2c3d93887b1cc16fab4918840508d518924ad61d561b1bf1f",
+      "gitBlob": "fc641d172e91bba7c111eac8de39880f289e5387",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-mousewheel-event-listener-on-window.html",
+      "sha256": "bf3ced1d9af1785a18aa980268864e1d41eb188fb42bb5be590670610869da67",
+      "gitBlob": "f60955c7c488951421785db2cece005a326825ad",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-body.html",
+      "sha256": "41ff92b9699bf26210e0c361db4881b48bb294407f7ca552306d4530cdcf8c48",
+      "gitBlob": "2349bad258343449b216176f7a1776ff961f0b48",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-div.html",
+      "sha256": "0c86ccf85ebd2b8ddd86ba968eadc854edaef752ac99835ab0d6140b832f7a36",
+      "gitBlob": "a61b34851e99ae5a50117ac3ad17fcf55a3dbcfa",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-document.html",
+      "sha256": "4398d22af296aba7d0473eeeedcfa03aa15eece6010c7ffb30e1c49cc47845c1",
+      "gitBlob": "b49971b5b0145ec63b939d8a1effc48dfc082c65",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-root.html",
+      "sha256": "054bea0997759cdaf0381733de0ac5ecd98faac6deedb12a558309894b090248",
+      "gitBlob": "b851704590086366a3c88c0eed27926e9d6851af",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchmove-event-listener-on-window.html",
+      "sha256": "3d6b073f6d5ad47ee950b2df2e5f4b4ae9430842ea6e008cee683944189e8c08",
+      "gitBlob": "351d6ace84593511032b08b1fae6e2657a3e7a18",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-body.html",
+      "sha256": "d86254009ab72f07e196c9e23b54ddfdc858c6ecc6c9365266153f32a9bc1d82",
+      "gitBlob": "c3d2b577fd8c661005c390ac14712e5170526ede",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-div.html",
+      "sha256": "615e51c2bcbe2d20e94cce4fc4dbc73cabb0ca9ceb28d2e334002c98bb67d006",
+      "gitBlob": "103e7f0d233a6059049e4957ae13cf67c8ebb504",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-document.html",
+      "sha256": "414b53f74b96efdde616d682e38d08f27020d4002400c885e28f963f050659fe",
+      "gitBlob": "2e4de2405fb2fb44e3eef85b2c081e5d86e3455f",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-root.html",
+      "sha256": "7e115df407416a6086b3bb1a087e1710e1afeddbf5de003bddbebc18403d63b6",
+      "gitBlob": "0f52e9a16fe67c99ae7eea2d9d103b7fe6870cf1",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-touchstart-event-listener-on-window.html",
+      "sha256": "262b22c15ee89c110326b9b322c5fde4a5b44b6efc2ec56931e96472308d5198",
+      "gitBlob": "c47af8101f2b7bc953e6118c1af74ce2a6798ea8",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-body.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-body.html",
+      "sha256": "12038dbab0f788f3e30563fe6c2fdc7206d3463024fa031c02c510ed1dbc4e65",
+      "gitBlob": "fe0869b0229f5cd8c7371820db22018d5f418706",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-div.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-div.html",
+      "sha256": "eb4517351b0d474ce57d4b3da50d1d438a5a230124b3c0512fe925406b1d47f5",
+      "gitBlob": "e2ca6e795ae0f364e2243db9731d903870c0d55b",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-document.html",
+      "sha256": "27c182e36b8179c9a19df3966f176e98cea3bebe9c229875f965b747b01122c9",
+      "gitBlob": "61b716f7bbfb580e596a1d2955d0ab1449d8beea",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-root.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-root.html",
+      "sha256": "81863e9f1b734069b1011d8a3840f73d0284840a275e0c11790ac9f18f5b2150",
+      "gitBlob": "6b383bc871d7aadfd125071ce88d97cd392dcd36",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/passive-wheel-event-listener-on-window.html",
+      "sha256": "d8223038464572c799f216fdfb60e05628560d06124bf8a2635f7b780d1821c9",
+      "gitBlob": "a1e901f5527d9ae85420f193cbd456ed0c34cd10",
+      "category": "browser-input",
+      "reason": "Requires real browser Window/Document/element targets and wheel/touch input behavior."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/resources/scrolling.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/resources/scrolling.js",
+      "sha256": "c07eac5924ce4dbe77dcd662e7569f8494bbb46e1ce3daa1bd721d9fc66362d5",
+      "gitBlob": "88e10f5efdceab71dac9cecabdc12bc82ad8a7fa",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/resources/touching.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/resources/touching.js",
+      "sha256": "5fe1863abce09f1e14779e973fd384620497a0d05f5bea916c6c4468037ea06d",
+      "gitBlob": "620d26804bf8c74662d4299eccfbbb409949c212",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/resources/wait-for.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/resources/wait-for.js",
+      "sha256": "e36ac1f346b7d12acfc06b14e8a52db0658fdcfd8dfd0169938d72c9a895321b",
+      "gitBlob": "0bf3e558342fd60e1bbd2cf85b3bcf7c5db6f4e1",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/synthetic-events-cancelable.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/synthetic-events-cancelable.html",
+      "sha256": "3f352f06442c0b58b95bf2dcfe856d8fbeda2f45d7b9dc8a107f0b390067afc9",
+      "gitBlob": "4287770b8d58281c09c8174b9d7757174e51ff29",
+      "category": "global-bootstrap-ui",
+      "reason": "Uses global addEventListener/dispatchEvent plus WheelEvent and TouchEvent interfaces; those host surfaces are absent."
+    },
+    {
+      "path": "dom/events/passive-by-default.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/passive-by-default.html",
+      "sha256": "dcf94a05375d05de0b0a8c3092e406014de86bcca9f56838d8d80ce966775cd2",
+      "gitBlob": "02029f4dacf81180c846b27f0f2de4b0e8f5cc05",
+      "category": "document-top-level",
+      "reason": "Top-level target enumeration requires Document/Window nodes before registrations; tests browser default-passive policy."
+    },
+    {
+      "path": "dom/events/pointer-event-document-move.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/pointer-event-document-move.html",
+      "sha256": "eb20c7c75f65fb2ea21cfa4c7996714703bc251061b6fb9922b0b85089828038",
+      "gitBlob": "91e7c36860572a7ab80409c524fc9d17fdc962b2",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/preventDefault-during-activation-behavior.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/preventDefault-during-activation-behavior.html",
+      "sha256": "b5ac16dd2e184a9159c194386f50da6f8e7bd11478e10abda429c67426aa2c1e",
+      "gitBlob": "928740313471656ccb64ca771e72b2b7c199e27f",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/relatedTarget.window.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/relatedTarget.window.js",
+      "sha256": "b3f0d1e5f294966fef533c253ec53c367426a2ea444e2b65f8b00668c701ca51",
+      "gitBlob": "ebc83ceb209a7c18cdc722cd70352845409cd893",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/remove-all-listeners.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/remove-all-listeners.html",
+      "sha256": "eb0ec7efd257b8c67a6081364dda90ea6de615391d459d1ff44bfa474ddce8fc",
+      "gitBlob": "3a2a751a146bca0fc30144c997fda4cd16242294",
+      "category": "document",
+      "reason": "Requires Document construction, queries, or document-owned event targets unavailable in the package."
+    },
+    {
+      "path": "dom/events/replace-event-listener-null-browsing-context-crash.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/replace-event-listener-null-browsing-context-crash.html",
+      "sha256": "3f7d1c38793d48a62481ed8e0f1b259d08f61aef5f92be216e01fff83bb5ad44",
+      "gitBlob": "f41955eedd39fbdb788b4e1bcdc454fb61f97277",
+      "category": "cross-realm",
+      "reason": "Requires browser iframe/document realms, lifecycle, or navigation behavior."
+    },
+    {
+      "path": "dom/events/resources/empty-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/empty-document.html",
+      "sha256": "46b12f16295ca1e336720f37f5873dbb616002ca0d860c0e8a08aa912dc4b2d2",
+      "gitBlob": "b9cd130a07f77ee1a54f4bf54df54dc126fec1ee",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/resources/event-global-extra-frame.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/event-global-extra-frame.html",
+      "sha256": "690603334e4f3f1386841b772e50d23214c216053105642616dca19b4e3fe8ef",
+      "gitBlob": "241dda8b66f8c8fe128e736bcb073479aee634a9",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/resources/event-global-is-still-set-when-coercing-beforeunload-result-frame.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/event-global-is-still-set-when-coercing-beforeunload-result-frame.html",
+      "sha256": "c8604d4ac0a7a4c216f684a5a68b578a175a9466f058640289f5385e04f12fec",
+      "gitBlob": "5df4fa279363798f2f471467ed674c092c7a1749",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/resources/large-dimension-document.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/large-dimension-document.sub.html",
+      "sha256": "686765cc9b9817a8523326203685a996770e8fba463c5af946078a3a9a8815fc",
+      "gitBlob": "5d29f7be0bbb77e6303598aef833a810e84b6e80",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/resources/not-fully-active-frame.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/not-fully-active-frame.html",
+      "sha256": "4154d6b2fb93fdf036e2e0d6ece4d0b4b5b3d75d4117bbc012178d81d66858b2",
+      "gitBlob": "526bc935310eb860e559ec85aea92fca31b0c830",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/resources/not-fully-active-helpers.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/not-fully-active-helpers.js",
+      "sha256": "6576255280fe3743aae996e592ed96ef123dabf7caed74a64d44d7f16fdaf3e0",
+      "gitBlob": "820fa01a8afcbaeec11293fb6dda4fff2a093554",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/resources/prefixed-animation-event-tests.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/resources/prefixed-animation-event-tests.js",
+      "sha256": "14e5873ac800f550f73e668a21e8e1341f6acd7cde9fb5d0a82e5ec274a0d497",
+      "gitBlob": "021b6bb9dfdc422d1a6c3c9c4a1a039f89a901d5",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/scrolling/iframe-chains.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/iframe-chains.html",
+      "sha256": "422e47a6f8c259c8de9fc7c9ce5a8b95b0cbb29fbf03f5055e74268992266e4b",
+      "gitBlob": "c117210537f7c0afa57afc7e3cd620d06442adb0",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/input-text-scroll-event-when-using-arrow-keys.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/input-text-scroll-event-when-using-arrow-keys.html",
+      "sha256": "8e097a0fc7db8b9f4b2636c348cba6c87ba829df2b1cfce55e712fee7fc37aff",
+      "gitBlob": "f84e4465275b7a3401c8cde88677465d3cc5a18c",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/save-iframe-scroll-offset-when-display-none.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/save-iframe-scroll-offset-when-display-none.html",
+      "sha256": "8cd40c6ae3c38e2fd4ca40a7fb53371059392f360f6594593388b82f1f724d9b",
+      "gitBlob": "3947e47795e3b240744c41f5e12d0e040fbfdf93",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/save-iframe-scroll-offset-when-display-none.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/save-iframe-scroll-offset-when-display-none.sub.html",
+      "sha256": "8f1ffd46fdbc74d96c7682f307511e125fded65b6b4baedbd4c4d14725c9950c",
+      "gitBlob": "f9c22d998362f75127fd57a51a37737b00b1c646",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll-cross-origin-iframes.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll-cross-origin-iframes.html",
+      "sha256": "fa34c6f1b9c6c453a44355532a222dd27408ff444bbde02476cc6c8dd1ef70f7",
+      "gitBlob": "7184e44e340c44c464160a4b80a972bb3c8c93f8",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll-cross-origin-iframes.sub.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll-cross-origin-iframes.sub.html",
+      "sha256": "d7905a65efa9b15d88ad26e13b9e4521149b0bf0079eac65b0904c7031f08a31",
+      "gitBlob": "e6d12794e3fd29e976249d8932dde3a9be4dc083",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll-event-fired-to-element.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll-event-fired-to-element.html",
+      "sha256": "d6600cd062aadf00ce86434e499a3356fbfc2dccc93b12c2767264ceb28d689d",
+      "gitBlob": "3484a2ec92b2bd8faa1d5147568f13a83b8c59d9",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll-event-fired-to-iframe.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll-event-fired-to-iframe.html",
+      "sha256": "ace904295da7812b0bcb17155c32df1f1b2cadb88c23d2bf119e278debf3d935",
+      "gitBlob": "2ff3de79d33fa0a676a0eda4f109b6d0e634cc9d",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll-event-not-fired-on-ancestor-style-change.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll-event-not-fired-on-ancestor-style-change.html",
+      "sha256": "060a3ad348d0260ed37d78114a484448a12a843f3334ee9495ab3592e527764b",
+      "gitBlob": "7f55de74c16858ab4579eccf2a594c38cdf4be5c",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll-events-fired-once-per-frame-across-display-none.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll-events-fired-once-per-frame-across-display-none.html",
+      "sha256": "ae3bbd57d4b9888474bfa0f3af65c1efe1439559fc41f44819c214fcb2bdc122",
+      "gitBlob": "634853a0ef49223c343eb874c057a1130f2240e2",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollIntoView-in-onscroll-to-sticky.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollIntoView-in-onscroll-to-sticky.html",
+      "sha256": "8e0dff5af2045d0147f8abd158ef3b124baf7e88f47552f2c5fd507178142a17",
+      "gitBlob": "fd8c7af407e74ea5edfe3972b103fb74ca4ff5a6",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scroll_support.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scroll_support.js",
+      "sha256": "ebd9e6ce9a23f1267d3aa1bd61c8e4d3303ab1f885cf1dc0733a154cd5260411",
+      "gitBlob": "05b06491670870a18cf3775ee3dacbeaec37b208",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-after-instant-scroll-in-microtask.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-after-instant-scroll-in-microtask.html",
+      "sha256": "02ca35eb68f20422d5f010c4987708070cb7ca5f8a6d460499894c4cfd512b39",
+      "gitBlob": "d4a683b758ac3ddd2ea0bab1daa7d6dc29696475",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-after-layout-clamping.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-after-layout-clamping.html",
+      "sha256": "237a1a4af5bd05b7c87e54e701f4af19d3e5bf0a54091622df45d8813e52258d",
+      "gitBlob": "2877a4beb232480f0f1521b48e7aeb2803ffc5f1",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-after-sequence-of-scrolls.tentative.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-after-sequence-of-scrolls.tentative.html",
+      "sha256": "a4f50013dd7696e3142fafa6c38cb5ae086c026e37cb0e8a29b19a52e57f4b5c",
+      "gitBlob": "dab6dcc9bd8d67a514ca95daf3e1d64b10a45188",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-after-snap.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-after-snap.html",
+      "sha256": "7f96b0a795ab7c5a3ac190ddf503382c15b2053f438b37711bb2ccad2077f45f",
+      "gitBlob": "03079ddc6cad8c82da74725206b39ca0924b0615",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-for-mandatory-snap-point-after-load.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-for-mandatory-snap-point-after-load.html",
+      "sha256": "82a9b1bdada783126a7ab48c4ae0a239dc34e9726f18b67a4c81632159c86068",
+      "gitBlob": "f3791134204497d7c3fdc73da19a55f5cbc3a114",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-for-programmatic-scroll.html",
+      "sha256": "fd20ea830b805604aee097aa41a2838dbb05c390782e4ca14dd5d5bb7a81095d",
+      "gitBlob": "a958ff675c59ab77a329c8cb1dc159451a7de1c3",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-for-scroll-attr-change.html",
+      "sha256": "bad376c5cd9e4d0a671fe3a45dca8643299d63425abdef3c922ea8e1436b4f1b",
+      "gitBlob": "0e59aba17797fc40e06add85f3d18757af695619",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-for-scrollIntoView.html",
+      "sha256": "501c811dfd6c25de5e01bee23b4c827751d4d2e043ba757afbcc8238cf020297",
+      "gitBlob": "e3e63f2820158623851bc83ec6b49d6da9adc0c2",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-to-document.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-to-document.html",
+      "sha256": "4666051508030644693ba6e14f0433396cf0b2a21820c7a668d7b48c49a81397",
+      "gitBlob": "797c2eb53da0e31f848fbe5f26f656231d57fb45",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-to-element-with-overscroll-behavior.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-to-element-with-overscroll-behavior.html",
+      "sha256": "84889e7ce926fd63bf935c51668f13f2f29be8f6169e9326c8b130bfc5fd7e96",
+      "gitBlob": "edda88e7cb2064757cb4b34c2bf7dcdab97e8f65",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fired-to-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fired-to-window.html",
+      "sha256": "06fd56b4f340e79cbdf394ae5365595a82a09d24b5a4e13d32999b4e5cf29501",
+      "gitBlob": "d2fd6f4d3158a5efa40b9621a057ee0bc26f71ab",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fires-for-repeat-key-ending-after-scroll-container-end-is-reached.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fires-for-repeat-key-ending-after-scroll-container-end-is-reached.html",
+      "sha256": "1588838a15bc158246e867af991b45a9dc39e0c7dd0a74609501fc78cc496a49",
+      "gitBlob": "33c2b13124e90a736761a8cb2649d9c2826bab7f",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fires-on-visual-viewport.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fires-on-visual-viewport.html",
+      "sha256": "a170d44a0e340a209fef69ebbdbc0b277abb3f5c3c04e683eff8c6dabdc8ec27",
+      "gitBlob": "841931a7c1f12515721ec10d41b05413f2a68f56",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fires-to-iframe-inner-frame.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fires-to-iframe-inner-frame.html",
+      "sha256": "564bb7de4be353e7fbce0b9267d7d5f942ff4e134c4d3076b5039c6b9710ccc6",
+      "gitBlob": "115e583c067ebd381da8f9665b3a322c29b41268",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-fires-to-iframe-window.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-fires-to-iframe-window.html",
+      "sha256": "0888825ebfa7db45588628b66a659a455e84b8b508b312322ef684ff208cbdf2",
+      "gitBlob": "d90203e2880a8f4322352038c8025bf9b12cc118",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-for-user-scroll.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-for-user-scroll.html",
+      "sha256": "2aacd4b5b934c59faf18d5cd36a14f4c1148850d8c4e04b30581fa13dba06100",
+      "gitBlob": "a06843a35e7ec9c827d70fd8f6eefa5f9bfdf724",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-handler-content-attributes.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-handler-content-attributes.html",
+      "sha256": "05e71aa198d828516811586c5ea6143121bdb4b68daed65bb0232c53cee16757",
+      "gitBlob": "47f563c39bd9072267529e72bd43c89948c9f962",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-not-fired-after-removing-scroller.tentative.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-not-fired-after-removing-scroller.tentative.html",
+      "sha256": "9deab4759992effb40a49083c5a97f45c251e88abf61f9669e0e2013b183c3d2",
+      "gitBlob": "95447fbd12ea2a0c149d196a3ef0fe681ea03131",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-event-not-fired-on-no-scroll.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-event-not-fired-on-no-scroll.html",
+      "sha256": "f53bb8d0ee7ecc45db47a08747747dff1722e176581e67f5296266f6639eed32",
+      "gitBlob": "761574605d581db6677758e51416d6c6e636ad5c",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-fires-to-text-input.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-fires-to-text-input.html",
+      "sha256": "d804aeb4178d3e1484ddf299066eeeded6c2d10b73887a85ceeb80e5d4210952",
+      "gitBlob": "540fa730b0e56ae02e5946b9e23d65b4f501366b",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-user-scroll-common.js",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-user-scroll-common.js",
+      "sha256": "5f63061beb1b6acd30491e4ebf70a9e6986fd8ea77e2231239533bcf7a3dbf72",
+      "gitBlob": "1b63723388284352dd5e83533e996a826fa37d00",
+      "category": "support",
+      "reason": "Support for excluded browser/DOM/UI fixtures; not a standalone test file."
+    },
+    {
+      "path": "dom/events/scrolling/scrollend-with-snap-on-fractional-offset.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/scrollend-with-snap-on-fractional-offset.html",
+      "sha256": "8758dbb74399b773a7ac914ecd9716254ee931fd9cdc07ccdfb838080cd8b14b",
+      "gitBlob": "d1f50304add2ac1f1c3fb69a197150951b2e6a0a",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/visibility-hidden-scrolls.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/visibility-hidden-scrolls.html",
+      "sha256": "75b85502392968cf503831da29862cf7f7108ab4d52d9c00a6b7ec95ff1cca8c",
+      "gitBlob": "b5d325a5ad529cc4b69cc3e27b5efa8e7497c692",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-composed.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-composed.html",
+      "sha256": "1ddd62ca446fb8aeae4ebc89736454c6272f6878c17f53a7966de03f58662061",
+      "gitBlob": "6c6a162ce6b43b9d0579758e88aa5c25f16aad72",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-no-scroll-after-prevent-default.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-no-scroll-after-prevent-default.html",
+      "sha256": "33317e75fa0dfdb9b17fae4ad8ef973bfd5e498b38136947c45d02b0041e7b81",
+      "gitBlob": "bd9f523e9077da711ef680c015c3c57f9166fd26",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-basic.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-basic.html",
+      "sha256": "99010aa4a602a6bfa479929d1cb55aa0236e303cfb3e3369119907b0ef671587",
+      "gitBlob": "1b9df69ec77f883685166ef7963b0c8a1911fd73",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-multiple-action-chains.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-multiple-action-chains.html",
+      "sha256": "68aa77db613bf049573870d53428c01af34a06a0591ffe58234ad104fcba2c1c",
+      "gitBlob": "3b46b2f99a9c994864e53b9ea0d5fa9cbc9921a4",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-target-display-change.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-target-display-change.html",
+      "sha256": "cbb6cd0f00c588da6b8bd0e7facf89a2391d950bd6a6cfd60e71ad1fca318ba1",
+      "gitBlob": "6ca3c78b74cefe8b82735d32d9aee2688f10f208",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-target-elements.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-target-elements.html",
+      "sha256": "d3e2854dd99d7c63d2181e37c749c9d9f57b4c2b3625af11aa99849a35e5665f",
+      "gitBlob": "0109b7b6b18b92404868b20c89cc69d8ee142985",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-target-move.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-target-move.html",
+      "sha256": "e7e839299f41eca8ba857f1aa980d931c769416f97a21c7998d58548ab4d0379",
+      "gitBlob": "a739d1cd5479ad5c414ff7bb2169911678bea8e1",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-target-removal.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-target-removal.html",
+      "sha256": "b76c210a66ee915ebe5fde92b7d209d7068bde5b45e7318d0361dc8cb14b0c71",
+      "gitBlob": "c25a30a3da5f7699c5a89494cc43f7f836f9525d",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/scrolling/wheel-event-transactions-target-resize.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/wheel-event-transactions-target-resize.html",
+      "sha256": "48f526cb5ffa3ea12a2b5ea983bfa98320d83bb539095ff26db3cff3eb1cdae2",
+      "gitBlob": "eb7431fca475db37f0ff217f37c132f5b1c251f2",
+      "category": "browser-scrolling",
+      "reason": "Requires browser layout/scrolling, viewport or iframe behavior, and/or real user-input automation."
+    },
+    {
+      "path": "dom/events/shadow-relatedTarget.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/shadow-relatedTarget.html",
+      "sha256": "d2ecb3cc3e8fd7818c3c0c27b1597d25a3c66aadcc68d21a48db0d5d93c7fdfb",
+      "gitBlob": "713555b7d8ab6117d12c70d08185335246e44e1a",
+      "category": "browser-ui",
+      "reason": "Requires DOM element activation, UI event subclasses, focus, or browser input automation."
+    },
+    {
+      "path": "dom/events/webkit-animation-end-event.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/webkit-animation-end-event.html",
+      "sha256": "05e4fcf4d850c1734a9f91d76959ad5a57ef08f4e2d3fffe7403cdb138cfbc9d",
+      "gitBlob": "4186f6b7a9d2415f7df6174b7b5ea9e42c550bae",
+      "category": "browser-ui",
+      "reason": "Requires prefixed CSS animation/transition event interfaces and browser rendering."
+    },
+    {
+      "path": "dom/events/webkit-animation-iteration-event.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/webkit-animation-iteration-event.html",
+      "sha256": "f9a40d6ad622fb5a11aa9e63873fd5f40616a1f2a28776a163e68401d219f909",
+      "gitBlob": "fb251972a32e1619c18a083ffc76dcd8284fd126",
+      "category": "browser-ui",
+      "reason": "Requires prefixed CSS animation/transition event interfaces and browser rendering."
+    },
+    {
+      "path": "dom/events/webkit-animation-start-event.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/webkit-animation-start-event.html",
+      "sha256": "6f01cd8db48b56f44833877193af1285c0c6c3587b3a6c44aa13d6422ee52257",
+      "gitBlob": "ad1036644a96e15956d5159b886ca7879a916204",
+      "category": "browser-ui",
+      "reason": "Requires prefixed CSS animation/transition event interfaces and browser rendering."
+    },
+    {
+      "path": "dom/events/webkit-transition-end-event.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/webkit-transition-end-event.html",
+      "sha256": "401639452f8cebe314ca458d086179b2e5191adb91c1dd2dd9ff15b973f5bed6",
+      "gitBlob": "2741824e3054a2b4fa41d0cfe33488e7a3cdd3ae",
+      "category": "browser-ui",
+      "reason": "Requires prefixed CSS animation/transition event interfaces and browser rendering."
+    },
+    {
+      "path": "dom/events/window-composed-path.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/window-composed-path.html",
+      "sha256": "7c3e2ffb7330aa1dc73808cedcbfbbf39853d80906f84785dcc1d64a3ad2c734",
+      "gitBlob": "2411f87f2c16cddf448288335fcb9e7b6beae6da",
+      "category": "window-global",
+      "reason": "Tests composedPath on the actual Window EventTarget; no Window provider is present."
+    },
+    {
+      "path": "dom/events/window-event-restored-after-throwing-onerror.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/window-event-restored-after-throwing-onerror.html",
+      "sha256": "30bf27ef66f64e8a518abb41e192a60ea83e3b2f05cb7674e625b3254a8859eb",
+      "gitBlob": "4ad44400982d8247a8690891008181a5b3441971",
+      "category": "global-bootstrap",
+      "reason": "Requires Window.onerror and the legacy Window.event reporting/restoration algorithm."
+    },
+    {
+      "path": "dom/abort/abort-signal-any-crash.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/abort-signal-any-crash.html",
+      "sha256": "713c9dd6f8a8280ef05cf1268f9000b4bb980ca87b3da538685afbe0643166af",
+      "gitBlob": "912c0d0ada738593700f453ff4810ece2d6e9af6",
+      "category": "crash-browser",
+      "reason": "Browser crash-test protocol uses garbageCollect and document.documentElement completion marker."
+    },
+    {
+      "path": "dom/abort/abort-signal-timeout.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/abort-signal-timeout.html",
+      "sha256": "d8fc57dfae79069ff5a5476f2201bf5298d6ede6b9f44769c09a959b39a655e2",
+      "gitBlob": "2a9c13d61434b43c5c47e426c3f6df94fbb67370",
+      "category": "window-lifecycle",
+      "reason": "Requires a real iframe Window and verifies AbortSignal.timeout stops after frame detachment."
+    },
+    {
+      "path": "dom/abort/crashtests/any-on-abort.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/crashtests/any-on-abort.html",
+      "sha256": "bb5ef5a7cd85aaa25b37d4c756008c5f956898bd2b10368708c1807e804a2ac7",
+      "gitBlob": "07a0f0bd3c2ba66f7f8f9d371397fd3f77b6a0f2",
+      "category": "crash-browser",
+      "reason": "Browser crash test runs from Window DOMContentLoaded; it has no testharness test registrations."
+    },
+    {
+      "path": "dom/abort/crashtests/timeout-close.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/crashtests/timeout-close.html",
+      "sha256": "473768f6cbfd859588b4a4b5484466424e32ea3318dc5d81ae9d238de1155ab7",
+      "gitBlob": "ee8544a7f57edb8cac05e94dbd836eac20a37b85",
+      "category": "crash-browser",
+      "reason": "Requires iframe navigation/closure, synchronous XMLHttpRequest, and the browser crash-test completion protocol."
+    },
+    {
+      "path": "dom/abort/reason-constructor.html",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/reason-constructor.html",
+      "sha256": "9126ef15cf88759d517d4bfb6ce24b652064d2aaae70fcea9e7067566e382c67",
+      "gitBlob": "0515165a0f6788ff66526ff04414040e5d1c61ba",
+      "category": "cross-realm",
+      "reason": "Requires a real iframe realm and checks that the abort reason uses that realm's DOMException constructor."
+    }
+  ],
+  "metadata": [
+    {
+      "path": "dom/events/WEB_FEATURES.yml",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/WEB_FEATURES.yml",
+      "sha256": "16503e2a9419a788c50dea71ca1b18fe876518883623b255288e366a236aa4d9",
+      "gitBlob": "7d9e87bbcedfa2c2a7d581a71c2283c01d216333",
+      "category": "metadata",
+      "reason": "WPT browser feature metadata, not an executable fixture."
+    },
+    {
+      "path": "dom/events/non-cancelable-when-passive/WEB_FEATURES.yml",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/non-cancelable-when-passive/WEB_FEATURES.yml",
+      "sha256": "53a4521e0439e387ab83977a1defc8718347b022c764b21c3b45f5fc2de764dd",
+      "gitBlob": "019d3957d514115336383bdca0873d435dcf1e9e",
+      "category": "metadata",
+      "reason": "WPT browser feature metadata, not an executable fixture."
+    },
+    {
+      "path": "dom/events/scrolling/WEB_FEATURES.yml",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/events/scrolling/WEB_FEATURES.yml",
+      "sha256": "4ffabaf5e1812d2434d60768d587f1002c54a3c96db994f5066dfe18a38a8448",
+      "gitBlob": "34c514745f0a1572c38a592a474c016b3d50e7c7",
+      "category": "metadata",
+      "reason": "WPT browser feature metadata, not an executable fixture."
+    },
+    {
+      "path": "dom/abort/WEB_FEATURES.yml",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/fd3d5e4c393a0ee7ff29b7e6c2281e486f7699ee/dom/abort/WEB_FEATURES.yml",
+      "sha256": "19ab3ac6c130d55cc0a8c43dea9ea3969b5cb1f12ba092a43e71e6be5278038d",
+      "gitBlob": "837aab14bca54d346b1021e03a3e8d3dcbf35a92",
+      "category": "metadata",
+      "reason": "WPT browser feature metadata, not an executable fixture."
+    }
+  ],
+  "summary": {
+    "selectedFixtureFiles": 18,
+    "selectedSupportFiles": 1,
+    "expectedRegisteredTests": 92,
+    "explicitlyBlockedTests": 8,
+    "expectedRunnableTests": 84,
+    "excludedHtmlJsPaths": 193,
+    "metadataPaths": 4
+  },
+  "harness": {
+    "assertions": [
+      "assert_array_equals",
+      "assert_equals",
+      "assert_false",
+      "assert_not_equals",
+      "assert_throws_exactly",
+      "assert_throws_js",
+      "assert_true",
+      "assert_unreached"
+    ],
+    "entryPoints": [
+      "test",
+      "async_test",
+      "done"
+    ],
+    "testContext": [
+      "add_cleanup",
+      "done",
+      "step_func",
+      "step_func_done",
+      "step_timeout",
+      "unreached_func"
+    ],
+    "notes": [
+      "Use stable per-file ordinals for unnamed registrations.",
+      "Callback assertion failures must mark the owning test failed even when EventTarget catches them.",
+      "Invoke non-arrow test callbacks with the test context as this.",
+      "Run cleanups on success and failure.",
+      "AbortSignal.any.js waits 2000 ms in its no-event async test.",
+      "Use the actual ordinary-node provider for timing; do not substitute Node web API implementations.",
+      "No fake Document, Window, Performance, global EventTarget, or cross-realm behavior.",
+      "HTML extraction executes unedited inline script text; the fixture file itself is unchanged."
+    ]
+  },
+  "subsetReview": {
+    "method": "Inspected all top-level candidate callbacks with acorn and reviewed callback/helper/top-level DOM dependencies. Also scanned nested events directories; only generic-events-stay-cancelable.html supplies additional standalone coverage.",
+    "additionalStandaloneSubsetsFound": false,
+    "specificDependencies": [
+      "Event-constants.html performs document.createEvent in setup before helper-driven registrations.",
+      "Event-defaultPrevented.html shares ev from the first document.createEvent case.",
+      "Event-type-empty.html calls a helper that creates a Document element even for its Constructor case.",
+      "Event-subclasses-constructors.html reads window and document while constructing top-level expected data.",
+      "Event-dispatch-redispatch.html has a trivial test nested in browser-driven input work; it is not independent core Event coverage."
+    ]
+  }
+}
