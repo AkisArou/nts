@@ -87,6 +87,8 @@ test("parameterless operations ignore unused algorithm properties", () => {
     { name: "HMAC", operations: ["sign", "verify", "exportKey"] },
     { name: "AES-KW", operations: ["wrapKey", "unwrapKey", "importKey", "exportKey"] },
     { name: "AES-CBC", operations: ["importKey", "exportKey"] },
+    { name: "Ed25519", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+    { name: "X25519", operations: ["generateKey", "importKey", "exportKey"] },
   ];
   for (const { name, operations } of inputs) {
     for (const operation of operations) {
@@ -95,6 +97,9 @@ test("parameterless operations ignore unused algorithm properties", () => {
         get hash() { throw new Error("unused hash"); },
         get length() { throw new Error("unused length"); },
         get iv() { throw new Error("unused iv"); },
+        get namedCurve() { throw new Error("unused curve"); },
+        get public() { throw new Error("unused peer"); },
+        get context() { throw new Error("unused context"); },
       }, operation);
       assert.equal(normalized.constructor, Algorithm);
       assert.deepEqual(Object.keys(normalized), ["name"]);
@@ -618,26 +623,39 @@ test("ECDSA selects and normalizes a hash separately for each signature operatio
   }
 });
 
-test("ECDH public dictionary conversion checks only the CryptoKey brand and preserves its identity", () => {
-  for (const type of ["public", "private", "secret"] as const) {
-    const publicKey = createCryptoKey(type, false, new KeyAlgorithm("not ECDH"), [], {} as CryptoKeyHandle);
-    const reads: string[] = [];
-    const normalized = normalizeAlgorithm({
-      get name() { reads.push("name"); return "ecdh"; },
-      get public() { reads.push("public"); return publicKey; },
-      get namedCurve() { throw new Error("ECDH does not read a namedCurve parameter"); },
-      get hash() { throw new Error("ECDH does not read a hash parameter"); },
-    }, "deriveBits");
-    assert.ok(normalized instanceof EcdhKeyDeriveParams);
-    assert.equal(normalized.name, "ECDH");
-    assert.equal(normalized.public, publicKey);
-    assert.deepEqual(reads, ["name", "name", "public"]);
+for (const name of ["ECDH", "X25519"] as const) {
+  test(name + " public dictionary conversion checks only the CryptoKey brand and preserves its identity", () => {
+    for (const type of ["public", "private", "secret"] as const) {
+      const publicKey = createCryptoKey(type, false, new KeyAlgorithm("not an agreement algorithm"), [], {} as CryptoKeyHandle);
+      const reads: string[] = [];
+      const normalized = normalizeAlgorithm({
+        get name() { reads.push("name"); return name.toLowerCase(); },
+        get public() { reads.push("public"); return publicKey; },
+        get namedCurve() { throw new Error("agreement does not read a namedCurve parameter"); },
+        get hash() { throw new Error("agreement does not read a hash parameter"); },
+      }, "deriveBits");
+      assert.ok(normalized instanceof EcdhKeyDeriveParams);
+      assert.equal(normalized.name, name);
+      assert.equal(normalized.public, publicKey);
+      assert.deepEqual(reads, ["name", "name", "public"]);
+    }
+    for (const publicKey of [undefined, null, false, "key", {}, Object.create(CryptoKey.prototype)]) {
+      assert.throws(() => normalizeAlgorithm({ name, public: publicKey }, "deriveBits"), TypeError);
+    }
+    const error = new Error("peer getter");
+    assert.throws(() => normalizeAlgorithm({ name, get public() { throw error; } }, "deriveBits"), value => value === error);
+  });
+}
+
+test("curve25519 normalization matches only its canonical algorithm names", () => {
+  for (const name of ["EdDSA", "ed-25519", "X-25519", " Ed25519", "Ed25519 ", "Ｘ25519", "curve25519"]) {
+    assert.throws(() => normalizeAlgorithm(name, "generateKey"), notSupported);
   }
-  for (const publicKey of [undefined, null, false, "key", {}, Object.create(CryptoKey.prototype)]) {
-    assert.throws(() => normalizeAlgorithm({ name: "ECDH", public: publicKey }, "deriveBits"), TypeError);
+  for (const name of ["Ed25519", "X25519"] as const) {
+    const normalized = normalizeAlgorithm(name.toLowerCase(), "importKey");
+    assert.equal(normalized.name, name);
+    assert.deepEqual(Object.keys(normalized), ["name"]);
   }
-  const error = new Error("peer getter");
-  assert.throws(() => normalizeAlgorithm({ name: "ECDH", get public() { throw error; } }, "deriveBits"), value => value === error);
 });
 
 test("EC export dictionaries ignore every operation-specific member", () => {

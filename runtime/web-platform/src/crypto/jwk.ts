@@ -492,8 +492,9 @@ function stringJsonMember(text: string, name: string, value: string | undefined)
 export function serializeWrappedJwk(key: JsonWebKey, padToEight: boolean): Uint8Array {
   if ((key.kty !== "oct" || key.k === undefined) &&
       (key.kty !== "RSA" || key.n === undefined || key.e === undefined) &&
-      (key.kty !== "EC" || key.crv === undefined || key.x === undefined || key.y === undefined)) {
-    throw new TypeError("Expected an exported octet, RSA or EC JWK");
+      (key.kty !== "EC" || key.crv === undefined || key.x === undefined || key.y === undefined) &&
+      (key.kty !== "OKP" || key.crv === undefined || key.x === undefined)) {
+    throw new TypeError("Expected an exported octet, RSA, EC or OKP JWK");
   }
   // Match dictionary-to-object's lexicographic member order. These are internal
   // typed dictionaries from export, so no caller-owned toJSON, replacer, prototype
