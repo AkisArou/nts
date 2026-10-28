@@ -5,7 +5,10 @@ This corpus imports **172 unedited WebSocket fixture files** from
 It covers `websockets/` outside `stream/`, including the applicable HTML interface
 tests as well as JavaScript fixtures. The fixtures define **330 ordinary-host
 URL-variant runs and 871 test registrations**. The current execution profile has
-**846 runnable registrations and 25 explicitly named blocks**.
+**848 runnable registrations and 23 explicitly named blocks**. The
+[interop follow-up](../websocket-interop-policy/README.md) enables the two
+duplicate-protocol variants. Historical captures below retain their original
+counts and bytes.
 
 [manifest.json](manifest.json) records every source path, revision, SHA-256 and
 Git blob ID, along with the selected variants, dependencies and exclusions. The
@@ -32,7 +35,8 @@ tool versions and capture hashes.
 | Capture | Passed | Failed | Blocked | Registrations |
 | --- | ---: | ---: | ---: | ---: |
 | Initial, with every imported case enabled | 799 | 72 | 0 | 871 |
-| Final, after source fixes | 846 | 0 | 25 | 871 |
+| Reviewed PR #16 capture, after source fixes | 846 | 0 | 25 | 871 |
+| Interop follow-up, full package gate | 848 | 0 | 23 | 871 |
 
 [after-results.json](after-results.json) preserves all final variant diagnostics.
 [per-file-results.md](per-file-results.md) gives before/after counts for all 172
@@ -173,7 +177,7 @@ binding behavior to the implementation. The shared adapter records callback
 assertion failures, verifies registration counts and requires every named block
 to be encountered.
 
-## The 25 named conformance blocks
+## The 23 current named conformance blocks
 
 These cases remain in their original files and registration totals. The manifest
 names each exact test and emits it as a skip with a reason. They remain owed
@@ -186,7 +190,6 @@ conformance or specification-review work and are never reported as passes.
 | `send-data-isolation.sub.html` | 3 | The unchanged tests require the unavailable `FileReader` interface to inspect returned blobs. |
 | `cookies/cross-origin-cookie-set.html` | 1 | The provider has no ambient cookie store or handshake cookie integration. |
 | `mixed-content.https.any.js` | 1 | The provider has no secure-context/environment-settings capability for mixed-content policy. |
-| `Create-protocols-repeated-case-insensitive.any.js` | 2 | The upstream assertion conflicts with the current duplicate-protocol rule and requires review. |
 
 The constant tests failed because constructor static fields remain writable and
 configurable in the ordinary-node binding. Their
@@ -226,15 +229,22 @@ Infra defines that comparison using identical code-unit sequences.
 [RFC 6455 section 4.1, request requirement 10](https://www.rfc-editor.org/rfc/rfc6455#section-4.1)
 requires unique strings and supplies token syntax, with no separate
 case-insensitive equality rule. Applying these rules, the two offered strings
-are distinct. `normalizeWebSocketProtocols()` therefore retains its
-case-sensitive `Set<string>` check and continues rejecting exact duplicates.
+are distinct under the literal comparison rule. That remains a recorded gap
+between the specification text and deployed interoperability behavior.
 
 [WHATWG issue 47](https://github.com/whatwg/websockets/issues/47) identifies this
-exact fixture and remains open at this review. Its browser observations are
-historical, not a current compatibility measurement. Both unchanged WPT
-variants remain explicit blocks for the unresolved WPT/specification
-disagreement, and neither is counted as a pass. No implementation change is
-justified by the published comparison rules.
+exact fixture. Its browser observations are historical, not a current
+compatibility measurement. The maintainer requested interoperability with WPT
+and implementations, and verified that Node 24.20 rejects the mixed-case pair.
+A separate local Node 24.20.0 control reproduced `SyntaxError` with
+`Invalid Sec-WebSocket-Protocol value`. No new cross-browser measurement is
+claimed here.
+
+The [interop follow-up](../websocket-interop-policy/README.md) therefore compares
+the already-validated ASCII tokens case-insensitively while preserving their
+original spelling in the offer. Both unchanged WPT variants now execute and
+pass. This is an explicit interoperability decision; the quoted wording has
+not been reinterpreted as an express case-folding requirement.
 
 ## Directory and environment exclusions
 

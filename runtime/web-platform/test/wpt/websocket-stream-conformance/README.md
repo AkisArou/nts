@@ -111,12 +111,15 @@ required promise. It adds no payload copy or callback closure per frame.
 Masking, native UTF-8 validation and DEFLATE remain untouched. The provider
 already supplies a scheduler, so provider bootstrap is unchanged.
 
-The shared close-dictionary helper's explicit-null `reason` conversion is an
-uncovered follow-up in `semantics.ts`, owned by the prerequisite WebSocket PR;
-it is not hidden behind a WPT pass claim. Existing descriptor initialization
+The shared close-dictionary helper's explicit-null `reason` conversion was an
+uncovered follow-up in this reviewed capture. The separate
+[interop follow-up](../websocket-interop-policy/README.md) fixes it and adds
+explicit controls for both `WebSocketStream.close()` and `WebSocketError`.
+The original WPT captures remain unchanged. Existing descriptor initialization
 is unchanged, and no new reflective surface work is added. FileReader and
 constant-descriptor gaps remain as documented in the prerequisite PR. Fetch
-over the network remains deferred to its separately authorized later item.
+over the network is a separately authorized item stacked on the Fetch/File API
+prerequisites.
 
 All execution here is host evidence under Node. The package gate explicitly
 reports when the compiled axis is skipped because no nts compiler is present;
