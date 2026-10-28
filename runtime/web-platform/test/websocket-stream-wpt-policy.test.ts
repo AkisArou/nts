@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
-import { WebSocketStream } from "../src/index.ts";
+import { WebSocketError, WebSocketStream } from "../src/index.ts";
 import type {
   SocketIncoming,
   SocketMessage,
@@ -148,4 +148,51 @@ suite("WebSocketStream rejects a failed text conversion without sending a messag
   }), (error: unknown) => error === failure);
   assert.equal(conversions, 1);
   assert.deepEqual(session.sent, []);
+});
+
+// Draft section 4.2, close using reason step 4: validate received error fields too.
+for (const operation of ["cancel", "abort"] as const) {
+  for (const code of [1001, 1006]) {
+    suite(`WebSocketStream ${operation} discards a received close code ${code} and its reason`, async (t) => {
+      const sourceSession = new ControlledSession();
+      const targetSession = new ControlledSession();
+      controlledRuntime(t, sourceSession, targetSession);
+      const source = new WebSocketStream("ws://example.test/source");
+      await source.opened;
+      sourceSession.push({ kind: "close", code, reason: "from peer", wasClean: false, failed: true });
+      const error = await source.closed.then(
+        () => assert.fail("an abnormal source close must reject"),
+        (reason: unknown) => reason,
+      );
+      assert.ok(error instanceof WebSocketError);
+      assert.equal(error.closeCode, code);
+      assert.equal(error.reason, "from peer");
+
+      const target = new WebSocketStream("ws://example.test/target");
+      const { readable, writable } = await target.opened;
+      if (operation === "cancel") await readable.cancel(error);
+      else await writable.abort(error);
+      assert.deepEqual(targetSession.closes, [{ code: null, reason: "" }]);
+      assert.equal(error.closeCode, code, "the received error must not be changed");
+      assert.equal(error.reason, "from peer");
+    });
+  }
+}
+
+suite("WebSocketStream cancel and abort preserve valid WebSocketError close information", async (t) => {
+  const sessions = Array.from({ length: 4 }, () => new ControlledSession());
+  controlledRuntime(t, ...sessions);
+  let next = 0;
+  for (const operation of ["cancel", "abort"] as const) {
+    for (const error of [new WebSocketError(), new WebSocketError("application", {
+      closeCode: 4001,
+      reason: "finished",
+    })]) {
+      const stream = new WebSocketStream("ws://example.test/socket");
+      const { readable, writable } = await stream.opened;
+      if (operation === "cancel") await readable.cancel(error);
+      else await writable.abort(error);
+      assert.deepEqual(sessions[next++]?.closes, [{ code: error.closeCode, reason: error.reason }]);
+    }
+  }
 });

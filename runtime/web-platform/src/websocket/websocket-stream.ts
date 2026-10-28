@@ -514,7 +514,17 @@ function snapshotMessage(value: unknown): SocketMessage {
 }
 
 function closeFromError(error: WebSocketError): NormalizedWebSocketClose {
-  return { closeCode: error.closeCode, reason: error.reason };
+  // Draft section 4.2: received codes such as 1001 are not script-settable.
+  // If validation fails, close using reason discards both fields.
+  try {
+    return normalizeWebSocketCloseInfo(
+      error.closeCode === null
+        ? { reason: error.reason }
+        : { closeCode: error.closeCode, reason: error.reason },
+    );
+  } catch {
+    return emptyClose();
+  }
 }
 
 function emptyClose(): NormalizedWebSocketClose {
