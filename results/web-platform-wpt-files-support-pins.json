@@ -1,0 +1,493 @@
+{
+  "version": 1,
+  "command": "node --expose-gc --import ./runtime/web-platform/host/environment-shim.ts --test --test-reporter=tap runtime/web-platform/test/wpt-events-abort.test.ts runtime/web-platform/test/wpt-streams.test.ts runtime/web-platform/test/wpt-fetch-data.test.ts runtime/web-platform/test/wpt-files-forms.test.ts",
+  "sharedDirectoryPins": {
+    "common": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "resources": "a8f306ee4399724f33399dfdcac7da296f3cc05a"
+  },
+  "versions_sha256": "ffa9b5bf2ba835886e7a0b7baa37af29a5ccbde6a0e23e2ffa05e1e0d33c8913",
+  "totals": {
+    "pass": 485,
+    "fail": 0,
+    "blocked": 17
+  },
+  "changedFiles": [],
+  "files": [
+    {
+      "path": "FileAPI/FileReader/progress_event_bubbles_cancelable.html",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-array-buffer.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-bytes.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-constructor.any.js",
+      "before": {
+        "pass": 67,
+        "fail": 0,
+        "blocked": 6
+      },
+      "after": {
+        "pass": 67,
+        "fail": 0,
+        "blocked": 6
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-newobject.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-slice-overflow.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-slice.any.js",
+      "before": {
+        "pass": 150,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 150,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-stream.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/blob/Blob-text.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/file/File-constructor.any.js",
+      "before": {
+        "pass": 49,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 49,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/fileReader.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/Determining-Encoding.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_abort.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_error.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_events.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readAsText.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/reading-data-section/filereader_result.any.js",
+      "before": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 3
+      },
+      "changed": false
+    },
+    {
+      "path": "FileAPI/unicode.html",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "url/urlencoded-parser.any.js",
+      "before": {
+        "pass": 105,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 105,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/append.any.js",
+      "before": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/constructor.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/delete.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/foreach.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/get.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/has.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/iteration.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/set-blob.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "xhr/formdata/set.any.js",
+      "before": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    }
+  ]
+}

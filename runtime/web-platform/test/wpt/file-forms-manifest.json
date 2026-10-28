@@ -1,12 +1,5 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "revisions": {
-    "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
-    "xhr/formdata": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "url": "4832db47614f5f48cc57374cbf5c1f70937fad48",
-    "common": "dbd648158d337580885e70a54f929daf215211a0",
-    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
-  },
   "destinationRoot": "runtime/web-platform/test/wpt",
   "scope": "A4 Blob, File, asynchronous FileReader, FormData and application/x-www-form-urlencoded parsing, without network.",
   "inventoryNote": "Every FileAPI and xhr/formdata path and the requested url/urlencoded-parser fixture is selected, used as support, excluded with a reason or classified as metadata. Source files are unedited. Counts describe one ordinary-node host execution, not every WPT global variant. Two Document-dependent registrations are listed separately and never counted as executed or blocked.",
@@ -82,11 +75,6 @@
   "fixtures": [
     {
       "path": "FileAPI/FileReader/progress_event_bubbles_cancelable.html",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/FileReader/progress_event_bubbles_cancelable.html",
-      "sha256": "52f52764bb2301d093e4fd781d95548316d2873fa86ba2ad3bf93c97d7add0c3",
-      "gitBlob": "6a03243f934081b18cf456d741c3fc2d1660f9c3",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/FileReader/progress_event_bubbles_cancelable.html",
       "format": "html",
       "support": [],
       "harnessScripts": [
@@ -105,11 +93,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-array-buffer.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-array-buffer.any.js",
-      "sha256": "eb5ac8ab115dfb3f91202132c144b33c1e530a456f463324066dbe11ade2f60b",
-      "gitBlob": "2310646e5fdeab300bcea66e4035adbdf3651685",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-array-buffer.any.js",
       "format": "javascript",
       "support": [
         "FileAPI/support/Blob.js"
@@ -143,11 +126,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-bytes.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-bytes.any.js",
-      "sha256": "a305534e59646650d71826a838e499a57da1c2ea60ebb3fdb899f1ea0d6a5964",
-      "gitBlob": "5173b3715c8054ff724899c336fea5c3d221a0d2",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-bytes.any.js",
       "format": "javascript",
       "support": [
         "FileAPI/support/Blob.js"
@@ -181,11 +159,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-constructor.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-constructor.any.js",
-      "sha256": "7a09f45aa13c1634489425c08a0d77f69f92fc5da4bc2d3cf341e9e290aabe8b",
-      "gitBlob": "03155b99cb20ea34fa5167e5107141e18fc08647",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-constructor.any.js",
       "format": "javascript",
       "support": [
         "FileAPI/support/Blob.js"
@@ -516,11 +489,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-newobject.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-newobject.any.js",
-      "sha256": "64257c4adfd0ff059fb492605a62e921ff17b63c9b66c3a87d94c1626a9c3444",
-      "gitBlob": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-newobject.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -548,11 +516,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-slice-overflow.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-slice-overflow.any.js",
-      "sha256": "5da17f7ad6fa2e15a0ae6e8435f9cfd0413b64a39ea337bedd99e915048d8d5d",
-      "gitBlob": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-slice-overflow.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -580,11 +543,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-slice.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-slice.any.js",
-      "sha256": "506fc067d18adb43b2b3b01fcc1123fadaaaf78bfed311b8e863c5f7edd64cda",
-      "gitBlob": "bedc8d737302a0f4c0464db103c66bfe1ca2e3e2",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-slice.any.js",
       "format": "javascript",
       "support": [
         "FileAPI/support/Blob.js"
@@ -1198,11 +1156,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-stream.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-stream.any.js",
-      "sha256": "7cdb21fa95a5e9f0383fa9d3a4519a542e5f58df14fa6a358158d35dbf469504",
-      "gitBlob": "453144cac964a627bb2a004d435887b15ddc96d3",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-stream.any.js",
       "format": "javascript",
       "support": [
         "FileAPI/support/Blob.js",
@@ -1242,11 +1195,6 @@
     },
     {
       "path": "FileAPI/blob/Blob-text.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/blob/Blob-text.any.js",
-      "sha256": "e1fa952af9b0bb70c103d0aa63a9524142904b66d60481e25d4c957426e13101",
-      "gitBlob": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/blob/Blob-text.any.js",
       "format": "javascript",
       "support": [
         "FileAPI/support/Blob.js"
@@ -1292,11 +1240,6 @@
     },
     {
       "path": "FileAPI/file/File-constructor.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/file/File-constructor.any.js",
-      "sha256": "106ca99025bf075fbcad76a37c919064f07036845b5805be9963eecc51a4ae85",
-      "gitBlob": "0b0185c40bf83c5781630c72878764f2ef5588c6",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/file/File-constructor.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1518,11 +1461,6 @@
     },
     {
       "path": "FileAPI/fileReader.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/fileReader.any.js",
-      "sha256": "c759afe96b4f94065748fee5edcad52e33e9abe7d70eb0c7524805c8504cc07f",
-      "gitBlob": "2876dcb4ce314e3441e1e61a37505235209f4e2e",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/fileReader.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1550,11 +1488,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/Determining-Encoding.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/Determining-Encoding.any.js",
-      "sha256": "ecb92d96b05bba4d6c564c6bdfa4c6d47eac8949123d63b0d93ab5461ba55744",
-      "gitBlob": "5b69f7ed9821acefa84ecd1d5cc849f6e0f60b78",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/Determining-Encoding.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1590,11 +1523,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
-      "sha256": "4596cbb1023131aafb9c12b9ef48b37a3bcd4446daf9578147c3f8ec9f1fe262",
-      "gitBlob": "fc71c6434812e220455c2f9d3df19426b4091fb1",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1630,11 +1558,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
-      "sha256": "89a20ca7126ed96e02183093af2642d713ddd812955f6d7f02a876fca96a761c",
-      "gitBlob": "4b19c69b425188acd52f647e98963d70b350ca83",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1675,11 +1598,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_abort.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_abort.any.js",
-      "sha256": "3f1b3ed7c3a714d1ead98e474c45ab96d90e30ec4c6a065a93ab0b7d846bb369",
-      "gitBlob": "c778ae55bb573bc2b7f8d5c1b76f9cd4c866d51f",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_abort.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1699,11 +1617,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_error.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_error.any.js",
-      "sha256": "f31c1b1c96453f38e8dbd8fe5393fd4b1f9af8f59af9babd4c0b40493443ba5e",
-      "gitBlob": "9845962090132e6620aecb0668081e65441e143c",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_error.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1722,11 +1635,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_events.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_events.any.js",
-      "sha256": "40af04891eab2b344efb050b0fd79b248e417b0a9be0c690529e54076f841325",
-      "gitBlob": "ac692907d119f7c8cc9c6e028df4819f27a5112e",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_events.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1755,11 +1663,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
-      "sha256": "643a9cf575a43653da531172c9d9c353623bc04ba0b91958968732803a1a85e6",
-      "gitBlob": "88c4f4d26cc0b25598ce46d010200f25d493ad75",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1778,11 +1681,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
-      "sha256": "11ad046a792954af389807e542e64ae64dc8760f1e55992d145f6dd6c4ecaeb7",
-      "gitBlob": "e69ff15e75b5903bdf984fff9fb35b1805a62f22",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1801,11 +1699,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
-      "sha256": "346b0c45c6c33b87b5d5f7632de5f9859cf6c54edeea00b0b7d88626e1565586",
-      "gitBlob": "4f9dbf7a754a87694c737487a903467a4725cc7a",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1850,11 +1743,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readAsText.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readAsText.any.js",
-      "sha256": "4f48486e0aa10c62ca33c310fe2e772e631ba304945242d60689514f65bc921c",
-      "gitBlob": "4d0fa113931d3425833e176f73e4ebca14cf918e",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readAsText.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1874,11 +1762,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_readystate.any.js",
-      "sha256": "924eb4046feffe81760debf79c625a7f88f6cbb2a553e2c0411af36322820519",
-      "gitBlob": "3cb36ab999653bfddffc7c765b7e1e8e266bf90c",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_readystate.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1902,11 +1785,6 @@
     },
     {
       "path": "FileAPI/reading-data-section/filereader_result.any.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/reading-data-section/filereader_result.any.js",
-      "sha256": "39e1714101e263d0fa5ae91ab61ff0f7ba4f62d24b9ec0cd5fb63703e61c359d",
-      "gitBlob": "28c068bb349c3de4ea1af8bea2d277159ccf171d",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/reading-data-section/filereader_result.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1979,11 +1857,6 @@
     },
     {
       "path": "FileAPI/unicode.html",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/unicode.html",
-      "sha256": "74d569fadfbde3742590e8087e1ad92491f13a5df0867aca90f0591547f24f6d",
-      "gitBlob": "ce3e3579d7c2c74c27d907ccd25c953588ef87f2",
-      "destination": "runtime/web-platform/test/wpt/FileAPI/unicode.html",
       "format": "html",
       "support": [],
       "harnessScripts": [
@@ -2014,11 +1887,6 @@
     },
     {
       "path": "url/urlencoded-parser.any.js",
-      "revision": "4832db47614f5f48cc57374cbf5c1f70937fad48",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/4832db47614f5f48cc57374cbf5c1f70937fad48/url/urlencoded-parser.any.js",
-      "sha256": "9d3514f33a6bce8ab4d0163a77d79f0231ef30239ca237cf75f9e206a8b0c3e8",
-      "gitBlob": "847465cb9214e1feac1babb6a1b86ecec9597028",
-      "destination": "runtime/web-platform/test/wpt/url/urlencoded-parser.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2450,11 +2318,6 @@
     },
     {
       "path": "xhr/formdata/append.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/append.any.js",
-      "sha256": "0adedf9be59114773d698e6c2b90f87b33c15f633854e7b3a948bbcad03a7a41",
-      "gitBlob": "6871f69df591cc468e5fd99ae6456d48ad96e3a9",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/append.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2494,11 +2357,6 @@
     },
     {
       "path": "xhr/formdata/constructor.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/constructor.any.js",
-      "sha256": "a49b4e2e5f194f35e5a3fb626ad0665b45d6a02d09fbb5185b2ba9d0e6f6c391",
-      "gitBlob": "43704538ab2489a6cbd7a2449532a040fdb4adbd",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/constructor.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2514,11 +2372,6 @@
     },
     {
       "path": "xhr/formdata/delete.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/delete.any.js",
-      "sha256": "8a83a4a9112522a7099924300bd5191d6879b33b1c1a7df390758a943088ff77",
-      "gitBlob": "9424614f961b2e4b88ad0355d4da9d9e3ad9bccf",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/delete.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2542,11 +2395,6 @@
     },
     {
       "path": "xhr/formdata/foreach.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/foreach.any.js",
-      "sha256": "7b94892d20c70699c6b7be5858b643714b439e01e5ce9e1683c30b936b26536b",
-      "gitBlob": "9fc1e2d9b399fe08acf090f0aaa4a9f6bbe33c3f",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/foreach.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2574,11 +2422,6 @@
     },
     {
       "path": "xhr/formdata/get.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/get.any.js",
-      "sha256": "fd983b9ccc39eebc7f4f7591d78a7710f3d16b12e1c5024896dc97a127e61955",
-      "gitBlob": "b307f1edd0ad3b739c1fa44b178d90f4697f465a",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/get.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2614,11 +2457,6 @@
     },
     {
       "path": "xhr/formdata/has.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/has.any.js",
-      "sha256": "cbe1e781d18a5d8930a29ec7045c2876216b173eebbe9edac318bbc2b2eb0cc7",
-      "gitBlob": "2c1a3fdafe3480732f177be32584a7d8a889e493",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/has.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2642,11 +2480,6 @@
     },
     {
       "path": "xhr/formdata/iteration.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/iteration.any.js",
-      "sha256": "e98147f85dfe7aa744c7e4eb4c4a0111cc26a5999c3c242171bf3169fed21231",
-      "gitBlob": "1633fd9c4daa792f7050723220b7fcaa38b20858",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/iteration.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2670,11 +2503,6 @@
     },
     {
       "path": "xhr/formdata/set-blob.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/set-blob.any.js",
-      "sha256": "c5724281fc7f0b4d29a2acddb8a40081cb922c607acaf3987b96c7429b002c5c",
-      "gitBlob": "6a8b5c717050598058d44ac6772ed04722924be3",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/set-blob.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2710,11 +2538,6 @@
     },
     {
       "path": "xhr/formdata/set.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/xhr/formdata/set.any.js",
-      "sha256": "a58a8a2393077834aac649dc52e0633578d5b63e1f7ae7cc2f51388f4ecbe92e",
-      "gitBlob": "734e55bb759cad5df13bb4e374a30eac28e85f2a",
-      "destination": "runtime/web-platform/test/wpt/xhr/formdata/set.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -2755,26 +2578,14 @@
   ],
   "support": [
     {
-      "path": "FileAPI/support/Blob.js",
-      "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/7f5130188818b6c12c636491186b459ec2bf131f/FileAPI/support/Blob.js",
-      "sha256": "a1152b82af45d952c56f8b6f82c3a87e9ac58f834114a9813778418bfa7df25d",
-      "gitBlob": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
+      "path": "FileAPI/support/Blob.js"
     },
     {
-      "path": "common/gc.js",
-      "revision": "dbd648158d337580885e70a54f929daf215211a0",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/gc.js",
-      "sha256": "186144288438fb6d520defdc16a6a86fff193184a30fe04e901fe93febe3f8c4",
-      "gitBlob": "ac43a4cfaf7735a08dfd1be177918167f815e800"
+      "path": "common/gc.js"
     }
   ],
   "license": {
     "path": "LICENSE.md",
-    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/LICENSE.md",
-    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
-    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
     "identifier": "BSD-3-Clause",
     "note": "Copy the original licence bytes; preserve every existing fixture header and do not insert new text into upstream files."
   },
@@ -3587,5 +3398,6 @@
     "excludedSourcePaths": 84,
     "metadataPaths": 2,
     "totalRequestedSourcePaths": 121
-  }
+  },
+  "versions": "versions.json"
 }
