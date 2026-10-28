@@ -257,8 +257,6 @@ function patternString(parts: readonly Part[], options: CompileOptions): string 
   return result;
 }
 
-const builtinExec: (regexp: RegExp, value: string) => RegExpExecArray | null =
-  Function.prototype.call.bind(RegExp.prototype.exec);
 
 export class Component {
   readonly pattern: string;
@@ -274,7 +272,7 @@ export class Component {
     this.pattern = patternString(parts, options);
     this.hasRegExpGroups = parts.some((part) => part.type === "regexp");
   }
-  exec(input: string): RegExpExecArray | null { return builtinExec(this.regexp, input); }
+  exec(input: string): RegExpExecArray | null { return this.regexp.exec(input); }
 }
 
 export const defaultOptions: CompileOptions = { delimiter: "", prefix: "", ignoreCase: false };

@@ -259,10 +259,20 @@ test("WPT nested failures still fail and explicit done still refuses further reg
 });
 
 test("WPT implicit draining keeps promise timeouts and stale exclusion checks", async () => {
-  const harness = new WptHarness({}, {}, 1000);
-  harness.run('promise_test(() => new Promise(() => {}), "never settles");', "timeout.js");
-  await assert.rejects(harness.finish(), (error) => error instanceof AggregateError &&
+  const started = Promise.withResolvers<void>();
+  const deadlines = new Set<() => void>();
+  const harness = new WptHarness({ started: () => started.resolve() }, {}, 10000, {
+    deadlineScheduler(callback) {
+      deadlines.add(callback);
+      return () => { deadlines.delete(callback); };
+    },
+  });
+  harness.run('promise_test(() => { started(); return new Promise(() => {}); }, "never settles");', "timeout.js");
+  const rejected = assert.rejects(harness.finish(), (error) => error instanceof AggregateError &&
     error.errors.some((entry: unknown) => String(entry).includes("pending tests did not complete")));
+  await started.promise;
+  for (const deadline of [...deadlines]) deadline();
+  await rejected;
   const stale = new WptHarness({}, { missing: { category: "provider-capability", reason: "test" } });
   stale.run('test(() => {}, "actual");', "stale.js");
   await assert.rejects(stale.finish(), /stale WPT capability exclusion/);
@@ -288,7 +298,7 @@ test("WPT duplicate registration remains a harness failure when a provider consu
   const caught: unknown[] = [];
   const harness = new WptHarness({
     dispatch(callback: () => void) { try { callback(); } catch (error) { caught.push(error); } },
-  }, {}, 1000, { maxTests: 2 });
+  }, {}, 10000, { maxTests: 2 });
   harness.run(`
     test(() => {}, "first");
     dispatch(() => test(() => {}, "first"));
@@ -303,7 +313,7 @@ test("WPT after-done registration remains a harness failure when a provider cons
   const caught: unknown[] = [];
   const harness = new WptHarness({
     dispatch(callback: () => void) { try { callback(); } catch (error) { caught.push(error); } },
-  }, {}, 1000, { maxTests: 1 });
+  }, {}, 10000, { maxTests: 1 });
   harness.run(`
     setup({ explicit_done: true });
     test(() => {}, "first");

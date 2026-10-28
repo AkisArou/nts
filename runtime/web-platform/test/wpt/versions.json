@@ -19,7 +19,8 @@
     "html/webappapis": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
     "hr-time": "34cafd797e58dad280d20040eee012d49ccfa91f",
     "performance-timeline": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
-    "user-timing": "5ae85bf8267ac617833dc013dee9774c9e2a18b7"
+    "user-timing": "5ae85bf8267ac617833dc013dee9774c9e2a18b7",
+    "urlpattern": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03"
   },
   "files": {
     "common/blank.html": {
@@ -1050,6 +1051,38 @@
     "url/urlencoded-parser.any.js": {
       "sha256": "9d3514f33a6bce8ab4d0163a77d79f0231ef30239ca237cf75f9e206a8b0c3e8",
       "gitBlob": "847465cb9214e1feac1babb6a1b86ecec9597028"
+    },
+    "urlpattern/resources/urlpattern-hasregexpgroups-tests.js": {
+      "sha256": "130329152a601d2242b26eaed2b7a7837972a34c5df324ca284ab23fd986b2d4",
+      "gitBlob": "4be886e4a5390d7d43356d853cc00c7bbb23d361"
+    },
+    "urlpattern/resources/urlpatterntestdata.json": {
+      "sha256": "f52a8ba3940de7e55ad47dc58eab5bccb697d7d76335c20ed7aaef6b85b98ab9",
+      "gitBlob": "272b51ef692183730529d39e05642611d147f6c9"
+    },
+    "urlpattern/resources/urlpatterntests.js": {
+      "sha256": "b7f8d058e73d85827a7e5611420edbf8fe6b54a1bb451ba09f30f7f696ae9e8b",
+      "gitBlob": "761f96b6fd3392027f357ce79c11734d9b97557f"
+    },
+    "urlpattern/urlpattern-constructor.any.js": {
+      "sha256": "1bd1e358e89e767f647824bca98584131d65f806de3324ef2786bc1c729f90d0",
+      "gitBlob": "9290911d4b1c77141305f3914badf1ad1cbf6205"
+    },
+    "urlpattern/urlpattern-empty-regexp-group.html": {
+      "sha256": "e771813ba8fb7b9d38af822c00697e27c54ec4c375ec896aa9fcb5f32f47c86c",
+      "gitBlob": "529184880446661aa8ec7109aaca3807a67e4f00"
+    },
+    "urlpattern/urlpattern-hasregexpgroups.any.js": {
+      "sha256": "3ddb2100f7b62cc0ff17d1e193cb6ded16be9cab07402bb783172a8ddeed3085",
+      "gitBlob": "33133d2511b065ca94cc5e793066cc8111b4d6e6"
+    },
+    "urlpattern/urlpattern.any.js": {
+      "sha256": "8e8f63551402b0b14ffedaba165c7d103430e705a335d744bd540db83348d174",
+      "gitBlob": "7d47d22609bf8eb14386b0363e36b86f77b2780d"
+    },
+    "urlpattern/urlpattern.https.any.js": {
+      "sha256": "8e8f63551402b0b14ffedaba165c7d103430e705a335d744bd540db83348d174",
+      "gitBlob": "7d47d22609bf8eb14386b0363e36b86f77b2780d"
     },
     "user-timing/clear_all_marks.any.js": {
       "sha256": "b5efcfaad5934c383be44596f1ec74e5a606990f70409ae8493e7f96d28ecf59",

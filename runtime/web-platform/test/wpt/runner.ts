@@ -314,6 +314,7 @@ export type WptEnvironmentFactory = (
 export async function executeWptFixture(
   prepared: WptPreparedFixture,
   createEnvironment: WptEnvironmentFactory,
+  publish?: (results: readonly WptResult[]) => void | Promise<void>,
 ): Promise<WptResult[]> {
   const { context, scripts, imports } = prepared;
   const { fixture } = context;
@@ -349,6 +350,9 @@ export async function executeWptFixture(
     for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
     const results = await harness.finish();
     assert.equal(imported, imports.length, "declared importScripts dependency was not loaded");
+    // Publish completed cases before teardown, while still awaiting and checking
+    // teardown before the fixture itself can succeed.
+    if (publish !== undefined) await publish(results);
     return results;
   } finally {
     await environment.close();
@@ -391,16 +395,17 @@ export async function runWptFixtures(
     const { fixture } = context;
     const name = fixture.path + (fixture.variant ?? "");
     await suite.test(name, async (file) => {
-      const results = await executeWptFixture(prepared, createEnvironment);
-      assert.equal(results.length, fixture.expectedTests, "WPT registration count changed");
-      const counts = { pass: 0, fail: 0, blocked: 0 };
-      for (const result of results) {
-        counts[result.status]++;
-        await file.test(result.name, { skip: result.reason }, () => {
-          if (result.status === "fail") throw result.error;
-        });
-      }
-      file.diagnostic(`WPT ${name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.blocked} blocked`);
+      await executeWptFixture(prepared, createEnvironment, async (results) => {
+        assert.equal(results.length, fixture.expectedTests, "WPT registration count changed");
+        const counts = { pass: 0, fail: 0, blocked: 0 };
+        for (const result of results) {
+          counts[result.status]++;
+          await file.test(result.name, { skip: result.reason }, () => {
+            if (result.status === "fail") throw result.error;
+          });
+        }
+        file.diagnostic(`WPT ${name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.blocked} blocked`);
+      });
     });
   }
 }

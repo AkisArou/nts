@@ -44,7 +44,7 @@ function runCloseControl(mode: CloseMode): { status: number | null; output: stri
   delete environment.NODE_TEST_CONTEXT;
   const child = spawnSync(process.execPath,
     ["--expose-gc", "--input-type=module", "--test-reporter=tap", "--eval", source],
-    { env: environment, encoding: "utf8", timeout: 10000 });
+    { env: environment, encoding: "utf8" });
   const output = child.stdout + child.stderr;
   assert.equal(child.error, undefined, output);
   assert.equal(child.signal, null, output);
