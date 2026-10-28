@@ -260,3 +260,22 @@ test("the returnValue setter sets the canceled flag without calling preventDefau
   assert.equal(event.defaultPrevented, true);
   assert.equal(new EventTarget().dispatchEvent(event), false);
 });
+
+// Web IDL constants: https://webidl.spec.whatwg.org/#es-constants
+test("Event constants have immutable descriptors on the interface and prototype", () => {
+  for (const [name, value] of [
+    ["NONE", 0],
+    ["CAPTURING_PHASE", 1],
+    ["AT_TARGET", 2],
+    ["BUBBLING_PHASE", 3],
+  ] as const) {
+    for (const owner of [Event, Event.prototype]) {
+      assert.deepEqual(Object.getOwnPropertyDescriptor(owner, name), {
+        value,
+        writable: false,
+        enumerable: true,
+        configurable: false,
+      });
+    }
+  }
+});
