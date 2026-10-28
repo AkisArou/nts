@@ -5,6 +5,8 @@
  * entry point instead of depending on the shared runtime's internal layout.
  */
 export { createPerformance } from "./performance/performance.ts";
+export { createNavigator } from "./navigator/navigator.ts";
+export type { NavigatorCapability } from "./provider/navigator.ts";
 export type {
   PerformanceCapabilities,
   PerformanceTimeOrigin,
