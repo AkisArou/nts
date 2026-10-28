@@ -155,3 +155,65 @@ export const allSteps=()=>["tooling"];
     }
   }
 });
+
+function newPathFixture(t) {
+  const repo=mkdtempSync(join(tmpdir(),"owed-new-path-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
+  const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  const write=(path:string,text:string)=>{mkdirSync(join(repo,path,".."),{recursive:true});writeFileSync(join(repo,path),text);};
+  write("tooling/gate/all.sh","node tooling/conformance/named-new.ts\n");
+  write("tooling/gate/rules.json","{\"version\":1}\n");
+  write("tooling/gate/policy.ts","export const leafStep='tooling';\n");
+  const policy=`import {existsSync,readFileSync} from 'node:fs';
+import {leafStep} from './policy.ts';
+export const SELECTOR_POLICY_DATA=['tooling/gate/all.sh','tooling/gate/rules.json'];
+export const allSteps=()=>['build','tests','tooling','profile','full'];
+export const selfTest=()=>null;
+export const isStrictPath=()=>true;
+export function owed(changes){
+ JSON.parse(readFileSync('tooling/gate/rules.json','utf8'));
+ const script=readFileSync('tooling/gate/all.sh','utf8');
+ return [{name:'always',paths:[],steps:['tests'],arms:[]},...changes.map(c=>({name:c.path,paths:[c.path],steps:existsSync(c.path)?[script.includes(c.path)?'profile':leafStep]:[],full:!existsSync(c.path),arms:[]}))];
+}
+export const gateSteps=rules=>rules.some(row=>row.full)?allSteps():[...new Set(rules.flatMap(row=>row.steps))];
+`;
+  write("tooling/gate/owed.mjs",policy);git("init","-qb","main");git("add",".");git("commit","-qm","stable selector");
+  return {repo,git,write,policy,base:git("rev-parse","HEAD"),commit:()=>{git("add",".");git("commit","-qm","candidate");return selectRange(repo,`${git('rev-parse','HEAD^')}..HEAD`);}};
+}
+
+test("a new census leaf uses candidate reach when the complete selector identity is unchanged",t=>{
+  const f=newPathFixture(t);f.write("tooling/census/new.test.ts","export const control=1;\n");
+  const selected=f.commit();assert.deepEqual(selected.checks.steps,['tests','tooling']);
+  assert.deepEqual(selected.views[0].rules.map(row=>row.name),['always']);
+});
+test("a new leaf plus a selector edit retains the base fallback",t=>{
+  const f=newPathFixture(t);f.write("tooling/census/new.test.ts","export const control=1;\n");
+  f.write("tooling/gate/owed.mjs",f.policy+'\n// one-line policy edit\n');
+  assert.ok(f.commit().checks.steps.includes('full'));
+});
+test("a new file named by a gate script keeps its actual reader step",t=>{
+  const f=newPathFixture(t);f.write("tooling/conformance/named-new.ts","export const control=1;\n");
+  assert.deepEqual(f.commit().checks.steps,['tests','profile']);
+});
+test("transitive imports and rule data both prevent stable-selector narrowing when changed",t=>{
+  for(const path of ['tooling/gate/policy.ts','tooling/gate/rules.json']){
+    const f=newPathFixture(t);f.write("tooling/census/new.test.ts","export const control=1;\n");
+    f.write(path,path.endsWith('.ts')?"export const leafStep='tooling'; // changed helper\n":"{\"version\":2}\n");
+    assert.ok(f.commit().checks.steps.includes('full'),path);
+  }
+});
+
+test("the real unchanged selector reaches a newly added census test without a core fallback",t=>{
+  const directory=mkdtempSync(join(tmpdir(),"owed-real-leaf-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const repo=join(directory,"repo"),env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  execFileSync("git",["clone","--quiet","--shared",ROOT,repo],{env,stdio:["ignore","pipe","pipe"]});
+  execFileSync("sh",[join(ROOT,"tooling/lanes/inputs.sh"),"lane",ROOT,repo],{env,stdio:["ignore","pipe","pipe"]});
+  const base=git("rev-parse","HEAD"),path="tooling/census/new-scope-control.test.ts";
+  writeFileSync(join(repo,path),"import {test} from 'node:test';test('new leaf',()=>{});\n");git("add",path);git("commit","-qm","new leaf");
+  const selected=selectRange(repo,`${base}..HEAD`);
+  assert.deepEqual(selected.candidateNewPaths?.paths,[path]);
+  assert.ok(selected.checks.steps.includes("tooling"));
+  assert.equal(selected.views.some(view=>view.rules.some(rule=>rule.name==="owes the full gate")),false);
+  assert.ok(selected.checks.steps.length<10,JSON.stringify(selected.checks));
+});

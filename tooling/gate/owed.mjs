@@ -90,6 +90,15 @@ export {parseNameStatus} from "./change-paths.ts";
  */
 const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 
+// Policy data and lexer/tool versions, as distinct from the derived project
+// and reader graph. The range selector fingerprints these plus every loaded
+// module before using candidate reach for a newly added path.
+export const SELECTOR_POLICY_DATA = [
+  "tooling/lanes/lanes.json", "tooling/config/src/target.ts",
+  "tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/comment-tokens.rs",
+  "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
+];
+
 /** Verdict machinery always gates before landing, including its verifier.
  * Tree-only changes have already passed their entire owed gate; they never
  * need the future optimistic path either. Keep this routing policy in one list. */
@@ -1423,6 +1432,7 @@ function main() {
   const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
   if (selection) console.log(`  rules: union of base ${selection.base.slice(0,12)} and candidate ${selection.tip.slice(0,12)}`);
+  if(selection?.candidateNewPaths?.paths.length)console.log(`  new paths: candidate reach with unchanged selector ${selection.candidateNewPaths.identity.slice(0,12)} (${selection.candidateNewPaths.paths.length} path(s))`);
   if (selection?.strict ?? changes.some(c => isStrictPath(c.path))) console.log("  landing policy: strict gate-before-land");
   for (const r of rules) {
     console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);

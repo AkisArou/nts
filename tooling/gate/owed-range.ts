@@ -1,17 +1,19 @@
 // Evaluate each endpoint's own rules and derived inputs in immutable trees.
 // The caller's working files and the other endpoint cannot narrow that view.
+import { createHash } from "node:crypto";
+import { registerHooks } from "node:module";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
 
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
-export type RuleView = { revision: string; checks: Checks; catalogue: string[]; strict: boolean; rules: Rule[] };
-export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[] };
+export type RuleView = { revision: string; checks: Checks; catalogue: string[]; strict: boolean; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
+export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] } };
 const SELF = fileURLToPath(import.meta.url);
 const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
 const INFRASTRUCTURE_CODE = "NTS_SELECTION_INFRASTRUCTURE";
@@ -49,6 +51,11 @@ function readView(text: string, revision: string): RuleView {
       || (view.checks.doctests != null && typeof view.checks.doctests !== "string")
       || !Array.isArray(view.rules) || view.rules.some(r => !r || typeof r.name !== "string" || !strings(r.paths) || !strings(r.steps) || !Array.isArray(r.arms))) {
     throw new Error(`invalid owed selection at ${revision}`);
+  }
+  if(view.selector){
+    if(view.selector.identity!==null&&(typeof view.selector.identity!=="string"||!/^[a-f0-9]{64}$/.test(view.selector.identity)))throw new Error(`invalid selector identity at ${revision}`);
+    if(view.selector.existing?.selector)throw new Error(`recursive selector view at ${revision}`);
+    view.selector.existing=readView(JSON.stringify(view.selector.existing),revision);
   }
   return view;
 }
@@ -94,7 +101,14 @@ export function selectRange(repo: string, range: string): RangeSelection {
         throw new Error(`cannot evaluate owed rules at ${revision}: ${String(error)}`, { cause: error });
       }
     }
-    result = { base, tip, checks: unionViews(views), strict: views.some(v => v.strict), views };
+    // Code and policy data are unchanged: candidate reach for an added path
+    // is the same selector evaluated in the tree where that path exists.
+    // Existing paths retain their independent base obligations.
+    const identity=views[0].selector?.identity;
+    const stable=identity&&identity===views[1].selector?.identity;
+    if(stable)views[0]=views[0].selector!.existing;
+    result = { base, tip, checks: unionViews(views), strict: views.some(v => v.strict), views,
+      ...(stable?{candidateNewPaths:{identity,paths:changes.filter(change=>change.added).map(change=>change.path)}}:{}) };
   } catch (error) { errors.push(error); }
   finally {
     for (const tree of added.reverse()) {
@@ -108,6 +122,18 @@ export function selectRange(repo: string, range: string): RangeSelection {
 }
 
 async function endpoint(tree: string, revision: string, changes:PathChange[]): Promise<RuleView> {
+  const loaded=new Map<string,string>();let complete=true;
+  const hooks=registerHooks({load(url,context,next){
+    const result=next(url,context);
+    if(url.startsWith("file:")) {
+      const path=fileURLToPath(url),local=relative(tree,path);
+      const key=local!==".."&&!local.startsWith("../")&&!local.startsWith("/")?local:`external:${path}`;
+      if(result.source===undefined||result.source===null)complete=false;
+      else loaded.set(key,createHash("sha256").update(result.source).digest("hex"));
+    }
+    return result;
+  }});
+  try {
   const m = await import(pathToFileURL(join(tree, "tooling/gate/owed.mjs")).href);
   for (const name of ["owed", "gateSteps", "allSteps"]) {
     if (typeof m[name] !== "function") throw new Error(`owed.mjs lacks ${name} at ${revision}`);
@@ -125,13 +151,28 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
     execFileSync(process.execPath, [join(tree, "tooling/gate/owed.mjs"), "--self-test"],
       { cwd: tree, stdio: ["ignore", "pipe", "pipe"] });
   }
-  const rules: Rule[] = m.owed(changes);
-  const projects = typeof m.interopOwed==="function"?m.interopOwed(rules):null;
-  const doctests = [...new Set(rules.flatMap(r => r.doctests ?? []))];
-  return { revision, checks: { steps: rules.some(r => r.full && r.wide) ? "all" : m.gateSteps(rules),
-    interop: Array.isArray(projects) && projects.length ? projects.join(" ") : null,
-    doctests: doctests.length ? doctests.join(" ") : null },
-    catalogue: m.allSteps(), strict: typeof m.isStrictPath!=="function" || changes.some(c => m.isStrictPath(c.path)), rules };
+  const select=(paths:PathChange[]):RuleView=>{
+    const rules: Rule[] = m.owed(paths);
+    const projects = typeof m.interopOwed==="function"?m.interopOwed(rules):null;
+    const doctests = [...new Set(rules.flatMap(r => r.doctests ?? []))];
+    return { revision, checks: { steps: rules.some(r => r.full && r.wide) ? "all" : m.gateSteps(rules),
+      interop: Array.isArray(projects) && projects.length ? projects.join(" ") : null,
+      doctests: doctests.length ? doctests.join(" ") : null },
+      catalogue: m.allSteps(), strict: typeof m.isStrictPath!=="function" || changes.some(c => m.isStrictPath(c.path)), rules };
+  };
+  const full=select(changes);
+  const declared=Array.isArray(m.SELECTOR_POLICY_DATA);
+  const existing=declared?select(changes.filter(change=>!change.added)):full;
+  // An old or undeclared policy keeps the ordinary endpoint union. Source
+  // loads include transitive ESM/CommonJS imports; data inputs are explicit.
+  if(!declared||m.SELECTOR_POLICY_DATA.some(path=>typeof path!=="string"||path.startsWith("/")||path.split("/").includes("..")))complete=false;
+  else for(const path of m.SELECTOR_POLICY_DATA) {
+    const bytes=infrastructure(`selector policy input ${path}`,()=>existsSync(join(tree,path))?readFileSync(join(tree,path)):null);
+    loaded.set(`data:${path}`,bytes===null?"absent":createHash("sha256").update(bytes).digest("hex"));
+  }
+  const identity=complete?createHash("sha256").update(JSON.stringify([...loaded].sort(([a],[b])=>a<b?-1:a>b?1:0))).digest("hex"):null;
+  return {...full,selector:{identity,existing}};
+  }finally{hooks.deregister();}
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
