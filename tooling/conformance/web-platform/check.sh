@@ -60,6 +60,7 @@ node tooling/conformance/web-platform/host-tests.ts \
   runtime/web-platform/test/crypto-kdf-provider.test.ts \
   runtime/web-platform/test/crypto-kdf.test.ts \
   runtime/web-platform/test/crypto-ml-dsa.test.ts \
+  runtime/web-platform/test/crypto-ml-kem.test.ts \
   runtime/web-platform/test/crypto-modern-aead.test.ts \
   runtime/web-platform/test/crypto-normalization.test.ts \
   runtime/web-platform/test/crypto-okp-der.test.ts \

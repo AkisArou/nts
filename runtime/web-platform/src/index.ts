@@ -455,3 +455,4 @@ export { CryptoKey } from "./crypto/crypto-key.ts";
 export type { AlgorithmIdentifier } from "./crypto/algorithms.ts";
 export type { CryptoKeyPair, KeyAlgorithmObject as KeyAlgorithm, KeyType, KeyUsage } from "./crypto/crypto-key.ts";
 export type { JsonWebKeyObject as JsonWebKey, KeyFormat, RsaOtherPrimesInfoObject as RsaOtherPrimesInfo } from "./crypto/jwk.ts";
+export type { EncapsulatedBits, EncapsulatedKey } from "./crypto/ml-kem.ts";

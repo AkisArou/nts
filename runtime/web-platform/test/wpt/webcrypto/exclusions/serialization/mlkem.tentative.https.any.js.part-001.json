@@ -3,33 +3,33 @@
   "blockedTests": [
     {
       "name": "serialization test ML-KEM-512",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test {name: ML-KEM-512}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test ML-KEM-768",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test {name: ML-KEM-768}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test ML-KEM-1024",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     },
     {
       "name": "serialization test {name: ML-KEM-1024}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native CryptoKey structured cloning",
+      "reason": "The adapter has no native CryptoKey structured-clone capability; the original case stays unedited."
     }
   ]
 }

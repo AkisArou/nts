@@ -4,7 +4,7 @@ import { createCryptoKey } from "./crypto-key.ts";
 import type { CryptoKey, CryptoKeySlots, KeyUsage } from "./crypto-key.ts";
 import { EcKeyAlgorithm } from "./ec-key.ts";
 import { normalizeKeyUsages } from "./jwk.ts";
-import { isMlAlgorithm } from "./ml-parameters.ts";
+import { isMlAlgorithm, isMlKemAlgorithm } from "./ml-parameters.ts";
 import { RsaHashedKeyAlgorithm } from "./rsa-key.ts";
 
 export function supportsPublicKey(name: string): boolean {
@@ -14,6 +14,7 @@ export function supportsPublicKey(name: string): boolean {
 }
 
 function allowed(name: string, usage: KeyUsage): boolean {
+  if (isMlKemAlgorithm(name)) return usage === "encapsulateKey" || usage === "encapsulateBits";
   if (name === "RSA-OAEP") return usage === "encrypt" || usage === "wrapKey";
   if (name === "ECDH" || name === "X25519" || name === "X448") return false;
   return usage === "verify";

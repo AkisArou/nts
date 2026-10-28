@@ -210,9 +210,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 9,
-      "blockedTestFiles": [
-        "exclusions/encap_decap/encap_decap_bits.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
@@ -223,9 +221,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 120,
-      "blockedTestFiles": [
-        "exclusions/encap_decap/encap_decap_keys.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
@@ -454,13 +450,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 1044,
-      "blockedTestFiles": [
-        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-001.json",
-        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-002.json",
-        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-003.json",
-        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-004.json",
-        "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-005.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
@@ -684,12 +674,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 468,
-      "blockedTestFiles": [
-        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-001.json",
-        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-002.json",
-        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-003.json",
-        "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-004.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
@@ -785,9 +770,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 37,
-      "blockedTestFiles": [
-        "exclusions/getPublicKey.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/getRandomValues.any.js",
@@ -876,11 +859,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 324,
-      "blockedTestFiles": [
-        "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-001.json",
-        "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-002.json",
-        "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-003.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",

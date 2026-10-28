@@ -454,17 +454,23 @@ function mlAlgorithm(reader: DerReader): CryptoMlAlgorithmName {
   const algorithm = reader.read(0x30);
   const oid = algorithm.read(0x06).content();
   algorithm.complete(); // Parameters must be absent, including NULL.
-  const prefix = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03];
-  if (oid.byteLength !== prefix.length + 1) invalidDer();
+  const prefix = [0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04];
+  if (oid.byteLength !== prefix.length + 2) invalidDer();
   for (let index = 0; index < prefix.length; index++) if (oid[index] !== prefix[index]) invalidDer();
-  if (oid[8] === 17) return "ML-DSA-44";
-  if (oid[8] === 18) return "ML-DSA-65";
-  if (oid[8] === 19) return "ML-DSA-87";
+  if (oid[7] === 0x03) {
+    if (oid[8] === 17) return "ML-DSA-44";
+    if (oid[8] === 18) return "ML-DSA-65";
+    if (oid[8] === 19) return "ML-DSA-87";
+  } else if (oid[7] === 0x04) {
+    if (oid[8] === 1) return "ML-KEM-512";
+    if (oid[8] === 2) return "ML-KEM-768";
+    if (oid[8] === 3) return "ML-KEM-1024";
+  }
   invalidDer();
 }
 
 /**
- * Modern Algorithms §8.4.4, RFC 9881: validate the original envelope exactly.
+ * Modern Algorithms §§6.4.5, 8.4.4, RFC 9881/9935: validate the original envelope exactly.
  * Seed expansion and validation of the optional expanded material stay native.
  * Expanded-only private keys are valid encodings but outside the seed profile.
  */

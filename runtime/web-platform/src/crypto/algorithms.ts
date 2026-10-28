@@ -1,6 +1,6 @@
 import { DOMException } from "../core/errors.ts";
 import { coerceToDOMString } from "../core/webidl.ts";
-import type { CryptoDigestName, CryptoMlDsaName } from "../provider/crypto.ts";
+import type { CryptoDigestName, CryptoMlAlgorithmName, CryptoMlDsaName } from "../provider/crypto.ts";
 import {
   copyCryptoBytes,
   cryptoBytes,
@@ -29,7 +29,10 @@ export type CryptoOperation =
   | "exportKey"
   | "wrapKey"
   | "unwrapKey"
-  | "get key length";
+  | "get key length"
+  | "encapsulate"
+  | "decapsulate"
+  | "get shared key length";
 
 /** Typed IDL dictionary; later algorithm dictionaries extend this layout. */
 export class Algorithm<Name extends string = string> {
@@ -56,7 +59,7 @@ export type EcAlgorithmName = "ECDSA" | "ECDH";
 export type OkpAlgorithmName = "Ed25519" | "X25519" | "Ed448" | "X448";
 export type Argon2AlgorithmName = "Argon2d" | "Argon2i" | "Argon2id";
 export type KdfAlgorithmName = "HKDF" | "PBKDF2" | Argon2AlgorithmName;
-type RegisteredAlgorithmName = CryptoMlDsaName | CryptoDigestName | CshakeAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
+type RegisteredAlgorithmName = CryptoMlAlgorithmName | CryptoDigestName | CshakeAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
 
 /** Modern Algorithms §13.3. Dictionary conversion precedes BufferSource snapshots. */
 export class CShakeParams extends Algorithm<CshakeAlgorithmName> {
@@ -372,7 +375,7 @@ export type NormalizedAlgorithm =
   | KmacKeyGenParams
   | KmacImportParams
   | KmacParams
-  | Algorithm<CryptoMlDsaName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName>
+  | Algorithm<CryptoMlAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName>
   | AesKeyGenParams
   | AesDerivedKeyParams
   | AesCtrParams
@@ -408,6 +411,25 @@ class AlgorithmRegistration {
 // §18.4.2's supportedAlgorithms. Register only operations implemented by this
 // increment: a future primitive contract is not an implemented Web algorithm.
 const registeredAlgorithms: readonly AlgorithmRegistration[] = [
+  new AlgorithmRegistration("ML-KEM-512", "encapsulate"),
+  new AlgorithmRegistration("ML-KEM-512", "decapsulate"),
+  new AlgorithmRegistration("ML-KEM-512", "get shared key length"),
+  new AlgorithmRegistration("ML-KEM-512", "generateKey"),
+  new AlgorithmRegistration("ML-KEM-512", "importKey"),
+  new AlgorithmRegistration("ML-KEM-512", "exportKey"),
+  new AlgorithmRegistration("ML-KEM-768", "encapsulate"),
+  new AlgorithmRegistration("ML-KEM-768", "decapsulate"),
+  new AlgorithmRegistration("ML-KEM-768", "get shared key length"),
+  new AlgorithmRegistration("ML-KEM-768", "generateKey"),
+  new AlgorithmRegistration("ML-KEM-768", "importKey"),
+  new AlgorithmRegistration("ML-KEM-768", "exportKey"),
+  new AlgorithmRegistration("ML-KEM-1024", "encapsulate"),
+  new AlgorithmRegistration("ML-KEM-1024", "decapsulate"),
+  new AlgorithmRegistration("ML-KEM-1024", "get shared key length"),
+  new AlgorithmRegistration("ML-KEM-1024", "generateKey"),
+  new AlgorithmRegistration("ML-KEM-1024", "importKey"),
+  new AlgorithmRegistration("ML-KEM-1024", "exportKey"),
+
   new AlgorithmRegistration("ML-DSA-44", "sign"),
   new AlgorithmRegistration("ML-DSA-44", "verify"),
   new AlgorithmRegistration("ML-DSA-44", "generateKey"),
@@ -667,6 +689,8 @@ function normalizeRegisteredAlgorithm(
     return operation === "encrypt" || operation === "decrypt"
       ? aeadParameters(algorithm, name, copyBuffers) : new Algorithm(name);
   }
+
+  if (name === "ML-KEM-512" || name === "ML-KEM-768" || name === "ML-KEM-1024") return new Algorithm(name);
 
   if (name === "ML-DSA-44" || name === "ML-DSA-65" || name === "ML-DSA-87") {
     if (operation !== "sign" && operation !== "verify") return new Algorithm(name);

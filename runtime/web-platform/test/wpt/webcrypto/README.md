@@ -1,5 +1,9 @@
 # WebCryptoAPI WPT
 
+The figures below retain the accepted #110 baseline. The
+[ML-KEM increment](modern-ml-kem.md) records its added algorithms, restored cases,
+and isolated per-file evidence; its ordered-stack gate is reported in the PR.
+
 The full unchanged WebCryptoAPI import registers **36,330 cases across 122
 executable files** against this package's canonical `Crypto`, `SubtleCrypto`
 and `CryptoKey`. The approved scope and exact exclusions yield **30,991 pass,
