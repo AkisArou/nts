@@ -1,0 +1,2005 @@
+{
+  "version": 1,
+  "command": "node --expose-gc --import ./runtime/web-platform/host/environment-shim.ts --test --test-reporter=tap runtime/web-platform/test/wpt-events-abort.test.ts runtime/web-platform/test/wpt-streams.test.ts runtime/web-platform/test/wpt-fetch-data.test.ts",
+  "sharedDirectoryPins": {
+    "common": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "resources": "a8f306ee4399724f33399dfdcac7da296f3cc05a"
+  },
+  "versions_sha256": "0db060b6172a8330fffcdf6b50158c8dd6b883e724c5172b8d0f42b3619ca964",
+  "totals": {
+    "pass": 1839,
+    "fail": 0,
+    "blocked": 218
+  },
+  "changedFiles": [],
+  "files": [
+    {
+      "path": "dom/events/AddEventListenerOptions-once.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-passive.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/AddEventListenerOptions-signal.any.js",
+      "before": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/Event-constructors.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/Event-isTrusted.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/EventTarget-add-remove-listener.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/EventTarget-addEventListener.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/EventTarget-constructible.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/Event-returnValue.html",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/Event-type.html",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 2
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 2
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/EventTarget-removeEventListener.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/events/CustomEvent.html",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/abort/AbortSignal.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/abort/abort-signal-any.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/abort/event.any.js",
+      "before": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "dom/abort/timeout.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/body/cloned-any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/body/formdata.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/body/mime-type.any.js",
+      "before": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/body/textstream.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/header-setcookie.any.js",
+      "before": {
+        "pass": 23,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 23,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-basic.any.js",
+      "before": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 3
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-casing.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-combine.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-errors.any.js",
+      "before": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-forbidden-override.any.js",
+      "before": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 72
+      },
+      "after": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 72
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-no-cors.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 8
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 8
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-normalize.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-record.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 10
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 10
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/headers/headers-structure.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/forbidden-method.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-clone-readable-stream-body.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-clone.sub.html",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-constructor-init-body-override.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-consume-empty.any.js",
+      "before": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-consume.any.js",
+      "before": {
+        "pass": 45,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 45,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-disturbed.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-error.any.js",
+      "before": {
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-headers.any.js",
+      "before": {
+        "pass": 24,
+        "fail": 0,
+        "blocked": 37
+      },
+      "after": {
+        "pass": 24,
+        "fail": 0,
+        "blocked": 37
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-init-001.sub.html",
+      "before": {
+        "pass": 50,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 50,
+        "fail": 0,
+        "blocked": 3
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-init-002.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-init-contenttype.any.js",
+      "before": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-init-priority.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 3
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-init-stream.any.js",
+      "before": {
+        "pass": 23,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 23,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-keepalive.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/request/request-structure.any.js",
+      "before": {
+        "pass": 24,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 24,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/json.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-cancel-stream.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-clone.any.js",
+      "before": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-consume-empty.any.js",
+      "before": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-consume-stream.any.js",
+      "before": {
+        "pass": 15,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 15,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-error-from-stream.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-error.any.js",
+      "before": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-form-data.html",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-from-stream.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-init-001.any.js",
+      "before": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-init-002.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-init-contenttype.any.js",
+      "before": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-static-error.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-static-json.any.js",
+      "before": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-static-redirect.any.js",
+      "before": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-bad-chunk.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-1.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-2.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-3.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-4.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-5.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-6.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-disturbed-by-pipe.any.js",
+      "before": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "fetch/api/response/response-stream-with-broken-then.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 6
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 6
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/abort.any.js",
+      "before": {
+        "pass": 33,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 33,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/close-propagation-backward.any.js",
+      "before": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/close-propagation-forward.any.js",
+      "before": {
+        "pass": 30,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 30,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/error-propagation-backward.any.js",
+      "before": {
+        "pass": 35,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 35,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/error-propagation-forward.any.js",
+      "before": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/flow-control.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/general-addition.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/general.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/multiple-propagation.any.js",
+      "before": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 9,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/pipe-through.any.js",
+      "before": {
+        "pass": 43,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 43,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/then-interception.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/throwing-options.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/piping/transform-streams.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/queuing-strategies.any.js",
+      "before": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/bad-buffers-and-views.any.js",
+      "before": {
+        "pass": 24,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 24,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/construct-byob-request.any.js",
+      "before": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/enqueue-with-detached-buffer.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/general.any.js",
+      "before": {
+        "pass": 98,
+        "fail": 0,
+        "blocked": 3
+      },
+      "after": {
+        "pass": 98,
+        "fail": 0,
+        "blocked": 3
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/non-transferable-buffers.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/patched-global.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/read-min.any.js",
+      "before": {
+        "pass": 23,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 23,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/respond-after-enqueue.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/tee.any.js",
+      "before": {
+        "pass": 39,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 39,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-byte-streams/templated.any.js",
+      "before": {
+        "pass": 34,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 34,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/async-iterator.any.js",
+      "before": {
+        "pass": 40,
+        "fail": 0,
+        "blocked": 1
+      },
+      "after": {
+        "pass": 40,
+        "fail": 0,
+        "blocked": 1
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/bad-strategies.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/bad-underlying-sources.any.js",
+      "before": {
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/cancel.any.js",
+      "before": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/constructor.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/count-queuing-strategy-integration.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/crashtests/garbage-collection.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/default-reader.any.js",
+      "before": {
+        "pass": 29,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 29,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/floating-point-total-queue-size.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/from.any.js",
+      "before": {
+        "pass": 48,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 48,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/garbage-collection.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/general.any.js",
+      "before": {
+        "pass": 38,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 38,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/owning-type-message-port.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/owning-type-video-frame.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 5
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 5
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/owning-type.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 5
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 5
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/patched-global.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/reentrant-strategies.any.js",
+      "before": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/tee.any.js",
+      "before": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/readable-streams/templated.any.js",
+      "before": {
+        "pass": 91,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 91,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transferable/transform-stream-members.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/backpressure.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/cancel.any.js",
+      "before": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/errors.any.js",
+      "before": {
+        "pass": 21,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 21,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/flush.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/general.any.js",
+      "before": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/lipfuzz.any.js",
+      "before": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/patched-global.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "after": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/properties.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/reentrant-strategies.any.js",
+      "before": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/strategies.any.js",
+      "before": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/transform-streams/terminate.any.js",
+      "before": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/aborting.any.js",
+      "before": {
+        "pass": 65,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 65,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/bad-strategies.any.js",
+      "before": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/bad-underlying-sinks.any.js",
+      "before": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/byte-length-queuing-strategy.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/close.any.js",
+      "before": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/constructor.any.js",
+      "before": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/count-queuing-strategy.any.js",
+      "before": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/crashtests/garbage-collection.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/error.any.js",
+      "before": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/floating-point-total-queue-size.any.js",
+      "before": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/garbage-collection.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/general.any.js",
+      "before": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/properties.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/reentrant-strategy.any.js",
+      "before": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/start.any.js",
+      "before": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    },
+    {
+      "path": "streams/writable-streams/write.any.js",
+      "before": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 13,
+        "fail": 0,
+        "blocked": 0
+      },
+      "changed": false
+    }
+  ]
+}

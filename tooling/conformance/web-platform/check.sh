@@ -7,6 +7,7 @@ cd "$root"
 node runtime/web-platform/test/wpt/verify-versions.ts
 
 pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false
+node runtime/web-platform/test/wpt/verify-versions.ts
 
 # Exports nothing mentions. Four mechanisms nothing routed through were found by hand in
 # this lane, none of them by looking, so the discipline is a gate rather than a habit.

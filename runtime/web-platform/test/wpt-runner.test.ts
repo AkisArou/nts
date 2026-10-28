@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { WptHarness } from "./wpt/harness.ts";
 import { executeWptFixture, loadWptFixtures, runWptFixtures } from "./wpt/runner.ts";
 import type { WptFixture, WptManifest, WptRunnerOptions, WptSource } from "./wpt/runner.ts";
+import type { WptVersions } from "./wpt/versions.ts";
 
 import type { WptVersions } from "./wpt/versions.ts";
 

@@ -8,7 +8,6 @@ function fixture(support: string[] = []): WptFixture {
   return {
     path: "fetch/api/request/control.html", format: "html", support,
     harnessScripts: ["/resources/testharness.js"],
-    revision: "control", sha256: "control", gitBlob: "control",
     expectedTests: 1, blockedTests: {},
   };
 }

@@ -2,12 +2,19 @@
 
 Unedited fixtures live at their original WPT paths below this directory, for
 example `dom/events/Event-constructors.any.js`. Each area owns a manifest and
-README in a separate directory such as `events-abort/`. `versions.json` records one revision per imported WPT directory and the exact
-SHA-256 and Git blob ID of every original fixture, support file and licence.
-Area manifests record selection and expected registrations; the runner reads
-source identity only from the shared table. `check.sh` verifies the complete
-inventory, including support files no selected case loads.
+README in a separate directory such as `events-abort/`. `versions.json` is the
+single authority for directory revisions and each imported file's SHA-256 and
+Git blob ID. Area manifests describe selected cases and dependencies by path.
 Do not patch a copied case or insert a new header into its bytes.
+
+Each WPT directory has one revision; the most specific directory entry governs
+a path. Shared `common/` and `resources/` files exist once, at the newest revision
+an imported area requires. When either pin advances, rerun the older areas on
+the new support files and record changed results. A genuine incompatibility
+requires re-importing the affected test directory at the newer revision.
+`check.sh` verifies the complete file inventory before running tests, including
+support files no selected case executes. Local adapter code is outside the
+upstream directory inventory.
 
 ## Reuse from another specification area
 

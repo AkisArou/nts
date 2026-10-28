@@ -2,7 +2,7 @@
   "repository": "https://github.com/web-platform-tests/wpt",
   "license": "BSD-3-Clause (server/LICENSE.wpt.md; individual notices retained unedited)",
   "notes": [
-    "All listed files are byte-for-byte copies from this revision.",
+    "All listed files are byte-for-byte copies from the directory revisions in ../versions.json.",
     "Python files are reference source only; the Node server implements their routes in TypeScript and never executes Python.",
     "This manifest covers server resources; WPT test cases are added by the following API-specific pull requests.",
     "Upstream LICENSE.md is stored as server/LICENSE.wpt.md to avoid the shared adapter's independently owned root licence file."

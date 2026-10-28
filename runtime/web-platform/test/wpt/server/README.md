@@ -6,9 +6,9 @@ zlib facilities. Every handler identifies the upstream Python resource it
 reproduces. The Python files are reference sources; they are not executable
 routes in this server.
 
-`upstream-manifest.json` pins WPT revision
-`a8f306ee4399724f33399dfdcac7da296f3cc05a`, and records the source path,
-local path and SHA-256 of every copied file. All copies, including the test
+`upstream-manifest.json` records the source and local paths of every copied
+file. The shared `../versions.json` pins each directory revision and each
+file's SHA-256 and Git blob ID. All copies, including the test
 certificates in `../tools/certs/`, retain their original bytes and notices.
 `LICENSE.wpt.md` is the unedited upstream BSD-3-Clause license and covers those
 copies. The root WPT license and harness belong to the shared adapter.

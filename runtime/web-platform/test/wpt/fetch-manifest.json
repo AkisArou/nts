@@ -1,10 +1,5 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "revisions": {
-    "fetch": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "common": "dbd648158d337580885e70a54f929daf215211a0",
-    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
-  },
   "upstreamPin": {
     "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
     "verified": "2026-10-28",
@@ -65,10 +60,7 @@
   "fixtures": [
     {
       "path": "fetch/api/body/cloned-any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/body/cloned-any.js",
-      "sha256": "17746b9f2b82bfe4769291dfab41aa01b4facafe8e35e04e93e55ec060d5c573",
-      "gitBlob": "2bca96c7043db34b9cd4a60156019b7f870100a2",
       "destination": "runtime/web-platform/test/wpt/fetch/api/body/cloned-any.js",
       "format": "javascript",
       "support": [],
@@ -102,10 +94,7 @@
     },
     {
       "path": "fetch/api/body/formdata.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/body/formdata.any.js",
-      "sha256": "b68d03041db3f1705f2e37d09bbb90def9a924506ce603c387340ccf0a7c534a",
-      "gitBlob": "6733fa0ed70afe5b20935c6b5cd3050ca28787b7",
       "destination": "runtime/web-platform/test/wpt/fetch/api/body/formdata.any.js",
       "format": "javascript",
       "support": [],
@@ -130,10 +119,7 @@
     },
     {
       "path": "fetch/api/body/mime-type.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/body/mime-type.any.js",
-      "sha256": "7a619ace938b4321b3ef5dc5c7ec1e7cb97d668eada0d4541723ff0e34d5c2c2",
-      "gitBlob": "ed19309bdb24f199d3a985ec8c1de9a5452a28f3",
       "destination": "runtime/web-platform/test/wpt/fetch/api/body/mime-type.any.js",
       "format": "javascript",
       "support": [],
@@ -226,10 +212,7 @@
     },
     {
       "path": "fetch/api/body/textstream.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/body/textstream.any.js",
-      "sha256": "bed3e9dc0ac0ae735afb08c9aa643a81f6980e6d06d0866c5bc29e77896860eb",
-      "gitBlob": "a908bc232a9603292909a91bae59d94fe63f7dff",
       "destination": "runtime/web-platform/test/wpt/fetch/api/body/textstream.any.js",
       "format": "javascript",
       "support": [],
@@ -299,10 +282,7 @@
     },
     {
       "path": "fetch/api/headers/header-setcookie.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/header-setcookie.any.js",
-      "sha256": "b587804553ca837bf953fea9b40c94237af803710f56f45e98750b450da42be2",
-      "gitBlob": "cafb780c2c75a9ae6a84fb842f0d0fa075aeffd8",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/header-setcookie.any.js",
       "format": "javascript",
       "support": [],
@@ -431,10 +411,7 @@
     },
     {
       "path": "fetch/api/headers/headers-basic.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-basic.any.js",
-      "sha256": "596cd577710773b42a5edf7c6150138fd0502e005a76b383a8331b5fcaf2cfeb",
-      "gitBlob": "ead1047645a15fa63fdbb665eaf8fc685b3bde7b",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-basic.any.js",
       "format": "javascript",
       "support": [],
@@ -552,10 +529,7 @@
     },
     {
       "path": "fetch/api/headers/headers-casing.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-casing.any.js",
-      "sha256": "f9034ff6ddc3c23e2aa16419738005d229e19a0b40eb5791af465b16df3ab877",
-      "gitBlob": "20b8a9d375aaa0550f44df27cd3cbaec3bb1c772",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-casing.any.js",
       "format": "javascript",
       "support": [],
@@ -584,10 +558,7 @@
     },
     {
       "path": "fetch/api/headers/headers-combine.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-combine.any.js",
-      "sha256": "8bc26fcc318dc1fb0d0b60f2a4dd6d5fdaa8ac2e148d20856f6186b5d4f4971d",
-      "gitBlob": "4f3b6d11df97481c4593ec69ae3432692d4749f4",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-combine.any.js",
       "format": "javascript",
       "support": [],
@@ -624,10 +595,7 @@
     },
     {
       "path": "fetch/api/headers/headers-errors.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-errors.any.js",
-      "sha256": "4b4b9c8d9b72a52c5200feaa67f018cc91d05e9ee0c98a2a18ad56f44873047b",
-      "gitBlob": "82dadd823403898ea5cf9ae30b45751643d31d75",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-errors.any.js",
       "format": "javascript",
       "support": [],
@@ -654,7 +622,7 @@
         },
         {
           "kind": "test",
-          "name": "Check headers get with an invalid name invalid\u0100"
+          "name": "Check headers get with an invalid name invalidĀ"
         },
         {
           "kind": "test",
@@ -662,7 +630,7 @@
         },
         {
           "kind": "test",
-          "name": "Check headers delete with an invalid name invalid\u0100"
+          "name": "Check headers delete with an invalid name invalidĀ"
         },
         {
           "kind": "test",
@@ -670,7 +638,7 @@
         },
         {
           "kind": "test",
-          "name": "Check headers has with an invalid name invalid\u0100"
+          "name": "Check headers has with an invalid name invalidĀ"
         },
         {
           "kind": "test",
@@ -678,7 +646,7 @@
         },
         {
           "kind": "test",
-          "name": "Check headers set with an invalid name invalid\u0100"
+          "name": "Check headers set with an invalid name invalidĀ"
         },
         {
           "kind": "test",
@@ -686,11 +654,11 @@
         },
         {
           "kind": "test",
-          "name": "Check headers set with an invalid value invalid\u0100"
+          "name": "Check headers set with an invalid value invalidĀ"
         },
         {
           "kind": "test",
-          "name": "Check headers append with an invalid name invalid\u0100"
+          "name": "Check headers append with an invalid name invalidĀ"
         },
         {
           "kind": "test",
@@ -698,7 +666,7 @@
         },
         {
           "kind": "test",
-          "name": "Check headers append with an invalid value invalid\u0100"
+          "name": "Check headers append with an invalid value invalidĀ"
         },
         {
           "kind": "test",
@@ -712,10 +680,7 @@
     },
     {
       "path": "fetch/api/headers/headers-forbidden-override.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-forbidden-override.any.js",
-      "sha256": "1e007c7ab7ace17e9f8ffeef50badbdcb3e096629f5f6af6943591e1f6dbd0d8",
-      "gitBlob": "7166e7a04c79a56727e99c8192d59656d68deca1",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-forbidden-override.any.js",
       "format": "javascript",
       "support": [],
@@ -2457,17 +2422,14 @@
     },
     {
       "path": "fetch/api/headers/headers-no-cors.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-no-cors.any.js",
-      "sha256": "4ca3dc516dc745cc0a7073a3cb1e12b20a4938afc63f7f1e849d4de2e2c13b39",
-      "gitBlob": "60dbb9ef67a4790a5cf7a3b059f5186b8270841b",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-no-cors.any.js",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
       "expectedTests": 8,
       "blockedTests": {
-        "Loading data\u2026": {
+        "Loading data…": {
           "category": "network",
           "reason": "Requires an HTTP resource served by WPT or an outbound fetch, outside this no-network Fetch data-type task. The case is registered but its body is not executed; no Node fetch implementation, fake HTTP response or network resource substitute is supplied. This loader also registers additional cases only after the HTTP JSON response; those unregistered dependent cases are separately itemized below."
         },
@@ -2609,7 +2571,7 @@
       "registrations": [
         {
           "kind": "promise_test",
-          "name": "Loading data\u2026"
+          "name": "Loading data…"
         },
         {
           "kind": "test",
@@ -2766,10 +2728,7 @@
     },
     {
       "path": "fetch/api/headers/headers-normalize.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-normalize.any.js",
-      "sha256": "8f914199d80ed14cd5dec7992464a10981e0b5b74fd26b70768f04f1fd1fb4c1",
-      "gitBlob": "68cf5b85f3acb7fcfe6275ffa0c4d37843ac2935",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-normalize.any.js",
       "format": "javascript",
       "support": [],
@@ -2794,10 +2753,7 @@
     },
     {
       "path": "fetch/api/headers/headers-record.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-record.any.js",
-      "sha256": "79dbf361fd95af103c725c77c20510f8a43ccbeb744b98b2e4a5d62fa6d0a31b",
-      "gitBlob": "fa853914f4879ff4d52922289beb156ffd479804",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-record.any.js",
       "format": "javascript",
       "support": [],
@@ -2903,10 +2859,7 @@
     },
     {
       "path": "fetch/api/headers/headers-structure.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/headers/headers-structure.any.js",
-      "sha256": "50f222c12d865e69b860ce02b471accd4b6983a516bec380ece51fbda3a72bec",
-      "gitBlob": "d826bcab2a01f232f2f5bed89fb7d023bf038386",
       "destination": "runtime/web-platform/test/wpt/fetch/api/headers/headers-structure.any.js",
       "format": "javascript",
       "support": [],
@@ -2951,10 +2904,7 @@
     },
     {
       "path": "fetch/api/request/forbidden-method.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/forbidden-method.any.js",
-      "sha256": "d531582e04abd1857c9de1e8b2b745f5899c7e855c1ac0dc6d2bf8c93d439044",
-      "gitBlob": "eb13f37f0b5ef83128bbd2adce9eb3341eee5f72",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/forbidden-method.any.js",
       "format": "javascript",
       "support": [],
@@ -2991,10 +2941,7 @@
     },
     {
       "path": "fetch/api/request/request-clone-readable-stream-body.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-clone-readable-stream-body.any.js",
-      "sha256": "fceb5b247950c5fa814e6b76625ec2c242100e9f3690f5581f94de35c5f1c96b",
-      "gitBlob": "167715aeb98558ca413a95e02034f78e89251785",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-clone-readable-stream-body.any.js",
       "format": "javascript",
       "support": [],
@@ -3011,10 +2958,7 @@
     },
     {
       "path": "fetch/api/request/request-clone.sub.html",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-clone.sub.html",
-      "sha256": "e865105f6f694496d8b12aff5b5d0f7bd5b9f60209192e2a55e8efdbf3212886",
-      "gitBlob": "c690bb3dc036535510de6720f6aaf9d55cb55fe6",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-clone.sub.html",
       "format": "html",
       "support": [
@@ -3045,10 +2989,7 @@
     },
     {
       "path": "fetch/api/request/request-constructor-init-body-override.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-constructor-init-body-override.any.js",
-      "sha256": "f632fc7bf3f5a685fe502c530af6d49fe36716e7fedaa8dac260fe3ccab81590",
-      "gitBlob": "c2bbf86f304c2f55c9b9dbaf3cce28daadc59f30",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-constructor-init-body-override.any.js",
       "format": "javascript",
       "support": [],
@@ -3069,10 +3010,7 @@
     },
     {
       "path": "fetch/api/request/request-consume-empty.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-consume-empty.any.js",
-      "sha256": "96ef1b3d05ec60ce75a5481c71fa0809db3c229cf437d1d88a515a432e54b6fd",
-      "gitBlob": "0bf9672a7950570d8bee99fdec4307429b5ae786",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-consume-empty.any.js",
       "format": "javascript",
       "support": [],
@@ -3163,10 +3101,7 @@
     },
     {
       "path": "fetch/api/request/request-consume.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-consume.any.js",
-      "sha256": "65787e7343e5ba9ceb3181e63b6924886c375caa04614f8457f2ab9e82d6ba37",
-      "gitBlob": "b4cbe7457d20a9f46f6e4ca8cba92b92db49b465",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-consume.any.js",
       "format": "javascript",
       "support": [
@@ -3361,10 +3296,7 @@
     },
     {
       "path": "fetch/api/request/request-disturbed.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-disturbed.any.js",
-      "sha256": "1341f1b0aa01f7150c05a1362179174d7df09d8b02f450964a8c93468975875a",
-      "gitBlob": "5baccb577f6655d6e629e4995ea4e0c3745489b8",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-disturbed.any.js",
       "format": "javascript",
       "support": [
@@ -3420,10 +3352,7 @@
     },
     {
       "path": "fetch/api/request/request-error.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-error.any.js",
-      "sha256": "a87987c0049c2d22b5c1d8fda09f7f6add2db55aed8a7d14001bcadc011c7524",
-      "gitBlob": "9ec8015198daddf55d61fbd98a9d093da0f6a76d",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-error.any.js",
       "format": "javascript",
       "support": [
@@ -3526,10 +3455,7 @@
     },
     {
       "path": "fetch/api/request/request-headers.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-headers.any.js",
-      "sha256": "abb337fe59abb65853d8af6a1545ae6f9650d2f31c4311b68156977d9b472ddc",
-      "gitBlob": "a766bcb5fff6b3387fd840a41e6101f2849bdc39",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-headers.any.js",
       "format": "javascript",
       "support": [],
@@ -4490,10 +4416,7 @@
     },
     {
       "path": "fetch/api/request/request-init-001.sub.html",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-init-001.sub.html",
-      "sha256": "3fabc7a2a771b2cc0f5df5a0da5acbb8658c12eab3234fdd16ef81fc0da1da5d",
-      "gitBlob": "cc495a66527d7b2ab3729bf58c0dc31f8d1088e1",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-init-001.sub.html",
       "format": "html",
       "support": [],
@@ -4734,10 +4657,7 @@
     },
     {
       "path": "fetch/api/request/request-init-002.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-init-002.any.js",
-      "sha256": "236bdb6b8355afc626d618337fe37f9082c64778b8d8e870e02348cf3d41afc4",
-      "gitBlob": "abb6689f1e844acb507929f701f3f8852c0994fd",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-init-002.any.js",
       "format": "javascript",
       "support": [],
@@ -4782,10 +4702,7 @@
     },
     {
       "path": "fetch/api/request/request-init-contenttype.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-init-contenttype.any.js",
-      "sha256": "c20ccf72681fccffc753213864526bbdea359e7ce170068f22b73815542e5246",
-      "gitBlob": "18a6969d4f8acdfb01261fdc3c1621f2f6bb6708",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-init-contenttype.any.js",
       "format": "javascript",
       "support": [],
@@ -4870,10 +4787,7 @@
     },
     {
       "path": "fetch/api/request/request-init-priority.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-init-priority.any.js",
-      "sha256": "844ca1374359c16271b1b0dac2f243a00331c90d5f16bc237dad857e643942d1",
-      "gitBlob": "eb5073c85785c37d1b82e1fe7139988216236587",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-init-priority.any.js",
       "format": "javascript",
       "support": [],
@@ -4932,10 +4846,7 @@
     },
     {
       "path": "fetch/api/request/request-init-stream.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-init-stream.any.js",
-      "sha256": "9594fc0b9873ea3fe0f4f0ba126c76cb0601d375639bf153a7a3aa508525d8dd",
-      "gitBlob": "f0ae441a00258ddd37998387a347d801b4029cec",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-init-stream.any.js",
       "format": "javascript",
       "support": [],
@@ -5040,10 +4951,7 @@
     },
     {
       "path": "fetch/api/request/request-keepalive.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-keepalive.any.js",
-      "sha256": "8ed68023214770c3e2ec660012bfdbd3d5b7cac2b6d4caa5cbe356b681a54a79",
-      "gitBlob": "cb4506db46c931ca347b05a7caa108292e480fc1",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-keepalive.any.js",
       "format": "javascript",
       "support": [
@@ -5067,10 +4975,7 @@
     },
     {
       "path": "fetch/api/request/request-structure.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-structure.any.js",
-      "sha256": "26cde26a2993ef04ca1c97ace296720c770838c752cfd7c4ea67e63e4868ab61",
-      "gitBlob": "5e7855385554bd1c3ef04cfbec78dcfd9f9e9678",
       "destination": "runtime/web-platform/test/wpt/fetch/api/request/request-structure.any.js",
       "format": "javascript",
       "support": [],
@@ -5179,10 +5084,7 @@
     },
     {
       "path": "fetch/api/response/json.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/json.any.js",
-      "sha256": "4f70c9a4e8f3a92b373c937590178d02112b4781ecaa02a096dd2c9df2ecd2e4",
-      "gitBlob": "15f050e6324663388ab706350ad16b0cb424c986",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/json.any.js",
       "format": "javascript",
       "support": [],
@@ -5209,10 +5111,7 @@
     },
     {
       "path": "fetch/api/response/response-cancel-stream.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-cancel-stream.any.js",
-      "sha256": "8f4694dcf6db5590ee97909cf811a49aa7cf19dd4678ae3f7fefcfebdd94588e",
-      "gitBlob": "91140d1afd183b2b6ba2e5fa24bb85c1a7ae40ab",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-cancel-stream.any.js",
       "format": "javascript",
       "support": [
@@ -5272,10 +5171,7 @@
     },
     {
       "path": "fetch/api/response/response-clone.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-clone.any.js",
-      "sha256": "43976959100baebcf07a3333ec42ec5c73c15db5f11e061a661b72b8d49289f5",
-      "gitBlob": "20ce01e9997163f382c510da97930a411f220a17",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-clone.any.js",
       "format": "javascript",
       "support": [
@@ -5391,10 +5287,7 @@
     },
     {
       "path": "fetch/api/response/response-consume-empty.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-consume-empty.any.js",
-      "sha256": "4f17b29d20607de6866450735185508d450ba3e2475bd4c74817cc53852fff3b",
-      "gitBlob": "a5df356258658957137d09ef38da6d71fd7ed488",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-consume-empty.any.js",
       "format": "javascript",
       "support": [],
@@ -5485,10 +5378,7 @@
     },
     {
       "path": "fetch/api/response/response-consume-stream.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-consume-stream.any.js",
-      "sha256": "9aa003bf20a4a812ff6a0ce16818ccba10aea8cbc45ef021052bfebd64e2aa60",
-      "gitBlob": "f89d7341ac6ca9379f67a3d72e05e0e2656c07d5",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-consume-stream.any.js",
       "format": "javascript",
       "support": [
@@ -5563,10 +5453,7 @@
     },
     {
       "path": "fetch/api/response/response-error-from-stream.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-error-from-stream.any.js",
-      "sha256": "089e0b477eacd30327535b77c196b14b68d32cb989a1942821018b02ec6411be",
-      "gitBlob": "33cad40e757bdeec058620f05272faa1fe39706d",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-error-from-stream.any.js",
       "format": "javascript",
       "support": [],
@@ -5635,10 +5522,7 @@
     },
     {
       "path": "fetch/api/response/response-error.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-error.any.js",
-      "sha256": "f5c0863dd92f0e973c4fda128ec9d869cf36a226bd891f387e3faa01e29389cd",
-      "gitBlob": "a76bc4380286fac47b96425abaa6217ed5291e52",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-error.any.js",
       "format": "javascript",
       "support": [],
@@ -5673,7 +5557,7 @@
         },
         {
           "kind": "test",
-          "name": "Throws TypeError when responseInit's statusText is \u0100"
+          "name": "Throws TypeError when responseInit's statusText is Ā"
         },
         {
           "kind": "test",
@@ -5691,10 +5575,7 @@
     },
     {
       "path": "fetch/api/response/response-form-data.html",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-form-data.html",
-      "sha256": "bba91c3602b8f532a34156a93274cef90902da71ef3452c8d2db46f033b88358",
-      "gitBlob": "e45734410abe2c4db03477ae6e8b8a7a7dfe5ee1",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-form-data.html",
       "format": "html",
       "support": [],
@@ -5766,10 +5647,7 @@
     },
     {
       "path": "fetch/api/response/response-from-stream.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-from-stream.any.js",
-      "sha256": "048609ff6a98cf7ebf08f8cb3b081535618a0bd72dda192e249b86e0177d0b33",
-      "gitBlob": "ea5192bfb10dcf316ef953c809b89a7682de92a3",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-from-stream.any.js",
       "format": "javascript",
       "support": [],
@@ -5794,10 +5672,7 @@
     },
     {
       "path": "fetch/api/response/response-init-001.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-init-001.any.js",
-      "sha256": "a4f53fc2c718a3a6d9f2692f6778e88dc74f7c938940ba47ffc4ac5dd9096482",
-      "gitBlob": "559e49ad11ffe13a7a291935f6540b6a177e4c9f",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-init-001.any.js",
       "format": "javascript",
       "support": [],
@@ -5846,10 +5721,7 @@
     },
     {
       "path": "fetch/api/response/response-init-002.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-init-002.any.js",
-      "sha256": "258a5feec4a406c9501f9b7c2324e923d4c25c4b8aae4ffa712d27dcc2c4917f",
-      "gitBlob": "6c0a46e480406c359abcc7cc315810a844fff6ec",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-init-002.any.js",
       "format": "javascript",
       "support": [
@@ -5896,10 +5768,7 @@
     },
     {
       "path": "fetch/api/response/response-init-contenttype.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-init-contenttype.any.js",
-      "sha256": "0812b00fb59a414652e82cea3b9f858204edb4646f6d9cb724a87c375fd3898e",
-      "gitBlob": "3a7744c28782c87f0a92cfaab17512ca0859b25c",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-init-contenttype.any.js",
       "format": "javascript",
       "support": [],
@@ -5984,10 +5853,7 @@
     },
     {
       "path": "fetch/api/response/response-static-error.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-static-error.any.js",
-      "sha256": "d55c1c97d9db34123e02a73b44965e31bb638b75ef38cbaf1fe01b0050c49355",
-      "gitBlob": "4097eab37b4c90e8c453027b99fbf4ed31a08b42",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-static-error.any.js",
       "format": "javascript",
       "support": [],
@@ -6008,10 +5874,7 @@
     },
     {
       "path": "fetch/api/response/response-static-json.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-static-json.any.js",
-      "sha256": "467229540cf61c12ee730be8d658d921b9b70afebfc9b8379ca6afe8b6a1b060",
-      "gitBlob": "5ec79e69aa3f9c1009050b083e0cf8c0cc76e1dc",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-static-json.any.js",
       "format": "javascript",
       "support": [],
@@ -6074,7 +5937,7 @@
         },
         {
           "kind": "promise_test",
-          "name": "Check response returned by static json() with input \ud834\udf06"
+          "name": "Check response returned by static json() with input 𝌆"
         },
         {
           "kind": "promise_test",
@@ -6088,10 +5951,7 @@
     },
     {
       "path": "fetch/api/response/response-static-redirect.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-static-redirect.any.js",
-      "sha256": "0ba5cced747dffc81bc08e528aa40014488e9679985f0cc501fa5143d8fef29e",
-      "gitBlob": "b16c56d83003d9b08944e67f9492046e9c890b48",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-static-redirect.any.js",
       "format": "javascript",
       "support": [],
@@ -6148,10 +6008,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-bad-chunk.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-bad-chunk.any.js",
-      "sha256": "fcd211b34f1d050d261edab690a4f66528b29046d9067c0b0bf47e435bf4faf1",
-      "gitBlob": "8e83cd190873a904a366b8eb6cdcc44229f742c0",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-bad-chunk.any.js",
       "format": "javascript",
       "support": [],
@@ -6188,10 +6045,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-1.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-1.any.js",
-      "sha256": "538bb0bdcba4f6c4cd83d1908b7348e394a0c5243cf84db4a9e14606688da46d",
-      "gitBlob": "64f65f16f23e7d797451c634a2f472a51d6955c0",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-1.any.js",
       "format": "javascript",
       "support": [
@@ -6271,10 +6125,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-2.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-2.any.js",
-      "sha256": "d4390d2591d35faf5b624f6a2d9083473dd4ead551bbd480182a852acfc910f2",
-      "gitBlob": "c46a180a18d7941f1b716f45fba2f0d52d1278e3",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-2.any.js",
       "format": "javascript",
       "support": [
@@ -6354,10 +6205,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-3.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-3.any.js",
-      "sha256": "2b379190dc1043b7f9f923cf9a792ad5f6f7aa81c0c6ed02ebb5fe5018075771",
-      "gitBlob": "35fb086469b440f2e566978ba9a7aa8a14e5f7c6",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-3.any.js",
       "format": "javascript",
       "support": [
@@ -6437,10 +6285,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-4.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-4.any.js",
-      "sha256": "455dbe3ce70ec2f82edcc121a116406f1ca14d59f9f05fbfebb73f7f2c627a77",
-      "gitBlob": "490672febd025479b26bfe9ba85a5b7789f3ecc9",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-4.any.js",
       "format": "javascript",
       "support": [
@@ -6520,10 +6365,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-5.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-5.any.js",
-      "sha256": "9e35fac81a159e60e534e8ad5c7b311f907cdab62a59c0fe045c6a11ac3dff8a",
-      "gitBlob": "348fc3938314dc9fd065300be6d508a3d57fb11a",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-5.any.js",
       "format": "javascript",
       "support": [
@@ -6603,10 +6445,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-6.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-6.any.js",
-      "sha256": "631c04004ad0ef1f4a578b7e892195c280748ff6264cfedf321ab5e506f546dd",
-      "gitBlob": "61d8544f0786c803f2793d463390537ff7d78fca",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-6.any.js",
       "format": "javascript",
       "support": [],
@@ -6639,10 +6478,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-by-pipe.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-by-pipe.any.js",
-      "sha256": "6cb288bdd66742de04ee7cebe2de9d093524c0b80d51affa5efd64daab125568",
-      "gitBlob": "5341b75271ead59be5022afd99ffbe22a26628fb",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-disturbed-by-pipe.any.js",
       "format": "javascript",
       "support": [],
@@ -6663,10 +6499,7 @@
     },
     {
       "path": "fetch/api/response/response-stream-with-broken-then.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-with-broken-then.any.js",
-      "sha256": "04b27499dc1d4f65d843401209e885f7fe17135d67e459698649656d8228e1cc",
-      "gitBlob": "8fef66c8a281c6248fd36763889bc95aa899f7cc",
       "destination": "runtime/web-platform/test/wpt/fetch/api/response/response-stream-with-broken-then.any.js",
       "format": "javascript",
       "support": [
@@ -6732,46 +6565,28 @@
   "support": [
     {
       "path": "common/get-host-info.sub.js",
-      "revision": "dbd648158d337580885e70a54f929daf215211a0",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/get-host-info.sub.js",
-      "sha256": "9e63583b3b64521961b7b9cc8a9efad70bb2c2bbe3ab732dd3f320b16f3d604e",
-      "gitBlob": "9b8c2b5de63f282663cab92231fe1c35184e6f02"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/get-host-info.sub.js"
     },
     {
       "path": "common/utils.js",
-      "revision": "dbd648158d337580885e70a54f929daf215211a0",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/utils.js",
-      "sha256": "10b4eb5bc8bd8f28edd13f2a3f258de3b71428a41997cce25dc00f2391011db0",
-      "gitBlob": "62e742bee7f67cf3bd92a217a0a92b23fddf3017"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/utils.js"
     },
     {
       "path": "fetch/api/request/request-error.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-error.js",
-      "sha256": "6e8cda90613eb7da52862ca4463f3842ad34b39c9ebe30df5cb8afcfd102c762",
-      "gitBlob": "cf77313f5bc3096aa5862c6508a231eea582bd61"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/request/request-error.js"
     },
     {
       "path": "fetch/api/resources/utils.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/resources/utils.js",
-      "sha256": "b0471d45399909b060f9d36caca1346477c47852c280ac5a2fb4c3d7d85077aa",
-      "gitBlob": "3721d9bf9cc7cf6d01709aa5e22de2eb9bd4bda7"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/resources/utils.js"
     },
     {
       "path": "fetch/api/response/response-stream-disturbed-util.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-util.js",
-      "sha256": "d6bf75404cd563fafd723c12083dcc28ae40c3c5c0030f70934a7456c4c132ab",
-      "gitBlob": "50bb586aa0743966e4d626a52e3051ba47b7768c"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/fetch/api/response/response-stream-disturbed-util.js"
     }
   ],
   "license": {
     "path": "LICENSE.md",
-    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
     "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/LICENSE.md",
-    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
-    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
     "identifier": "BSD-3-Clause",
     "note": "Copy the original licence bytes; preserve every existing fixture header and do not insert new text into upstream files."
   },
