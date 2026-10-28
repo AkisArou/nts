@@ -1855,8 +1855,23 @@
         "outfile cumulative checksum must be -412589664 and outerr checksum must be 0."
       ],
       "category": "Large real programs",
-      "portOrder": 42,
-      "portStatus": "pending-port"
+      "portOrder": 39,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 108,
+        "url": "https://github.com/AkisArou/nts/pull/108"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/108",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 7,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 250.195342,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/108"
+      }
     },
     {
       "name": "FlightPlanner",
@@ -2055,7 +2070,22 @@
       },
       "category": "Large real programs",
       "portOrder": 33,
-      "portStatus": "pending-port"
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 102,
+        "url": "https://github.com/AkisArou/nts/pull/102"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/102",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 8,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 3.866324,
+        "seed": 1,
+        "completeOperationTimingException": false,
+        "evidence": "https://github.com/AkisArou/nts/pull/102"
+      }
     },
     {
       "name": "OfflineAssembler",
@@ -2352,7 +2382,22 @@
       },
       "category": "Large real programs",
       "portOrder": 34,
-      "portStatus": "pending-port"
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 103,
+        "url": "https://github.com/AkisArou/nts/pull/103"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/103",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 9,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 23.0069027,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/103"
+      }
     },
     {
       "name": "UniPoker",
@@ -8189,8 +8234,8 @@
         "compileTest returns the original diagnostics string and resultFilesCount from the in-memory emitted file map."
       ],
       "category": "Large real programs",
-      "portOrder": 43,
-      "portStatus": "pending-port"
+      "portOrder": 40,
+      "portStatus": "in-progress-port"
     },
     {
       "name": "async-fs",
@@ -8798,7 +8843,22 @@
       ],
       "category": "Numeric and 3D work",
       "portOrder": 32,
-      "portStatus": "pending-port"
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 101,
+        "url": "https://github.com/AkisArou/nts/pull/101"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/101",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 7,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 94.389965,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/101"
+      }
     },
     {
       "name": "babylonjs-startup-es5",
@@ -11469,7 +11529,7 @@
         }
       ],
       "requiredAdaptations": [
-        "Transcribe test registration to an explicit checked typed register operation, preserving duplicate-name failures, registration order and all tests.",
+        "Keep the original Proxy registration, duplicate-name checks, registration order and all 285 tests. Its one initialization Proxy and 285 set traps remain unchanged.",
         "Keep the complete compiler, standard library, test programs and original assertions; source strings are input to its own shading-language parser, not JavaScript eval.",
         "Replace only the outer JetStream loader/timing bindings with static modules."
       ],
@@ -11478,9 +11538,19 @@
       ],
       "category": "Large real programs",
       "portOrder": 41,
-      "portStatus": "pending-approved-unchanged-port",
-      "portStatusEvidence": "wsl-prototype-audit.json",
-      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
+      "portStatus": "validated-awaiting-ordered-pull-request",
+      "portStatusEvidence": "https://github.com/AkisArou/nts/tree/chatgpt/jetstream-wsl/benchmarks/cases/jetstream-wsl",
+      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized.",
+      "publishedBranch": "chatgpt/jetstream-wsl",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 9,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 8307.094613,
+        "seed": 1,
+        "completeOperationTimingException": true
+      }
     },
     {
       "name": "prismjs-startup-es6",
@@ -14754,7 +14824,22 @@
       ],
       "category": "Large real programs",
       "portOrder": 35,
-      "portStatus": "pending-port"
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 104,
+        "url": "https://github.com/AkisArou/nts/pull/104"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/104",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 7,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 90.325335,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/104"
+      }
     },
     {
       "name": "babel-wtb",
@@ -15197,8 +15282,8 @@
       ],
       "originalValidation": [],
       "category": "Large real programs",
-      "portOrder": 36,
-      "portStatus": "pending-approved-unchanged-port",
+      "portOrder": 42,
+      "portStatus": "in-progress-approved-unchanged-port",
       "portStatusEvidence": "babel-wtb-model-audit.json",
       "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
     },
@@ -17351,8 +17436,23 @@
       ],
       "originalValidation": [],
       "category": "Large real programs",
-      "portOrder": 37,
-      "portStatus": "pending-port"
+      "portOrder": 36,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 105,
+        "url": "https://github.com/AkisArou/nts/pull/105"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/105",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 8,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 54.321999,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/105"
+      }
     },
     {
       "name": "chai-wtb",
@@ -18179,8 +18279,23 @@
         "For each original input return tokenize(payload,{loc:true,range:true}).length + parse(payload,{loc:true,range:true}).body.length."
       ],
       "category": "Large real programs",
-      "portOrder": 38,
-      "portStatus": "pending-port"
+      "portOrder": 37,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 106,
+        "url": "https://github.com/AkisArou/nts/pull/106"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/106",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 8,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 61.002504,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/106"
+      }
     },
     {
       "name": "esprima-next-wtb",
@@ -18546,8 +18661,23 @@
         "For each original input return tokenize(payload,{loc:true,range:true}).length + parse(payload,{loc:true,range:true}).body.length."
       ],
       "category": "Large real programs",
-      "portOrder": 39,
-      "portStatus": "pending-port"
+      "portOrder": 38,
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 107,
+        "url": "https://github.com/AkisArou/nts/pull/107"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/107",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 9,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 57.491258,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/107"
+      }
     },
     {
       "name": "lebab-wtb",
@@ -19649,8 +19779,8 @@
         "Original transforms: arg-rest, arg-spread, arrow, class, for-of, let, template, includes, obj-method, obj-shorthand; return transform result including warnings."
       ],
       "category": "Large real programs",
-      "portOrder": 40,
-      "portStatus": "pending-approved-unchanged-port",
+      "portOrder": 43,
+      "portStatus": "in-progress-approved-unchanged-port",
       "portStatusEvidence": "lebab-wtb-model-audit.json",
       "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
     },
@@ -21367,8 +21497,7 @@
   ],
   "portabilityFindings": {
     "selectedByInitialInventory": 43,
-    "unaffectedSelectedWorkloads": 40,
-    "note": "The 43-workload selection is unchanged. WSL, Babel WTB and Lebab WTB are authorized for unchanged transcription, including their audited runtime prototype/descriptor operations. The evidence files retain the exact original operation counts; these rows are no longer waiting for a scope decision.",
+    "note": "The 43-workload selection is unchanged. WSL, Babel WTB and Lebab WTB are authorized unchanged, including their original prototype/descriptor operations. Additional completed-port audits identify retained operations in Three.js, Espree and Esprima-next; these are compiler-support findings for maintainers, not reasons to rewrite the original programs.",
     "unchangedOperationTargets": [
       {
         "name": "WSL",
@@ -21388,22 +21517,69 @@
         "priorHoldReason": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
         "decision": "Port unchanged, retaining the audited operation as an nts compiler target. The maintainer handoff resolves the earlier scope hold."
       }
+    ],
+    "originalAuditUnaffectedSelectedWorkloads": 40,
+    "additionalImplementationFindings": [
+      {
+        "name": "threejs",
+        "pullRequest": 101,
+        "operation": "Object.defineProperty, Object.defineProperties and Object.freeze",
+        "initialization": {
+          "defineProperty": 31,
+          "defineProperties": 11,
+          "freeze": 3
+        },
+        "firstCompleteIteration": {
+          "defineProperty": 96000,
+          "defineProperties": 24000
+        },
+        "laterObservedIterations": {
+          "defineProperty": 0,
+          "defineProperties": 0
+        },
+        "evidence": "https://github.com/AkisArou/nts/pull/101",
+        "decision": "Original operations retained unchanged; original and typed-port runtime counts and full WebGL traces match."
+      },
+      {
+        "name": "espree-wtb",
+        "pullRequest": 106,
+        "operation": "Object.freeze",
+        "initialization": {
+          "freeze": 91
+        },
+        "completeIteration": {
+          "freeze": 0
+        },
+        "evidence": "https://github.com/AkisArou/nts/pull/106",
+        "decision": "Original initialization and dormant unionWith freezing operations retained unchanged."
+      },
+      {
+        "name": "esprima-next-wtb",
+        "pullRequest": 107,
+        "operation": "Parser.validateParam Object.defineProperty",
+        "completeIteration": {
+          "defineProperty": 2184
+        },
+        "perInputCounts": [
+          232,
+          832,
+          803,
+          317
+        ],
+        "originalBundleInitialization": {
+          "defineProperty": 172
+        },
+        "evidence": "https://github.com/AkisArou/nts/pull/107",
+        "decision": "Original parameter-registration descriptors retained unchanged; typed-port counts match. Original initialization count includes Webpack export scaffolding represented by static imports/exports in the port."
+      }
     ]
   },
   "portSummary": {
     "selected": 43,
-    "openPullRequests": 31,
-    "readyForMaintainerCompilation": 25,
+    "openPullRequests": 39,
+    "readyForMaintainerCompilation": 33,
     "draftsAwaitingAwaitedHarness": 6,
     "pendingPorts": [
-      "threejs",
-      "FlightPlanner",
-      "OfflineAssembler",
-      "acorn-wtb",
-      "babylon-wtb",
-      "espree-wtb",
-      "esprima-next-wtb",
-      "typescript-octane",
       "typescript-lib",
       "WSL",
       "babel-wtb",
@@ -21415,6 +21591,14 @@
       "Node oracle counts",
       "gate execution",
       "measurement and landing"
+    ],
+    "pendingImplementation": [
+      "typescript-lib",
+      "babel-wtb",
+      "lebab-wtb"
+    ],
+    "validatedAwaitingOrderedPullRequest": [
+      "WSL"
     ]
   }
 }
