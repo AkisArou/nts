@@ -7,6 +7,12 @@
 export { createPerformance } from "./performance/performance.ts";
 export { createNavigator } from "./navigator/navigator.ts";
 export type { NavigatorCapability } from "./provider/navigator.ts";
+export { installURLPatternURLCapability, URLPatternCapabilityError } from "./provider/url-pattern.ts";
+export type {
+  URLPatternURLCapability,
+  URLPatternCanonicalComponent,
+  URLPatternCanonicalResult,
+} from "./provider/url-pattern.ts";
 export type {
   PerformanceCapabilities,
   PerformanceTimeOrigin,
