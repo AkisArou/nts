@@ -962,6 +962,14 @@ impl<S: ViewPhase> fmt::Debug for File<'_, S> {
 }
 
 impl<'s, S: ViewPhase> File<'s, S> {
+    /// The requested checked project's configuration, including for imported
+    /// and default-library files. This is a locator, not semantic equivalence:
+    /// another set of roots may merge declarations in the same project.
+    #[must_use]
+    pub fn project_config_path(self) -> &'s Utf8Path {
+        self.program_path()
+    }
+
     pub(crate) fn program_path(self) -> &'s Utf8Path {
         crate::host::native_path(self.project.program.command_line().get().config_name())
     }

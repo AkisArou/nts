@@ -1897,6 +1897,7 @@ mod tests {
             nts_semantic_schema::CallTarget {
                 signature: SignatureId(1),
                 callee: None,
+                declaration: None,
             },
         );
         let owner = Owner::Function(NodeId(10));

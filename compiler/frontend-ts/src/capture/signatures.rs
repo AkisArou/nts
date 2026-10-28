@@ -77,13 +77,23 @@ impl<'p> Capture<'p, '_> {
                 let callee = signature
                     .declaration()
                     .and_then(|node| self.nodes.get(&node).copied());
+                let declaration = signature
+                    .declaration()
+                    .map(|node| self.declaration_site(node))
+                    .transpose()?
+                    .flatten();
                 let signature = self.intern_signature(
                     signature,
                     kind == NodeKind::Syntax(syntax::NEW_EXPRESSION),
                 )?;
-                self.snapshot
-                    .call_targets
-                    .insert(id, CallTarget { signature, callee });
+                self.snapshot.call_targets.insert(
+                    id,
+                    CallTarget {
+                        signature,
+                        callee,
+                        declaration,
+                    },
+                );
             }
             if matches!(
                 kind,

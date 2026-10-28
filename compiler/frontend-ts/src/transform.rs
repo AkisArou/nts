@@ -2,7 +2,8 @@
 //! They rewrite owned syntax trees and may ask for the checker's rendered types.
 
 use camino::Utf8Path;
-use nts_semantic_schema::NodeId;
+use nts_semantic_schema::{DeclarationIdentity, NodeId, SnapshotError};
+use std::cell::RefCell;
 
 use crate::SyntaxTree;
 
@@ -57,16 +58,84 @@ pub struct TransformInput<'a> {
     pub tree: &'a SyntaxTree,
 }
 
-/// The checker's type at a node of the file being transformed, printed as
-/// TypeScript would write it there.
+/// Checked facts at nodes of the file being inspected or transformed. Binding
+/// uses owned declaration identities; rendered types are a presentation query.
 #[derive(Debug)]
 pub struct NodeTypes<'a> {
     nodes: &'a [Option<nts_frontend_tsrs::Node<'a>>],
+    sources: RefCell<crate::declaration::Sources>,
+}
+
+/// Typed declaration facts for one use. Declaration identities are locators;
+/// they do not certify that an added root leaves the semantic world unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeReferences {
+    pub site: DeclarationIdentity,
+    /// Declarations of the referenced symbol and every alias supplier.
+    pub declarations: Vec<DeclarationIdentity>,
+    /// The overload selected by the checker, independent of the supplier set.
+    pub selected_overload: Option<DeclarationIdentity>,
 }
 
 impl<'a> NodeTypes<'a> {
     pub(crate) fn new(nodes: &'a [Option<nts_frontend_tsrs::Node<'a>>]) -> Self {
-        Self { nodes }
+        Self {
+            nodes,
+            sources: RefCell::default(),
+        }
+    }
+
+    /// Own a checked syntax locator. Synthetic list nodes have no locator.
+    pub fn identity_at(&self, node: NodeId) -> Result<Option<DeclarationIdentity>, SnapshotError> {
+        match self.nodes.get(node.0 as usize).copied().flatten() {
+            Some(node) => self.sources.borrow_mut().identity(node),
+            None => Ok(None),
+        }
+    }
+
+    /// Read declaration identities without rendered type strings or native IDs.
+    /// Alias cycles are an error, never an incomplete supplier claim.
+    pub fn references_at(&self, node: NodeId) -> Result<Option<NodeReferences>, SnapshotError> {
+        let Some(native) = self.nodes.get(node.0 as usize).copied().flatten() else {
+            return Ok(None);
+        };
+        let Some(site) = self.identity_at(node)? else {
+            return Ok(None);
+        };
+        let mut sources = self.sources.borrow_mut();
+        let mut declarations = Vec::new();
+        let mut symbol = native.symbol();
+        #[expect(
+            clippy::mutable_key_type,
+            reason = "native Symbol Eq/Hash uses immutable opaque identities, never the file's lazy UTF-16 index"
+        )]
+        let mut seen = rustc_hash::FxHashSet::default();
+        while let Some(current) = symbol {
+            if !seen.insert(current) {
+                return Err(SnapshotError::Project(
+                    "cyclic alias in declaration inspection".into(),
+                ));
+            }
+            for declaration in current.declarations() {
+                if let Some(identity) = sources.identity(declaration)? {
+                    declarations.push(identity);
+                }
+            }
+            symbol = current.alias_target();
+        }
+        declarations.sort();
+        declarations.dedup();
+        let selected_overload = native
+            .resolved_signature()
+            .and_then(nts_frontend_tsrs::Signature::declaration)
+            .map(|declaration| sources.identity(declaration))
+            .transpose()?
+            .flatten();
+        Ok(Some(NodeReferences {
+            site,
+            declarations,
+            selected_overload,
+        }))
     }
 
     #[must_use]

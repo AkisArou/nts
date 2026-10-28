@@ -66,7 +66,9 @@ use crate::origin::Origin;
 /// 49: effective checker strictness options, reported without nts policy.
 /// 50: the complete native strict-option group and the native-resolved config
 /// responsible for each disabled member, for project compile policy.
-pub const SCHEMA_VERSION: u32 = 50;
+/// 51: owned source contexts and declaration sites, including external symbols
+/// and selected overloads, for inspection-to-final-capture rebinding.
+pub const SCHEMA_VERSION: u32 = 51;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -167,6 +169,12 @@ pub struct SemanticSnapshot {
     pub semantics: ProjectSemantics,
     /// Indexed by `nts_diagnostics::SourceId`.
     pub sources: Vec<SourceFile>,
+    /// Interned source contents and owning checked projects, including libraries
+    /// outside the captured syntax set. Locators alone do not certify semantics.
+    pub declaration_sources: Vec<crate::DeclarationSource>,
+    /// Captured source to its owning declaration context. Diagnostic-only
+    /// sources have no entry.
+    pub source_contexts: FxHashMap<nts_diagnostics::SourceId, crate::DeclarationSourceId>,
     /// Indexed by [`ModuleId`].
     pub modules: Vec<ModuleRecord>,
     /// Indexed by [`SymbolId`].
@@ -448,6 +456,8 @@ pub struct CallTarget {
     /// ambient function. The signature is still known, so the call can be typed
     /// exactly; only the direct symbol reference is unavailable.
     pub callee: Option<NodeId>,
+    /// Selected overload, including declarations outside the captured AST.
+    pub declaration: Option<crate::DeclarationSite>,
 }
 
 /// One module in the source graph.
@@ -479,6 +489,9 @@ pub struct SymbolRecord {
     /// Empty for a symbol declared outside the decoded file set, which is honest:
     /// there is no node to point at.
     pub declarations: Vec<NodeId>,
+    /// Every declaration, including ambient/merged declarations outside the
+    /// captured syntax set. Native checker handles never enter this table.
+    pub declaration_sites: Vec<crate::DeclarationSite>,
     /// The symbol's type, if the checker resolved one.
     pub ty: Option<TypeId>,
     /// The symbol this one aliases, for an `import` or `export` specifier.
@@ -1342,6 +1355,8 @@ impl SemanticSnapshot {
             });
         }
 
+        self.validate_declarations()?;
+
         for (index, node) in self.nodes.iter().enumerate() {
             if let Some(NodeId(parent)) = node.parent {
                 self.check_node(parent)?;
@@ -1464,6 +1479,8 @@ impl SemanticSnapshot {
             schema_version,
             semantics,
             sources,
+            declaration_sources,
+            source_contexts,
             modules,
             symbols,
             types,
@@ -1484,6 +1501,8 @@ impl SemanticSnapshot {
         encode(&mut bytes, schema_version)?;
         encode(&mut bytes, semantics)?;
         encode(&mut bytes, sources)?;
+        encode(&mut bytes, declaration_sources)?;
+        encode(&mut bytes, &by_key(source_contexts))?;
         encode(&mut bytes, modules)?;
         encode(&mut bytes, symbols)?;
         encode(&mut bytes, types)?;

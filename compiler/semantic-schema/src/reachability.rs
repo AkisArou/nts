@@ -381,6 +381,7 @@ mod tests {
             name: name.to_owned().into(),
             flags: SymbolFlags::default(),
             declarations,
+            declaration_sites: Vec::new(),
             ty: None,
             aliased: None,
             library: None,

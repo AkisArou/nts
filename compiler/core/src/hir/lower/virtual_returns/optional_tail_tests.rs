@@ -664,6 +664,7 @@ fn overloaded_property() -> (Fixture, Func, NodeId) {
             builtin: None,
             flags: nts_semantic_schema::SymbolFlags(0),
             declarations: vec![overload, fixture.declaration],
+            declaration_sites: Vec::new(),
             ty: Some(TypeId(3)),
             aliased: None,
             library: None,

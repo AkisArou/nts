@@ -455,6 +455,7 @@ mod tests {
                 nts_semantic_schema::CallTarget {
                     signature: SignatureId(signature),
                     callee: Some(selected),
+                    declaration: None,
                 },
             );
         }
@@ -640,6 +641,7 @@ mod tests {
                 nts_semantic_schema::CallTarget {
                     signature: SignatureId(2),
                     callee: Some(first),
+                    declaration: None,
                 },
             );
         }

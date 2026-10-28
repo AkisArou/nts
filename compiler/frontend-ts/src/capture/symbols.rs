@@ -13,6 +13,14 @@ impl<'p> Capture<'p, '_> {
             return Ok(*id);
         }
         let declarations: Vec<_> = symbol.declarations().collect();
+        let mut declaration_sites = Vec::new();
+        for &node in &declarations {
+            if let Some(site) = self.declaration_site(node)? {
+                declaration_sites.push(site);
+            }
+        }
+        declaration_sites.sort_unstable();
+        declaration_sites.dedup();
         let mut captured: Vec<_> = declarations
             .iter()
             .filter_map(|node| self.nodes.get(node).copied())
@@ -48,6 +56,7 @@ impl<'p> Capture<'p, '_> {
             name: PropertyKey::Name(String::new()),
             flags: schema_flags(classification),
             declarations: captured,
+            declaration_sites,
             ty: None,
             aliased: None,
             library,

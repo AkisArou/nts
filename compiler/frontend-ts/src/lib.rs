@@ -10,6 +10,7 @@
 mod annotations;
 mod bindings;
 mod capture;
+mod declaration;
 mod early_errors;
 mod frontend;
 pub mod generated;

@@ -4,6 +4,7 @@
 //! resolved. A cross-file declaration is therefore an ordinary lookup; no
 //! declaration handle or deferred transport repair survives this boundary.
 
+mod declarations;
 mod diagnostics;
 mod graph;
 mod queries;
@@ -35,6 +36,8 @@ pub(crate) struct Capture<'p, 'r> {
     workspace_uri_resolutions: usize,
     nodes: FxHashMap<Node<'p>, NodeId>,
     native_nodes: Vec<Option<Node<'p>>>,
+    declaration_sources: crate::declaration::Sources,
+    declaration_source_ids: FxHashMap<Node<'p>, nts_semantic_schema::DeclarationSourceId>,
     queries: Vec<queries::Queries>,
     files: Vec<(File<'p>, NodeId)>,
     symbols: FxHashMap<Symbol<'p>, SymbolId>,
@@ -98,6 +101,8 @@ impl<'p, 'r> Capture<'p, 'r> {
             workspace_uri_resolutions: 0,
             nodes: FxHashMap::default(),
             native_nodes: Vec::new(),
+            declaration_sources: crate::declaration::Sources::default(),
+            declaration_source_ids: FxHashMap::default(),
             queries: Vec::new(),
             files: Vec::new(),
             symbols: FxHashMap::default(),
@@ -111,6 +116,8 @@ impl<'p, 'r> Capture<'p, 'r> {
         };
         for file in files {
             let source = SourceId(arena_index(capture.snapshot.sources.len())?);
+            let context = capture.intern_declaration_source(file)?;
+            capture.snapshot.source_contexts.insert(source, context);
             let tree = crate::native_ast::capture(file, source)?;
             let base = arena_index(capture.snapshot.nodes.len())?;
             capture

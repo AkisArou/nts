@@ -10,6 +10,7 @@ fn snapshot() -> SemanticSnapshot {
         builtin: None,
         flags: SymbolFlags::INTERFACE,
         declarations: Vec::new(),
+        declaration_sites: Vec::new(),
         ty: None,
         aliased: None,
         library: Some(nts_semantic_schema::Library::Es),

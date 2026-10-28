@@ -23,6 +23,7 @@
 
 pub mod binding;
 pub mod children;
+pub mod declaration;
 pub mod keys;
 pub mod origin;
 pub mod protocol;
@@ -34,6 +35,9 @@ pub mod text;
 /// answers to, and two of them had their own copy before this.
 pub mod walk;
 
+pub use declaration::{
+    DeclarationIdentity, DeclarationIndex, DeclarationSite, DeclarationSource, DeclarationSourceId,
+};
 pub use keys::WellKnownSymbol;
 pub use origin::{GeneratedReason, Origin, ScopeId};
 pub use protocol::{ITERATION, is_an_iteration_protocol, iteration_protocol_of};

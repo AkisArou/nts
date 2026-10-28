@@ -201,6 +201,7 @@ mod tests {
                 name: name.to_string().into(),
                 flags,
                 declarations: Vec::new(),
+                declaration_sites: Vec::new(),
                 ty: None,
                 aliased: None,
                 library: None,
