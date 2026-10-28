@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
-import { normalizeGeneratedNumbers } from "../conformance/observation-text.ts";
+import { normalizeGeneratedNumbers, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
 
 // Version 2 recognizes the TypeScript case body when classifying diagnostics.
 // An older raw checkpoint must be remeasured, not resumed with stale locations.
@@ -101,9 +101,11 @@ export function parseObservation(input: unknown): TypeScriptObservation {
     case "invalid-hir":
       keys(row, ["kind", "validator"], "validator observation");
       return { kind: "invalid-hir", validator: normalizeGeneratedNumbers(text(row.validator, "missing validator error")) };
-    case "runtime-abort":
+    case "runtime-abort": {
       keys(row, ["kind", "failure"], "abort observation");
-      return { kind: "runtime-abort", failure: runtimeFailure(row.failure) };
+      const failure = runtimeFailure(row.failure);
+      return { kind: "runtime-abort", failure: { ...failure, output: stableRuntimeAbortOutput(failure.output) } };
+    }
     default: throw new Error(`unknown TypeScript observation kind: ${String(row.kind)}`);
   }
 }

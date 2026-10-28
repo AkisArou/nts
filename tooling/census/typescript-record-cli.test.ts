@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { harnessHashOf } from "./project.ts";
-import { parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, type TypeScriptObservation } from "./typescript-record.ts";
+import { parseObservation, parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, type TypeScriptObservation } from "./typescript-record.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
@@ -19,6 +19,8 @@ const wrong: TypeScriptObservation = { kind: "wrong", errorClass: "Test262Error"
 const refused: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }] };
 const invalid: TypeScriptObservation = { kind: "invalid-hir", validator: "CallArgumentType { expected: Float64, found: Erased }" };
 const abort: TypeScriptObservation = { kind: "runtime-abort", failure: { exit: null, signal: "SIGABRT", output: "program aborted" } };
+const host = (from: string, to: string, frame: number): TypeScriptObservation => ({ kind: "runtime-abort",
+  failure: { exit: 1, signal: null, output: `Exception in thread "main" java.lang.ClassCastException: class nts.gen.${from} cannot be cast to class nts.gen.${to}\n\tat nts.gen.Program.method${frame}(Unknown Source)` } });
 function row(observed: TypeScriptObservation): object {
   switch (observed.kind) {
     case "pass": return { bucket: "strict-pass" };
@@ -55,6 +57,8 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     [pass, wrong, "REGRESSED", 1], [refused, wrong, "CHANGED", 1], [invalid, abort, "CHANGED", 1],
     [wrong, { ...wrong, failure: { ...wrong.failure, output: wrong.failure.output + "9" } }, "CHANGED", 1],
     [wrong, refused, "REFUSES NOW", 0], [invalid, pass, "FIXED", 0], [refused, refused, "reproduces", 0],
+    [host("Cell$29$", "Type27", 42), host("Cell$39$", "Type37", 52), "reproduces", 0],
+    [host("Cell$29$", "Type27", 42), host("Tuple25", "Type37", 52), "CHANGED", 1],
   ] as const) {
     const cases = new Map(recorded.cases);
     cases.set(target, before);
@@ -62,7 +66,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     assert.equal(result.status, status, result.stdout + result.stderr);
     const report = JSON.parse(readFileSync(json, "utf8"));
     assert.equal(report.record_version, 2);
-    assert.deepEqual(report.observations[target], after);
+    assert.deepEqual(report.observations[target], parseObservation(after));
     assert.equal(report.comparison[word]?.length ?? 0, word === "reproduces" ? 0 : 1);
   }
   const withRefusal = new Map(recorded.cases);

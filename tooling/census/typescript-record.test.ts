@@ -135,3 +135,20 @@ test("generated validator numbers move without changing names, positions or outc
   const abort = (output: string) => parseObservation({ kind: "runtime-abort", failure: { exit: null, signal: "SIGABRT", output } });
   assert.equal(compareTypeScriptObservation(abort("value type 35"), abort("value type 45")).word, "CHANGED");
 });
+
+test("host exceptions retain their class and layout message without generated frames", () => {
+  const host = (from: string, to: string, frame: number) => observationFromRow({ bucket: "crash", why: "host exception",
+    runtimeFailure: { exit: 1, signal: null, output: `Exception in thread "main" java.lang.ClassCastException: class nts.gen.${from} cannot be cast to class nts.gen.${to}\n\tat nts.gen.Program.method${frame}(Unknown Source)` } });
+  const before = host("Cell$29$", "Type27", 42);
+  const shifted = host("Cell$39$", "Type37", 52);
+  assert.equal(compareTypeScriptObservation(before, shifted).word, "reproduces");
+  assert.equal(compareTypeScriptObservation(before, host("Tuple25", "Type37", 52)).word, "CHANGED");
+  assert.equal(before.kind, "runtime-abort");
+  assert.equal(before.failure.output, "java.lang.ClassCastException: class nts.gen.Cell$N$ cannot be cast to class nts.gen.TypeN");
+  const native = "nts: refused: nts.gen.Cell$29$ with tag 3";
+  const abort = parseObservation({ kind: "runtime-abort", failure: { exit: 1, signal: null, output: native } });
+  assert.equal(abort.kind === "runtime-abort" && abort.failure.output, native);
+  const wrongText = 'Exception in thread "main" java.lang.ClassCastException: nts.gen.Cell$29$\nobserved value 42';
+  const wrong = parseObservation({ kind: "wrong", errorClass: "Error", failure: { exit: 1, signal: null, output: wrongText } });
+  assert.equal(wrong.kind === "wrong" && wrong.failure.output, wrongText);
+});
