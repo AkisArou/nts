@@ -1,0 +1,385 @@
+{
+  "baseline": "b89824d9c087e45e8db51910bd3eb99081d065df",
+  "candidate": "79c2d556a",
+  "focused": {
+    "state": "PASS",
+    "phases": [
+      {
+        "name": "fmt",
+        "argv": [
+          "cargo",
+          "fmt",
+          "--check"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "clippy",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "core",
+        "argv": [
+          "cargo",
+          "test",
+          "--profile",
+          "nts-dev",
+          "--no-fail-fast",
+          "-p",
+          "nts-core",
+          "--lib"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "native",
+        "argv": [
+          "cargo",
+          "test",
+          "--profile",
+          "nts-dev",
+          "--no-fail-fast",
+          "-p",
+          "nts-codegen-llvm",
+          "--test",
+          "container_contents"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "build",
+        "argv": [
+          "cargo",
+          "build",
+          "--profile",
+          "nts-dev",
+          "-p",
+          "nts-cli"
+        ],
+        "status": 0,
+        "signal": null
+      }
+    ]
+  },
+  "freshRust": {
+    "name": "rust",
+    "exe": "cargo",
+    "args": [
+      "test",
+      "--profile",
+      "nts-dev",
+      "--no-fail-fast",
+      "-p",
+      "nts-core",
+      "-p",
+      "nts-codegen-c",
+      "-p",
+      "nts-codegen-llvm",
+      "-p",
+      "nts-codegen-jvm",
+      "-p",
+      "nts-cli",
+      "-p",
+      "nts-frontend-ts",
+      "-p",
+      "nts-frontend-tsrs"
+    ],
+    "started": "2026-10-28T13:22:02.665Z",
+    "end": "2026-10-28T13:44:43.075Z",
+    "status": 0,
+    "signal": null,
+    "groups": 264,
+    "passed": 1961,
+    "ignored": 4
+  },
+  "broad": {
+    "state": "PASS",
+    "phases": 7,
+    "comparisons": [
+      {
+        "name": "agree-c-0",
+        "exe": "node",
+        "args": [
+          "tooling/differential/agree.mjs",
+          "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/before-nts",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/target/nts-dev/nts"
+        ],
+        "env": {
+          "NTS_BACKEND": "c",
+          "NTS_RC": "0",
+          "NTS_AGREE_JOBS": "4"
+        },
+        "started": "2026-10-28T13:48:03.245Z",
+        "end": "2026-10-28T13:52:11.867Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+          "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+          "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 248 s"
+        ]
+      },
+      {
+        "name": "agree-llvm-0",
+        "exe": "node",
+        "args": [
+          "tooling/differential/agree.mjs",
+          "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/before-nts",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/target/nts-dev/nts"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm",
+          "NTS_RC": "0",
+          "NTS_AGREE_JOBS": "4"
+        },
+        "started": "2026-10-28T13:52:11.867Z",
+        "end": "2026-10-28T13:56:49.121Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+          "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+          "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 277 s"
+        ]
+      },
+      {
+        "name": "agree-jvm-0",
+        "exe": "node",
+        "args": [
+          "tooling/differential/agree.mjs",
+          "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/before-nts",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/target/nts-dev/nts"
+        ],
+        "env": {
+          "NTS_BACKEND": "jvm",
+          "NTS_RC": "0",
+          "NTS_AGREE_JOBS": "4"
+        },
+        "started": "2026-10-28T13:56:49.140Z",
+        "end": "2026-10-28T13:59:31.364Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+          "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+          "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 162 s"
+        ]
+      },
+      {
+        "name": "agree-c-1",
+        "exe": "node",
+        "args": [
+          "tooling/differential/agree.mjs",
+          "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/before-nts",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/target/nts-dev/nts"
+        ],
+        "env": {
+          "NTS_BACKEND": "c",
+          "NTS_RC": "1",
+          "NTS_AGREE_JOBS": "4"
+        },
+        "started": "2026-10-28T13:59:31.364Z",
+        "end": "2026-10-28T14:01:48.821Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+          "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+          "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 137 s"
+        ]
+      },
+      {
+        "name": "agree-llvm-1",
+        "exe": "node",
+        "args": [
+          "tooling/differential/agree.mjs",
+          "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/before-nts",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/target/nts-dev/nts"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm",
+          "NTS_RC": "1",
+          "NTS_AGREE_JOBS": "4"
+        },
+        "started": "2026-10-28T14:01:48.821Z",
+        "end": "2026-10-28T14:07:00.557Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  821 agree, 10 agree on part of their cases, 12 compared nothing, 0 wrong, 0 not measured",
+          "  139937 of 140295 case(s) compared; not compared: 108 declined, 0 timed out, 250 unreached",
+          "  843 unchanged, 0 fixed, 0 regressed, 0 changed, 0 unstable, 0 not comparable (new), 0 not measured, in 312 s"
+        ]
+      }
+    ]
+  },
+  "test262": {
+    "state": "PASS",
+    "failed": [],
+    "rows": [
+      {
+        "name": "language",
+        "argv": [
+          "node",
+          "tooling/census/conformance262.ts",
+          "--under",
+          "test/language",
+          "--recorded",
+          "results/test262/c/language.tsv",
+          "--jobs",
+          "4"
+        ],
+        "binary": "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts",
+        "start": "2026-10-28T14:07:00.612Z",
+        "end": "2026-10-28T14:11:43.425Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  recorded cases: 6974 of 8367 pass -- not a conformance rate; the denominator is not the suite",
+          "         0  REGRESSED"
+        ]
+      },
+      {
+        "name": "builtins",
+        "argv": [
+          "node",
+          "tooling/census/conformance262.ts",
+          "--under",
+          "test/built-ins",
+          "--recorded",
+          "results/test262/c/builtins.tsv",
+          "--jobs",
+          "4"
+        ],
+        "binary": "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts",
+        "start": "2026-10-28T14:11:43.425Z",
+        "end": "2026-10-28T14:12:52.240Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  recorded cases: 828 of 1034 pass -- not a conformance rate; the denominator is not the suite",
+          "         0  REGRESSED"
+        ]
+      },
+      {
+        "name": "annexb",
+        "argv": [
+          "node",
+          "tooling/census/conformance262.ts",
+          "--under",
+          "test/annexB",
+          "--recorded",
+          "results/test262/c/annexb.tsv",
+          "--jobs",
+          "4"
+        ],
+        "binary": "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts",
+        "start": "2026-10-28T14:12:52.240Z",
+        "end": "2026-10-28T14:12:58.178Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  recorded cases: 9 of 12 pass -- not a conformance rate; the denominator is not the suite",
+          "         0  REGRESSED"
+        ]
+      },
+      {
+        "name": "staging",
+        "argv": [
+          "node",
+          "tooling/census/conformance262.ts",
+          "--under",
+          "test/staging",
+          "--recorded",
+          "results/test262/c/staging.tsv",
+          "--jobs",
+          "4"
+        ],
+        "binary": "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts",
+        "start": "2026-10-28T14:12:58.179Z",
+        "end": "2026-10-28T14:13:05.415Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  recorded cases: 53 of 58 pass -- not a conformance rate; the denominator is not the suite",
+          "         0  REGRESSED"
+        ]
+      },
+      {
+        "name": "harness",
+        "argv": [
+          "node",
+          "tooling/census/conformance262.ts",
+          "--under",
+          "test/harness",
+          "--recorded",
+          "results/test262/c/harness.tsv",
+          "--jobs",
+          "4"
+        ],
+        "binary": "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts",
+        "start": "2026-10-28T14:13:05.415Z",
+        "end": "2026-10-28T14:13:12.075Z",
+        "status": 0,
+        "signal": null,
+        "summary": [
+          "  recorded cases: 17 of 17 pass -- not a conformance rate; the denominator is not the suite",
+          "         0  REGRESSED"
+        ]
+      }
+    ]
+  },
+  "census": {
+    "state": "PASS",
+    "current": null,
+    "workers": 4,
+    "planned": 174,
+    "completed": 174,
+    "counter_scope": "exec-inherited-user-instructions-v1",
+    "counterScope": "exec-inherited-user-instructions-v1",
+    "costs": [
+      {
+        "mode": "nogc",
+        "modules": 29,
+        "minimum": 0.9783404283904021,
+        "maximum": 1.0004527062986692,
+        "summed": 0.9999818626256971,
+        "maximumRepeatDrift": 0.04371344669664834
+      },
+      {
+        "mode": "rc",
+        "modules": 29,
+        "minimum": 0.9598240764668077,
+        "maximum": 1.0006497032912567,
+        "summed": 1.0000677085625782,
+        "maximumRepeatDrift": 0.0003697544558252108
+      }
+    ]
+  },
+  "measurement": {
+    "state": "PASS",
+    "current": null,
+    "completed": 376,
+    "utc": "2026-10-28T13:09:56.668Z"
+  },
+  "notes": [
+    "The first broad run passed the complete Rust suite, then refused its first comparison before workload because --base requires a verified pin.ts provenance record. No corpus input changed, so the resumed comparison uses strict two-binary mode and grants no new-project exemptions.",
+    "Five backend comparisons, the five C test262 records and the compile census complete in the resumed named unit. An explicit pressure hold was installed before later workloads and then removed on Main clearance; no test verdict is waived.",
+    "The inline size-read fixture changes no oracle population. The old compiler loses the scalar content/arithmetic proof at the size read; the constant-size control already has it. Managed and unknown writers remain Dynamic.",
+    "Both compile census arms use nts-dev. RC and NoGC are separate A/B/A brackets on all 29 gate modules, with identical function populations. Counter scope includes all user threads and descendants from exec; HIR starts no C toolchain.",
+    "The paired report retains all five layouts, five native A/B/A rounds, five fresh Node and Bun launches, train/load conditions, and per-layout losses. All four instruction means improve; wall changes stay inside their measured floors."
+  ]
+}

@@ -8,27 +8,26 @@ Authoritative current-provider value eligibility by prepared identity, clones in
 
 | Corpus / constructor | Allocations | Value candidates | Dynamic | Empty | Candidate delta |
 |---|---:|---:|---:|---:|---:|
-| benchmarks / nts_map_new | 14 | 8 | 6 | 0 | -- |
-| benchmarks / nts_set_new | 4 | 0 | 4 | 0 | -- |
-| benchmarks / nts_table_new | 2 | 2 | 0 | 0 | -- |
-| benchmarks / nts_map_copy | 0 | 0 | 0 | 0 | -- |
-| programs / nts_map_new | 215 | 82 | 132 | 1 | -- |
-| programs / nts_set_new | 103 | 0 | 103 | 0 | -- |
-| programs / nts_table_new | 115 | 35 | 80 | 0 | -- |
-| programs / nts_map_copy | 10 | 0 | 10 | 0 | -- |
+| benchmarks / nts_map_new | 14 | 12 | 2 | 0 | 4 |
+| benchmarks / nts_set_new | 4 | 0 | 4 | 0 | 0 |
+| benchmarks / nts_table_new | 2 | 2 | 0 | 0 | 0 |
+| benchmarks / nts_map_copy | 0 | 0 | 0 | 0 | 0 |
+| programs / nts_map_new | 215 | 138 | 76 | 1 | 56 |
+| programs / nts_set_new | 103 | 0 | 103 | 0 | 0 |
+| programs / nts_table_new | 115 | 35 | 80 | 0 | 0 |
+| programs / nts_map_copy | 10 | 0 | 10 | 0 | 0 |
 
 ## Dynamic reasons
 
 | Corpus / constructor | Failed proof | Allocations |
 |---|---|---:|
 | benchmarks / nts_map_new | identity escapes the closed writer scope | 2 |
-| benchmarks / nts_map_new | not every writer is known | 4 |
 | benchmarks / nts_set_new | allocation kind unsupported by current provider | 4 |
 | programs / nts_map_new | heterogeneous possible payload tags | 2 |
 | programs / nts_map_new | identity escapes the closed writer scope | 10 |
-| programs / nts_map_new | not every writer is known | 105 |
+| programs / nts_map_new | not every writer is known | 39 |
 | programs / nts_map_new | not one closed fresh identity | 6 |
-| programs / nts_map_new | precise managed payload layout unprovided | 9 |
+| programs / nts_map_new | precise managed payload layout unprovided | 19 |
 | programs / nts_set_new | allocation kind unsupported by current provider | 103 |
 | programs / nts_table_new | identity escapes the closed writer scope | 8 |
 | programs / nts_table_new | not every writer is known | 64 |
@@ -41,17 +40,15 @@ An identity may have several barriers. A sole barrier is diagnostic, not permiss
 
 | Corpus / constructor | Rejected use | Affected | Sole barrier |
 |---|---|---:|---:|
-| benchmarks / nts_map_new | length | 4 | 4 |
 | benchmarks / nts_map_new | return | 2 | 2 |
 | programs / nts_map_new | Binary | 2 | 0 |
 | programs / nts_map_new | FieldSet | 6 | 6 |
 | programs / nts_map_new | GlobalSet | 10 | 10 |
-| programs / nts_map_new | ambiguous receiver identity | 6 | 2 |
-| programs / nts_map_new | call | 9 | 3 |
-| programs / nts_map_new | length | 86 | 66 |
+| programs / nts_map_new | ambiguous receiver identity | 6 | 4 |
+| programs / nts_map_new | call | 9 | 7 |
 | programs / nts_map_new | nts_is_map argument 0 | 2 | 2 |
 | programs / nts_map_new | nts_map_keys_into argument 0 | 9 | 0 |
-| programs / nts_map_new | nts_map_values_into argument 0 | 12 | 0 |
+| programs / nts_map_new | nts_map_values_into argument 0 | 12 | 3 |
 | programs / nts_map_new | nts_value_to_string argument 0 | 2 | 0 |
 | programs / nts_map_new | return | 10 | 10 |
 | programs / nts_table_new | FieldSet | 1 | 1 |

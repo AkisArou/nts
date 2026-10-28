@@ -1,0 +1,1351 @@
+{
+  "inventory": {
+    "cases": 97,
+    "unchanged": 95,
+    "selected": [
+      "map-and-set",
+      "map-entries-top-k"
+    ],
+    "rows": [
+      {
+        "name": "absences",
+        "entry": "absences",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "accumulate",
+        "entry": "accumulate",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-copying-methods",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-from",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-methods",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-mutations",
+        "entry": "mutations",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "array-predicates",
+        "entry": "predicates",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "arrays",
+        "entry": "convolve",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-bounce",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-list",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-mandelbrot",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-nbody",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-permute",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-queens",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-sieve",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "awfy-towers",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "bigint",
+        "entry": "mix",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "bytes",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-cjk",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-greek",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-latin1",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "case-convert-unchanged",
+        "entry": "convert",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "checksum",
+        "entry": "checksum",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "closure-merge",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "closures",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "cyclic-churn",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "dispatch",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "elementwise",
+        "entry": "scale",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-stored-typed",
+        "entry": "erasureStoredTyped",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-stored-unknown",
+        "entry": "erasureStoredUnknown",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-typed",
+        "entry": "erasureTyped",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "erasure-unknown",
+        "entry": "erasureUnknown",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "event-state",
+        "entry": "event",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "exceptions",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "face-fields",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "fib",
+        "entry": "fib",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "generator",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "generator-dispatched",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "generic-classes",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "growth-fixed",
+        "entry": "scan",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "growth-grown",
+        "entry": "scan",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "immutable-update",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "in-narrowing",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "instanceof",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-build-append",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-build-join",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-parse",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-quote",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-scan",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-serialize",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-builtin",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-doc",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-fused",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-inline",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "json-stringify-typed",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "logical-assignment",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "loop",
+        "entry": "accumulate",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-and-set",
+        "entry": "table",
+        "changed": {
+          "c": true,
+          "llvm": true
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-entries-top-k",
+        "entry": "topWords",
+        "changed": {
+          "c": true,
+          "llvm": true
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-literal-keys",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "map-word-counts",
+        "entry": "mapWordCounts",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "module-closures",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "node-utf8",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "number-format",
+        "entry": "format",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "number-format-double",
+        "entry": "format",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "objects",
+        "entry": "simulate",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "optional-chain",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "pipeline",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "printer-erased",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "record-word-counts",
+        "entry": "wordCounts",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "release-acyclic",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "sort-objects",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-append-length",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-append-loop",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-compare",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-concat-pair",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-equal",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-index-of",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-index-read",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-join",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-map-keys",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-slice-keep",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-split",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-template",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "str-to-number",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "strings",
+        "entry": "scan",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "substrings",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "symbol-keyed-map",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "symbol-keys",
+        "entry": "keys",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "tree-teardown",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "uniform-callback",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "uniform-callback-arguments",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "uniform-callback-default",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "upcast",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "user-iterable",
+        "entry": "run",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "",
+          ""
+        ]
+      },
+      {
+        "name": "utf8-encode",
+        "entry": "work",
+        "changed": {
+          "c": false,
+          "llvm": false
+        },
+        "diagnosticChange": false,
+        "diagnostics": [
+          "/home/akisarou/Projects/nts-lanes/runtime-content/benchmarks/cases/utf8-encode/case.ts:42:19: NTS1001 a `new` of unrepresentable type (`TextEncoder`) is not supported by this lowering yet\n",
+          "/home/akisarou/Projects/nts-lanes/runtime-content/benchmarks/cases/utf8-encode/case.ts:42:19: NTS1001 a `new` of unrepresentable type (`TextEncoder`) is not supported by this lowering yet\n"
+        ]
+      }
+    ]
+  },
+  "bridge": {
+    "state": "PASS",
+    "normalization": "ThinLTO internal module suffix only, after rejecting ambiguous normalized symbol names; resolved addresses and literal constants use the shared layout decoder",
+    "rows": [
+      {
+        "name": "map-and-set",
+        "backend": "c",
+        "arm": "base",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/base/map-and-set/c",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-and-set-c/links/base-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-and-set",
+        "backend": "llvm",
+        "arm": "base",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/base/map-and-set/llvm",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-and-set-llvm/links/base-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-entries-top-k",
+        "backend": "c",
+        "arm": "base",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/base/map-entries-top-k/c",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-entries-top-k-c/links/base-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-entries-top-k",
+        "backend": "llvm",
+        "arm": "base",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/base/map-entries-top-k/llvm",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-entries-top-k-llvm/links/base-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-and-set",
+        "backend": "c",
+        "arm": "contents",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/contents/map-and-set/c",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-and-set-c/links/contents-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-and-set",
+        "backend": "llvm",
+        "arm": "contents",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/contents/map-and-set/llvm",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-and-set-llvm/links/contents-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-entries-top-k",
+        "backend": "c",
+        "arm": "contents",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/contents/map-entries-top-k/c",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-entries-top-k-c/links/contents-reference.bin",
+        "identical": true
+      },
+      {
+        "name": "map-entries-top-k",
+        "backend": "llvm",
+        "arm": "contents",
+        "shipping": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/contents/map-entries-top-k/llvm",
+        "reference": "/home/akisarou/.cache/nts-scratch/runtime-content/typed-maps/length/bench/layouts/map-entries-top-k-llvm/links/contents-reference.bin",
+        "identical": true
+      }
+    ]
+  },
+  "seeds": [
+    101,
+    307,
+    509,
+    701,
+    907
+  ],
+  "observations": 376
+}

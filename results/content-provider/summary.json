@@ -992,7 +992,7 @@
       "pruned_functions": 0
     }
   ],
-  "provider_visits": 241772,
+  "provider_visits": 246510,
   "budget_exhaustions": 0,
   "population": [
     {
@@ -4769,9 +4769,9 @@
       "family": "benchmarks",
       "constructor": "nts_map_new",
       "allocations": 14,
-      "candidates": 8,
+      "candidates": 12,
       "empty": 0,
-      "dynamic": 6
+      "dynamic": 2
     },
     {
       "family": "benchmarks",
@@ -4801,9 +4801,9 @@
       "family": "programs",
       "constructor": "nts_map_new",
       "allocations": 215,
-      "candidates": 82,
+      "candidates": 138,
       "empty": 1,
-      "dynamic": 132
+      "dynamic": 76
     },
     {
       "family": "programs",
@@ -4839,12 +4839,6 @@
     },
     {
       "family": "benchmarks",
-      "constructor": "nts_map_new",
-      "reason": "not every writer is known",
-      "count": 4
-    },
-    {
-      "family": "benchmarks",
       "constructor": "nts_set_new",
       "reason": "allocation kind unsupported by current provider",
       "count": 4
@@ -4865,7 +4859,7 @@
       "family": "programs",
       "constructor": "nts_map_new",
       "reason": "not every writer is known",
-      "count": 105
+      "count": 39
     },
     {
       "family": "programs",
@@ -4877,7 +4871,7 @@
       "family": "programs",
       "constructor": "nts_map_new",
       "reason": "precise managed payload layout unprovided",
-      "count": 9
+      "count": 19
     },
     {
       "family": "programs",
@@ -4914,13 +4908,6 @@
     {
       "family": "benchmarks",
       "constructor": "nts_map_new",
-      "barrier": "length",
-      "affected": 4,
-      "sole": 4
-    },
-    {
-      "family": "benchmarks",
-      "constructor": "nts_map_new",
       "barrier": "return",
       "affected": 2,
       "sole": 2
@@ -4951,21 +4938,14 @@
       "constructor": "nts_map_new",
       "barrier": "ambiguous receiver identity",
       "affected": 6,
-      "sole": 2
+      "sole": 4
     },
     {
       "family": "programs",
       "constructor": "nts_map_new",
       "barrier": "call",
       "affected": 9,
-      "sole": 3
-    },
-    {
-      "family": "programs",
-      "constructor": "nts_map_new",
-      "barrier": "length",
-      "affected": 86,
-      "sole": 66
+      "sole": 7
     },
     {
       "family": "programs",
@@ -4986,7 +4966,7 @@
       "constructor": "nts_map_new",
       "barrier": "nts_map_values_into argument 0",
       "affected": 12,
-      "sole": 0
+      "sole": 3
     },
     {
       "family": "programs",
@@ -7084,7 +7064,16 @@
       "module": "a-number-table-holds-its-numbers-unboxed",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "nanAndZeroAreOneKeyEach",
       "function_index": 0,
@@ -7092,7 +7081,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 912, end: 937 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -7155,19 +7144,9 @@
           "value": 30
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 67,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -7309,7 +7288,16 @@
       "module": "a-number-table-holds-its-numbers-unboxed",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "clearedAndRefilled",
       "function_index": 4,
@@ -7317,7 +7305,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2098, end: 2123 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -7350,26 +7338,25 @@
           "value": 19
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 39,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-number-table-holds-its-numbers-unboxed",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "nanAndZeroAreOneKeyEach#whole",
       "function_index": 5,
@@ -7377,7 +7364,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 912, end: 937 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -7440,19 +7427,9 @@
           "value": 30
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 67,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -7550,7 +7527,16 @@
       "module": "a-number-table-holds-its-numbers-unboxed",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "clearedAndRefilled#whole",
       "function_index": 8,
@@ -7558,7 +7544,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2098, end: 2123 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -7591,19 +7577,9 @@
           "value": 19
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 39,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -7788,7 +7764,16 @@
       "module": "a-presence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapOfMaybeKeys",
       "function_index": 5,
@@ -7796,7 +7781,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1643, end: 1659 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -7814,26 +7799,25 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(26))",
-          "operand": 26,
-          "operation": 40,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 26,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
       "module": "a-presence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2",
+          "lo": "1",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "keysReadBack",
       "function_index": 6,
@@ -7841,7 +7825,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1870, end: 1895 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -7874,19 +7858,9 @@
           "value": 6
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 50,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -8006,7 +7980,16 @@
       "module": "a-presence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapOfMaybeKeys#whole",
       "function_index": 11,
@@ -8014,7 +7997,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1643, end: 1659 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -8032,26 +8015,25 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(26))",
-          "operand": 26,
-          "operation": 40,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 26,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
       "module": "a-presence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2",
+          "lo": "1",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "keysReadBack#whole",
       "function_index": 12,
@@ -8059,7 +8041,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1870, end: 1895 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -8092,19 +8074,9 @@
           "value": 20
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 50,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -9027,7 +8999,16 @@
       "module": "a-record-keyed-by-strings-built-at-run-time",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "undefinedKeys",
       "function_index": 3,
@@ -9035,7 +9016,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2050, end: 2087 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -9083,19 +9064,9 @@
           "value": 43
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 46,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -9419,29 +9390,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 21,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(2), ValueId(22)], frame: None }",
           "operand": 2,
           "operation": 23,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 25,
           "reason": "not every writer is known"
         },
         {
@@ -9508,29 +9461,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 21,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(2), ValueId(22)], frame: None }",
           "operand": 2,
           "operation": 23,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 25,
           "reason": "not every writer is known"
         },
         {
@@ -9551,7 +9486,16 @@
       "module": "a-spread-of-a-maps-entries",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "largest",
       "function_index": 0,
@@ -9559,7 +9503,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 920, end: 975 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -9577,19 +9521,9 @@
           "value": 26
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(1))",
-          "operand": 1,
-          "operation": 31,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 1,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -9983,29 +9917,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 21,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_values_into",
           "kind": "Call { callee: External(\"nts_map_values_into\"), args: [ValueId(2), ValueId(22)], frame: None }",
           "operand": 2,
           "operation": 23,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 28,
           "reason": "not every writer is known"
         },
         {
@@ -10133,7 +10049,16 @@
       "module": "a-string-table-holds-its-number-values-unboxed",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "spreadThenClear",
       "function_index": 4,
@@ -10141,7 +10066,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2397, end: 2422 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -10174,19 +10099,9 @@
           "value": 49
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(30))",
-          "operand": 30,
-          "operation": 110,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 30,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -10341,29 +10256,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 21,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_values_into",
           "kind": "Call { callee: External(\"nts_map_values_into\"), args: [ValueId(2), ValueId(22)], frame: None }",
           "operand": 2,
           "operation": 23,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 28,
           "reason": "not every writer is known"
         },
         {
@@ -10566,7 +10463,16 @@
       "module": "a-string-table-holds-its-number-values-unboxed",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "spreadThenClear#whole",
       "function_index": 9,
@@ -10574,7 +10480,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2397, end: 2422 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -10607,19 +10513,9 @@
           "value": 49
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(30))",
-          "operand": 30,
-          "operation": 110,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 30,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -10799,7 +10695,16 @@
       "module": "a-table-built-from-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapSize",
       "function_index": 5,
@@ -10807,7 +10712,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3231, end: 3293 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -10825,26 +10730,25 @@
           "value": 27
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 32,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-table-built-from-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapLastWins",
       "function_index": 6,
@@ -10852,7 +10756,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3472, end: 3534 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -10870,26 +10774,25 @@
           "value": 27
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 32,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-table-built-from-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapOfNumbers",
       "function_index": 7,
@@ -10897,7 +10800,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3698, end: 3756 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -10915,19 +10818,9 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 40,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -11036,7 +10929,16 @@
       "module": "a-table-built-from-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapSize#whole",
       "function_index": 15,
@@ -11044,7 +10946,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3231, end: 3293 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -11062,26 +10964,25 @@
           "value": 27
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 32,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-table-built-from-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapLastWins#whole",
       "function_index": 16,
@@ -11089,7 +10990,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3472, end: 3534 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -11107,26 +11008,25 @@
           "value": 27
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 32,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-table-built-from-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapOfNumbers#whole",
       "function_index": 17,
@@ -11134,7 +11034,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3698, end: 3756 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -11152,19 +11052,9 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 40,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -11356,29 +11246,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 48,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(2), ValueId(49)], frame: None }",
           "operand": 2,
           "operation": 50,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 28,
           "reason": "not every writer is known"
         },
         {
@@ -11429,29 +11301,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(4))",
-          "operand": 4,
-          "operation": 9,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(4), ValueId(10)], frame: None }",
           "operand": 4,
           "operation": 11,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(4))",
-          "operand": 4,
-          "operation": 14,
           "reason": "not every writer is known"
         },
         {
@@ -11582,29 +11436,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 28,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_values_into",
           "kind": "Call { callee: External(\"nts_map_values_into\"), args: [ValueId(2), ValueId(29)], frame: None }",
           "operand": 2,
           "operation": 30,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 48,
           "reason": "not every writer is known"
         },
         {
@@ -11669,29 +11505,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 35,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(2), ValueId(36)], frame: None }",
           "operand": 2,
           "operation": 37,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 38,
           "reason": "not every writer is known"
         },
         {
@@ -11771,29 +11589,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 28,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_values_into",
           "kind": "Call { callee: External(\"nts_map_values_into\"), args: [ValueId(2), ValueId(29)], frame: None }",
           "operand": 2,
           "operation": 30,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 31,
           "reason": "not every writer is known"
         },
         {
@@ -11892,29 +11692,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 35,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(2), ValueId(36)], frame: None }",
           "operand": 2,
           "operation": 37,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 38,
           "reason": "not every writer is known"
         },
         {
@@ -12081,7 +11863,16 @@
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapCounts",
       "function_index": 1,
@@ -12089,7 +11880,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1196, end: 1221 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12107,26 +11898,25 @@
           "value": 40
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 45,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "negativeZeroKey",
       "function_index": 2,
@@ -12134,7 +11924,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1650, end: 1675 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12167,19 +11957,9 @@
           "value": 46
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 71,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -12274,15 +12054,6 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(10))",
-          "operand": 10,
-          "operation": 45,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "call",
           "helper": null,
           "kind": "Call { callee: Direct(\"touch\"), args: [ValueId(10), ValueId(12)], frame: None }",
@@ -12343,7 +12114,16 @@
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "anotherTable",
       "function_index": 7,
@@ -12351,7 +12131,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3500, end: 3525 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12369,19 +12149,9 @@
           "value": 56
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(10))",
-          "operand": 10,
-          "operation": 61,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 10,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -12432,7 +12202,16 @@
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "deleteBetweenUpdates",
       "function_index": 8,
@@ -12440,7 +12219,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 4024, end: 4049 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12458,19 +12237,9 @@
           "value": 39
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(10))",
-          "operand": 10,
-          "operation": 55,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 10,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -12521,7 +12290,16 @@
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapCounts#whole",
       "function_index": 11,
@@ -12529,7 +12307,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1196, end: 1221 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12547,26 +12325,25 @@
           "value": 40
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 45,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "negativeZeroKey#whole",
       "function_index": 12,
@@ -12574,7 +12351,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1650, end: 1675 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12607,19 +12384,9 @@
           "value": 46
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 71,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -12714,15 +12481,6 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(10))",
-          "operand": 10,
-          "operation": 45,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "call",
           "helper": null,
           "kind": "Call { callee: Direct(\"touch\"), args: [ValueId(10), ValueId(12)], frame: None }",
@@ -12783,7 +12541,16 @@
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "anotherTable#whole",
       "function_index": 16,
@@ -12791,7 +12558,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3500, end: 3525 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12809,19 +12576,9 @@
           "value": 56
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(10))",
-          "operand": 10,
-          "operation": 61,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 10,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -12872,7 +12629,16 @@
       "module": "a-table-key-updated-in-place",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "deleteBetweenUpdates#whole",
       "function_index": 17,
@@ -12880,7 +12646,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 4024, end: 4049 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -12898,19 +12664,9 @@
           "value": 39
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(10))",
-          "operand": 10,
-          "operation": 55,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 10,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -12992,7 +12748,18 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "like",
       "function_index": 4,
@@ -13000,7 +12767,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1494, end: 1559 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13020,26 +12787,7 @@
           "value": 47
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 56,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 87,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -13048,7 +12796,16 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "largest",
       "function_index": 6,
@@ -13056,7 +12813,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2161, end: 2236 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -13074,26 +12831,27 @@
           "value": 36
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 41,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "mixed",
       "function_index": 7,
@@ -13101,7 +12859,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2629, end: 2666 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13121,17 +12879,7 @@
           "value": 76
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(53))",
-          "operand": 53,
-          "operation": 91,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 53,
       "value_eligibility": "Dynamic"
     },
@@ -13157,7 +12905,18 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "objects",
       "function_index": 10,
@@ -13165,7 +12924,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3600, end: 3624 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13185,26 +12944,7 @@
           "value": 13
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 22,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 50,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -13213,7 +12953,18 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "objectsByName",
       "function_index": 11,
@@ -13221,7 +12972,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 4202, end: 4226 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13241,26 +12992,7 @@
           "value": 16
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 25,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 58,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -13269,7 +13001,16 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "empty",
       "function_index": 13,
@@ -13277,7 +13018,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 4860, end: 4885 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -13295,28 +13036,9 @@
           "value": 5
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 14,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 43,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -13340,7 +13062,18 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "like#whole",
       "function_index": 17,
@@ -13348,7 +13081,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1494, end: 1559 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13368,26 +13101,7 @@
           "value": 47
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 56,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 87,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -13396,7 +13110,16 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "largest#whole",
       "function_index": 19,
@@ -13404,7 +13127,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2161, end: 2236 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -13422,26 +13145,27 @@
           "value": 36
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 41,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "mixed#whole",
       "function_index": 20,
@@ -13449,7 +13173,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2629, end: 2666 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13469,17 +13193,7 @@
           "value": 76
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(53))",
-          "operand": 53,
-          "operation": 91,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 53,
       "value_eligibility": "Dynamic"
     },
@@ -13505,7 +13219,18 @@
       "module": "a-tables-entries-collected-into-an-array",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "objects#whole",
       "function_index": 23,
@@ -13513,7 +13238,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3600, end: 3624 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -13533,26 +13258,7 @@
           "value": 13
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 22,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 50,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -13790,7 +13496,16 @@
       "module": "absent",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "3",
+          "lo": "1",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "asMapKeys",
       "function_index": 17,
@@ -13798,7 +13513,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 5665, end: 5709 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -13846,19 +13561,9 @@
           "value": 18
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 21,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -14322,7 +14027,16 @@
       "module": "an-absence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapOfMaybeKeys",
       "function_index": 5,
@@ -14330,7 +14044,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2519, end: 2535 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -14348,26 +14062,25 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(26))",
-          "operand": 26,
-          "operation": 40,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 26,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
       "module": "an-absence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2",
+          "lo": "1",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "keysReadBack",
       "function_index": 6,
@@ -14375,7 +14088,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2745, end: 2782 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -14408,19 +14121,9 @@
           "value": 6
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 50,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -14444,7 +14147,16 @@
       "module": "an-absence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapOfMaybeKeys#whole",
       "function_index": 11,
@@ -14452,7 +14164,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2519, end: 2535 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -14470,26 +14182,25 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(26))",
-          "operand": 26,
-          "operation": 40,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 26,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
       "module": "an-absence-a-table-holds-keeps-its-tag",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2",
+          "lo": "1",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "keysReadBack#whole",
       "function_index": 12,
@@ -14497,7 +14208,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2745, end: 2782 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -14530,19 +14241,9 @@
           "value": 20
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 50,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -14719,15 +14420,6 @@
           "operand": 30,
           "operation": 31,
           "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 32,
-          "reason": "not every writer is known"
         }
       ],
       "value": 2,
@@ -14790,15 +14482,6 @@
           "operand": 30,
           "operation": 31,
           "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 32,
-          "reason": "not every writer is known"
         }
       ],
       "value": 2,
@@ -14809,7 +14492,16 @@
       "module": "an-erased-bigint-preserves-its-primitive",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "4",
+          "lo": "2",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapKeys",
       "function_index": 12,
@@ -14817,7 +14509,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1642, end: 1668 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -14865,19 +14557,9 @@
           "value": 22
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 25,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -15356,7 +15038,16 @@
       "module": "an-unchosen-table-takes-its-type-from-where-it-goes",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "declared",
       "function_index": 2,
@@ -15364,7 +15055,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1096, end: 1105 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -15397,19 +15088,9 @@
           "value": 25
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 28,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -15650,15 +15331,6 @@
         },
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(37))",
-          "operand": 37,
-          "operation": 43,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_get",
           "kind": "Call { callee: External(\"nts_map_get\"), args: [ValueId(37), ValueId(47), ValueId(48)], frame: None }",
@@ -15715,15 +15387,6 @@
         },
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(37))",
-          "operand": 37,
-          "operation": 43,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_get",
           "kind": "Call { callee: External(\"nts_map_get\"), args: [ValueId(37), ValueId(47), ValueId(48)], frame: None }",
@@ -15766,7 +15429,16 @@
       "module": "an-unchosen-table-takes-its-type-from-where-it-goes",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "3",
+          "lo": "2",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "valuesChosen",
       "function_index": 15,
@@ -15774,7 +15446,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3046, end: 3055 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -15807,26 +15479,27 @@
           "value": 15
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 47,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
       "module": "an-unchosen-table-takes-its-type-from-where-it-goes",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "noDestination",
       "function_index": 16,
@@ -15834,7 +15507,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3231, end: 3240 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -15888,17 +15561,7 @@
           "value": 21
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 24,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -15963,15 +15626,6 @@
         },
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(37))",
-          "operand": 37,
-          "operation": 43,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_get",
           "kind": "Call { callee: External(\"nts_map_get\"), args: [ValueId(37), ValueId(47), ValueId(48)], frame: None }",
@@ -16025,15 +15679,6 @@
           "operand": 37,
           "operation": 42,
           "reason": "not one closed fresh identity"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(37))",
-          "operand": 37,
-          "operation": 43,
-          "reason": "not every writer is known"
         },
         {
           "argument": 0,
@@ -16140,29 +15785,11 @@
       "rejected_uses": [
         {
           "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 17,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
           "category": "external",
           "helper": "nts_map_keys_into",
           "kind": "Call { callee: External(\"nts_map_keys_into\"), args: [ValueId(2), ValueId(18)], frame: None }",
           "operand": 2,
           "operation": 19,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 20,
           "reason": "not every writer is known"
         },
         {
@@ -16319,7 +15946,16 @@
       "module": "array-from-mapped-iteration",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapAdding",
       "function_index": 6,
@@ -16327,7 +15963,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1390, end: 1415 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -16375,19 +16011,9 @@
           "value": 38
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(7))",
-          "operand": 7,
-          "operation": 52,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 7,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -16621,15 +16247,6 @@
         }
       ],
       "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 26,
-          "reason": "not every writer is known"
-        },
         {
           "argument": 0,
           "category": "external",
@@ -18819,7 +18436,16 @@
       "module": "iteration",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "mapGrowWhileWalking",
       "function_index": 18,
@@ -18827,7 +18453,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 7446, end: 7471 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -18860,19 +18486,9 @@
           "value": 31
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 39,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -19562,7 +19178,16 @@
       "module": "loops-that-always-leave",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "firstKeyThenStop",
       "function_index": 0,
@@ -19570,7 +19195,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 915, end: 940 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -19603,26 +19228,25 @@
           "value": 12
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 38,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "stringKeys",
       "function_index": 0,
@@ -19630,7 +19254,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1094, end: 1119 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -19678,26 +19302,25 @@
           "value": 19
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 22,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "overwrite",
       "function_index": 1,
@@ -19705,7 +19328,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1376, end: 1401 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -19753,19 +19376,9 @@
           "value": 19
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 22,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -19860,7 +19473,16 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "numberKeys",
       "function_index": 4,
@@ -19868,7 +19490,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2199, end: 2224 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -19886,26 +19508,25 @@
           "value": 11
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 16,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "deleteAndReinsert",
       "function_index": 5,
@@ -19913,7 +19534,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2521, end: 2546 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -19946,26 +19567,25 @@
           "value": 31
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 39,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "sameValueZero",
       "function_index": 6,
@@ -19973,7 +19593,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2947, end: 2972 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -20006,26 +19626,25 @@
           "value": 13
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 44,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "growth",
       "function_index": 7,
@@ -20033,7 +19652,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3256, end: 3281 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -20051,26 +19670,25 @@
           "value": 11
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 38,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "compaction",
       "function_index": 8,
@@ -20078,7 +19696,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3762, end: 3787 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -20111,35 +19729,25 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 26,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 42,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "clearing",
       "function_index": 9,
@@ -20147,7 +19755,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 4106, end: 4131 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -20195,37 +19803,9 @@
           "value": 18
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 13,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 15,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 26,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -20266,7 +19846,16 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2",
+          "lo": "1",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "identityKeys",
       "function_index": 13,
@@ -20274,7 +19863,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 5243, end: 5266 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -20307,19 +19896,9 @@
           "value": 14
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(6))",
-          "operand": 6,
-          "operation": 30,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 6,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
@@ -20343,7 +19922,18 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "referenceValues",
       "function_index": 15,
@@ -20351,7 +19941,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 6096, end: 6121 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -20388,17 +19978,7 @@
           "value": 14
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 61,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -20407,7 +19987,16 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "chainedSets",
       "function_index": 16,
@@ -20415,7 +20004,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 6578, end: 6603 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -20463,19 +20052,9 @@
           "value": 19
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 22,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -21038,7 +20617,16 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "numberKeys#whole",
       "function_index": 26,
@@ -21046,7 +20634,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2199, end: 2224 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -21064,26 +20652,25 @@
           "value": 11
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 16,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "2147483647",
+          "lo": "-2147483648",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "deleteAndReinsert#whole",
       "function_index": 27,
@@ -21091,7 +20678,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2521, end: 2546 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -21124,26 +20711,25 @@
           "value": 31
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 39,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "I32"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "growth#whole",
       "function_index": 28,
@@ -21151,7 +20737,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3256, end: 3281 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -21169,26 +20755,25 @@
           "value": 11
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 38,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "compaction#whole",
       "function_index": 29,
@@ -21196,7 +20781,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 3762, end: 3787 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -21229,35 +20814,27 @@
           "value": 35
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 26,
-          "reason": "not every writer is known"
-        },
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 42,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "-inf",
+          "lo": "inf",
+          "maybe_nan": false,
+          "maybe_negative_zero": false,
+          "whole": true
+        },
+        "tags": [
+          "null",
+          "undefined",
+          "managed"
+        ]
       },
       "function": "referenceValues#whole",
       "function_index": 30,
@@ -21265,7 +20842,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 6096, end: 6121 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "precise managed payload layout unprovided",
       "recognized_writes": [
         {
           "fact": {
@@ -21302,17 +20879,7 @@
           "value": 14
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 61,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
       "value_eligibility": "Dynamic"
     },
@@ -25122,7 +24689,16 @@
       "module": "symbol-values",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "twoSymbolsAreTwoKeys",
       "function_index": 4,
@@ -25130,7 +24706,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1910, end: 1935 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -25163,26 +24739,25 @@
           "value": 14
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(6))",
-          "operand": 6,
-          "operation": 17,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 6,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
       "module": "symbol-values",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "aMixedKeyMap",
       "function_index": 5,
@@ -25190,7 +24765,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 2277, end: 2311 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -25223,19 +24798,9 @@
           "value": 13
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(4))",
-          "operand": 4,
-          "operation": 16,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 4,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "programs",
@@ -25649,7 +25214,16 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "table",
       "function_index": 0,
@@ -25657,7 +25231,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 517, end: 542 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -25690,19 +25264,9 @@
           "value": 93
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 98,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "benchmarks",
@@ -25726,7 +25290,16 @@
       "module": "map-and-set",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "table#whole",
       "function_index": 2,
@@ -25734,7 +25307,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 517, end: 542 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -25767,19 +25340,9 @@
           "value": 93
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 98,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "benchmarks",
@@ -25803,7 +25366,16 @@
       "module": "map-entries-top-k",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "topWords",
       "function_index": 0,
@@ -25811,7 +25383,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1442, end: 1467 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -25829,26 +25401,25 @@
           "value": 63
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 68,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "benchmarks",
       "module": "map-entries-top-k",
       "constructor": "nts_map_new",
       "fact": {
-        "unknown": "not every writer is known"
+        "numbers": {
+          "hi": "inf",
+          "lo": "-inf",
+          "maybe_nan": true,
+          "maybe_negative_zero": true,
+          "whole": false
+        },
+        "tags": [
+          "number"
+        ]
       },
       "function": "topWords#whole",
       "function_index": 3,
@@ -25856,7 +25427,7 @@
       "key_eligibility": "Dynamic",
       "key_reason": "per-identity key summary unprovided",
       "origin": "Origin { location: Location { file: SourceId(0), span: Span { start: 1442, end: 1467 } }, scope: None, inline_chain: [], async_parent: None, generated: None }",
-      "reason": "not every writer is known",
+      "reason": "closed numeric payload",
       "recognized_writes": [
         {
           "fact": {
@@ -25874,19 +25445,9 @@
           "value": 63
         }
       ],
-      "rejected_uses": [
-        {
-          "argument": 0,
-          "category": "length",
-          "helper": null,
-          "kind": "Length(ValueId(2))",
-          "operand": 2,
-          "operation": 68,
-          "reason": "not every writer is known"
-        }
-      ],
+      "rejected_uses": [],
       "value": 2,
-      "value_eligibility": "Dynamic"
+      "value_eligibility": "F64"
     },
     {
       "family": "benchmarks",
