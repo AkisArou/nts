@@ -5,7 +5,7 @@ import { registerHooks } from "node:module";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
@@ -85,7 +85,9 @@ export function selectRange(repo: string, range: string): RangeSelection {
   try {
     infrastructure("selector owner record",()=>writeFileSync(join(directory,"owner.json"),JSON.stringify({version:1,pid:process.pid,created:Date.now(),repo:shared})+"\n"));
     for (const [index, revision] of [base, tip].entries()) {
-      const tree = join(directory, String(index));
+      // Git derives the shared registry id from this basename, not its parent.
+      // Keep it unique across simultaneous range preflights and their cleanup.
+      const tree = join(directory, `${basename(directory)}-${index}`);
       git(repo, "worktree", "add", "--quiet", "--detach", tree, revision);
       added.push(tree);
       if (existsSync(join(tree, "pnpm-lock.yaml"))) {

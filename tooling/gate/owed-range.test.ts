@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { createServer, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
 import { selectRange, selectionInfrastructure, unionViews, type RuleView } from "./owed-range.ts";
 import {committedChanges} from "./change-paths.ts";
+import {waitFor} from "./test-wait.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 test("committed paths preserve spaces, Unicode, tabs and line breaks across a rename",t=>{
@@ -58,6 +60,69 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
   const got=selectRange(repo,`${base}..HEAD`);
   assert.deepEqual(got.checks.steps,["tests","tooling"]);
   assert.equal(got.strict,true,"unknown historical routing stays strict");
+});
+
+test("concurrent range preflights have distinct endpoint registry names and collect only their own trees", async t => {
+  const directory=mkdtempSync(join(tmpdir(),"owed-concurrent-")),repo=join(directory,"repo");
+  const sockets=new Set<Socket>(),seen:string[]=[];
+  let pair:Socket[]=[],aborted=false;
+  const server=createServer(socket=>{
+    sockets.add(socket);socket.on("close",()=>sockets.delete(socket));
+    let input="";
+    socket.on("data",bytes=>{
+      input+=bytes;
+      if(!input.endsWith("\n"))return;
+      seen.push(JSON.parse(input));pair.push(socket);
+      // Both real endpoint imports must be live before either may proceed.
+      if(pair.length===2||aborted){for(const waiting of pair)waiting.end("release\n");pair=[];}
+    });
+  });
+  const children:ReturnType<typeof spawn>[]=[];
+  t.after(async()=>{
+    for(const socket of sockets)socket.destroy();
+    for(const child of children)if(child.exitCode===null)child.kill();
+    await Promise.all(children.map(child=>child.exitCode!==null?Promise.resolve():new Promise<void>(done=>child.once("close",()=>done()))));
+    await new Promise<void>(done=>server.close(()=>done()));
+    rmSync(directory,{recursive:true,force:true});
+  });
+  await new Promise<void>((done,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",()=>done());});
+  const address=server.address();assert.ok(address&&typeof address!=="string");
+  const env={...process.env,HOME:join(directory,"home"),OWED_TEST_BARRIER_PORT:String(address.port),GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  mkdirSync(join(repo,"tooling/gate"),{recursive:true});
+  writeFileSync(join(repo,"tooling/gate/owed.mjs"),`
+import {createConnection} from "node:net";
+await new Promise((done,reject)=>{
+ const socket=createConnection({host:"127.0.0.1",port:Number(process.env.OWED_TEST_BARRIER_PORT)});
+ socket.once("error",reject);socket.once("connect",()=>socket.write(JSON.stringify(process.cwd())+"\\n"));
+ socket.once("data",()=>socket.end());socket.once("close",done);
+});
+export const selfTest=()=>null;
+export const owed=()=>[{name:"control",paths:[],steps:["tooling"],arms:[]}];
+export const gateSteps=rules=>rules.flatMap(rule=>rule.steps);
+export const allSteps=()=>["tooling"];
+`);
+  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  git("init","-qb","main");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
+  writeFileSync(join(repo,"candidate"),"candidate\n");git("add","candidate");git("commit","-qm","candidate");
+  const script=`import {selectRange} from ${JSON.stringify(new URL("./owed-range.ts",import.meta.url).href)};console.log(JSON.stringify(selectRange(process.argv[1],process.argv[2]).checks));`;
+  const run=()=>{
+    const child=spawn(process.execPath,["--input-type=module","-e",script,repo,`${base}..HEAD`],{env,stdio:["ignore","pipe","pipe"]});children.push(child);
+    let out="",err="";child.stdout!.on("data",bytes=>out+=bytes);child.stderr!.on("data",bytes=>err+=bytes);
+    return new Promise<{code:number|null,out:string,err:string}>((done,reject)=>{
+      child.once("error",reject);child.once("close",code=>{
+        if(code!==0){aborted=true;for(const socket of sockets)socket.end("release\n");pair=[];}
+        done({code,out,err});
+      });
+    });
+  };
+  const results:Awaited<ReturnType<typeof run>>[]=[];
+  const pending=[run(),run()].map(result=>result.then(value=>{results.push(value);}));
+  await waitFor("both concurrent selector preflights to finish",()=>results.length===2);
+  await Promise.all(pending);
+  for(const result of results){assert.equal(result.code,0,result.err);assert.deepEqual(JSON.parse(result.out).steps,["tooling"]);}
+  assert.equal(seen.length,4,"both selectors evaluate both real endpoint trees");
+  assert.equal(new Set(seen.map(path=>basename(path))).size,4,`shared registry basenames: ${JSON.stringify(seen)}`);
+  assert.equal(git("worktree","list","--porcelain").split("\n").filter(line=>line.startsWith("worktree ")).length,1,"neither preflight leaves a registered endpoint");
 });
 
 test("a rule cannot narrow its own committed range and dirty policy cannot alter it", t => {
