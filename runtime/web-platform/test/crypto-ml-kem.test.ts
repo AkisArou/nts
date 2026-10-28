@@ -387,3 +387,71 @@ test("ML-KEM promise settlement uses the crypto task queue without delaying nati
   assert.equal((await pending).sharedKey.byteLength, 32);
   assert.equal(settled, true);
 });
+
+for (const target of [
+  { name: "AES-OCB", algorithm: { name: "AES-OCB" }, usages: ["encrypt", "decrypt"] },
+  { name: "ChaCha20-Poly1305", algorithm: { name: "ChaCha20-Poly1305" }, usages: ["encrypt", "decrypt"] },
+  { name: "KMAC128", algorithm: { name: "KMAC128", length: 249 }, usages: ["sign", "verify"] },
+  { name: "KMAC256", algorithm: { name: "KMAC256", length: 256 }, usages: ["sign", "verify"] },
+  { name: "HMAC with SHA3-512", algorithm: { name: "HMAC", hash: "SHA3-512", length: 255 }, usages: ["sign", "verify"] },
+]) {
+  test("ML-KEM imports its complete shared secret into " + target.name, async () => {
+    const f = fixture();
+    const privateKey = await f.privateKey("ML-KEM-768");
+    const publicKey = await f.settle(f.subtle.getPublicKey(privateKey, ["encapsulateKey"]));
+    const result = await f.settle(f.subtle.encapsulateKey("ML-KEM-768", publicKey, target.algorithm, true, target.usages));
+    const decoded = await f.settle(f.subtle.decapsulateKey("ML-KEM-768", privateKey, result.ciphertext, target.algorithm, true, target.usages));
+    const bytes = await f.settle(f.subtle.exportKey("raw-secret", result.sharedKey)) as ArrayBuffer;
+    assert.equal(bytes.byteLength, 32);
+    assert.deepEqual(await f.settle(f.subtle.exportKey("raw-secret", decoded)), bytes);
+    assert.deepEqual(decoded.algorithm, result.sharedKey.algorithm);
+    assert.deepEqual(decoded.usages, target.usages);
+  });
+}
+
+for (const name of ["Argon2d", "Argon2i", "Argon2id"] as const) {
+  test("ML-KEM imports nonextractable " + name + " material through raw-secret", async () => {
+    const f = fixture();
+    const privateKey = await f.privateKey("ML-KEM-512");
+    const publicKey = await f.settle(f.subtle.getPublicKey(privateKey, ["encapsulateKey"]));
+    const result = await f.settle(f.subtle.encapsulateKey("ML-KEM-512", publicKey, name, false, ["deriveBits"]));
+    const imported = f.provider.imported;
+    assert.ok(imported !== undefined && imported.format === "raw" && imported.family === "secret");
+    const material = imported.bytes.slice();
+    const decoded = await f.settle(f.subtle.decapsulateKey("ML-KEM-512", privateKey, result.ciphertext, name, false, ["deriveBits"]));
+    const decapsulated = f.provider.imported;
+    assert.ok(decapsulated !== undefined && decapsulated.format === "raw" && decapsulated.family === "secret");
+    assert.equal(material.byteLength, 32);
+    assert.deepEqual(decapsulated.bytes, material);
+    assert.deepEqual(decoded.algorithm, { name });
+    assert.equal(decoded.extractable, false);
+    await assert.rejects(f.settle(f.subtle.exportKey("raw-secret", decoded)), dom("NotSupportedError"));
+  });
+}
+
+test("ML-KEM private JWK native seed-import failure precedes its public-field check", async () => {
+  const f = fixture();
+  const key = await f.privateKey("ML-KEM-512");
+  const material = await f.settle(f.subtle.exportKey("jwk", key)) as JsonWebKeyObject;
+  f.provider.failure = { failure: "operation" };
+  await assert.rejects(f.settle(f.subtle.importKey("jwk", { ...material, pub: undefined }, "ML-KEM-512", false, ["decapsulateBits"])), dom("OperationError"));
+  f.provider.failure = undefined;
+  await assert.rejects(f.settle(f.subtle.importKey("jwk", { ...material, pub: undefined }, "ML-KEM-512", false, ["decapsulateBits"])), dom("DataError"));
+});
+
+test("ML-KEM wrapping uses internal import/export and preserves private KEM usages", async () => {
+  const f = fixture();
+  const key = await f.privateKey("ML-KEM-512");
+  const publicKey = await f.settle(f.subtle.getPublicKey(key, ["encapsulateBits"]));
+  const wrapping = await f.settle(f.subtle.importKey("raw-secret", new Uint8Array(16), "AES-OCB", false, ["wrapKey", "unwrapKey"]));
+  const algorithm = { name: "AES-OCB", iv: new Uint8Array(12) };
+  f.subtle.exportKey = (): never => { throw new Error("public exportKey override invoked"); };
+  f.subtle.importKey = (): never => { throw new Error("public importKey override invoked"); };
+  for (const format of ["jwk", "raw-seed", "pkcs8"] as const) {
+    const wrapped = await f.settle(f.subtle.wrapKey(format, key, wrapping, algorithm));
+    const restored = await f.settle(f.subtle.unwrapKey(format, wrapped, wrapping, algorithm, "ML-KEM-512", false, ["decapsulateBits"]));
+    assert.deepEqual(restored.usages, ["decapsulateBits"]);
+    const result = await f.settle(f.subtle.encapsulateBits("ML-KEM-512", publicKey));
+    assert.deepEqual(await f.settle(f.subtle.decapsulateBits("ML-KEM-512", restored, result.ciphertext)), result.sharedKey);
+  }
+});

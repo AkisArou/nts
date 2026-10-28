@@ -97,3 +97,18 @@ settlement without timers. The new file is registered in `check.sh`.
 The parent integration runs the complete package gate after stacking all prior
 families. nts compilation remains a maintainer gate, distinct from these Node
 results.
+
+## Ordered integration controls
+
+After rebasing on the first four families, the ML-KEM control file has
+**42 tests / 42 pass / 0 fail / 0 skip**. The ten additional controls cover
+AES-OCB, ChaCha20-Poly1305, KMAC128/256, HMAC with SHA3-512, all three Argon2
+secret-key targets, the inherited private-JWK native-failure ordering, and
+ML-KEM JWK/raw-seed/PKCS8 wrapping through AES-OCB. The four preceding families'
+focused suites add **129 pass / 0 fail / 0 skip**. Public, WPT and strict new-test
+typechecks all exit 0 after resolving the shared-file rebase conflicts.
+
+The actual WPT gate reruns the restored encapsulation files with **129 pass /
+0 fail / 0 blocked**, and ML-KEM import/export with **324 pass / 0 fail /
+0 blocked**. The complete isolated census above remains labeled with its original
+base; the full ordered package census is the parent integration's gate.

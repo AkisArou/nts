@@ -880,5 +880,39 @@
       "fail": null,
       "blocked": null
     }
-  ]
+  ],
+  "orderedIntegration": {
+    "base": "762c501cd070db4e6ffbc1ab3d01a4ed7976d498",
+    "productionCommit": "e028a4e16f675a0f3fa3fcb4b3397109ae138971",
+    "focusedTests": {
+      "total": 42,
+      "pass": 42,
+      "fail": 0,
+      "skip": 0
+    },
+    "predecessorControls": {
+      "total": 129,
+      "pass": 129,
+      "fail": 0,
+      "skip": 0
+    },
+    "publicTypecheckExit": 0,
+    "wptTypecheckExit": 0,
+    "strictNewTestTypecheckExit": 0,
+    "controlsLogSha256": "8396bb1f89eb81d5b86195ff4fd5b5e301ab5bf2fede6c7d4e5d433feede4091",
+    "affectedWptGate": {
+      "encapDecap": {
+        "cases": 129,
+        "pass": 129,
+        "fail": 0,
+        "blocked": 0
+      },
+      "importExport": {
+        "cases": 324,
+        "pass": 324,
+        "fail": 0,
+        "blocked": 0
+      }
+    }
+  }
 }
