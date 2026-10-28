@@ -370,7 +370,12 @@ export class EventSource extends EventTarget {
       return "reconnect";
     } catch (error) {
       if (this.state === EventSource.CLOSED || controller.signal.aborted) return "fatal";
-      if (error instanceof LimitError) return "fatal";
+      if (error instanceof LimitError) {
+        // Retire this Fetch before the terminal error task unregisters us.
+        // Keep the parser's failure as the abort reason, not a new AbortError.
+        controller.abort(error);
+        return "fatal";
+      }
       // HTML 9.2.2 step 15.2 permits terminal failure when retrying is known
       // to be futile. Fetch cannot service other schemes in this environment.
       return this.retryableScheme ? "reconnect" : "fatal";
@@ -419,9 +424,23 @@ export class EventSource extends EventTarget {
         }
         await parser.push(decoder.decode(result.value, { stream: true }));
       }
+    } catch (error) {
+      if (error instanceof LimitError) {
+        try {
+          // Cancel while this reader still owns the body. Fetch's ordinary
+          // cancellation path releases its own underlying provider reader.
+          await reader.cancel(error);
+        } catch {
+          // Cleanup failure must not replace the fatal parser error.
+        }
+      }
+      throw error;
     } finally {
-      if (this.state === EventSource.CLOSED) await reader.cancel();
-      reader.releaseLock();
+      try {
+        if (this.state === EventSource.CLOSED) await reader.cancel();
+      } finally {
+        reader.releaseLock();
+      }
     }
   }
 

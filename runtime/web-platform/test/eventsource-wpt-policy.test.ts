@@ -7,6 +7,7 @@ import "../host/node-runtime.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
 import { Blob, DOMException, EventSource, ReadableStream, TextEncoder } from "../src/index.ts";
 import type { ReadableStreamDefaultController } from "../src/index.ts";
+import { LimitError } from "../src/core/errors.ts";
 import { installWebPlatformRuntime, VirtualScheduler, WebPlatformRuntime } from "../src/provider.ts";
 import type { WebPlatformOptions } from "../src/provider.ts";
 import type { FetchTransport, TransportRequest, TransportResponse } from "../src/fetch/transport.ts";
@@ -210,6 +211,63 @@ for (const scheme of ["http", "https"]) {
     assert.equal(requests.length, 2);
     assert.equal(clock.nextDeadline, null);
   });
+}
+
+// HTML 9.2.2 close ownership and 9.2.3 terminal failure: retire the active Fetch.
+for (const limit of ["line", "event"] as const) {
+  for (const cancelRejects of [false, true]) {
+    suite(`EventSource ${limit} limit cancels and aborts once when cancellation ${cancelRejects ? "rejects" : "fulfills"}`, async (t) => {
+      const requests: TransportRequest[] = [];
+      const body = new ControlledBody();
+      const cancellation = Promise.withResolvers<void>();
+      body.cancelGate = cancellation;
+      t.after(() => {
+        cancellation.resolve();
+        body.end();
+      });
+      const { runtime, clock } = virtualRuntime(t, {
+        async dispatch(request) {
+          requests.push(request);
+          return response(body.stream);
+        },
+      }, {
+        eventSource: {
+          maxLineBufferCharacters: limit === "line" ? 8 : 100,
+          maxEventBufferCharacters: limit === "event" ? 4 : 100,
+        },
+      });
+      const source = new EventSource("https://events.example/feed");
+      const states: number[] = [];
+      source.onerror = () => states.push(source.readyState);
+      await until(clock, () => source.readyState === EventSource.OPEN, "stream open");
+      const request = requests[0];
+      assert.ok(request);
+      assert.equal(body.stream.locked, true);
+      body.push(limit === "line" ? "data: too-long" : "data:ab\ndata:cd\n");
+      await until(clock, () => body.cancellations.length !== 0 || states.length !== 0, "parser limit cleanup");
+      assert.equal(body.cancellations.length, 1, "fatal parsing must cancel its owned body reader");
+      const error = body.cancellations[0];
+      assert.ok(error instanceof LimitError);
+      assert.match(error.message, limit === "line" ? /line exceeded/ : /event exceeded/);
+      if (cancelRejects) cancellation.reject(new Error("provider cancellation failed"));
+      else cancellation.resolve();
+      await until(clock, () => states.length !== 0, "terminal parser error event");
+      assert.deepEqual(states, [EventSource.CLOSED]);
+      assert.equal(request.signal.aborted, true);
+      assert.equal(request.signal.reason, error, "cancellation failure cannot replace the parser LimitError");
+      assert.equal(body.stream.locked, false, "owned readers must be released after cleanup");
+      assert.equal(clock.nextDeadline, null);
+      source.close();
+      source.close();
+      runtime.close();
+      await checkpoint();
+      clock.runPending();
+      assert.equal(requests.length, 1);
+      assert.equal(body.cancellations.length, 1);
+      assert.deepEqual(states, [EventSource.CLOSED]);
+      assert.equal(clock.advanceToNextDeadline(), false);
+    });
+  }
 }
 
 for (const operation of ["public close", "runtime close"] as const) {
