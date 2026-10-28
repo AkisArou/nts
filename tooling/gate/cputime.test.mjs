@@ -3,7 +3,7 @@
 //   node --test tooling/gate/cputime.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PERF_ARGS, parsePerf, parseMeasurement } from "./cputime.mjs";
+import { PERF_ARGS, countedLaunch, parsePerf, parseMeasurement, parseUserEvents } from "./cputime.mjs";
 
 // `nts hir --prepared runtime/node/events`, twice, each counted by two perfs
 // attached to the same process: one with PERF_ARGS (raw), one as the first
@@ -69,4 +69,50 @@ test("launch output sums hybrid counts and uses waited-command user plus sys CPU
   assert.equal(row.instructions, 1111111110);
   assert.equal(row.cpu_s, 0.239235 + 0.002937);
   assert.equal(parseMeasurement("123 instructions:u").cpu_s, null);
+});
+
+test("extra user counters keep inheritance and pin before counting starts", () => {
+  const legacy = countedLaunch("nts",["hir"]);
+  assert.equal(legacy.command,"timeout");
+  assert.deepEqual(legacy.args.slice(4),PERF_ARGS);
+  const extra = countedLaunch("nts",["hir"],{cpu:4,events:["cycles","branch-misses"]});
+  assert.equal(extra.command,"taskset"); assert.deepEqual(extra.args.slice(0,3),["-c","4","timeout"]);
+  assert.ok(extra.args.includes("instructions:u,cycles:u,branch-misses:u"));
+  assert.ok(!extra.args.includes("--no-inherit")); assert.ok(extra.args.includes("--no-scale"));
+  assert.throws(()=>countedLaunch("nts",[],{events:["cycles"]}));
+  assert.throws(()=>countedLaunch("nts",[],{cpu:4,events:["instructions"]}));
+});
+
+test("pinned metrics reject empty, duplicate, unsupported and multiplexed values", () => {
+  const text = "123,,cpu_core/instructions/u,999,100.00,,\n<not counted>,,cpu_atom/instructions/u,0,0.00,,\n456,,cpu_core/cycles/u,999,100.00,,\n0,,cpu_core/branch-misses/u,999,100.00,,\n";
+  const parsed = parseUserEvents(text,["instructions","cycles","branch-misses"]);
+  assert.equal(parsed.instructions.value,123); assert.equal(parsed.cycles.value,456); assert.equal(parsed["branch-misses"].value,0);
+  assert.deepEqual(parsed.instructions.inactive,["cpu_atom/instructions/u"]);
+  for (const bad of [text.replace("123,,",",,"),text.replace("456,,","<not supported>,,"),text.replaceAll("100.00","98.00"),text+"456,,cpu_core/cycles/u,999,100.00,,\n"])
+    assert.throws(()=>parseUserEvents(bad,["instructions","cycles"]));
+  assert.throws(()=>parseUserEvents(text.replace("<not counted>","12"),["instructions"]));
+  assert.throws(()=>parseUserEvents("<not counted>,,cpu_atom/cycles/u,0,0.00,,",["cycles"]));
+});
+
+test("CSV counter CPU keeps the waited-command measurement", () => {
+  const row=parseMeasurement("123,,cpu_core/instructions/u,999,100.00,,\n0.125,seconds user\n0.025,seconds sys\n");
+  assert.equal(row.instructions,123); assert.equal(row.cpu_s,0.15);
+});
+
+test("human extra events retain real perf rusage and implicit full running time", () => {
+  const raw = ` <not counted> cpu_atom/instructions/u (0.00%)
+ 50914920 cpu_core/instructions/u
+ <not counted> cpu_atom/cycles/u (0.00%)
+ 74890938 cpu_core/cycles/u
+ 0.014955945 seconds time elapsed
+ 0.014926000 seconds user
+ 0.000000000 seconds sys
+ `;
+  const events = parseUserEvents(raw,["instructions","cycles"]);
+  assert.equal(events.cycles.value,74890938); assert.equal(events.cycles.running_percent,100);
+  assert.equal(parseMeasurement(raw).cpu_s,0.014926);
+  assert.throws(()=>parseUserEvents(raw.replace("74890938 cpu_core/cycles/u","74890938 cpu_core/cycles/u (98.00%)"),["cycles"]));
+  for(const suffix of ["(n/a%)","(98.00%) trailing","(99.00%"])
+    assert.throws(()=>parseUserEvents(raw.replace("74890938 cpu_core/cycles/u","74890938 cpu_core/cycles/u "+suffix),["cycles"]));
+  assert.equal(parseUserEvents("7 cpu_core/branch-misses/u # 0.12% of all branches",["branch-misses"])["branch-misses"].running_percent,100);
 });

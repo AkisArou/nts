@@ -76,12 +76,64 @@ export function parsePerf(text) {
 export function parseMeasurement(text) {
   const seconds = (kind) => {
     const match = new RegExp(`^\\s*([0-9]+(?:\\.[0-9]+)?) seconds ${kind}\\s*$`, "m").exec(text);
-    return match ? Number(match[1]) : null;
+    const csv = new RegExp(`^\\s*([0-9]+(?:\\.[0-9]+)?),seconds ${kind}(?:,.*)?$`, "m").exec(text);
+    return match ? Number(match[1]) : csv ? Number(csv[1]) : null;
   };
   const user_s = seconds("user");
   const sys_s = seconds("sys");
   return { counter_scope: COUNTER_SCOPE, instructions: parsePerf(text), user_s, sys_s,
     cpu_s: user_s === null || sys_s === null ? null : user_s + sys_s };
+}
+
+const EXTRA_EVENTS = ["cycles", "branches", "branch-misses", "cache-references", "cache-misses"];
+
+/** Additional counters use explicit user-only events on one pinned CPU.
+ * An inactive hybrid PMU is not a zero measurement of an active event. */
+export function parseUserEvents(text, events) {
+  const lines = text.split("\n").flatMap(line => {
+    const c = line.split(",").map(x => x.trim());
+    if (c.length >= 5) return [{value:c[0],event:c[2],runtime:c[3],percent:c[4],format:"csv"}];
+    const m = /^\s*(\d+|<not counted>|<not supported>)\s+((?:cpu_(?:core|atom)\/[^\s]+\/u)|(?:[\w-]+:u))(?:\s+(.*))?$/.exec(line);
+    if (!m) return [];
+    const percent = /\((\d+(?:\.\d+)?)%\)\s*$/.exec(m[3] ?? "");
+    const annotations = (m[3]?.match(/\([^)]*%/g) ?? []).length;
+    if ((annotations && !percent) || annotations > 1) throw Error("malformed counter running percentage");
+    // perf's human format omits the percentage when the event ran fully.
+    return [{value:m[1],event:m[2],runtime:null,percent:percent?.[1] ?? "100",format:"human"}];
+  });
+  const result = {};
+  for (const event of events) {
+    const rows = lines.filter(c => c.event === `${event}:u` || c.event === `cpu_core/${event}/u` || c.event === `cpu_atom/${event}/u`);
+    if (!rows.length || new Set(rows.map(c => c.event)).size !== rows.length) throw Error(`missing or duplicate event: ${event}`);
+    const active = [], inactive = [];
+    for (const c of rows) {
+      if (c.value === "<not counted>" && /^cpu_(core|atom)\//.test(c.event)
+        && /^0(?:\.0+)?$/.test(c.percent) && (c.format === "human" || /^0(?:\.0+)?$/.test(c.runtime))) {
+        inactive.push(c.event); continue;
+      }
+      if (!/^\d+$/.test(c.value) || !Number.isSafeInteger(Number(c.value))
+        || (c.format === "csv" && (!/^\d+(?:\.\d+)?$/.test(c.runtime) || Number(c.runtime) <= 0))
+        || !/^\d+(?:\.\d+)?$/.test(c.percent) || Number(c.percent) < 99 || Number(c.percent) > 100)
+        throw Error(`invalid, unsupported or multiplexed event: ${event}`);
+      active.push({pmu:c.event,value:Number(c.value),running_percent:Number(c.percent),format:c.format});
+    }
+    if (active.length !== 1) throw Error(`event must run on one pinned PMU: ${event}`);
+    if ((event === "instructions" || event === "cycles") && active[0].value <= 0) throw Error(`nonpositive event: ${event}`);
+    result[event] = {...active[0], inactive};
+  }
+  return result;
+}
+
+export function countedLaunch(command, args, {timeoutMs = 900_000, events = [], cpu} = {}) {
+  if (!Array.isArray(events) || new Set(events).size !== events.length || events.some(e => !EXTRA_EVENTS.includes(e))) throw Error("invalid extra counter events");
+  if (cpu !== undefined && (!Number.isSafeInteger(cpu) || cpu < 0 || cpu > 1023)) throw Error("invalid pinned CPU");
+  if (events.length && cpu === undefined) throw Error("extra counters require an explicit pinned CPU");
+  // CSV mode suppresses perf's waited-command user/sys footer. Retain the
+  // human format so extra events share the default counter's exact CPU scope.
+  const perf = events.length ? ["stat", "--no-scale", "--no-big-num", "-e", ["instructions", ...events].map(e => e + ":u").join(",")] : PERF_ARGS;
+  const argv = ["timeout", "--signal=TERM", "--kill-after=5s", `${timeoutMs / 1000}s`, "perf", ...perf];
+  return {command: cpu === undefined ? argv.shift() : "taskset", args: cpu === undefined ? argv : ["-c", String(cpu), ...argv],
+    target: [command,...args], events: events.length ? ["instructions",...events] : []};
 }
 
 let probed;
@@ -102,11 +154,11 @@ export function instructionsWork() {
  * every nonzero status (including timeout's 124/137) invalidates the count.
  * The raw file belongs to the caller's run and is never deleted here.
  */
-export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, ...options }) {
+export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, events = [], cpu, ...options }) {
   if (!counterFile) throw new Error("a retained counterFile is required");
   mkdirSync(dirname(counterFile), { recursive: true });
-  const child = spawn("timeout", ["--signal=TERM", "--kill-after=5s", `${timeoutMs / 1000}s`, "perf",
-    ...PERF_ARGS, "-o", counterFile, "--", command, ...args],
+  const launch = countedLaunch(command,args,{timeoutMs,events,cpu});
+  const child = spawn(launch.command, [...launch.args, "-o", counterFile, "--", ...launch.target],
     { ...options, env: { ...(options.env ?? process.env), ...FIXED_AMBIENT } });
   const measurement = new Promise((resolve) => {
     let launchError;
@@ -115,7 +167,12 @@ export function spawnCounted(command, args, { counterFile, timeoutMs = 900_000, 
       let raw = "";
       try { raw = readFileSync(counterFile, "utf8"); } catch {}
       const row = { ...parseMeasurement(raw), counter_file: counterFile, status, signal };
-      row.counter_error = launchError ?? (signal ? `counter run ended by ${signal}` : status !== 0 ? `counter run exited ${status}` : counterProblem(row));
+      let metricError;
+      if (launch.events.length) {
+        try { row.metrics = parseUserEvents(raw,launch.events); row.counter_cpu = cpu; }
+        catch (error) { metricError = error.message; }
+      }
+      row.counter_error = launchError ?? metricError ?? (signal ? `counter run ended by ${signal}` : status !== 0 ? `counter run exited ${status}` : counterProblem(row));
       resolve(row);
     });
   });
