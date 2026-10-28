@@ -34,6 +34,8 @@ import type {
   CryptoKeyPairRecord,
   CryptoKeyRecord,
   CryptoNamedCurve,
+  CryptoOkpComponents,
+  CryptoOkpCurve,
   CryptoProvider,
   CryptoRsaComponents,
   CryptoRsaOtherPrime,
@@ -98,6 +100,10 @@ function keyRecord(key: KeyObject): CryptoKeyRecord {
   keyObjects.set(handle, key);
   if (key.type === "secret") {
     return { handle, info: { family: "secret", type: "secret", length: secretBits(key) } };
+  }
+  const okpCurve = okpCurveName(key);
+  if (okpCurve !== undefined) {
+    return { handle, info: { family: "OKP", type: key.type, namedCurve: okpCurve } };
   }
   if (key.asymmetricKeyType === "ec") {
     const nativeCurve = key.asymmetricKeyDetails?.namedCurve;
@@ -324,6 +330,42 @@ function minimalInteger(bytes: Uint8Array): Uint8Array {
   return owned(byteSlice(bytes, start, byteLength(bytes) - start));
 }
 
+function okpCurveName(key: KeyObject): CryptoOkpCurve | undefined {
+  if (key.asymmetricKeyType === "ed25519") return "Ed25519";
+  if (key.asymmetricKeyType === "x25519") return "X25519";
+  return undefined;
+}
+
+function okpPublicKey(curve: CryptoOkpCurve, bytes: Uint8Array): KeyObject {
+  if (curve !== "Ed25519" && curve !== "X25519") throw new TypeError("Unsupported native OKP curve");
+  // The native public-key constructor preserves the encoded octets, including
+  // noncanonical and small-order encodings. Validation belongs to the operation.
+  return createPublicKey({ format: "jwk", key: { kty: "OKP", crv: curve, x: Buffer.from(bytes).toString("base64url") } });
+}
+
+function okpPrivateKey(curve: CryptoOkpCurve, seed: Uint8Array): KeyObject {
+  if (curve !== "Ed25519" && curve !== "X25519") throw new TypeError("Unsupported native OKP curve");
+  // RFC 8410's nested OCTET STRING carries the original seed, not the clamped
+  // scalar. Native import derives the actual public key from that seed; supplied
+  // JWK x is deliberately absent so shared code can perform its consistency check.
+  const oid = derValue(6, new ByteArray([0x2b, 0x65, curve === "Ed25519" ? 0x70 : 0x6e]));
+  const privateKey = derValue(0x30, Buffer.concat([
+    derInteger(new ByteArray([0])), derValue(0x30, oid), derValue(4, derValue(4, seed)),
+  ]));
+  return createPrivateKey({ format: "der", type: "pkcs8", key: privateKey });
+}
+
+function okpComponents(key: KeyObject): CryptoOkpComponents {
+  const namedCurve = okpCurveName(key);
+  const components = key.export({ format: "jwk" });
+  if (namedCurve === undefined || components.x === undefined) throw new TypeError("Missing native OKP components");
+  const publicComponents: CryptoOkpComponents = {
+    family: "OKP", namedCurve, x: owned(Buffer.from(components.x, "base64url")),
+  };
+  return components.d === undefined ? publicComponents
+    : { ...publicComponents, d: owned(Buffer.from(components.d, "base64url")) };
+}
+
 /**
  * How many input blocks fit before the requested low-order counter field wraps.
  * Compute the complement plus one, capped at the actual input's block count, so
@@ -399,6 +441,9 @@ export class NodeCryptoProvider implements CryptoProvider {
       if (input.format === "raw" && input.family === "EC") {
         return keyRecord(ecRawKey(input.namedCurve, input.bytes));
       }
+      if (input.format === "raw" && input.family === "OKP") {
+        return keyRecord(okpPublicKey(input.namedCurve, input.bytes));
+      }
       if (input.format === "spki") {
         return keyRecord(validatedEcKey(createPublicKey({ key: Buffer.from(input.bytes), format: "der", type: "spki" })));
       }
@@ -410,6 +455,12 @@ export class NodeCryptoProvider implements CryptoProvider {
         return keyRecord(components.d === undefined
           ? ecRawKey(components.namedCurve, ecPoint(components))
           : ecPrivateKey(nativeCurveName(components.namedCurve), components.d));
+      }
+      if (input.format === "components" && input.components.family === "OKP") {
+        const components = input.components;
+        return keyRecord(components.d === undefined
+          ? okpPublicKey(components.namedCurve, components.x)
+          : okpPrivateKey(components.namedCurve, components.d));
       }
       if (input.format === "components" && input.components.family === "RSA") {
         const components = input.components;
@@ -433,6 +484,10 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
+      if (format === "raw" && okpCurveName(nativeKey) !== undefined) {
+        if (nativeKey.type !== "public") return { failure: "operation" };
+        return okpComponents(nativeKey).x;
+      }
       if (nativeKey.asymmetricKeyType === "ec") {
         if (format === "raw") {
           if (nativeKey.type !== "public") return { failure: "operation" };
@@ -452,6 +507,7 @@ export class NodeCryptoProvider implements CryptoProvider {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
       if (nativeKey.type === "secret") return { family: "secret", k: owned(nativeKey.export()) };
+      if (okpCurveName(nativeKey) !== undefined) return okpComponents(nativeKey);
       if (nativeKey.asymmetricKeyType === "ec") return ecComponents(nativeKey);
       return rsaComponents(nativeKey);
     } catch {
@@ -461,6 +517,11 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
     try {
+      if (parameters.family === "OKP") {
+        if (parameters.namedCurve !== "Ed25519" && parameters.namedCurve !== "X25519") return { failure: "operation" };
+        const pair = parameters.namedCurve === "Ed25519" ? generateKeyPairSync("ed25519") : generateKeyPairSync("x25519");
+        return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
+      }
       if (parameters.family === "EC") {
         const pair = generateKeyPairSync("ec", { namedCurve: nativeCurveName(parameters.namedCurve) });
         return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
@@ -581,6 +642,10 @@ export class NodeCryptoProvider implements CryptoProvider {
         const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return { kind: "bytes", bytes: owned(bytes) };
       }
+      if (parameters.name === "Ed25519") {
+        if (nativeKey.asymmetricKeyType !== "ed25519" || nativeKey.type !== "private") return { failure: "invalid-key" };
+        return { kind: "bytes", bytes: owned(sign(null, data, nativeKey)) };
+      }
       if (parameters.name === "ECDSA") {
         if (nativeKey.asymmetricKeyType !== "ec" || nativeKey.type !== "private") return { failure: "invalid-key" };
         const signature = sign(hashName(parameters.hash), data, { key: nativeKey, dsaEncoding: "ieee-p1363" });
@@ -616,6 +681,10 @@ export class NodeCryptoProvider implements CryptoProvider {
           Buffer.concat([signature.r, signature.s]));
       }
       if (signature.kind !== "bytes") return false;
+      if (parameters.name === "Ed25519") {
+        if (nativeKey.asymmetricKeyType !== "ed25519" || nativeKey.type !== "public") return false;
+        return verify(null, data, nativeKey, signature.bytes);
+      }
       if (parameters.name === "HMAC") {
         const expected = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return expected.byteLength === byteLength(signature.bytes)
@@ -635,12 +704,13 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   derive(parameters: CryptoDerivationParameters, key: CryptoKeyHandle): Uint8Array | CryptoFailure {
     try {
-      if (parameters.name !== "ECDH") return { failure: "operation" };
+      if (parameters.name !== "ECDH" && parameters.name !== "X25519") return { failure: "operation" };
       const privateKey = keyObjects.get(key);
       const publicKey = keyObjects.get(parameters.publicKey);
+      const nativeType = parameters.name === "ECDH" ? "ec" : "x25519";
       if (privateKey === undefined || publicKey === undefined
         || privateKey.type !== "private" || publicKey.type !== "public"
-        || privateKey.asymmetricKeyType !== "ec" || publicKey.asymmetricKeyType !== "ec") {
+        || privateKey.asymmetricKeyType !== nativeType || publicKey.asymmetricKeyType !== nativeType) {
         return { failure: "invalid-key" };
       }
       return owned(diffieHellman({ privateKey, publicKey }));

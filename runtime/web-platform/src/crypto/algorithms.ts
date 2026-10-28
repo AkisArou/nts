@@ -51,7 +51,8 @@ export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW";
 export type SecretAlgorithmName = AesAlgorithmName | "HMAC";
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
 export type EcAlgorithmName = "ECDSA" | "ECDH";
-type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName;
+export type OkpAlgorithmName = "Ed25519" | "X25519";
+type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName;
 
 /** Web Cryptography §27.5. Validation of AES key sizes is an operation step. */
 export class AesKeyGenParams extends Algorithm<AesAlgorithmName> {
@@ -212,11 +213,11 @@ export class EcKeyImportParams extends Algorithm<EcAlgorithmName> {
   }
 }
 
-/** Web Cryptography §24.3. Conversion checks the CryptoKey brand, not its usage. */
-export class EcdhKeyDeriveParams extends Algorithm<"ECDH"> {
+/** Web Cryptography §§24.3, 26.2. ECDH and X25519 use the same dictionary. */
+export class EcdhKeyDeriveParams extends Algorithm<"ECDH" | "X25519"> {
   readonly public: CryptoKey;
 
-  constructor(name: "ECDH", publicKey: CryptoKey) {
+  constructor(name: "ECDH" | "X25519", publicKey: CryptoKey) {
     super(name);
     this.public = publicKey;
   }
@@ -224,7 +225,7 @@ export class EcdhKeyDeriveParams extends Algorithm<"ECDH"> {
 
 export type NormalizedAlgorithm =
   | DigestAlgorithm
-  | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName>
+  | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName>
   | AesKeyGenParams
   | AesDerivedKeyParams
   | AesCtrParams
@@ -312,6 +313,15 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("ECDH", "generateKey"),
   new AlgorithmRegistration("ECDH", "importKey"),
   new AlgorithmRegistration("ECDH", "exportKey"),
+  new AlgorithmRegistration("Ed25519", "sign"),
+  new AlgorithmRegistration("Ed25519", "verify"),
+  new AlgorithmRegistration("Ed25519", "generateKey"),
+  new AlgorithmRegistration("Ed25519", "importKey"),
+  new AlgorithmRegistration("Ed25519", "exportKey"),
+  new AlgorithmRegistration("X25519", "deriveBits"),
+  new AlgorithmRegistration("X25519", "generateKey"),
+  new AlgorithmRegistration("X25519", "importKey"),
+  new AlgorithmRegistration("X25519", "exportKey"),
 ];
 
 /** Web IDL's (object or DOMString) union conversion, before later argument conversions. */
@@ -366,6 +376,15 @@ function normalizedBytes(source: CryptoBufferSource, copyBuffers: boolean): Uint
   return copyBuffers ? copyCryptoBytes(source) : cryptoBytes(source);
 }
 
+function agreementParameters(algorithm: object, name: "ECDH" | "X25519"): EcdhKeyDeriveParams {
+  const input = algorithm as { readonly public?: unknown };
+  const publicKey = requiredMember(input.public, name + ".public");
+  // Web IDL validates the interface brand here. Algorithm, kind and permission
+  // checks belong to the later operation and preserve their specified ordering.
+  getCryptoKeySlots(publicKey);
+  return new EcdhKeyDeriveParams(name, publicKey as CryptoKey);
+}
+
 function normalizeRegisteredAlgorithm(
   algorithm: object,
   name: RegisteredAlgorithmName,
@@ -378,6 +397,11 @@ function normalizeRegisteredAlgorithm(
 
   if (name === "SHA-1" || name === "SHA-256" || name === "SHA-384" || name === "SHA-512") {
     return new DigestAlgorithm(name);
+  }
+
+  if (name === "Ed25519") return new Algorithm(name);
+  if (name === "X25519") {
+    return operation === "deriveBits" ? agreementParameters(algorithm, name) : new Algorithm(name);
   }
 
   if (name === "HMAC") {
@@ -440,10 +464,7 @@ function normalizeRegisteredAlgorithm(
       const hash = toAlgorithmIdentifier(requiredMember(input.hash, "ECDSA.hash"));
       return new EcdsaParams(name, normalizeAlgorithm(hash, "digest"));
     }
-    const input = algorithm as { readonly public?: unknown };
-    const publicKey = requiredMember(input.public, "ECDH.public");
-    getCryptoKeySlots(publicKey);
-    return new EcdhKeyDeriveParams(name, publicKey as CryptoKey);
+    return agreementParameters(algorithm, name);
   }
 
   if (operation === "generateKey" || operation === "get key length") {

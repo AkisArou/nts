@@ -387,3 +387,53 @@ export function parseEcDer(format: "spki" | "pkcs8", bytes: Uint8Array, requireP
   privateKey.complete();
   return { namedCurve, x, y, d };
 }
+
+/** RFC 8410 key encodings retain the public octets without point validation. */
+export interface OkpDerKey {
+  readonly namedCurve: "Ed25519" | "X25519";
+  readonly x: Uint8Array | undefined;
+  readonly d: Uint8Array | undefined;
+}
+
+function okpAlgorithm(reader: DerReader): "Ed25519" | "X25519" {
+  const algorithm = reader.read(0x30);
+  const oid = algorithm.read(0x06).content();
+  // RFC 8410 §3 requires absent parameters, including rejecting a NULL value.
+  algorithm.complete();
+  if (cryptoViewByteLength(oid) !== 3 || oid[0] !== 0x2b || oid[1] !== 0x65) invalidDer();
+  if (oid[2] === 0x70) return "Ed25519";
+  if (oid[2] === 0x6e) return "X25519";
+  invalidDer();
+}
+
+/**
+ * Web Cryptography §§25.3.4–5, 26.3.3–4 and RFC 8410 §§4, 7. Its PKCS8
+ * operation uses RFC 5208 PrivateKeyInfo, not RFC 5958 OneAsymmetricKey:
+ * version zero, optional attributes, and an exactly consumed CurvePrivateKey.
+ * The inner value is a 32-octet seed, not an ECPrivateKey sequence. Public
+ * imports deliberately impose no canonical, on-curve or small-order check.
+ */
+export function parseOkpDer(format: "spki" | "pkcs8", bytes: Uint8Array): OkpDerKey {
+  const source = new DerReader(bytes);
+  const envelope = source.read(0x30);
+  source.complete();
+  if (format === "spki") {
+    const namedCurve = okpAlgorithm(envelope);
+    const publicKey = envelope.read(0x03);
+    if (publicKey.done() || publicKey.bytes[publicKey.position++] !== 0) invalidDer();
+    const x = publicKey.content();
+    if (cryptoViewByteLength(x) !== 32) invalidDer();
+    envelope.complete();
+    return { namedCurve, x, d: undefined };
+  }
+  const version = envelope.integer(true);
+  if (cryptoViewByteLength(version) !== 1 || version[0] !== 0) invalidDer();
+  const namedCurve = okpAlgorithm(envelope);
+  const privateOctets = envelope.read(0x04);
+  if (!envelope.done()) attributes(envelope);
+  envelope.complete();
+  const d = privateOctets.read(0x04).content();
+  privateOctets.complete();
+  if (cryptoViewByteLength(d) !== 32) invalidDer();
+  return { namedCurve, x: undefined, d };
+}
