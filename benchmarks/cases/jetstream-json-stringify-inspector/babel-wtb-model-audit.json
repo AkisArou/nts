@@ -1,0 +1,92 @@
+{
+  "name": "babel-wtb",
+  "status": "blocked-active-function-descriptor-operations",
+  "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "rule": "The current docs/contributing/cloud-agents.md forbids runtime property descriptor reflection and mutation. The executed gensync implementation reads and rewrites descriptors of dynamic callable wrappers.",
+  "scope": "Proven during the original transformation, not only Webpack export registration, class scaffolding, helper source text, or dormant browser paths.",
+  "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js",
+  "functions": [
+    {
+      "name": "setFunctionMetadata",
+      "span": [
+        49972,
+        49992
+      ],
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js#L49972-L49992",
+      "operations": [
+        {
+          "kind": "Object.getOwnPropertyDescriptor(fn,name)",
+          "calls": 2
+        },
+        {
+          "kind": "Object.getOwnPropertyDescriptor(fn,length)",
+          "calls": 124
+        },
+        {
+          "kind": "Object.defineProperty(fn,name)",
+          "calls": 2
+        },
+        {
+          "kind": "Object.defineProperty(fn,length)",
+          "calls": 124
+        }
+      ]
+    },
+    {
+      "name": "wrapGenerator",
+      "span": [
+        49843,
+        49852
+      ],
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js#L49843-L49852"
+    },
+    {
+      "name": "buildOperation",
+      "span": [
+        49855,
+        49937
+      ],
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js#L49855-L49937"
+    }
+  ],
+  "originalInput": {
+    "path": "web-tooling-benchmark/third_party/redux-5.0.1.esm.js",
+    "bytes": 16765,
+    "sha256": "b26e875f0fd94e379996f23ccd99fc500268c739dd9c462aa794234001e30a91",
+    "options": {
+      "presets": [
+        "env"
+      ],
+      "sourceType": "module",
+      "plugins": [
+        "objectRestSpread"
+      ]
+    },
+    "transformPlugins": [
+      "transform-object-rest-spread"
+    ]
+  },
+  "originalOutput": {
+    "node": "v24.20.0",
+    "completeRuns": 1,
+    "results": 1,
+    "codeLength": 21248,
+    "codeSha256": "968ca8f97a50a133c71a65e448957769cfa466d3df630411795220c2392a03bc",
+    "successful": true
+  },
+  "proof": {
+    "script": "babel-wtb-model-trace.mjs",
+    "trace": "babel-wtb/model-trace.json",
+    "unchangedPinnedBundle": true,
+    "codeGenerationDisabled": true,
+    "descriptorReads": 126,
+    "descriptorWrites": 126
+  },
+  "notIndependentBlockers": [
+    "Object.getOwnPropertySymbols is an own-key enumeration operation, not by itself the stated prototype/descriptor rule. Its 732 traced calls are recorded only for implementation context.",
+    "Error.prepareStackTrace replacement is supporting context, not the sole exclusion reason.",
+    "Many Reflect/Proxy/descriptor tokens in helper template strings are compiler input/output data, not executed code."
+  ],
+  "action": "No production port created. Do not delete gensync metadata or replace it with a different algorithm to evade the model boundary. All original source/input preserved in the audit snapshot.",
+  "ruleSource": "https://github.com/AkisArou/nts/blob/main/docs/contributing/cloud-agents.md"
+}

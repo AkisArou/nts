@@ -14977,6 +14977,55 @@
             "endLine": 133124,
             "description": "Babel standalone script-tag loading is unrelated to transformFromAst and is not invoked."
           }
+        },
+        {
+          "kind": "active-function-descriptor-operations",
+          "status": "active-core-transformation",
+          "evidence": [
+            {
+              "name": "setFunctionMetadata",
+              "span": [
+                49972,
+                49992
+              ],
+              "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js#L49972-L49992",
+              "operations": [
+                {
+                  "kind": "Object.getOwnPropertyDescriptor(fn,name)",
+                  "calls": 2
+                },
+                {
+                  "kind": "Object.getOwnPropertyDescriptor(fn,length)",
+                  "calls": 124
+                },
+                {
+                  "kind": "Object.defineProperty(fn,name)",
+                  "calls": 2
+                },
+                {
+                  "kind": "Object.defineProperty(fn,length)",
+                  "calls": 124
+                }
+              ]
+            },
+            {
+              "name": "wrapGenerator",
+              "span": [
+                49843,
+                49852
+              ],
+              "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js#L49843-L49852"
+            },
+            {
+              "name": "buildOperation",
+              "span": [
+                49855,
+                49937
+              ],
+              "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/babel.bundle.js#L49855-L49937"
+            }
+          ],
+          "portability": "The current docs/contributing/cloud-agents.md forbids runtime property descriptor reflection and mutation. The executed gensync implementation reads and rewrites descriptors of dynamic callable wrappers. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed."
         }
       ],
       "requiredAdaptations": [
@@ -14986,7 +15035,9 @@
       ],
       "originalValidation": [],
       "category": "Large real programs",
-      "portOrder": 36
+      "portOrder": 36,
+      "portStatus": "blocked-active-function-descriptor-operations",
+      "portStatusEvidence": "babel-wtb-model-audit.json"
     },
     {
       "name": "babel-minify-wtb",
@@ -19400,6 +19451,27 @@
             "endLine": 47236,
             "description": "webpack global discovery fallback."
           }
+        },
+        {
+          "kind": "active-prototype-preserving-copy",
+          "status": "active-core-transformation",
+          "evidence": [
+            {
+              "name": "TreeCopier.copy",
+              "span": [
+                38781,
+                38856
+              ],
+              "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/lebab.bundle.js#L38781-L38856",
+              "criticalSpan": [
+                38797,
+                38806
+              ],
+              "operation": "Object.create(Object.getPrototypeOf(node), {original:{value:node,configurable:false,enumerable:false,writable:true}})",
+              "calls": 3310
+            }
+          ],
+          "portability": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed."
         }
       ],
       "requiredAdaptations": [
@@ -19411,7 +19483,9 @@
         "Original transforms: arg-rest, arg-spread, arrow, class, for-of, let, template, includes, obj-method, obj-shorthand; return transform result including warnings."
       ],
       "category": "Large real programs",
-      "portOrder": 40
+      "portOrder": 40,
+      "portStatus": "blocked-active-prototype-preserving-copy",
+      "portStatusEvidence": "lebab-wtb-model-audit.json"
     },
     {
       "name": "postcss-wtb",
@@ -21126,14 +21200,24 @@
   ],
   "portabilityFindings": {
     "selectedByInitialInventory": 43,
-    "unaffectedSelectedWorkloads": 42,
+    "unaffectedSelectedWorkloads": 40,
     "blockedWorkloads": [
       {
         "name": "WSL",
         "reason": "Blocked by the current fixed-layout/no-prototype rule. Replacing the active object reclassification with tags, replacement objects or forwarding changes representation/dispatch and needs an explicit scope decision. The static Proxy-registration adaptation alone is insufficient.",
         "evidence": "wsl-prototype-audit.json"
+      },
+      {
+        "name": "babel-wtb",
+        "reason": "The current docs/contributing/cloud-agents.md forbids runtime property descriptor reflection and mutation. The executed gensync implementation reads and rewrites descriptors of dynamic callable wrappers. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
+        "evidence": "babel-wtb-model-audit.json"
+      },
+      {
+        "name": "lebab-wtb",
+        "reason": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed.",
+        "evidence": "lebab-wtb-model-audit.json"
       }
     ],
-    "note": "The accepted 90-workload selection is retained as the initial inventory. This additional confirmed implementation constraint blocks one selected port; it is not silently omitted or rewritten."
+    "note": "The accepted 90-workload selection remains the initial inventory. Full original executions revealed three further constraints under the repository fixed-layout/no-prototype/descriptor rule. These ports are explicitly blocked rather than silently omitted or rewritten; all 40 unaffected selected workloads continue."
   }
 }
