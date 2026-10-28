@@ -61,6 +61,8 @@
     "../encoding-stream-policy.test.ts",
     "../wpt-webcrypto.test.ts",
     "./webcrypto/report.ts",
-    "../crypto-quota.test.ts"
+    "../crypto-quota.test.ts",
+    "../wpt-compression.test.ts",
+    "./compression-streams/census.ts"
   ]
 }
