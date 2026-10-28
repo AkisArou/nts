@@ -1,0 +1,4201 @@
+{
+  "scope": "UTF-8, UTF-16LE, UTF-16BE policy for canonical TextEncoder, TextDecoder, TextEncoderStream and TextDecoderStream; source-byte loops remain simple pending native replacement",
+  "date": "2026-10-28",
+  "node": "v24.20.0",
+  "pnpm": "10.15.0",
+  "baselineSourceCommit": "f52f77a56294c30f79ef804b654deb514279012c",
+  "measuredSourceCommit": "008c2857795431fe8053929b882bd92bb083bb37",
+  "measuredSourceTree": "5ef5ea4de3497c5693aff723033c3116c2531c29",
+  "sourceHashes": {
+    "runtime/web-platform/src/core/encoding.ts": "aabbcd2f424bfa867c32c38a87967ed7adbe6d898765fe49f5d6cd31844d2849",
+    "runtime/web-platform/src/core/encoding-streams.ts": "c4081845c15f16a1c9d37533b7e565568727cd84a1e0449c6a188e61532c64df",
+    "runtime/web-platform/test/wpt/encoding-manifest.json": "0491c0563810c4e3b29a99bc80e31b100f6583a495214a814933582d4d70d271",
+    "runtime/web-platform/test/wpt/versions.json": "c8c6d1ab7ed34627207192bfc1ed6fb9727f1d50ca9bf974029272047d352e3a"
+  },
+  "provenanceNote": "The measured commit is local. Publication can recreate commits with different IDs; the PR records the same-tree mapping. These measurements are not evidence for later main/merged artifacts. Documentation-only additions do not change the measured executable source.",
+  "rulesCommit": "d283612e",
+  "basePR": 43,
+  "baseBranch": "chatgpt/global-error-handlers",
+  "revisions": {
+    "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
+    "common": "dbd648158d337580885e70a54f929daf215211a0",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "versionsTable": {
+    "path": "runtime/web-platform/test/wpt/versions.json",
+    "directories": 16,
+    "copiedFiles": 260,
+    "harnessReferences": 2,
+    "commonResourcesUpgraded": false,
+    "addedCommonHelpers": [
+      "common/sab.js",
+      "common/subset-tests.js"
+    ]
+  },
+  "fixtureSelection": {
+    "files": 29,
+    "supportFiles": 5,
+    "registeredTests": 4067,
+    "fullQueryVariantInvalidLabelCases": 3421,
+    "note": "The API-invalid-label file runs all four declared query variants together under an empty search. Valid legacy codec support is not inferred from invalid-label rejection."
+  },
+  "files": [
+    {
+      "path": "encoding/api-basics.any.js",
+      "rawBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/api-invalid-label.any.js",
+      "rawBaseline": {
+        "pass": 3421,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 3421,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 3421,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/api-replacement-encodings.any.js",
+      "rawBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/api-surrogates-utf8.any.js",
+      "rawBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/encodeInto.any.js",
+      "rawBaseline": {
+        "pass": 110,
+        "fail": 1,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 110,
+        "fail": 0,
+        "blocked": 1
+      },
+      "final": {
+        "pass": 110,
+        "fail": 0,
+        "blocked": 1
+      }
+    },
+    {
+      "path": "encoding/textdecoder-arguments.any.js",
+      "rawBaseline": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-byte-order-marks.any.js",
+      "rawBaseline": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-copy.any.js",
+      "rawBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-eof.any.js",
+      "rawBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-fatal-streaming.any.js",
+      "rawBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-fatal.any.js",
+      "rawBaseline": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-ignorebom.any.js",
+      "rawBaseline": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "rawBaseline": {
+        "pass": 15,
+        "fail": 207,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 15,
+        "fail": 0,
+        "blocked": 207
+      },
+      "final": {
+        "pass": 15,
+        "fail": 0,
+        "blocked": 207
+      }
+    },
+    {
+      "path": "encoding/textdecoder-streaming.any.js",
+      "rawBaseline": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textdecoder-utf16-surrogates.any.js",
+      "rawBaseline": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "rawBaseline": {
+        "pass": 43,
+        "fail": 36,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 43,
+        "fail": 0,
+        "blocked": 36
+      },
+      "final": {
+        "pass": 43,
+        "fail": 0,
+        "blocked": 36
+      }
+    },
+    {
+      "path": "encoding/textencoder-utf16-surrogates.any.js",
+      "rawBaseline": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/backpressure.any.js",
+      "rawBaseline": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/decode-attributes.any.js",
+      "rawBaseline": {
+        "pass": 26,
+        "fail": 2,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 2
+      },
+      "final": {
+        "pass": 26,
+        "fail": 0,
+        "blocked": 2
+      }
+    },
+    {
+      "path": "encoding/streams/decode-bad-chunks.any.js",
+      "rawBaseline": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/decode-ignore-bom.any.js",
+      "rawBaseline": {
+        "pass": 12,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 12,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 12,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/decode-incomplete-input.any.js",
+      "rawBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "rawBaseline": {
+        "pass": 6,
+        "fail": 7,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 7
+      },
+      "final": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 7
+      }
+    },
+    {
+      "path": "encoding/streams/decode-split-character.any.js",
+      "rawBaseline": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/decode-utf8.any.js",
+      "rawBaseline": {
+        "pass": 10,
+        "fail": 2,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 2
+      },
+      "final": {
+        "pass": 10,
+        "fail": 0,
+        "blocked": 2
+      }
+    },
+    {
+      "path": "encoding/streams/encode-bad-chunks.any.js",
+      "rawBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/encode-utf8.any.js",
+      "rawBaseline": {
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/streams/readable-writable-properties.any.js",
+      "rawBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "encoding/sharedarraybuffer.https.html",
+      "rawBaseline": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "scopedBaseline": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "final": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      }
+    }
+  ],
+  "baselineUnfilteredTotals": {
+    "pass": 3812,
+    "fail": 255,
+    "blocked": 0
+  },
+  "baselineScopedTotals": {
+    "pass": 3812,
+    "fail": 0,
+    "blocked": 255
+  },
+  "finalWptTotals": {
+    "pass": 3812,
+    "fail": 0,
+    "blocked": 255
+  },
+  "baselineUnfilteredFailures": [
+    {
+      "path": "encoding/encodeInto.any.js",
+      "name": "encodeInto() and a detached output buffer",
+      "error": "ReferenceError: MessageChannel is not defined"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "866 => IBM866",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp866 => IBM866",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csibm866 => IBM866",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ibm866 => IBM866",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin2 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-2 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-101 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-2 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88592 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-2 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-2:1987 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l2 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin2 => ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin3 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-3 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-109 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-3 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88593 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-3 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-3:1988 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l3 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin3 => ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin4 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-4 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-110 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-4 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88594 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-4 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-4:1988 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l4 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin4 => ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatincyrillic => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cyrillic => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-5 => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-144 => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-5 => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88595 => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-5 => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-5:1988 => ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "arabic => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "asmo-708 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88596e => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88596i => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatinarabic => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ecma-114 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-6 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-6-e => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-6-i => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-127 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-6 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88596 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-6 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-6:1987 => ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatingreek => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ecma-118 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "elot_928 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "greek => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "greek8 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-7 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-126 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-7 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88597 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-7 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-7:1987 => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "sun_eu_greek => ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88598e => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatinhebrew => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "hebrew => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-8 => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-8-e => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-138 => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-8 => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88598 => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-8 => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-8:1988 => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "visual => ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88598i => ISO-8859-8-I",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-8-i => ISO-8859-8-I",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "logical => ISO-8859-8-I",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin6 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-10 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-157 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-10 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885910 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l6 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin6 => ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-13 => ISO-8859-13",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-13 => ISO-8859-13",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885913 => ISO-8859-13",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-14 => ISO-8859-14",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-14 => ISO-8859-14",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885914 => ISO-8859-14",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin9 => ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-15 => ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-15 => ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885915 => ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-15 => ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l9 => ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-16 => ISO-8859-16",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cskoi8r => KOI8-R",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi => KOI8-R",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8 => KOI8-R",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8-r => KOI8-R",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8_r => KOI8-R",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8-ru => KOI8-U",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8-u => KOI8-U",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csmacintosh => macintosh",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "mac => macintosh",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "macintosh => macintosh",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-mac-roman => macintosh",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "dos-874 => windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-11 => windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-11 => windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885911 => windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "tis-620 => windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-874 => windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1250 => windows-1250",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1250 => windows-1250",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1250 => windows-1250",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1251 => windows-1251",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1251 => windows-1251",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1251 => windows-1251",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ansi_x3.4-1968 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ascii => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1252 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp819 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin1 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ibm819 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-1 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-100 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-1 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88591 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-1 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-1:1987 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l1 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin1 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "us-ascii => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1252 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1252 => windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1253 => windows-1253",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1253 => windows-1253",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1253 => windows-1253",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1254 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin5 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-9 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-148 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-9 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88599 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-9 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-9:1989 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l5 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin5 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1254 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1254 => windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1255 => windows-1255",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1255 => windows-1255",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1255 => windows-1255",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1256 => windows-1256",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1256 => windows-1256",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1256 => windows-1256",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1257 => windows-1257",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1257 => windows-1257",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1257 => windows-1257",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1258 => windows-1258",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1258 => windows-1258",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1258 => windows-1258",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-mac-cyrillic => x-mac-cyrillic",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-mac-ukrainian => x-mac-cyrillic",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "chinese => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csgb2312 => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso58gb231280 => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb2312 => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb_2312 => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb_2312-80 => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gbk => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-58 => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-gbk => GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb18030 => gb18030",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "big5 => Big5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "big5-hkscs => Big5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cn-big5 => Big5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csbig5 => Big5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-x-big5 => Big5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cseucpkdfmtjapanese => EUC-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "euc-jp => EUC-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-euc-jp => EUC-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso2022jp => ISO-2022-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-2022-jp => ISO-2022-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csshiftjis => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ms932 => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ms_kanji => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "shift-jis => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "shift_jis => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "sjis => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-31j => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-sjis => Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cseuckr => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csksc56011987 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "euc-kr => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-149 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "korean => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ks_c_5601-1987 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ks_c_5601-1989 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ksc5601 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ksc_5601 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-949 => EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-user-defined => x-user-defined",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: IBM866",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-2",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-3",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-4",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-6",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-7",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-8",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-8-I",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-10",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-13",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-14",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-15",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-16",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: KOI8-R",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: KOI8-U",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: macintosh",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-874",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1250",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1251",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1252",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1253",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1254",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1255",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1256",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1257",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1258",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: x-mac-cyrillic",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: GBK",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: gb18030",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: Big5",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: EUC-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-2022-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: EUC-KR",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: x-user-defined",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-attributes.any.js",
+      "name": "encoding attribute should have correct value for 'iso-8859-2'",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-attributes.any.js",
+      "name": "encoding attribute should have correct value for 'ascii'",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode invalid sequences in Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to reject invalid sequences in Shift_JIS",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode ISO-2022-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode invalid sequences in ISO-2022-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to reject invalid sequences in ISO-2022-JP",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode ISO-8859-14",
+      "error": "RangeError: This decoder implements UTF-8, UTF-16LE and UTF-16BE"
+    },
+    {
+      "path": "encoding/streams/decode-utf8.any.js",
+      "name": "decoding a transferred Uint8Array chunk should give no output",
+      "error": "ReferenceError: MessageChannel is not defined"
+    },
+    {
+      "path": "encoding/streams/decode-utf8.any.js",
+      "name": "decoding a transferred ArrayBuffer chunk should give no output",
+      "error": "ReferenceError: MessageChannel is not defined"
+    }
+  ],
+  "dependencyCases": [
+    {
+      "path": "encoding/encodeInto.any.js",
+      "name": "encodeInto() and a detached output buffer",
+      "category": "compiler-capability",
+      "reason": "Requires compiler-owned MessageChannel/MessagePort transfer. The ordinary-node package provider exposes no canonical MessageChannel, so this unchanged case is registered as a compiler capability dependency. Node messaging classes and fabricated detachment are not substituted. Direct ArrayBuffer transfer can be covered separately by source policy controls; it does not execute this WPT case."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "866 => IBM866",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp866 => IBM866",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csibm866 => IBM866",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ibm866 => IBM866",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin2 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-2 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-101 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-2 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88592 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-2 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-2:1987 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l2 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin2 => ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin3 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-3 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-109 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-3 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88593 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-3 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-3:1988 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l3 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin3 => ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin4 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-4 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-110 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-4 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88594 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-4 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-4:1988 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l4 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin4 => ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatincyrillic => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cyrillic => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-5 => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-144 => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-5 => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88595 => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-5 => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-5:1988 => ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "arabic => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "asmo-708 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88596e => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88596i => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatinarabic => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ecma-114 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-6 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-6-e => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-6-i => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-127 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-6 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88596 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-6 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-6:1987 => ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatingreek => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ecma-118 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "elot_928 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "greek => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "greek8 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-7 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-126 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-7 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88597 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-7 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-7:1987 => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "sun_eu_greek => ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88598e => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatinhebrew => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "hebrew => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-8 => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-8-e => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-138 => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-8 => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88598 => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-8 => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-8:1988 => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "visual => ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso88598i => ISO-8859-8-I",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-8-i => ISO-8859-8-I",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "logical => ISO-8859-8-I",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin6 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-10 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-157 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-10 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885910 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l6 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin6 => ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-13 => ISO-8859-13",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-13 => ISO-8859-13",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885913 => ISO-8859-13",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-14 => ISO-8859-14",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-14 => ISO-8859-14",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885914 => ISO-8859-14",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin9 => ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-15 => ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-15 => ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885915 => ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-15 => ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l9 => ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-16 => ISO-8859-16",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-16 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cskoi8r => KOI8-R",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi => KOI8-R",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8 => KOI8-R",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8-r => KOI8-R",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8_r => KOI8-R",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8-ru => KOI8-U",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-U codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "koi8-u => KOI8-U",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-U codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csmacintosh => macintosh",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "mac => macintosh",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "macintosh => macintosh",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-mac-roman => macintosh",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "dos-874 => windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-11 => windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-11 => windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso885911 => windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "tis-620 => windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-874 => windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1250 => windows-1250",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1250 => windows-1250",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1250 => windows-1250",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1251 => windows-1251",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1251 => windows-1251",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1251 => windows-1251",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ansi_x3.4-1968 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ascii => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1252 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp819 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin1 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ibm819 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-1 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-100 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-1 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88591 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-1 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-1:1987 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l1 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin1 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "us-ascii => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1252 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1252 => windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1253 => windows-1253",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1253 => windows-1253",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1253 => windows-1253",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1254 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csisolatin5 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-8859-9 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-148 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso8859-9 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso88599 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-9 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso_8859-9:1989 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "l5 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "latin5 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1254 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1254 => windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1255 => windows-1255",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1255 => windows-1255",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1255 => windows-1255",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1256 => windows-1256",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1256 => windows-1256",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1256 => windows-1256",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1257 => windows-1257",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1257 => windows-1257",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1257 => windows-1257",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cp1258 => windows-1258",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-1258 => windows-1258",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-cp1258 => windows-1258",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-mac-cyrillic => x-mac-cyrillic",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy x-mac-cyrillic codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-mac-ukrainian => x-mac-cyrillic",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy x-mac-cyrillic codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "chinese => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csgb2312 => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso58gb231280 => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb2312 => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb_2312 => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb_2312-80 => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gbk => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-58 => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-gbk => GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "gb18030 => gb18030",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy gb18030 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "big5 => Big5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "big5-hkscs => Big5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cn-big5 => Big5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csbig5 => Big5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-x-big5 => Big5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cseucpkdfmtjapanese => EUC-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "euc-jp => EUC-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-euc-jp => EUC-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csiso2022jp => ISO-2022-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-2022-jp => ISO-2022-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csshiftjis => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ms932 => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ms_kanji => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "shift-jis => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "shift_jis => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "sjis => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-31j => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-sjis => Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "cseuckr => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "csksc56011987 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "euc-kr => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "iso-ir-149 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "korean => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ks_c_5601-1987 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ks_c_5601-1989 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ksc5601 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "ksc_5601 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "windows-949 => EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textdecoder-labels.any.js",
+      "name": "x-user-defined => x-user-defined",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy x-user-defined codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: IBM866",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy IBM866 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-2",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-3",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-3 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-4",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-4 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-6",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-6 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-7",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-7 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-8",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-8-I",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-8-I codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-10",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-10 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-13",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-13 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-14",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-15",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-15 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-8859-16",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-16 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: KOI8-R",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-R codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: KOI8-U",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy KOI8-U codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: macintosh",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy macintosh codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-874",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-874 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1250",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1250 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1251",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1251 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1252",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1253",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1253 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1254",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1254 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1255",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1255 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1256",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1256 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1257",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1257 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: windows-1258",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1258 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: x-mac-cyrillic",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy x-mac-cyrillic codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: GBK",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy GBK codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: gb18030",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy gb18030 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: Big5",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Big5 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: EUC-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: ISO-2022-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: EUC-KR",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy EUC-KR codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/textencoder-constructor-non-utf.any.js",
+      "name": "Encoding argument supported for decode: x-user-defined",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy x-user-defined codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-attributes.any.js",
+      "name": "encoding attribute should have correct value for 'iso-8859-2'",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-2 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-attributes.any.js",
+      "name": "encoding attribute should have correct value for 'ascii'",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy windows-1252 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode invalid sequences in Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to reject invalid sequences in Shift_JIS",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy Shift_JIS codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode ISO-2022-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode invalid sequences in ISO-2022-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to reject invalid sequences in ISO-2022-JP",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-2022-JP codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-non-utf8.any.js",
+      "name": "TextDecoderStream should be able to decode ISO-8859-14",
+      "category": "native-capability",
+      "reason": "Requires the maintainer-owned native legacy ISO-8859-14 codec and its label mapping. This PR covers UTF-8, UTF-16LE and UTF-16BE only; no host TextDecoder or source legacy codec is substituted."
+    },
+    {
+      "path": "encoding/streams/decode-utf8.any.js",
+      "name": "decoding a transferred Uint8Array chunk should give no output",
+      "category": "compiler-capability",
+      "reason": "Requires compiler-owned MessageChannel/MessagePort transfer. The ordinary-node package provider exposes no canonical MessageChannel, so this unchanged case is registered as a compiler capability dependency. Node messaging classes and fabricated detachment are not substituted. Direct ArrayBuffer transfer can be covered separately by source policy controls; it does not execute this WPT case."
+    },
+    {
+      "path": "encoding/streams/decode-utf8.any.js",
+      "name": "decoding a transferred ArrayBuffer chunk should give no output",
+      "category": "compiler-capability",
+      "reason": "Requires compiler-owned MessageChannel/MessagePort transfer. The ordinary-node package provider exposes no canonical MessageChannel, so this unchanged case is registered as a compiler capability dependency. Node messaging classes and fabricated detachment are not substituted. Direct ArrayBuffer transfer can be covered separately by source policy controls; it does not execute this WPT case."
+    }
+  ],
+  "nativeCapabilityDependencies": {
+    "singleByte": [
+      "IBM866",
+      "ISO-8859-2",
+      "ISO-8859-3",
+      "ISO-8859-4",
+      "ISO-8859-5",
+      "ISO-8859-6",
+      "ISO-8859-7",
+      "ISO-8859-8",
+      "ISO-8859-8-I",
+      "ISO-8859-10",
+      "ISO-8859-13",
+      "ISO-8859-14",
+      "ISO-8859-15",
+      "ISO-8859-16",
+      "KOI8-R",
+      "KOI8-U",
+      "macintosh",
+      "windows-874",
+      "windows-1250",
+      "windows-1251",
+      "windows-1252",
+      "windows-1253",
+      "windows-1254",
+      "windows-1255",
+      "windows-1256",
+      "windows-1257",
+      "windows-1258",
+      "x-mac-cyrillic"
+    ],
+    "multiByte": [
+      "GBK",
+      "gb18030",
+      "Big5",
+      "EUC-JP",
+      "ISO-2022-JP",
+      "Shift_JIS",
+      "EUC-KR"
+    ],
+    "other": [
+      "x-user-defined"
+    ],
+    "note": "Legacy single-byte and multi-byte decoder implementations and their state/index tables belong to native capability work. Replacement-encoding labels are specified to throw and are tested here; they do not need a codec."
+  },
+  "excludedPaths": [
+    {
+      "path": "encoding/idlharness.any.js",
+      "reason": "Full WebIDL reflection harness, interface IDL fetch, descriptor and prototype shape exceed this fixed-layout profile. Behavioral brand and conversion controls are covered separately."
+    },
+    {
+      "path": "encoding/idlharness-shadowrealm.window.js",
+      "reason": "ShadowRealm/browser realm and full WebIDL reflection harness unavailable; Node24.20 also excludes ShadowRealm support."
+    },
+    {
+      "path": "encoding/streams/invalid-realm.window.js",
+      "reason": "Requires Document, iframe and detached browsing contexts; no browser realm emulation."
+    },
+    {
+      "path": "encoding/streams/realms.window.js",
+      "reason": "Requires Window, iframe and distinct browser globals; no browser realm emulation."
+    },
+    {
+      "path": "encoding/streams/stringification-crash.html",
+      "reason": "Worker termination crash test requires DOM, Worker, object URL and asynchronous lifecycle, not a source encoding unit test."
+    },
+    {
+      "path": "encoding/iso-2022-jp-decoder.any.js",
+      "reason": "All cases require native ISO-2022-JP legacy decoder state/index tables; Node24.20 lists a state-handling bug for this file."
+    },
+    {
+      "path": "encoding/textdecoder-fatal-single-byte.any.js",
+      "reason": "All cases require native legacy single-byte codecs. Node24.20 skips the file because iso-8859-16 is unsupported."
+    },
+    {
+      "path": "encoding/single-byte-decoder.window.js",
+      "reason": "Native legacy single-byte decoders plus Document; Node24.20 excludes the Document requirement."
+    },
+    {
+      "path": "encoding/replacement-encodings.any.js",
+      "reason": "XHR decoding of data URLs, not TextDecoder; requires XMLHttpRequest. API-level replacement-label rejection is imported separately."
+    },
+    {
+      "path": "encoding/unsupported-encodings.any.js",
+      "reason": "XHR decoding of data URLs and browser document encodings, not the four requested Encoding APIs; XMLHttpRequest unavailable."
+    },
+    {
+      "path": "encoding/unsupported-labels.window.js",
+      "reason": "Browser document encoding and iframe navigation, not TextDecoder; requires Document."
+    },
+    {
+      "path": "encoding/legacy-mb-japanese/",
+      "reason": "Native EUC-JP, ISO-2022-JP and Shift_JIS indexes/codecs and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/legacy-mb-korean/",
+      "reason": "Native EUC-KR index/codec and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/legacy-mb-schinese/",
+      "reason": "Native GBK/gb18030 indexes/codecs and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/legacy-mb-tchinese/",
+      "reason": "Native Big5 index/codec and browser document/form/href decoding."
+    },
+    {
+      "path": "encoding/big5-encoder.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/bom-handling.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-shift_jis-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-shift_jis.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-one-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-one.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-three-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-three.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-two-ref.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/eof-utf-8-two.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/iso-2022-jp-encoder.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/remove-only-one-bom.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/sniffing.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/utf-32-from-win1252.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    },
+    {
+      "path": "encoding/utf-32.html",
+      "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
+    }
+  ],
+  "finalCommands": {
+    "wpt": "node --expose-gc --test runtime/web-platform/test/wpt-encoding.test.ts",
+    "policy": "node --expose-gc --test runtime/web-platform/test/encoding-policy.test.ts runtime/web-platform/test/encoding-stream-policy.test.ts runtime/web-platform/test/wpt-versions.test.ts runtime/web-platform/test/webidl-surface.test.ts",
+    "sourceTypes": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+    "adapterTypes": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+    "fullGate": "sh tooling/conformance/web-platform/check.sh",
+    "sabotage": "NTS_WPT_ENCODING_FIXTURE=encoding/textdecoder-ignorebom.any.js node --expose-gc --test runtime/web-platform/test/wpt-encoding.test.ts"
+  },
+  "finalWptNodeResults": {
+    "tests": 4097,
+    "pass": 3842,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 255
+  },
+  "sourcePolicy": {
+    "codecs": {
+      "tests": 27,
+      "before": {
+        "pass": 9,
+        "fail": 18
+      },
+      "after": {
+        "pass": 27,
+        "fail": 0
+      }
+    },
+    "streams": {
+      "tests": 26,
+      "before": {
+        "pass": 23,
+        "fail": 3
+      },
+      "after": {
+        "pass": 26,
+        "fail": 0
+      }
+    },
+    "combinedFinal": {
+      "tests": 133,
+      "pass": 114,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 19
+    },
+    "combinedIncludes": "27 codec controls,26 stream controls,2 versions-integrity controls,78 WebIDL-surface entries;19 surface skips include8 added encoding descriptor cases",
+    "addedDescriptorSkips": [
+      "TextDecoder @@toStringTag descriptor",
+      "TextDecoderStream @@toStringTag descriptor",
+      "TextEncoder @@toStringTag descriptor",
+      "TextEncoderStream @@toStringTag descriptor",
+      "TextDecoder Web IDL member enumerability",
+      "TextDecoderStream Web IDL member enumerability",
+      "TextEncoder Web IDL member enumerability",
+      "TextEncoderStream Web IDL member enumerability"
+    ],
+    "encodeIntoLengthGap": "The required-argument tuple keeps omitted arguments observable; the emitted JS operation length is0 rather than WebIDL2. No descriptor patch is used. Behavioral arity/brand/conversion controls remain active."
+  },
+  "typeChecks": {
+    "source": {
+      "exitCode": 0,
+      "log": "encoding-source-tsc.log"
+    },
+    "wpt": {
+      "exitCode": 0,
+      "log": "encoding-wpt-tsc.log"
+    }
+  },
+  "sabotage": {
+    "sourceCommit": "008c2857795431fe8053929b882bd92bb083bb37",
+    "mutation": "Ignore ignoreBOM and always strip an initial U+FEFF",
+    "fixture": "encoding/textdecoder-ignorebom.any.js",
+    "broken": {
+      "exitCode": 1,
+      "path": "encoding/textdecoder-ignorebom.any.js",
+      "pass": 1,
+      "fail": 3,
+      "blocked": 0,
+      "logSHA256": "0f854cb91eb943dfb2b1660601d47f8fe1c19c739696cc42f8e15db260fc4900"
+    },
+    "restored": {
+      "exitCode": 0,
+      "path": "encoding/textdecoder-ignorebom.any.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0,
+      "logSHA256": "20ff790acb2b009e78dea04e3c6d023ae965910c625b4ea42d85942e350cf366"
+    },
+    "restoredSourceSHA256": "aabbcd2f424bfa867c32c38a87967ed7adbe6d898765fe49f5d6cd31844d2849",
+    "byteExactRestore": true
+  },
+  "fullGate": {
+    "status": "NOT GREEN",
+    "exitCode": 1,
+    "nodeTests": {
+      "tests": 9286,
+      "pass": 8698,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 588
+    },
+    "legacyUpstream": {
+      "upstreamTests": 2817,
+      "applicableTests": 2772,
+      "passed": 2761,
+      "failed": 11,
+      "notApplicable": 45
+    },
+    "legacyFailures": [
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoder interface: operation decode(optional AllowSharedBufferSource, optional TextDecodeOptions)",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoder interface: attribute encoding",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoder interface: attribute fatal",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoder interface: attribute ignoreBOM",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextEncoder interface: operation encode(optional USVString)",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextEncoder interface: operation encodeInto(USVString, Uint8Array)",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextEncoder interface: attribute encoding",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoderStream interface: attribute encoding",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoderStream interface: attribute fatal",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextDecoderStream interface: attribute ignoreBOM",
+        "failure": "AssertionError: property should be enumerable"
+      },
+      {
+        "path": "encoding/idlharness.any.js",
+        "name": "TextEncoderStream interface: attribute encoding",
+        "failure": "AssertionError: property should be enumerable"
+      }
+    ],
+    "reason": "Plain class members intentionally omit WebIDL descriptors under the user fixed-layout rule. Legacy async_test does not apply named exclusions, although its test and promise_test paths do. Maintainers must update out-of-scope tooling/conformance/web-platform/test-upstream.mjs profile handling.",
+    "genericFooterNote": "The existing check.sh footer mentions eight historical structural failures; the actual result here is the11 encoding/idlharness failures listed above.",
+    "compiled": {
+      "status": "not verified",
+      "reason": "No nts compiler is available; check.sh explicitly skipped the compiled axis."
+    }
+  },
+  "revertedProfileTrial": {
+    "log": "encoding-full-gate-profile-trial.log",
+    "sourceCandidate": "008c2857795431fe8053929b882bd92bb083bb37",
+    "onlyMutation": "Added11 named descriptor exclusions to runtime/web-platform/third_party/wpt/manifest.json",
+    "outcome": "Same11 descriptor cases ran; legacy runner then threw AssertionError: Stale or unobserved WPT exclusions: encoding/idlharness.any.js.",
+    "retained": false,
+    "restoration": "Root restored the legacy manifest byte-for-byte and confirmed the executable tree returned to5ef5ea4de3497c5693aff723033c3116c2531c29. No tooling or legacy manifest change ships.",
+    "restoredManifestSHA256": "45563810f7e8497c3114567782004c19c51ef35138d68885fdf6fafa7023c4f5"
+  },
+  "nodeDifferences": {
+    "codecProbeCount": 15,
+    "codecDifferenceCount": 14,
+    "codecProbes": {
+      "nodeVersion": "v24.20.0",
+      "sourceCommit": "ac636dcf85a24ec98ff8349d13e259b128c31956",
+      "sourceFile": "runtime/web-platform/src/core/encoding.ts",
+      "note": "Paired source-policy probes, not WPT case counts. Node differences do not count as WPT failures or passes.",
+      "cases": [
+        {
+          "name": "decode ArrayBuffer with maxByteLength through buffer",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": "ab"
+          }
+        },
+        {
+          "name": "decode ArrayBuffer with maxByteLength through Uint8Array",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": "ab"
+          }
+        },
+        {
+          "name": "decode ArrayBuffer with maxByteLength through DataView",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": "ab"
+          }
+        },
+        {
+          "name": "encodeInto ArrayBuffer with maxByteLength",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": {
+              "progress": {
+                "read": 1,
+                "written": 1
+              },
+              "bytes": [
+                97,
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "decode SharedArrayBuffer with maxByteLength through buffer",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": "ab"
+          }
+        },
+        {
+          "name": "decode SharedArrayBuffer with maxByteLength through Uint8Array",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": "ab"
+          }
+        },
+        {
+          "name": "decode SharedArrayBuffer with maxByteLength through DataView",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": "ab"
+          }
+        },
+        {
+          "name": "encodeInto SharedArrayBuffer with maxByteLength",
+          "spec": "https://webidl.spec.whatwg.org/#es-buffer-source-types",
+          "package": {
+            "throws": "TypeError"
+          },
+          "node": {
+            "value": {
+              "progress": {
+                "read": 1,
+                "written": 1
+              },
+              "bytes": [
+                97,
+                0
+              ]
+            }
+          }
+        },
+        {
+          "name": "detached DataView decode",
+          "spec": "https://webidl.spec.whatwg.org/#dfn-get-buffer-source-copy",
+          "package": {
+            "value": ""
+          },
+          "node": {
+            "value": ""
+          }
+        },
+        {
+          "name": "fatal UTF-8 stream [255,97] then flush",
+          "spec": "https://encoding.spec.whatwg.org/#dom-textdecoder-decode",
+          "package": {
+            "value": [
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": "a"
+              }
+            ]
+          },
+          "node": {
+            "value": [
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "fatal UTF-8 stream [194,97,98] then flush",
+          "spec": "https://encoding.spec.whatwg.org/#dom-textdecoder-decode",
+          "package": {
+            "value": [
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": "ab"
+              }
+            ]
+          },
+          "node": {
+            "value": [
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "fatal UTF-8 stream [97,255,239,187,191,98] then flush",
+          "spec": "https://encoding.spec.whatwg.org/#dom-textdecoder-decode",
+          "package": {
+            "value": [
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": "b"
+              }
+            ]
+          },
+          "node": {
+            "value": [
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "fatal utf-16le lead surrogate with following unit split then flush",
+          "spec": "https://encoding.spec.whatwg.org/#shared-utf-16-decoder",
+          "package": {
+            "value": [
+              {
+                "value": ""
+              },
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": "ab"
+              }
+            ]
+          },
+          "node": {
+            "value": [
+              {
+                "value": ""
+              },
+              {
+                "throws": "TypeError"
+              },
+              {
+                "throws": "TypeError"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fatal utf-16be lead surrogate with following unit split then flush",
+          "spec": "https://encoding.spec.whatwg.org/#shared-utf-16-decoder",
+          "package": {
+            "value": [
+              {
+                "value": ""
+              },
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": "ab"
+              }
+            ]
+          },
+          "node": {
+            "value": [
+              {
+                "value": ""
+              },
+              {
+                "throws": "TypeError"
+              },
+              {
+                "throws": "TypeError"
+              }
+            ]
+          }
+        },
+        {
+          "name": "fatal UTF-8 error after prior successful output retains BOM-seen state",
+          "spec": "https://encoding.spec.whatwg.org/#dom-textdecoder-decode",
+          "package": {
+            "value": [
+              {
+                "value": "a"
+              },
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": "﻿b"
+              }
+            ]
+          },
+          "node": {
+            "value": [
+              {
+                "value": "a"
+              },
+              {
+                "throws": "TypeError"
+              },
+              {
+                "value": ""
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "sameCodecSourceSHA256": "aabbcd2f424bfa867c32c38a87967ed7adbe6d898765fe49f5d6cd31844d2849",
+    "streamProbes": {
+      "node": "v24.20.0",
+      "rows": [
+        {
+          "case": "dictionary ordering",
+          "order": [
+            "label"
+          ],
+          "error": "TypeError"
+        },
+        {
+          "case": "label error identity",
+          "same": true
+        },
+        {
+          "case": "Symbol chunk",
+          "results": [
+            {
+              "status": "fulfilled",
+              "value": {
+                "done": false,
+                "bytes": [
+                  83,
+                  121,
+                  109,
+                  98,
+                  111,
+                  108,
+                  40,
+                  99,
+                  104,
+                  117,
+                  110,
+                  107,
+                  41
+                ],
+                "text": "Symbol(chunk)"
+              }
+            },
+            {
+              "status": "fulfilled"
+            }
+          ]
+        }
+      ]
+    },
+    "streamComparison": "Constructor ordering/exception identity controls agree with Node24.20. Package rejects a primitive Symbol chunk with TypeError; Node fulfills and encodes Symbol(chunk).",
+    "interpretation": "These are paired supplemental probes, not WPT case counts. Source follows the explicitly requested specification algorithms; bit-for-bit Node agreement is not claimed for these cases."
+  },
+  "independentReview": {
+    "data": {
+      "sourceCommit": "ac636dcf85a24ec98ff8349d13e259b128c31956",
+      "splitRestorationProbes": {
+        "pass": 50,
+        "fail": 0
+      },
+      "reentrant": [
+        {
+          "name": "nts",
+          "continuation": {
+            "inner": "",
+            "outer": "¢"
+          },
+          "reset": {
+            "inner2": "�A",
+            "outer2": "�",
+            "next": ""
+          }
+        },
+        {
+          "name": "node",
+          "continuation": {
+            "inner": "",
+            "outer": "¢"
+          },
+          "reset": {
+            "inner2": "�A",
+            "outer2": "�",
+            "next": ""
+          }
+        }
+      ]
+    },
+    "sameCodecSourceSHA256": "aabbcd2f424bfa867c32c38a87967ed7adbe6d898765fe49f5d6cd31844d2849",
+    "interpretation": "50 split/restoration probes and2 reentrant scenarios supplement review; they are not added to WPT totals or the node:test gate count."
+  },
+  "sharedAdapterChanges": [
+    "Only additive test-file entries in runtime/web-platform/test/wpt/tsconfig.json; no harness.ts or runner.ts behavior changes."
+  ],
+  "executionLimitations": [
+    "Canonical node --test runs required normal subprocess access in this cloud environment; restricted execution produced only a file-level result and is not behavioral evidence.",
+    "Real host WebAssembly.Memory is supplied only to common/sab.js to obtain a SharedArrayBuffer constructor; no native WebAssembly/shared-memory/concurrency conformance claim.",
+    "No performance benchmark, native SIMD, legacy codec, compiler execution, or production bootstrap claim."
+  ],
+  "logs": [
+    {
+      "name": "encoding-wpt-unblocked-baseline.log",
+      "sha256": "e5eadb9e5309d88fde9137328df6ccaad334bbe541b4b88ce47ce911c009421f",
+      "bytes": 626936
+    },
+    {
+      "name": "encoding-wpt-baseline-escalated.log",
+      "sha256": "693ee2c656cb8eeff31ca7627b3ab74e51b99eb8ad4277e81ab948e34c0396d3",
+      "bytes": 398573
+    },
+    {
+      "name": "encoding-wpt-final.log",
+      "sha256": "c8217fbf7eb62174e750615f63fa45d38fc9faccfb28ce28fce5bae5d58d959a",
+      "bytes": 398527
+    },
+    {
+      "name": "encoding-policy-before.log",
+      "sha256": "1efe7791fd956b2120b28a5fad3f281c4bed05fcb07a643bae996ef17c7fafd4",
+      "bytes": 19398
+    },
+    {
+      "name": "encoding-policy-after.log",
+      "sha256": "b0717867900c9acac35077276fe033c42f21dddbb8f11f193da887112ecbee85",
+      "bytes": 2388
+    },
+    {
+      "name": "encoding-stream-policy-baseline.log",
+      "sha256": "dd5d04319c31c7346ae04e6c88a931cc1e2bc687bc8410d246e77adbed0e2b63",
+      "bytes": 6224
+    },
+    {
+      "name": "encoding-stream-policy-final-standard.log",
+      "sha256": "5a917c35f2fade358723838f53ffd889aa8fe9d8d7041748bee4f5c2479dd655",
+      "bytes": 2370
+    },
+    {
+      "name": "encoding-policy-final.log",
+      "sha256": "01ad5fc025e829d5e4410de341570833c1c6bca8d206b9f7159f757b8ba2c00f",
+      "bytes": 11890
+    },
+    {
+      "name": "encoding-source-tsc.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "encoding-wpt-tsc.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "encoding-sabotage-broken.log",
+      "sha256": "0f854cb91eb943dfb2b1660601d47f8fe1c19c739696cc42f8e15db260fc4900",
+      "bytes": 4474
+    },
+    {
+      "name": "encoding-sabotage-restored.log",
+      "sha256": "20ff790acb2b009e78dea04e3c6d023ae965910c625b4ea42d85942e350cf366",
+      "bytes": 699
+    },
+    {
+      "name": "encoding-full-gate.log",
+      "sha256": "96388071c41771d9bc07e03ff701ae3f6dab7f29bc7f1c4cc70ac015ea3677e6",
+      "bytes": 1336837
+    },
+    {
+      "name": "encoding-full-gate-profile-trial.log",
+      "sha256": "d77706167e2d2375be574b477f446a7d83621ac0d95ec6199d04e5c5611822d0",
+      "bytes": 1126341
+    },
+    {
+      "name": "encoding-codec-node-differences.json",
+      "sha256": "efb7c7f6f2b6d0b0aa5c8557784e3d3534c8d5e5809debdabb3df05e969322e3",
+      "bytes": 6145
+    },
+    {
+      "name": "encoding-stream-node24-probes.json",
+      "sha256": "9545b7eed7b1eb8823f4301a9d51b85e0b4d1e807fd15411ce86d019671110ff",
+      "bytes": 781
+    },
+    {
+      "name": "encoding-codec-independent-review.json",
+      "sha256": "6bf8fe8d701ae45f1dabb3f7f1b648828b305f49f3ad72aa9c29cea0ccd0c3b6",
+      "bytes": 562
+    }
+  ]
+}
