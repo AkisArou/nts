@@ -1,7 +1,15 @@
 import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { AbortController } from "../src/core/abort.ts";
+import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import { WebPlatformRuntime } from "../src/provider.ts";
+import {
+  currentWebPlatformRuntime,
+  hasWebPlatformRuntime,
+  installWebPlatformRuntime,
+} from "../src/provider/environment.ts";
 
 import {
   CustomEvent,
@@ -9,6 +17,7 @@ import {
   EventTarget,
   addInternalEventListener,
 } from "../src/core/events.ts";
+import type { CustomEventInit } from "../src/core/events.ts";
 
 // DOM, dispatch and inner invoke:
 // https://dom.spec.whatwg.org/#concept-event-dispatch
@@ -346,4 +355,86 @@ test("event handler attributes ignore an own call property on their callback", (
   assert.equal(calls.length, 1);
   assert.equal(calls[0]?.receiver, controller.signal);
   assert.equal(calls[0]?.event.type, "abort");
+});
+
+function installEventClock(t: TestContext, readClock: () => number): void {
+  const previous = hasWebPlatformRuntime() ? currentWebPlatformRuntime() : null;
+  const runtime = new WebPlatformRuntime({
+    ...createHostNodePrimitives(),
+    monotonicMilliseconds: readClock,
+  });
+  installWebPlatformRuntime(runtime);
+  t.after(() => {
+    runtime.close();
+    if (previous !== null) installWebPlatformRuntime(previous);
+  });
+}
+
+// Constructor argument conversion precedes DOM's inner event creation steps.
+// https://webidl.spec.whatwg.org/#es-interface-call
+// https://webidl.spec.whatwg.org/#es-dictionary
+// https://dom.spec.whatwg.org/#concept-event-constructor
+test("CustomEvent captures its timestamp after converting the complete init dictionary", (t) => {
+  const order: string[] = [];
+  let now = 10;
+  installEventClock(t, () => {
+    order.push("clock");
+    return now;
+  });
+  const detail = { value: 42 };
+  const type = {
+    toString(): string {
+      order.push("type");
+      now = 20;
+      return "converted";
+    },
+  };
+  const event = new CustomEvent(type as unknown as string, {
+    get bubbles(): boolean { order.push("bubbles"); now = 30; return true; },
+    get cancelable(): boolean { order.push("cancelable"); now = 40; return true; },
+    get composed(): boolean { order.push("composed"); now = 50; return true; },
+    get detail() { order.push("detail"); now = 60; return detail; },
+  });
+
+  assert.deepEqual(order, ["type", "bubbles", "cancelable", "composed", "detail", "clock"]);
+  assert.equal(event.type, "converted");
+  assert.equal(event.bubbles, true);
+  assert.equal(event.cancelable, true);
+  assert.equal(event.composed, true);
+  assert.equal(event.detail, detail);
+  assert.equal(event.timeStamp, 60);
+  now = 100;
+  assert.equal(event.timeStamp, 60, "time is captured once, after conversion");
+  assert.equal(order.filter((step) => step === "clock").length, 1);
+});
+
+test("CustomEvent conversion errors occur before reading the provider clock", (t) => {
+  let clockReads = 0;
+  installEventClock(t, () => { clockReads++; return 10; });
+  const failure = new Error("detail conversion failed");
+  assert.throws(() => new CustomEvent("x", {
+    get detail(): never { throw failure; },
+  }), (error) => error === failure);
+  assert.equal(clockReads, 0);
+  assert.throws(() => new CustomEvent("x", 1 as unknown as CustomEventInit<unknown>), TypeError);
+  assert.equal(clockReads, 0);
+});
+
+test("CustomEvent default dictionaries capture the clock once and retain defaults", (t) => {
+  let clockReads = 0;
+  installEventClock(t, () => { clockReads++; return 10; });
+  const events = [
+    new CustomEvent("x"),
+    new CustomEvent("x", undefined),
+    new CustomEvent("x", null as unknown as CustomEventInit<unknown>),
+  ];
+  assert.equal(clockReads, events.length);
+  for (const event of events) {
+    assert.equal(event.type, "x");
+    assert.equal(event.bubbles, false);
+    assert.equal(event.cancelable, false);
+    assert.equal(event.composed, false);
+    assert.equal(event.detail, null);
+    assert.equal(event.timeStamp, 10);
+  }
 });
