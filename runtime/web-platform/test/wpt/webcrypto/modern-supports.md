@@ -19,7 +19,7 @@ out whether that operation is available. Failures are values that become false.
 
 Shared code handles dictionary conversion, the registered operation, parameter
 checks, wrapping fallback, public-key eligibility and derived/shared key lengths.
-An ordinary check makes one metadata query. A check involving another algorithm
+An ordinary check makes at most one metadata query. A check involving another algorithm
 first checks that target and stops on false before reading the primary
 algorithm's dictionary. It makes at most two queries, one per algorithm. The
 repeated get-key-length normalization required by `deriveKey` remains observable;
@@ -92,8 +92,8 @@ NTS_WPT_CRYPTO_RAW=1 NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-
 
 The install reuses eight cached packages without a dependency or lockfile change.
 Both project typechecks and the strict standalone new-test typecheck exit 0.
-The combined test command reports **52 tests, 52 pass, 0 fail, 0 skip**, including
-27 supports controls. The ML-DSA context control covers all three parameter sets and both signature
+The combined test command reports **53 tests, 53 pass, 0 fail, 0 skip**, including
+28 supports controls. The ML-DSA context control covers all three parameter sets and both signature
 operations: 256-byte contexts fail before any native query, while 255-byte
 contexts reach an accepting capability, as §§8.4.1–2 require. The recording
 capability refuses every cryptographic
@@ -104,6 +104,9 @@ read a public `subtle` property. A separate native-vector control verifies the
 worker's metadata/operation reply protocol. Native GCM controls establish the
 128/129-byte IV boundary for encryption and decryption with all three AES key
 widths; a recording capability confirms both lengths still reach native policy.
+Typed scalar queries cover the native 2³¹−1-byte AAD limit for AES-GCM, AES-OCB
+and ChaCha20-Poly1305 without allocating large buffers. The common limit comes
+from [`CipherBase::SetAAD` and its `CheckSizeInt32` validation](https://github.com/nodejs/node/blob/v24.20.0/src/crypto/crypto_cipher.cc).
 The new test file is registered in `check.sh`.
 
 The parent integration records the complete ordered-stack package gate in the

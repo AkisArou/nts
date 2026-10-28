@@ -10,7 +10,7 @@ import type { TestContext } from "node:test";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
 import { SubtleCrypto } from "../src/index.ts";
 import { installWebPlatformRuntime, VirtualScheduler, WebPlatformRuntime } from "../src/provider.ts";
-import type { CryptoFailure, CryptoKeyHandle, CryptoSupportQuery, RandomSource } from "../src/provider.ts";
+import type { CryptoCipherSupport, CryptoFailure, CryptoKeyHandle, CryptoSupportQuery, RandomSource } from "../src/provider.ts";
 import { hasWebPlatformRuntime } from "../src/provider/environment.ts";
 import { createCryptoKey, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
 import { cryptoCapability } from "../src/crypto/capability.ts";
@@ -292,6 +292,21 @@ test("GCM supports reports the native 128-byte IV maximum without narrowing shar
     assert.equal(SubtleCrypto.supports(operation, { name: "AES-GCM", iv: rejected }), false);
   }
   assert.equal(provider.queries.length, 8, "both draft-valid lengths reach the selected capability");
+});
+
+test("cipher metadata applies the native AAD bound to ChaCha20 as well as AES", () => {
+  const provider = new NodeCryptoProvider();
+  for (const name of ["AES-GCM", "AES-OCB", "ChaCha20-Poly1305"] as const) {
+    for (const operation of ["encrypt", "decrypt"] as const) {
+      for (const additionalDataBytes of [0x7fff_ffff, 0x8000_0000]) {
+        // Typed scalar metadata exercises the native signed-int boundary without
+        // allocating a multi-gigabyte BufferSource or performing encryption.
+        const parameters: CryptoCipherSupport = { kind: "cipher", name, keyBits: 256,
+          ivBytes: 12, additionalDataBytes, counterBits: undefined, tagBits: 128 };
+        assert.equal(provider.supports({ operation, parameters, length: null }), additionalDataBytes === 0x7fff_ffff, name + " " + operation);
+      }
+    }
+  }
 });
 
 test("RSA support separates shared mathematical bounds from native exponent and modulus limits", (t) => {
