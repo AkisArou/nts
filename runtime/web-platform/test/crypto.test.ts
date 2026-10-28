@@ -7,7 +7,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { Crypto } from "../src/crypto/crypto.ts";
 import { DOMException } from "../src/core/errors.ts";
-import type { CryptoDigestName, CryptoDigestProvider, CryptoFailure } from "../src/provider/crypto.ts";
+import type { CryptoDigestName, CryptoProvider, CryptoFailure } from "../src/provider/crypto.ts";
 import type { RandomSource } from "../src/provider/primitives.ts";
 import { VirtualScheduler } from "../src/provider/virtual-time.ts";
 import { NodeCryptoProvider } from "./node-crypto-provider.ts";
@@ -38,7 +38,7 @@ class RecordingDigestProvider extends NodeCryptoProvider {
   }
 }
 
-function fixture(provider: CryptoDigestProvider = new NodeCryptoProvider()): {
+function fixture(provider: CryptoProvider = new NodeCryptoProvider()): {
   crypto: Crypto;
   random: CountingRandom;
   scheduler: VirtualScheduler;
@@ -456,7 +456,8 @@ test("the Node digest adapter returns a failure value for a native exception", (
 test("digest maps returned primitive failures to OperationError on a scheduler task", async () => {
   for (const failure of ["operation", "invalid-key"] as const) {
     let calls = 0;
-    const provider: CryptoDigestProvider = { digest() { calls++; return { failure }; } };
+    const provider = new NodeCryptoProvider();
+    provider.digest = () => { calls++; return { failure }; };
     const { crypto, scheduler } = fixture(provider);
     let rejected = false;
     const pending = crypto.subtle.digest("SHA-256", ascii("abc"));

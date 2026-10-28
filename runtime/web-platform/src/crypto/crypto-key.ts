@@ -13,6 +13,12 @@ export type KeyUsage =
   | "wrapKey"
   | "unwrapKey";
 
+function copyUsages(usages: readonly KeyUsage[]): KeyUsage[] {
+  const copy: KeyUsage[] = [];
+  for (let index = 0; index < usages.length; index++) copy[index] = usages[index]!;
+  return copy;
+}
+
 /** The ordinary ECMAScript dictionary exposed by CryptoKey.algorithm. */
 export interface KeyAlgorithmObject {
   name: string;
@@ -61,7 +67,7 @@ export class CryptoKeySlots {
     this.type = type;
     this.extractable = extractable;
     this.algorithm = algorithm.copy();
-    this.usages = usages.slice();
+    this.usages = copyUsages(usages);
     this.handle = handle;
   }
 }
@@ -76,18 +82,21 @@ class CryptoKeyState {
     // §9's cached ECMAScript objects are mutable snapshots, not frozen values.
     // Make each snapshot once; reading either attribute must preserve identity.
     this.algorithmCached = slots.algorithm.toObject();
-    this.usagesCached = slots.usages.slice();
+    this.usagesCached = copyUsages(slots.usages);
   }
 }
 
 const constructorToken = Symbol("CryptoKey construction");
 const keyStates = new WeakMap<object, CryptoKeyState>();
+// A mutable WeakMap.prototype must never receive this private map as its receiver.
+const readKeyState = keyStates.get.bind(keyStates);
+const writeKeyState = keyStates.set.bind(keyStates);
 
 function keyState(key: unknown): CryptoKeyState {
   if ((typeof key !== "object" || key === null) && typeof key !== "function") {
     throw new TypeError("Value is not a CryptoKey");
   }
-  const state = keyStates.get(key);
+  const state = readKeyState(key);
   if (state === undefined) throw new TypeError("Value is not a CryptoKey");
   return state;
 }
@@ -136,7 +145,7 @@ export function createCryptoKey(
   const slots = new CryptoKeySlots(type, extractable, algorithm, usages, handle);
   const state = new CryptoKeyState(slots);
   const key = new CryptoKey(constructorToken);
-  keyStates.set(key, state);
+  writeKeyState(key, state);
   return key;
 }
 
