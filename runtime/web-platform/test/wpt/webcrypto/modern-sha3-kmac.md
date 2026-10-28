@@ -110,3 +110,14 @@ project type checks and a strict check of all crypto tests plus the native
 worker pass. The scoped census exits zero with the totals above. Before their
 specification classification, the newly enabled digest and KMAC signing runs
 expose exactly the 37 transfer discrepancies stated above.
+
+## Complete package gate
+
+`sh tooling/conformance/web-platform/check.sh` exits 0 on the integrated family:
+40,129 tests / 35,415 pass / 0 fail / 4,714 skips; the existing upstream axis
+reports 2,817 tests / 2,771 pass / 0 fail / 46 not applicable. All 355 imported
+originals verify. The compiled axis is explicitly skipped because nts is not
+available. Maintainers still compile and run the landing gate.
+
+`modern-sha3-kmac-results.json` records all 125 original file outcomes and the
+complete package result. The full-check log SHA-256 is `cd1122a39a5cd7328e673cc5dc00a6aec360d1ff5b5a5768c72cb3fc6f21ecad`.
