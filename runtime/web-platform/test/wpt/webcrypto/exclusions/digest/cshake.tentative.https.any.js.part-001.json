@@ -2,444 +2,84 @@
   "fixture": "WebCryptoAPI/digest/cshake.tentative.https.any.js",
   "blockedTests": [
     {
-      "name": "cSHAKE128 with 0 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
       "name": "cSHAKE128 with 0 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 0 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 0 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 256 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 256 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 256 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 384 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 384 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 384 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 512 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE128 with 512 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE128 with 512 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 0 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 0 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 0 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 256 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 256 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 256 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 384 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 384 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 384 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and empty source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and short source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and short source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and short source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 512 bit output and short source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and short source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and medium source data",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and medium source data and altered buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and medium source data and altered buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     },
     {
       "name": "cSHAKE256 with 512 bit output and medium source data and transferred buffer during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "cSHAKE256 with 512 bit output and medium source data and transferred buffer after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "specification-disagreement",
+      "reason": "The name getter transfers its input buffer on each invocation, so the required second Algorithm dictionary conversion throws. Web Crypto \u00a718.4.4 and Web IDL \u00a73.2.17 require both conversions; see https://github.com/w3c/webcrypto/issues/563. The unedited case expects the transfer to run once."
     }
   ]
 }

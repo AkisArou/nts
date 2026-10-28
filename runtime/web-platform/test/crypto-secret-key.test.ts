@@ -58,7 +58,7 @@ class RecordingProvider extends NodeCryptoProvider {
     this.signed = bytes;
     return this.signFailure ?? super.sign(parameters, key, bytes);
   }
-  override verify(parameters: CryptoSignatureParameters, key: CryptoKeyHandle, signature: CryptoSignature, bytes: Uint8Array): boolean {
+  override verify(parameters: CryptoSignatureParameters, key: CryptoKeyHandle, signature: CryptoSignature, bytes: Uint8Array): boolean | CryptoFailure {
     this.verifies++;
     return super.verify(parameters, key, signature, bytes);
   }

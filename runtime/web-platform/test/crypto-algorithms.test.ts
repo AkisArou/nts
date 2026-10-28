@@ -14,7 +14,7 @@ import type { CryptoOperation } from "../src/crypto/algorithms.ts";
 import { createCryptoKey, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
 import type { CryptoKeyHandle } from "../src/provider/crypto.ts";
 
-const hashes = ["SHA-1", "SHA-256", "SHA-384", "SHA-512"];
+const hashes = ["SHA-1", "SHA-256", "SHA-384", "SHA-512", "SHA3-256", "SHA3-384", "SHA3-512"];
 const otherOperations: readonly CryptoOperation[] = [
   "encrypt", "decrypt", "sign", "verify", "generateKey", "deriveBits",
   "importKey", "exportKey", "wrapKey", "unwrapKey", "get key length",
@@ -122,7 +122,7 @@ for (const registration of keyRegistrations) {
 }
 
 test("future families and Modern Algorithms remain unregistered", () => {
-  for (const name of ["AES-OCB", "KMAC128"]) {
+  for (const name of ["TurboSHAKE128", "KT128"]) {
     for (const operation of allOperations) {
       assert.equal(supportsCryptoOperation(name, operation), false);
     }

@@ -2,7 +2,7 @@ import { DOMException } from "../core/errors.ts";
 import { coerceToBoolean, requireArguments } from "../core/webidl.ts";
 import type { CryptoProvider } from "../provider/crypto.ts";
 import type { RandomSource, Scheduler } from "../provider/primitives.ts";
-import { normalizeAlgorithm, supportsCryptoOperation, toAlgorithmIdentifier } from "./algorithms.ts";
+import { CShakeParams, normalizeAlgorithm, supportsCryptoOperation, toAlgorithmIdentifier } from "./algorithms.ts";
 import type { AlgorithmIdentifier, NormalizedAlgorithm } from "./algorithms.ts";
 import { decryptAes, encryptAes } from "./aes.ts";
 import { cryptoBytes, isCryptoBufferSource, toCryptoBufferSource } from "./buffer-source.ts";
@@ -26,6 +26,7 @@ import { exportOkpKey, generateOkpKey, importOkpKey } from "./okp-key.ts";
 import { decryptRsa, encryptRsa, signRsa, verifyRsa } from "./rsa.ts";
 import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
 import { exportSecretKey, generateSecretKey, getSecretKeyLength, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
+import { exportKmacKey, generateKmacKey, getKmacKeyLength, importKmacKey, signKmac, verifyKmac } from "./kmac.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
 
 const createPromiseResolvers = Promise.withResolvers.bind(Promise) as typeof Promise.withResolvers;
@@ -106,6 +107,7 @@ function decryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, 
 function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
   if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return signOkp(provider, algorithm, key, bytes);
   if (algorithm.name === "ECDSA") return signEc(provider, algorithm, key, bytes);
+  if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return signKmac(provider, algorithm, key, bytes);
   if (algorithm.name === "HMAC") return signHmac(provider, key, bytes);
   return signRsa(provider, algorithm, key, bytes);
 }
@@ -113,6 +115,7 @@ function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key
 function verifyBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, signature: Uint8Array, bytes: Uint8Array): boolean {
   if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return verifyOkp(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "ECDSA") return verifyEc(provider, algorithm, key, signature, bytes);
+  if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return verifyKmac(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "HMAC") return verifyHmac(provider, key, signature, bytes);
   return verifyRsa(provider, algorithm, key, signature, bytes);
 }
@@ -131,6 +134,7 @@ function importKeyMaterial(
   extractable: boolean,
   usages: readonly KeyUsage[],
 ): CryptoKey {
+  if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return importKmacKey(provider, format, data, algorithm, extractable, usages);
   if (isKdfAlgorithm(algorithm.name)) return importKdfKey(provider, format, data, algorithm, extractable, usages);
   if (isOkpAlgorithm(algorithm.name)) return importOkpKey(provider, format, data, algorithm, extractable, usages);
   if (isEcAlgorithm(algorithm.name)) return importEcKey(provider, format, data, algorithm, extractable, usages);
@@ -139,6 +143,7 @@ function importKeyMaterial(
 }
 
 function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: CryptoKeySlots): Uint8Array | JsonWebKey {
+  if (key.algorithm.name === "KMAC128" || key.algorithm.name === "KMAC256") return exportKmacKey(provider, format, key);
   if (isOkpAlgorithm(key.algorithm.name)) return exportOkpKey(provider, format, key);
   if (isEcAlgorithm(key.algorithm.name)) return exportEcKey(provider, format, key);
   if (isRsaAlgorithm(key.algorithm.name)) return exportRsaKey(provider, format, key);
@@ -182,8 +187,13 @@ export class SubtleCrypto {
       const normalized = normalizeAlgorithm(identifier, "digest");
       const bytes = cryptoBytes(source);
       return cryptoTask(scheduler, () => {
-        const digest = provider.digest(normalized.name, bytes);
-        if ("failure" in digest) throw new DOMException("The digest operation failed", "OperationError");
+        const digest = normalized instanceof CShakeParams
+          ? provider.digestXof({ name: normalized.name, outputLength: normalized.outputLength,
+              functionName: normalized.functionName ?? new Uint8Array(0), customization: normalized.customization ?? new Uint8Array(0) }, bytes)
+          : provider.digest(normalized.name, bytes);
+        if ("failure" in digest || (normalized instanceof CShakeParams && digest.byteLength !== Math.ceil(normalized.outputLength / 8))) {
+          throw new DOMException("The digest operation failed", "OperationError");
+        }
         return digest.buffer as ArrayBuffer;
       });
     } catch (error) {
@@ -285,6 +295,7 @@ export class SubtleCrypto {
       const usages = toKeyUsages(keyUsages);
       const normalized = normalizeAlgorithm(identifier, "generateKey");
       return cryptoTask<CryptoKey | CryptoKeyPair>(scheduler, () => {
+        if (normalized.name === "KMAC128" || normalized.name === "KMAC256") return generateKmacKey(provider, random, normalized, canExport, usages);
         if (isOkpAlgorithm(normalized.name)) return generateOkpKey(provider, normalized, canExport, usages);
         if (isEcAlgorithm(normalized.name)) return generateEcKey(provider, normalized, canExport, usages);
         if (isRsaAlgorithm(normalized.name)) return generateRsaKey(provider, normalized, canExport, usages);
@@ -311,9 +322,11 @@ export class SubtleCrypto {
       const normalizedLength = normalizeAlgorithm(derivedIdentifier, "get key length");
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "deriveKey");
-        const length = isKdfAlgorithm(normalizedLength.name) ? getKdfKeyLength() : getSecretKeyLength(normalizedLength);
+        const length = isKdfAlgorithm(normalizedLength.name) ? getKdfKeyLength()
+          : normalizedLength.name === "KMAC128" || normalizedLength.name === "KMAC256" ? getKmacKeyLength(normalizedLength)
+            : getSecretKeyLength(normalizedLength);
         const secret = deriveBytes(provider, normalized, slots, length);
-        return importKeyMaterial(provider, "raw", secret, normalizedImport, canExport, usages);
+        return importKeyMaterial(provider, "raw-secret", secret, normalizedImport, canExport, usages);
       });
     } catch (error) {
       return rejectedPromise(error);

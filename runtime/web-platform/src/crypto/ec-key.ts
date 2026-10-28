@@ -159,6 +159,7 @@ export function importEcKey(
 ): CryptoKey {
   if (!(algorithm instanceof EcKeyImportParams)) throw new DOMException("Expected EC import parameters", "NotSupportedError");
   const namedCurve = supportedCurve(algorithm.namedCurve);
+  if (format === "raw-secret") throw new DOMException("This asymmetric key format is not supported", "NotSupportedError");
   let type: "public" | "private";
   let encoded: EcDerKey | CryptoEcComponents;
   if (format === "jwk") {

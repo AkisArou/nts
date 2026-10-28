@@ -37,7 +37,7 @@ function cipherParameters(algorithm: NormalizedAlgorithm, key: CryptoKeySlots): 
 function oaepMaximumPlaintext(key: CryptoKeySlots): number {
   const algorithm = key.algorithm as RsaHashedKeyAlgorithm;
   const hash = algorithm.hash.name as CryptoDigestName;
-  const hashLength = hash === "SHA-1" ? 20 : hash === "SHA-256" ? 32 : hash === "SHA-384" ? 48 : 64;
+  const hashLength = hash === "SHA-1" ? 20 : hash === "SHA-256" || hash === "SHA3-256" ? 32 : hash === "SHA-384" || hash === "SHA3-384" ? 48 : 64;
   return modulusByteLength(algorithm.modulusLength) - 2 * hashLength - 2;
 }
 
@@ -76,7 +76,9 @@ export function verifyRsa(
   if (cryptoViewByteLength(signature) !== modulusByteLength((key.algorithm as RsaHashedKeyAlgorithm).modulusLength)) {
     return false;
   }
-  return provider.verify(signatureParameters(algorithm, key), key.handle, { kind: "bytes", bytes: signature }, bytes);
+  const result = provider.verify(signatureParameters(algorithm, key), key.handle, { kind: "bytes", bytes: signature }, bytes);
+  if (typeof result !== "boolean") throw new DOMException("The verification operation failed", "OperationError");
+  return result;
 }
 
 /**
