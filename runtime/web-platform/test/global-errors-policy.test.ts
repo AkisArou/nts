@@ -378,6 +378,30 @@ test("an ErrorEvent dispatched as unhandledrejection still uses ordinary handler
   assert.equal(d.dispatchGlobalEvent(event, (error) => d.runtime.reportException(error)), false);
 });
 
+test("global handlers set the canceled flag without invoking a subclass override", (t) => {
+  const d = driver(t);
+  let calls = 0;
+  class OverriddenEvent extends ErrorEvent {
+    override preventDefault(): void { calls++; }
+  }
+  d.runtime.onerror = () => true;
+  d.runtime.onunhandledrejection = () => false;
+  for (const type of ["error", "unhandledrejection"]) {
+    const event = new OverriddenEvent(type, { cancelable: true });
+    event.preventDefault();
+    assert.equal(calls, 1, "the public override is active");
+    assert.equal(event.defaultPrevented, false);
+    calls = 0;
+    assert.equal(d.dispatchGlobalEvent(event, (error) => d.runtime.reportException(error)), false);
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(calls, 0);
+    const fixed = new OverriddenEvent(type, { cancelable: false });
+    assert.equal(d.dispatchGlobalEvent(fixed, (error) => d.runtime.reportException(error)), true);
+    assert.equal(fixed.defaultPrevented, false);
+    assert.equal(calls, 0);
+  }
+});
+
 test("handler replacement preserves registration order and reactivation moves it", (t) => {
   const d = driver(t);
   const order: string[] = [];

@@ -1,4 +1,4 @@
-import { ErrorEvent, Event } from "./events.ts";
+import { cancelEvent, ErrorEvent, Event } from "./events.ts";
 import { PromiseRejectionEvent } from "./promise-rejection-event.ts";
 import { requireArguments } from "./webidl.ts";
 import type {
@@ -26,8 +26,6 @@ class HandlerSlot {
   context: GlobalHandlerContext | null = null;
   active = false;
 }
-
-const cancelEvent: (event: Event) => void = Function.prototype.call.bind(Event.prototype.preventDefault);
 
 function objectValue(value: unknown): object | null {
   return value !== null && (typeof value === "object" || typeof value === "function") ? value : null;

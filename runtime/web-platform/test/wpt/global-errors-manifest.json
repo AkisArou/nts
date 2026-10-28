@@ -1,17 +1,9 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "revisions": {
-    "html/webappapis/scripting": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
-  },
   "scope": "B10 HTML global error source policy over explicit engine capabilities; automatic engine/global integration is a recorded dependency.",
   "fixtures": [
     {
       "path": "html/webappapis/scripting/reporterror.any.js",
-      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/reporterror.any.js",
-      "sha256": "11e9c32d5ae5ebdd83605cac6a1e7ffe759ac2ae12b893005edeef2242007299",
-      "gitBlob": "b9e7ba25bc6a3938783f7bf32472ba422e815ae2",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -42,11 +34,7 @@
   ],
   "support": [],
   "license": {
-    "path": "LICENSE.md",
-    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/LICENSE.md",
-    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
-    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+    "path": "LICENSE.md"
   },
   "excluded": [
     {
@@ -188,5 +176,6 @@
     "runnableSourcePolicy": 2,
     "blockedNativeIntegration": 3
   },
-  "executionNote": "The two source-only cases execute canonical GlobalErrorRuntime.reportError with a deterministic capability driver and no native Node reportError replacement. There is no production global dispatch/metadata provider or Promise hook in this PR. No location, Window, Document or URL fake is installed."
+  "executionNote": "The two source-only cases execute canonical GlobalErrorRuntime.reportError with a deterministic capability driver and no native Node reportError replacement. There is no production global dispatch/metadata provider or Promise hook in this PR. No location, Window, Document or URL fake is installed.",
+  "versions": "versions.json"
 }

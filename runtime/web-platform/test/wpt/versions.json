@@ -699,6 +699,10 @@
       "sha256": "c0fb97b890aeb587d92cc632a418e8e4e7a92f447981f335571083dacf86b4f8",
       "gitBlob": "4319deee7b50163a68e556ee7f401373fab7495b"
     },
+    "html/webappapis/scripting/reporterror.any.js": {
+      "sha256": "11e9c32d5ae5ebdd83605cac6a1e7ffe759ac2ae12b893005edeef2242007299",
+      "gitBlob": "b9e7ba25bc6a3938783f7bf32472ba422e815ae2"
+    },
     "LICENSE.md": {
       "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
       "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"

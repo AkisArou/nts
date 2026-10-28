@@ -12,7 +12,7 @@ const root = new URL("./wpt/", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("global-errors-manifest.json", root), "utf8")) as WptManifest;
 
 test("WPT reportError — pinned source-policy cases and named native dependencies", async (suite) => {
-  await runWptFixtures(suite, root, manifest, (_reportError, reportUncaughtException) => {
+  await runWptFixtures(suite, root, manifest, (_reportError, _context, reportUncaughtException) => {
     const provider = createHostNodeWebPlatform();
     const driver = new ErrorDriver();
     driver.reportExceptionToConsole = (error): void => {
