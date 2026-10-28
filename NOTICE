@@ -1,12 +1,12 @@
 Native TypeScript
 Copyright 2026 The Native TypeScript Authors
 
-This product is licensed under the Apache License, Version 2.0.
+This product is licensed under the Apache License, Version 2.0, with LLVM Exceptions.
 See the LICENSE file for the full license text.
 
-The compiler distribution includes third-party Rust dependencies, tsrs and
-React Compiler code. Their full licence and notice texts and generated
-inventories are in licenses/ (README.md, packages.json,
-vendor-projects.json and texts/); include that directory with compiler binary
-distributions. Ship notices for linked runtime components separately with
-built programs.
+The compiler distribution includes third-party Rust dependencies, tsrs,
+React Compiler, embedded C components and Unicode data. Their full licence and
+notice texts and generated inventories are in licenses/ (README.md, packages.json,
+vendor-projects.json, vendored-data.json, components.json and texts/); include that directory with compiler binary
+distributions. The nts runtime needs no notice in compiled programs.
+Third-party components linked into a program retain their own notice requirements.

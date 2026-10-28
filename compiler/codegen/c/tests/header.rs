@@ -554,18 +554,24 @@ fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
     ] {
         let (dir, emitted) = emit(name, source);
         assert_eq!(emitted.needs_unicode(), unicode);
-        for notice in [
-            "nts-runtime/LICENSE",
-            "nts-runtime/NOTICE",
-            "zmij/LICENSE",
-            "ffc/LICENSE-APACHE",
-            "ffc/LICENSE-MIT",
-            "ffc/LICENSE-BOOST",
-        ] {
-            assert!(
-                dir.join("notices").join(notice).is_file(),
-                "missing {notice}"
-            );
+        let mut expected = vec!["notices/zmij/LICENSE"];
+        if unicode {
+            expected.extend(["notices/quickjs/LICENSE", "notices/unicode-data/LICENSE"]);
+        }
+        expected.sort_unstable();
+        let mut actual: Vec<_> = emitted
+            .support_files()
+            .into_iter()
+            .filter(|file| file.name.starts_with("notices/"))
+            .map(|file| file.name)
+            .collect();
+        actual.sort_unstable();
+        assert_eq!(
+            actual, expected,
+            "only linked third-party components owe notice files"
+        );
+        for notice in actual {
+            assert!(dir.join(notice).is_file(), "missing {notice}");
         }
         for notice in ["quickjs/LICENSE", "unicode-data/LICENSE"] {
             assert_eq!(

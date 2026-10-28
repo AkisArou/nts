@@ -19,6 +19,12 @@ type Attribution = { name: string; version: string; source: string; checksum: st
 type Text = Attribution["texts"][number];
 type Vendored = { directory: string; packages: { name: string; version: string; manifest: string }[]; texts: Text[] };
 type VendoredData = { name: string; license: string; texts: Text[] };
+type Component = { directory: string; license: string; program_license: string; texts: Text[] };
+const declaredComponents = [
+  { directory: "runtime/c/ffc", license: "Apache-2.0 OR MIT OR BSL-1.0", program_license: "BSL-1.0", licenses: ["LICENSE-APACHE", "LICENSE-MIT", "LICENSE-BOOST"] },
+  { directory: "runtime/c/quickjs", license: "MIT", program_license: "MIT", licenses: ["LICENSE"] },
+  { directory: "runtime/c/zmij", license: "MIT", program_license: "MIT", licenses: ["LICENSE"] },
+];
 // Vendored data inputs are not crates, so Cargo.lock cannot see them; they
 // are declared here by hand, each with the repository path of its license
 // file. Verification fails when a declared file is missing or unrecorded,
@@ -58,22 +64,37 @@ const registry = [...visited.values()].filter((pkg) => pkg.source).sort((a, b) =
 const inventoryPath = join(destination, "packages.json");
 const vendorPath = join(destination, "vendor-projects.json");
 const dataPath = join(destination, "vendored-data.json");
+const componentsPath = join(destination, "components.json");
 const ownPackages = new Set<string>();
-const packageName = (path: string) => {
-  const manifest = readFileSync(path, "utf8");
+const ownLicense = "Apache-2.0 WITH LLVM-exception";
+const workspaceManifest = readFileSync(join(root, "Cargo.toml"), "utf8");
+const workspacePackage = workspaceManifest.split("[workspace.package]")[1]?.split("\n[")[0] ?? "";
+const workspaceLicense = /^license\s*=\s*"([^"]+)"/m.exec(workspacePackage)?.[1];
+if (workspaceLicense !== ownLicense) throw new Error(`nts workspace licence must be ${ownLicense}`);
+// Workspace-owned code uses the LLVM exception and is excluded from the
+// third-party inventory. This does not change any dependency's licence or
+// notice obligations. Keep --check offline, without invoking Cargo.
+const packageName = (path: string, manifest = readFileSync(path, "utf8"), owned = false) => {
   const start = manifest.indexOf("[package]");
   const end = manifest.indexOf("\n[", start + 1);
-  const name = /^name\s*=\s*"([^"]+)"/m.exec(manifest.slice(start, end < 0 ? undefined : end))?.[1];
+  const pkg = manifest.slice(start, end < 0 ? undefined : end);
+  const name = /^name\s*=\s*"([^"]+)"/m.exec(pkg)?.[1];
   if (start < 0 || !name) throw new Error(`package name absent: ${path}`);
+  const explicit = /^license\s*=\s*"([^"]+)"/m.exec(pkg)?.[1];
+  const inherited = /^license\.workspace\s*=\s*true\s*$/m.test(pkg)
+    || /^license\s*=\s*\{\s*workspace\s*=\s*true\s*\}\s*$/m.test(pkg);
+  if (owned && (explicit ?? (inherited ? workspaceLicense : undefined)) !== ownLicense) {
+    throw new Error(`own package licence must be ${ownLicense}: ${path}`);
+  }
   return name;
 };
-const members = /^members\s*=\s*\[([\s\S]*?)\]/m.exec(readFileSync(join(root, "Cargo.toml"), "utf8"))?.[1];
+const members = /^members\s*=\s*\[([\s\S]*?)\]/m.exec(workspaceManifest)?.[1];
 if (!members) throw new Error("workspace members absent");
 const memberDirs: string[] = [];
 for (const [, member] of members.matchAll(/"([^"]+)"/g)) {
   if (/[?*\[\]]/.test(member)) throw new Error(`explicit workspace members required: ${member}`);
   memberDirs.push(member);
-  ownPackages.add(packageName(join(root, member, "Cargo.toml")));
+  ownPackages.add(packageName(join(root, member, "Cargo.toml"), undefined, true));
 }
 // The vendored-data convention: an owned crate that vendors data keeps the
 // data's license at `<crate>/data/LICENSE`. Discovering those paths and
@@ -130,20 +151,60 @@ if (args[0] === "--update") {
     license,
     texts: copy(root, [license]),
   }));
+  const components: Component[] = declaredComponents.map(({ directory, license, program_license, licenses }) => ({
+    directory, license, program_license, texts: copy(join(root, directory), licenses),
+  }));
   writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
   writeFileSync(vendorPath, `${JSON.stringify(projects, null, 2)}\n`);
   writeFileSync(dataPath, `${JSON.stringify(data, null, 2)}\n`);
+  writeFileSync(componentsPath, `${JSON.stringify(components, null, 2)}\n`);
   const links = (texts: Text[]) => texts.map((t) => `[${t.upstream}](texts/${t.sha256}.txt)`).join(", ");
-  writeFileSync(join(destination, "README.md"), `# Compiler dependency attributions\n\nGenerated from Cargo.lock by \`node tooling/licenses/licenses.ts --update\`.\nRoots: the release CLI and native frontend (until it becomes unconditional).\nThis conservative locked closure covers all platform/feature dependency paths.\nThe gate checks completeness and every full licence/notice text offline.\nShip this directory with compiler binary distributions. Ship notices for\nlinked runtime components separately with built programs.\n\n## Vendored code\n\nFull texts are copied here; a distribution needs no source checkout.\n\n| Project | Locked crates | Full texts and notices |\n| --- | --- | --- |\n${projects.map((p) => `| ${p.directory} | ${p.packages.length} | ${links(p.texts)} |`).join("\n")}\n\n## Vendored data\n\nData files the compiler carries derived tables from, declared in\n\`tooling/licenses/licenses.ts\` because Cargo.lock cannot see them.\n\n| Input | Licence file | Full text |\n| --- | --- | --- |\n${data.map((d) => `| ${d.name} | ${d.license} | ${links(d.texts)} |`).join("\n")}\n\n## Registry dependencies\n\n| Package | Version | Licence | Texts and notices |\n| --- | --- | --- | --- |\n${inventory.map((p) => `| ${p.name} | ${p.version} | ${p.license} | ${links(p.texts)} |`).join("\n")}\n`);
-  const used = new Set([...inventory, ...projects, ...data].flatMap((p) => p.texts.map((t) => `${t.sha256}.txt`)));
+  writeFileSync(join(destination, "README.md"), `# Compiler dependency attributions\n\nGenerated from Cargo.lock by \`node tooling/licenses/licenses.ts --update\`.\nRoots: the release CLI and native frontend (until it becomes unconditional).\nThis conservative locked closure covers all platform/feature dependency paths.\nThe gate checks completeness and every full licence/notice text offline.\nShip this directory with compiler binary distributions. The nts runtime\nneeds no notice in compiled programs under its Apache-2.0 WITH LLVM-exception\nlicence. Third-party components linked into a program retain their own notices.\n\n## Vendored code\n\nFull texts are copied here; a distribution needs no source checkout.\n\n| Project | Locked crates | Full texts and notices |\n| --- | --- | --- |\n${projects.map((p) => `| ${p.directory} | ${p.packages.length} | ${links(p.texts)} |`).join("\n")}\n\n## Vendored data\n\nData files the compiler carries derived tables from, declared in\n\`tooling/licenses/licenses.ts\` because Cargo.lock cannot see them.\n\n| Input | Licence file | Full text |\n| --- | --- | --- |\n${data.map((d) => `| ${d.name} | ${d.license} | ${links(d.texts)} |`).join("\n")}\n\n## Registry dependencies\n\n| Package | Version | Licence | Texts and notices |\n| --- | --- | --- | --- |\n${inventory.map((p) => `| ${p.name} | ${p.version} | ${p.license} | ${links(p.texts)} |`).join("\n")}\n`);
+  const readme = join(destination, "README.md");
+  const componentSection = `## Embedded C components\n\nThe compiler embeds these sources. FFC is used under BSL-1.0 in compiled\nprograms, which need no FFC notice; its source header retains the full licence.\nAll upstream licence alternatives remain in the compiler distribution.\n\n| Component | Upstream licence | Used in programs | Full texts |\n| --- | --- | --- | --- |\n${components.map(c => `| ${c.directory} | ${c.license} | ${c.program_license} | ${links(c.texts)} |`).join("\n")}\n\n`;
+  writeFileSync(readme, readFileSync(readme, "utf8").replace("## Registry dependencies\n", `${componentSection}## Registry dependencies\n`));
+  const used = new Set([...inventory, ...projects, ...data, ...components].flatMap((p) => p.texts.map((t) => `${t.sha256}.txt`)));
   for (const name of readdirSync(join(destination, "texts"))) if (!used.has(name)) rmSync(join(destination, "texts", name));
 }
 
 const inventory: Attribution[] = JSON.parse(readFileSync(inventoryPath, "utf8"));
 const projects: Vendored[] = JSON.parse(readFileSync(vendorPath, "utf8"));
 const data: VendoredData[] = JSON.parse(readFileSync(dataPath, "utf8"));
+const components: Component[] = JSON.parse(readFileSync(componentsPath, "utf8"));
 const loadText = (digest: string) => readFileSync(join(destination, "texts", `${digest}.txt`));
 const loadLicense = (path: string) => readFileSync(join(root, path));
+const discoverComponents = () => readdirSync(join(root, "runtime/c"), { withFileTypes: true })
+  .filter(entry => entry.isDirectory() && licenceNames(join(root, "runtime/c", entry.name)).length)
+  .map(entry => `runtime/c/${entry.name}`);
+function verifyComponents(records: Component[], readText = loadText, readLicense = loadLicense, discovered = discoverComponents()): Set<string> {
+  const byDirectory = new Map(records.map(record => [record.directory, record]));
+  if (byDirectory.size !== records.length) throw new Error("duplicate embedded component attribution");
+  const texts = new Set<string>();
+  for (const declared of declaredComponents) {
+    const record = byDirectory.get(declared.directory);
+    if (!record || record.license !== declared.license || record.program_license !== declared.program_license) {
+      throw new Error(`embedded component attribution missing or stale: ${declared.directory}`);
+    }
+    assert.deepEqual(record.texts.map(text => text.upstream).sort(), [...declared.licenses].sort(), `embedded component licence set changed: ${declared.directory}`);
+    assert.deepEqual(licenceNames(join(root, declared.directory)), [...declared.licenses].sort(), `unrecorded embedded component licence: ${declared.directory}`);
+    for (const entry of record.texts) {
+      const path = `${declared.directory}/${entry.upstream}`;
+      let source: Buffer;
+      try { source = readLicense(path); }
+      catch { throw new Error(`embedded component licence missing: ${path}`); }
+      if (!/^[a-f0-9]{64}$/.test(entry.sha256) || sha256(source) !== entry.sha256) throw new Error(`embedded component licence changed: ${path}`);
+      if (sha256(readText(entry.sha256)) !== entry.sha256) throw new Error(`modified embedded component licence text: ${path}`);
+      texts.add(`${entry.sha256}.txt`);
+    }
+  }
+  for (const directory of byDirectory.keys()) {
+    if (!declaredComponents.some(component => component.directory === directory)) throw new Error(`undeclared embedded component attribution: ${directory}`);
+  }
+  for (const directory of discovered) {
+    if (!declaredComponents.some(component => component.directory === directory)) throw new Error(`undeclared embedded component: ${directory}`);
+  }
+  return texts;
+}
 function verify(records: Attribution[], vendors: Vendored[], vendoredData: VendoredData[], discovered: string[] = discoverDataLicenses(), readText = loadText, readLicense = loadLicense): Set<string> {
   const byKey = new Map(records.map((p) => [key(p), p]));
   const expected = new Set(registry.map(key));
@@ -209,9 +270,19 @@ function verify(records: Attribution[], vendors: Vendored[], vendoredData: Vendo
   return texts;
 }
 const textFiles = verify(inventory, projects, data);
+for (const text of verifyComponents(components)) textFiles.add(text);
 if (readdirSync(join(destination, "texts")).some((name) => !textFiles.has(name))) throw new Error("unlisted attribution text; remove texts no longer referenced after regeneration");
 if (args[0] === "--check") {
   // Negative controls operate on owned copies, never edits to checked files.
+  assert.equal(packageName("owned licence control", '[package]\nname = "nts-control"\nlicense.workspace = true\n', true), "nts-control");
+  assert.throws(() => packageName("owned licence control", '[package]\nname = "nts-control"\nlicense = "Apache-2.0"\n', true), /own package licence must be Apache-2.0 WITH LLVM-exception/);
+  assert.equal(packageName("upstream licence control", '[package]\nname = "upstream-control"\nlicense = "MIT"\n'), "upstream-control");
+  assert.throws(() => verifyComponents(components.slice(1)), /embedded component attribution missing or stale/);
+  const wrongChoice = structuredClone(components);
+  wrongChoice[0].program_license = "MIT";
+  assert.throws(() => verifyComponents(wrongChoice), /embedded component attribution missing or stale/);
+  assert.throws(() => verifyComponents(components, loadText, () => { throw new Error("injected ENOENT"); }), /embedded component licence missing/);
+  assert.throws(() => verifyComponents(components, loadText, loadLicense, [...discoverComponents(), "runtime/c/unrecorded-control"]), /undeclared embedded component: runtime\/c\/unrecorded-control/);
   const missing = registry.find((p) => !adapterKeys.has(key(p))) ?? registry[0];
   assert.ok(missing, "compiler has registry dependencies");
   assert.throws(() => verify(inventory.filter((p) => key(p) !== key(missing)), projects, data), (error) => error instanceof Error && error.message.includes(`missing or stale: ${key(missing)}`));
@@ -236,4 +307,4 @@ if (args[0] === "--check") {
     /undeclared vendored data licence: compiler\/core\/data\/LICENSE/,
   );
 }
-process.stdout.write(`compiler attributions: ${registry.length} registry packages, ${vendorPackages.length} vendored crates in ${projects.length} projects, ${data.length} vendored data inputs, ${textFiles.size} verbatim texts verified\n`);
+process.stdout.write(`compiler attributions: ${registry.length} registry packages, ${vendorPackages.length} vendored crates in ${projects.length} projects, ${data.length} vendored data inputs, ${components.length} embedded components, ${textFiles.size} verbatim texts verified\n`);

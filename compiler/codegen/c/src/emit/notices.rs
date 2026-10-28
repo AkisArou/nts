@@ -28,18 +28,9 @@ pub(super) fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
                 ),
                 file(super::RUNTIME_SOURCE_NAME, super::RUNTIME_SOURCE, true),
             ],
-            notices: vec![
-                file(
-                    "notices/nts-runtime/LICENSE",
-                    include_str!("../../../../../LICENSE"),
-                    false,
-                ),
-                file(
-                    "notices/nts-runtime/NOTICE",
-                    include_str!("../../../../../runtime/c/NOTICE"),
-                    false,
-                ),
-            ],
+            // Apache-2.0 WITH LLVM-exception exempts embedded nts runtime code
+            // from program notice files; third-party groups keep their terms.
+            notices: Vec::new(),
         },
         // nts_runtime.c includes both sources, so these groups always travel.
         Component {
@@ -55,23 +46,10 @@ pub(super) fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
         },
         Component {
             sources: vec![file(super::FFC_HEADER_NAME, super::FFC_HEADER, false)],
-            notices: vec![
-                file(
-                    "notices/ffc/LICENSE-APACHE",
-                    include_str!("../../../../../runtime/c/ffc/LICENSE-APACHE"),
-                    false,
-                ),
-                file(
-                    "notices/ffc/LICENSE-MIT",
-                    include_str!("../../../../../runtime/c/ffc/LICENSE-MIT"),
-                    false,
-                ),
-                file(
-                    "notices/ffc/LICENSE-BOOST",
-                    include_str!("../../../../../runtime/c/ffc/LICENSE-BOOST"),
-                    false,
-                ),
-            ],
+            // FFC is used under BSL-1.0: machine-executable object code needs
+            // no notice. Its unchanged source header carries the full text;
+            // all three upstream alternatives stay in compiler attributions.
+            notices: Vec::new(),
         },
     ];
     if needs_unicode {
@@ -127,9 +105,32 @@ fn unicode_license() -> &'static str {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn runtime_copyright_matches_the_compiler_notice() {
-        let runtime = include_str!("../../../../../runtime/c/NOTICE");
-        assert!(include_str!("../../../../../NOTICE").starts_with(runtime));
-        assert!(runtime.contains("Copyright 2026 The Native TypeScript Authors"));
+    fn program_notices_cover_exactly_the_third_party_components() {
+        for (unicode, expected) in [
+            (false, vec!["notices/zmij/LICENSE"]),
+            (
+                true,
+                vec![
+                    "notices/quickjs/LICENSE",
+                    "notices/unicode-data/LICENSE",
+                    "notices/zmij/LICENSE",
+                ],
+            ),
+        ] {
+            let files = super::support_files(unicode);
+            let mut notices: Vec<_> = files
+                .iter()
+                .filter(|file| file.name.starts_with("notices/"))
+                .map(|file| file.name)
+                .collect();
+            notices.sort_unstable();
+            assert_eq!(notices, expected);
+            assert!(
+                files
+                    .iter()
+                    .filter(|file| file.name.starts_with("notices/"))
+                    .all(|file| !file.compiled && !file.contents.is_empty())
+            );
+        }
     }
 }

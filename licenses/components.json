@@ -1,0 +1,43 @@
+[
+  {
+    "directory": "runtime/c/ffc",
+    "license": "Apache-2.0 OR MIT OR BSL-1.0",
+    "program_license": "BSL-1.0",
+    "texts": [
+      {
+        "upstream": "LICENSE-APACHE",
+        "sha256": "097a889aa954d04e088b790b10a4014d6189561d0a6013935a73ce3d4ddaaf06"
+      },
+      {
+        "upstream": "LICENSE-BOOST",
+        "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+      },
+      {
+        "upstream": "LICENSE-MIT",
+        "sha256": "e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6"
+      }
+    ]
+  },
+  {
+    "directory": "runtime/c/quickjs",
+    "license": "MIT",
+    "program_license": "MIT",
+    "texts": [
+      {
+        "upstream": "LICENSE",
+        "sha256": "96f73f9d2a16c21a36b418f06073be26e7d6d5e7c1bc99756b21a4f2c74ef171"
+      }
+    ]
+  },
+  {
+    "directory": "runtime/c/zmij",
+    "license": "MIT",
+    "program_license": "MIT",
+    "texts": [
+      {
+        "upstream": "LICENSE",
+        "sha256": "a69b36adb8d116376bcd580772fa45f08fffecc17833cb9822532f4e4f5ec372"
+      }
+    ]
+  }
+]

@@ -4,8 +4,9 @@ Generated from Cargo.lock by `node tooling/licenses/licenses.ts --update`.
 Roots: the release CLI and native frontend (until it becomes unconditional).
 This conservative locked closure covers all platform/feature dependency paths.
 The gate checks completeness and every full licence/notice text offline.
-Ship this directory with compiler binary distributions. Ship notices for
-linked runtime components separately with built programs.
+Ship this directory with compiler binary distributions. The nts runtime
+needs no notice in compiled programs under its Apache-2.0 WITH LLVM-exception
+licence. Third-party components linked into a program retain their own notices.
 
 ## Vendored code
 
@@ -24,6 +25,18 @@ Data files the compiler carries derived tables from, declared in
 | Input | Licence file | Full text |
 | --- | --- | --- |
 | Unicode Character Database 17.0.0 | compiler/unicode/data/LICENSE | [compiler/unicode/data/LICENSE](texts/e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96.txt) |
+
+## Embedded C components
+
+The compiler embeds these sources. FFC is used under BSL-1.0 in compiled
+programs, which need no FFC notice; its source header retains the full licence.
+All upstream licence alternatives remain in the compiler distribution.
+
+| Component | Upstream licence | Used in programs | Full texts |
+| --- | --- | --- | --- |
+| runtime/c/ffc | Apache-2.0 OR MIT OR BSL-1.0 | BSL-1.0 | [LICENSE-APACHE](texts/097a889aa954d04e088b790b10a4014d6189561d0a6013935a73ce3d4ddaaf06.txt), [LICENSE-BOOST](texts/c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566.txt), [LICENSE-MIT](texts/e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6.txt) |
+| runtime/c/quickjs | MIT | MIT | [LICENSE](texts/96f73f9d2a16c21a36b418f06073be26e7d6d5e7c1bc99756b21a4f2c74ef171.txt) |
+| runtime/c/zmij | MIT | MIT | [LICENSE](texts/a69b36adb8d116376bcd580772fa45f08fffecc17833cb9822532f4e4f5ec372.txt) |
 
 ## Registry dependencies
 
