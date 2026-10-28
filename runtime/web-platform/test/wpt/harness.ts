@@ -236,6 +236,7 @@ export class WptHarness {
     globals: Record<string, unknown>,
     blocks: Readonly<Record<string, WptBlock>> = {},
     timeout = 10000,
+    globalAliases: readonly string[] = [],
   ) {
     this.blocks = blocks;
     assert.ok(Number.isSafeInteger(timeout) && timeout > 0, "WPT timeout must be positive integer milliseconds");
@@ -309,6 +310,21 @@ export class WptHarness {
     Object.assign(this.context, hostErrors, {
       assert_equals: assert.strictEqual,
       assert_not_equals: assert.notStrictEqual,
+      // resources/testharness.js at a8f306ee4399724f33399dfdcac7da296f3cc05a:
+      // primitive numeric types must match; no string/boxed-number coercion.
+      assert_greater_than: (actual: unknown, expected: unknown, message?: string) => {
+        assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
+        assert.equal(typeof actual, typeof expected, message);
+        assert.ok(actual > (expected as number | bigint), message);
+      },
+      assert_greater_than_equal: (actual: unknown, expected: unknown, message?: string) => {
+        assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
+        assert.equal(typeof actual, typeof expected, message);
+        assert.ok(actual >= (expected as number | bigint), message);
+      },
+      assert_regexp_match: (actual: string, expected: RegExp, message?: string) => {
+        assert.ok(expected.test(actual), message);
+      },
       assert_true: (value: unknown, message?: string) => assert.equal(value, true, message),
       assert_false: (value: unknown, message?: string) => assert.equal(value, false, message),
       assert_unreached: (message?: string) => assert.fail(message),
@@ -390,6 +406,14 @@ export class WptHarness {
       },
       done: () => this.closeRegistration(),
     });
+    // Alias the actual context global, not the host's globals dictionary. This
+    // preserves self === globalThis and never exposes Node's competing Web APIs.
+    const realmGlobal = new Script("globalThis").runInContext(this.context) as Record<string, unknown>;
+    for (const alias of globalAliases) {
+      assert.match(alias, /^[A-Za-z_$][\w$]*$/, "invalid WPT global alias");
+      assert.ok(!(alias in realmGlobal), `WPT alias would replace an existing global: ${alias}`);
+      this.context[alias] = realmGlobal;
+    }
   }
 
   private register(explicitName: string | undefined, kind: TestKind): WptTest {
