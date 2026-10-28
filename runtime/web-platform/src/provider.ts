@@ -279,3 +279,18 @@ export type {
   WebPlatformOptions,
   WebPlatformProxyOptions,
 } from "./provider/web-platform-runtime.ts";
+
+export type {
+  CryptoDigestName, CryptoDigestProvider, CryptoKeyHandle, CryptoKeyType,
+  CryptoNamedCurve, CryptoOkpCurve, CryptoSecretKeyInfo, CryptoRsaKeyInfo,
+  CryptoEcKeyInfo, CryptoOkpKeyInfo, CryptoKeyInfo, CryptoKeyRecord, CryptoKeyPairRecord,
+  CryptoSecretComponents, CryptoRsaOtherPrime, CryptoRsaComponents, CryptoEcComponents,
+  CryptoOkpComponents, CryptoKeyComponents, CryptoRawSecretImport, CryptoRawEcImport,
+  CryptoRawOkpImport, CryptoDerImport, CryptoComponentsImport, CryptoKeyImport,
+  CryptoRsaGeneration, CryptoEcGeneration, CryptoOkpGeneration, CryptoKeyPairGeneration,
+  CryptoAesCtrParameters, CryptoAesCbcParameters, CryptoAesGcmParameters, CryptoAesKwParameters,
+  CryptoRsaOaepParameters, CryptoCipherParameters, CryptoCiphertext, CryptoHashSignatureParameters,
+  CryptoRsaPssParameters, CryptoEd25519Parameters, CryptoEd448Parameters, CryptoSignatureParameters,
+  CryptoByteSignature, CryptoEcdsaSignature, CryptoSignature, CryptoAgreementParameters,
+  CryptoHkdfParameters, CryptoPbkdf2Parameters, CryptoDerivationParameters, CryptoFailure, CryptoProvider,
+} from "./provider/crypto.ts";

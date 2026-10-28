@@ -147,7 +147,6 @@ function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: Cry
 
 /**
  * Web Cryptography §14 and Secure Curves: shared key, cipher, signature and derivation operations.
- * Runtime assembly is a separate handoff item.
  * Members are plain declarations; descriptor-only Web IDL shape is deferred.
  */
 export class SubtleCrypto {
