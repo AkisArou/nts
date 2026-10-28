@@ -1,3 +1,6 @@
+import {durableRecord} from "./durable-record.ts";
+import {abandonFrozen} from "./train-abandon.ts";
+import {ensureTrain,markTrainRunning,retireTrainOwner,refreshController,trainOwner} from "./train-service.ts";
 import {pruneRunTemporaries} from "../gate/run-temporary.ts";
 import {selectRange,selectionInfrastructure} from "../gate/owed-range.ts";
 import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
@@ -6,6 +9,8 @@ import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "
 //
 //   node tooling/lanes/land.ts <commit>            gate it and land it
 //   node tooling/lanes/land.ts <commit> --dry-run  say what it owes, change nothing
+//   node tooling/lanes/land.ts --withdraw <commit|entry>  request boundary withdrawal
+//   node tooling/lanes/land.ts --abandon-frozen <id> --because=<reason> --run=<path>
 //
 // A gate takes half an hour, longer than an agent's command limit: run it in
 // the background and read the outcome with `lane status`, or the log it names.
@@ -14,12 +19,11 @@ import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "
 //
 // # What it does, in order
 //
-// 1. Joins the landing queue (a file per waiting landing under
-//    ~/.cache/nts-land/queue) and waits for the landing lock (a kernel lock,
-//    so it never goes stale); during the transition also for the old
-//    GATE-RUNNING marker, which it writes and removes like any lane.
-// 2. **Lands a train.** Whoever holds the lock gates every queued landing at
-//    once (up to TRAIN_MAX, oldest first), not only its own: one gate is half
+// 1. Publishes a durable entry under ~/.cache/nts-land/pending and polls its
+//    disposition. A dedicated train service owns the locks and gate; stopping
+//    the submitting process cannot stop another landing's proof.
+// 2. **Lands a train.** The service gates compatible queued landings at
+//    once (up to TRAIN_MAX, ancestry first), not only one: one gate is half
 //    an hour, and with a dozen landings queued one at a time a lane waited six
 //    hours (2026-10-13). Each landing's commits since it left main are
 //    replayed in turn onto main (`git replay`, which touches no tree), the
@@ -45,7 +49,7 @@ import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "
 // Pushing to origin is not its business: that stays a person's decision.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, fstatSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -68,10 +72,13 @@ import {admitted} from "./admission-hold.ts";
 const HOME = process.env.NTS_LAND_HOME ?? homedir();
 const LOCK = join(HOME, ".cache/nts-land.lock");
 const STATE = join(HOME, ".cache/nts-land");
-const QUEUE = join(STATE, "queue");
+const QUEUE = join(STATE, "pending");
+const LEGACY_QUEUE = join(STATE, "queue");
+const FROZEN = join(STATE,"frozen-train.json");
 const RESULTS = join(STATE, "results");
 const DISPOSITIONS = join(STATE, "submission-dispositions");
 const READY = join(STATE,"ready");
+const WITHDRAWALS = join(STATE,"withdrawals");
 const VERIFICATION = join(STATE, "verification");
 /** The most landings one gate carries: a red train is halved, so this bounds the gates a red one costs. */
 const TRAIN_MAX = Number(process.env.NTS_LAND_TRAIN_MAX ?? 6);
@@ -88,6 +95,9 @@ if (!Array.isArray(policyUnrun) || policyUnrun.some(name => typeof name !== "str
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
+const trainWorker = argv.includes("--train-worker");
+const withdrawing = argv.includes("--withdraw");
+const abandoning = argv.includes("--abandon-frozen");
 // `--accept-unrun=apple,windows --because=<why>`: land a range that touches a
 // platform whose programs did not run, once, on purpose. The user's call, never
 // a lane's (2026-10-14, the corpora move: its Apple and Windows projects change
@@ -115,6 +125,7 @@ function fail(message: string): never {
 
 function say(message: string): void {
   console.log(`land: ${message}`);
+  if (process.env.NTS_LAND_TRAIN_TRACE) try { appendFileSync(process.env.NTS_LAND_TRAIN_TRACE, `land: ${message}\n`); } catch {}
 }
 
 /** The checkout every worktree shares: main lives there and only there. */
@@ -284,7 +295,7 @@ function drainReady(root:string):void {
         proof=readyProof(root,entry.sha,proof.checked,proof.author);
       }
       if(proof==="regular"){
-        mkdirSync(RESULTS,{recursive:true});writeFileSync(join(RESULTS,entry.id+".json"),JSON.stringify({state:"regular",message:"changed rules require a train"}));removeReady(READY,entry.id);continue;
+        durableRecord(join(RESULTS,entry.id+".json"),{state:"regular",message:"changed rules require a train"});removeReady(READY,entry.id);continue;
       }
       if(!proof){answer(entry,{state:"landed",message:`${entry.sha.slice(0,12)}'s changes are on main already`});removeReady(READY,entry.id);continue;}
       const result=fastForward(root,entry,proof);
@@ -308,7 +319,7 @@ function drainReady(root:string):void {
 /** Returns a local-checkout conflict without answering or abandoning the intent. */
 function fastForward(root:string,entry:ReadyEntry,proof:ReadyProof):string|null {
   const {sha}=entry,{base,tip,checked,run,author}=proof;
-  if(lockHolder()===null||!isAncestor(lockHolder()!))fail("fast landing does not hold the landing lock");
+  if(!holdsLandingLock())fail("fast landing does not hold the landing lock");
   if(git(["rev-parse","main"],root)!==base)return "main moved before the ready fast-forward";
   if(git(["rev-parse","HEAD"],checked)!==tip||git(["status","--porcelain","--untracked-files=no","--ignore-submodules=all"],checked))fail("checked tree changed before fast-forward");
   const owed=owedSteps(checked,`${base}..${tip}`);
@@ -423,15 +434,15 @@ function replayOnto(root: string, base: string, onto: string, sha: string, ownFr
 }
 
 /** A landing waiting for the lock: one file in QUEUE, named by its id. */
-type Entry = { id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks; author?: Author };
+type Entry = { durable?: true; unit?: string; id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks; author?: Author };
 /** What became of a landing, written by whichever process gated it. */
-type Result = { state: "landed" | "red" | "conflict" | "unrun" | "regular"; message: string; landing?: string; main?: string; run?: string };
+type Result = { state: "landed" | "red" | "conflict" | "unrun" | "regular" | "withdrawn" | "abandoned"; trainUnit?: string; trace?: string; message: string; landing?: string; main?: string; run?: string };
 
 function enqueue(sha: string, tree: string): string {
   mkdirSync(QUEUE, { recursive: true });
   const at = Date.now();
   const id = `${at}-${process.pid}`;
-  writeFileSync(join(QUEUE, `${id}.json`), JSON.stringify({ id, sha, tree, pid: process.pid, at, author: authorOf(tree) }));
+  durableRecord(join(QUEUE, `${id}.json`), { id, sha, tree, pid: process.pid, at, durable: true, unit: process.env.NTS_LAND_SUBMISSION_UNIT, author: authorOf(tree) });
   return id;
 }
 
@@ -450,16 +461,24 @@ function resultOf(id: string): Result | null {
 }
 
 function answer(entry: Entry, result: Result): void {
+  say(`${entry.sha.slice(0,12)} (${entry.id}): ${result.message}`);
   mkdirSync(RESULTS, { recursive: true });
-  writeFileSync(join(RESULTS, `${entry.id}.json`), JSON.stringify(result));
-  disposition(entry,result.state === "landed" ? "landed" : "refused");
+  const file = join(RESULTS, `${entry.id}.json`);
+  durableRecord(file, { ...result, trainUnit: process.env.NTS_LAND_TRAIN_UNIT, trace: process.env.NTS_LAND_TRAIN_TRACE });
+  reconcileAnswer(entry,result);
+}
+
+/** Recovery repairs indexes, preserving the original answer's provenance. */
+function reconcileAnswer(entry:Entry,result:Result):void {
+  disposition(entry,result.state === "landed" ? "landed" : result.state === "withdrawn" ? "withdrawn" : "refused");
+  rmSync(join(QUEUE, `${entry.id}.json`), { force: true });
+  rmSync(join(LEGACY_QUEUE, `${entry.id}.json`), { force: true });
 }
 
 function disposition(entry:Entry,state:"landed"|"refused"|"withdrawn"):void {
   mkdirSync(DISPOSITIONS,{recursive:true});
   const path=join(DISPOSITIONS,`${entry.id}.json`);
-  writeFileSync(`${path}.tmp`,JSON.stringify({entry,state}));
-  renameSync(`${path}.tmp`,path);
+  durableRecord(path,{entry,state});
 }
 
 function alreadyInMain(root:string,base:string,sha:string):boolean {
@@ -470,9 +489,8 @@ function alreadyInMain(root:string,base:string,sha:string):boolean {
 }
 
 /**
- * The landings still waiting, oldest first. One whose process has gone (its
- * lane stopped it, or the machine restarted) is dropped from the queue: no one
- * is left to read its answer.
+ * Durable entries survive their submitting processes. Legacy entries retain
+ * their old process-lifetime withdrawal rule until the migration drains them.
  */
 function waiting(): Entry[] {
   // Answers are read within moments of being written; a week-old one was
@@ -483,27 +501,45 @@ function waiting(): Entry[] {
       if (Date.now() - statSync(path).mtimeMs > 7 * 86400_000) rmSync(path, { force: true });
     }
   }
-  if (!existsSync(QUEUE)) return [];
+  if (!existsSync(QUEUE) && !existsSync(LEGACY_QUEUE)) return [];
   const entries: Entry[] = [];
-  for (const name of readdirSync(QUEUE)) {
+  for (const path of [QUEUE,LEGACY_QUEUE].flatMap(directory => existsSync(directory) ? readdirSync(directory).map(name=>join(directory,name)) : [])) {
+    const name = path.slice(path.lastIndexOf("/")+1);
     if (!name.endsWith(".json")) continue;
-    const path = join(QUEUE, name);
     let entry: Entry;
     try {
       entry = JSON.parse(readFileSync(path, "utf8"));
     } catch {
       continue; // being written
     }
-    if (!alive(entry.pid)) {
-      if(!resultOf(entry.id))disposition(entry,"withdrawn");
-      rmSync(path, { force: true });
+    const result=resultOf(entry.id);
+    if (result) { say(`${entry.sha.slice(0,12)} (${entry.id}) already answered: ${result.state}; preserving its original result`);reconcileAnswer(entry,result);continue; }
+    if (withdrawRequested(entry)) { answer(entry, { state: "withdrawn", message: `${entry.sha.slice(0,12)} withdrawn before the next train` }); continue; }
+    if (!entry.durable && !alive(entry.pid)) {
+      answer(entry,{state:"withdrawn",message:`${entry.sha.slice(0,12)} legacy submitter exited before composition`});
     }
-    else if (!resultOf(entry.id)) entries.push(entry);
+    else entries.push(entry);
   }
-  return entries.sort((a, b) => a.at - b.at);
+  return [...new Map(entries.map(entry=>[entry.id,entry])).values()].sort((a, b) => a.at - b.at);
 }
 
-/** Hold the landing lock for the rest of this process: re-run under flock. */
+function withdrawRequested(entry: Entry): boolean {
+  return existsSync(join(WITHDRAWALS, `${entry.id}.json`));
+}
+function requestWithdrawal(root: string, asked: string): void {
+  const entries: Entry[] = [QUEUE,LEGACY_QUEUE].flatMap(directory=>existsSync(directory)?readdirSync(directory).filter(name=>name.endsWith(".json")).flatMap(name=>{try{return [JSON.parse(readFileSync(join(directory,name),"utf8"))];}catch{return [];}}):[]);
+  const direct = entries.filter(entry => entry.id === asked);
+  const sha = direct.length ? null : git(["rev-parse", "--verify", `${asked}^{commit}`], root);
+  const selected = direct.length ? direct : entries.filter(entry => entry.sha === sha);
+  if (!selected.length) fail(`no queued submission matches ${asked}; already disposed entries are not queued`);
+  mkdirSync(WITHDRAWALS, { recursive: true });
+  for (const entry of selected) {
+    const file = join(WITHDRAWALS, `${entry.id}.json`);
+    durableRecord(file,{version:1,id:entry.id,sha:entry.sha,at:new Date().toISOString()});
+    say(`withdrawal requested for ${entry.sha.slice(0,12)} (${entry.id}); a frozen train finishes its current run`);
+  }
+}
+
 /**
  * The process holding the landing lock, from the kernel's own table: a
  * `FLOCK` line in `/proc/locks` on the lock file's inode (a waiter's line
@@ -531,13 +567,24 @@ function isAncestor(pid: number): boolean {
 }
 
 export function holdsLandingLock(): boolean {
+  if(inheritedLandingLock())return true;
   const holder=lockHolder();
   return holder !== null && isAncestor(holder);
 }
 
+/** The supervisor's open file description survives its short-lived flock child. */
+function inheritedLandingLock(): boolean {
+  if(!trainWorker||!process.env.NTS_LAND_TRAIN_UNIT||process.env.NTS_LAND_LOCKED!=="1")return false;
+  const held=fstatSync(9),file=statSync(LOCK);
+  if(held.ino!==file.ino||held.dev!==file.dev)return false;
+  const locked=spawnSync("flock",["-n","-E","75","9"],{stdio:["ignore","pipe","pipe",null,null,null,null,null,null,9]});
+  if(locked.error)throw locked.error;
+  return locked.status===0;
+}
+
 /**
- * Join the queue and hold the landing lock for the rest of this process:
- * re-run under flock, telling the locked process which queue entry is its.
+ * Submit without owning the train. The service survives this process and
+ * owns all gate work; this client waits only for its durable disposition.
  */
 async function underTheLock(sha: string, tree: string): Promise<void> {
   if (process.env.NTS_LAND_LOCKED === "1") return;
@@ -553,34 +600,20 @@ async function underTheLock(sha: string, tree: string): Promise<void> {
   const fullBranch = checkedOut.status === 0 ? checkedOut.stdout.trim() : "";
   const submission: Submission = { sha, tree, branch: fullBranch.startsWith("refs/heads/") ? fullBranch.slice(11) : null };
   const id = enqueue(sha, tree);
-  const held = spawnSync("flock", ["-n", LOCK, "true"]);
-  if (held.status !== 0) say("another landing holds the lock; waiting (whoever holds it next gates every landing queued)");
-  // The commit resolved now, not the argument again: `HEAD` re-read under the
-  // lock, hours later, is whatever the lane has committed since -- so a lane
-  // could not work in its tree while its landing waited.
-  const flags = process.argv.slice(2).filter((a) => a.startsWith("--"));
-  // pinned.sh comes from shared main, not the candidate. This landing itself
-  // must still gate with an older main that cannot accept an inherited lock.
-  // Shadow entry refuses until that shared script supports the handoff.
-  let r;
-  for (;;) {
-    let resource: GateResource | null = null;
-    if (supportsResourceHandoff(sharedCheckout())) {
-      while (!(resource=GateResource.tryAcquire(`${GATE_TREE}.lock`))) await sleep(1000);
-    }
+  let result: Result | null = null;
+  let announced = "", lastFailure = "", lastFailureAt = 0;
+  while (!(result = resultOf(id))) {
     try {
-      // An older waiter can already hold the landing lock while entering
-      // pinned.sh. Never wait for it while retaining its needed tree lock.
-      r=spawnSync("flock", [...(resource ? ["-n","-E","75"] : []),LOCK, process.execPath, process.argv[1], sha, ...flags], {
-        stdio: resource ? resource.stdio("inherit") : "inherit",
-        env: { ...(resource ? resource.env() : process.env), NTS_LAND_LOCKED: "1", NTS_LAND_ENTRY: id },
-      });
-    } finally { resource?.close(); }
-    if (!resource || r.status !== 75) break;
-    await sleep(1000);
+      const owner = await ensureTrain(sharedCheckout(), STATE, tree, sha);
+      if (owner.unit !== announced) { say(`waiting for disposition; train owner ${owner.unit}; log ${owner.trace}`); announced = owner.unit; }
+    } catch (error) { const message=String(error);if(message!==lastFailure || Date.now()-lastFailureAt>=30_000){say(`train startup held; submission remains queued: ${message}`);lastFailure=message;lastFailureAt=Date.now();} }
+    await sleep(250);
   }
-  // The child and its flock wrapper have exited. Each originating process
-  // retires only its own submission; the shared gate tree remains warm.
+  if (result.trace && existsSync(result.trace)) process.stdout.write(readFileSync(result.trace,"utf8"));
+  say(result.message);
+  const r = { status: result.state === "landed" ? 0 : 1 };
+  // Each originating process retires only its own submission after the
+  // service has answered it; the shared gate tree remains warm.
   if (r.status === 0 && resultOf(id)?.state === "landed") {
     try {
       const upkeepLog = join(STATE, "upkeep.jsonl");
@@ -631,7 +664,7 @@ function claimMarker(sha: string): void {
 
 function status(fields: Record<string, unknown>): void {
   mkdirSync(STATE, { recursive: true });
-  writeFileSync(join(STATE, "status.json"), `${JSON.stringify({ at: new Date().toISOString(), ...fields }, null, 2)}\n`);
+  durableRecord(join(STATE, "status.json"),{ at: new Date().toISOString(), holder_unit: process.env.NTS_LAND_TRAIN_UNIT ?? null, ...fields });
 }
 
 /** How a gate of one commit ended: green, or why not. */
@@ -785,14 +818,18 @@ export function runShadowGate(root: string, base: string, tip: string, checks: O
  * of more than one was red: the culprit is found by gating its first half
  * next, and nothing is answered yet.
  */
-function runTrain(root: string, train: Entry[]): "done" | "halve" {
+type FrozenComposition = {base:string;tip:string;members:{entry:Entry;landing:string}[]};
+type TrainCycle = {state:"done"|"halve";size:number};
+function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maximum = TRAIN_MAX): TrainCycle {
   const base = git(["rev-parse", "main"], root);
   let tip = base;
   const members: { entry: Entry; landing: string }[] = [];
   const unavailable=existsSync(DISPOSITIONS)?readdirSync(DISPOSITIONS).filter(n=>n.endsWith(".json")).map(n=>JSON.parse(readFileSync(join(DISPOSITIONS,n),"utf8"))).filter(r=>r.state!=="landed"):[];
   const inTrain=new Set(train.map(e=>e.sha));
-  for (const {entry,prerequisites,from} of compose(train,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0)) {
+  if (resume?.base === base) { members.push(...resume.members); tip=resume.tip; }
+  else for (const {entry,prerequisites,from} of compose(train,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0)) {
     const short = entry.sha.slice(0, 12);
+    if(members.length>=maximum){say(`${short} (${entry.id}) deferred: train capacity ${maximum} compatible members`);continue;}
     const failed=prerequisites.find(p=>resultOf(p.id)&&resultOf(p.id)!.state!=="landed");
     const missing=unavailable.find(r=>r.entry.sha!==entry.sha&&!inTrain.has(r.entry.sha)&&spawnSync("git",["merge-base","--is-ancestor",r.entry.sha,entry.sha],{cwd:root}).status===0&&!alreadyInMain(root,base,r.entry.sha));
     if(failed||missing) {
@@ -817,10 +854,18 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
     members.push({ entry, landing });
     tip = landing;
   }
-  if (members.length === 0) return "done";
+  if (members.length === 0) return {state:"done",size:members.length};
   const shas = members.map((m) => m.entry.sha.slice(0, 12));
   if (members.length > 1) say(`a train of ${members.length}: ${shas.join(" ")}`);
 
+  const frozen = {base,tip,members};
+  if (process.env.NTS_LAND_TRAIN_UNIT) {
+    durableRecord(FROZEN,{version:1,phase:"running",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum});
+    const ref=`refs/archive/land-trains/${process.env.NTS_LAND_TRAIN_UNIT}/frozen-${tip}`;
+    const present=spawnSync("git",["rev-parse","--verify",ref],{cwd:root,encoding:"utf8"});
+    if(present.status!==0)git(["update-ref",ref,tip,"0".repeat(tip.length)],root);
+    else if(present.stdout.trim()!==tip)fail("frozen train archive changed");
+  }
   const started = Date.now();
   const required = members.reduce((checks, { entry }) => unionRequired(checks, entry.required ?? { steps: [], interop: null }), { steps: [], interop: null } as RequiredChecks);
   const gated = gate(root, base, tip, shas, required);
@@ -870,24 +915,23 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
     // Only a check green on this base can identify a regression in a half.
     // Persist on every survivor so a new lock holder keeps that distinction.
     if (inherited || redOnMain.length) for (const { entry } of remaining) {
-      const path = join(QUEUE, `${entry.id}.json`);
+      const path = existsSync(join(QUEUE,`${entry.id}.json`)) ? join(QUEUE,`${entry.id}.json`) : join(LEGACY_QUEUE,`${entry.id}.json`);
       const prior = entry.required ?? { steps: [], interop: null };
       const kept = { ...prior, steps: prior.steps.filter(step => !redOnMain.includes(step)) };
       if (!kept.steps.includes("interop")) kept.interop = null;
       const next = { ...entry, required: unionRequired(kept, inherited ?? { steps: [], interop: null }) };
-      writeFileSync(`${path}.tmp`, JSON.stringify(next));
-      renameSync(`${path}.tmp`, path);
+      durableRecord(path,next);
     }
-    const active=remaining.filter(({entry})=>alive(entry.pid)&&existsSync(join(QUEUE,`${entry.id}.json`)));
-    for(const {entry} of remaining)if(!active.some(m=>m.entry.id===entry.id))disposition(entry,"withdrawn");
+    const active=remaining.filter(({entry})=>!withdrawRequested(entry)&&(entry.durable||alive(entry.pid))&&(existsSync(join(QUEUE,`${entry.id}.json`))||existsSync(join(LEGACY_QUEUE,`${entry.id}.json`))));
+    for(const {entry} of remaining)if(!active.some(m=>m.entry.id===entry.id))answer(entry,{state:"withdrawn",message:`${entry.sha.slice(0,12)} withdrawn after the frozen run; omitted from recomposition`});
     if(active.length!==remaining.length)say(`withdrawn members leave the failed train before recomposition: ${remaining.filter(m=>!active.includes(m)).map(m=>m.entry.sha.slice(0,12)).join(" ")}`);
-    if (active.length !== members.length) return "done";
+    if (active.length !== members.length) return {state:"done",size:members.length};
     if (members.length > 1) {
       say(`a train of ${members.length} was ${gated.state}: gating its first half on its own next`);
-      return "halve";
+      return {state:"halve",size:members.length};
     }
     answer(members[0].entry, { state: gated.state, message: gated.message, run: gated.run });
-    return "done";
+    return {state:"done",size:members.length};
   }
   if (git(["rev-parse", "main"], root) !== base) {
     // Every landing takes this lock, so this is a hand-made move of main.
@@ -919,7 +963,7 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
     const train = members.length > 1 ? ` in a train of ${members.length}` : "";
     answer(entry, { state: "landed", message: `LANDED ${entry.sha.slice(0, 12)}${train} as ${landing.slice(0, 12)}: main is ${tip.slice(0, 12)}${refreshed}`, landing, main: tip, run: gated.run });
   }
-  return "done";
+  return {state:"done",size:members.length};
 }
 
 /**
@@ -945,10 +989,53 @@ function refreshPackages(root: string, base: string, tip: string): string {
   return `; the lockfile changed and \`pnpm install --frozen-lockfile\` failed in ${root} (${why}): run it there`;
 }
 
+async function runController(root: string): Promise<void> {
+  const unit = process.env.NTS_LAND_TRAIN_UNIT;
+  if (!unit || !/^(nts-land-train|nts-test-land-train)-[0-9]+-[a-f0-9]+$/.test(unit)
+      || !readFileSync("/proc/self/cgroup","utf8").includes(`/${unit}.service`)) fail("train worker must run in its own lander unit");
+  if (process.env.NTS_LAND_LOCKED !== "1" || !GateResource.inherited(`${GATE_TREE}.lock`)) fail("train service must own both gate and landing locks");
+  if(!inheritedLandingLock())fail("train supervisor does not own the landing descriptor");
+  markTrainRunning(STATE);
+  if(refreshController(STATE)){process.exitCode=76;return;}
+  admitted("verification-ledger",()=>{
+    try { return {value:ledgerAt(root,git(["rev-parse","main"],root))}; }
+    catch(error) {
+      if(!selectionInfrastructure(error)&&!["EACCES","EPERM","EEXIST","ENOTDIR","ENOSPC","EIO","EROFS","EMFILE","ENFILE"].includes((error as NodeJS.ErrnoException).code??""))throw error;
+      return {hold:String(error)};
+    }
+  },held=>{status(held);say(`verification journal held ${held.age_s} s: ${held.reason}; queued submissions are kept`);});
+  drainReady(root);
+  const saved = existsSync(FROZEN) ? JSON.parse(readFileSync(FROZEN,"utf8")) : null;
+  const limit = saved?.nextLimit ?? TRAIN_MAX;
+  const owner=trainOwner(STATE)!;
+  const bootstrap=owner.bootstrap&&spawnSync("git",["cat-file","-e","main:tooling/lanes/train-service.ts"],{cwd:root}).status!==0?owner.bootstrap:null;
+  // Interrupted members are immutable evidence. Requests made during their
+  // run are honored only after that frozen run has completed.
+  let train: Entry[] = saved?.phase === "running"
+    ? saved.entries.filter((entry:Entry)=>!resultOf(entry.id))
+    : compose(waiting(),(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0).map(p=>p.entry);
+  if(bootstrap){
+    if(saved?.composition?.members.some(member=>member.entry.sha!==bootstrap))fail("bootstrap cannot resume unrelated frozen members");
+    for(const entry of train)if(entry.sha!==bootstrap)say(`${entry.sha.slice(0,12)} (${entry.id}) deferred: service bootstrap gates only ${bootstrap.slice(0,12)}`);
+    train=train.filter(entry=>entry.sha===bootstrap);
+  }
+  if (!train.length) { await retireTrainOwner(STATE); return; }
+  const record = (value:unknown) => durableRecord(FROZEN,value);
+  record({version:1,phase:"running",entries:train,nextLimit:limit,base:git(["rev-parse","main"],root),composition:saved?.phase==="running"?saved.composition:undefined});
+  const result = runTrain(root,train,saved?.phase==="running"?saved.composition:undefined,limit);
+  record({version:1,phase:"boundary",nextLimit:result.state === "halve"?Math.max(1,Math.floor(result.size/2)):TRAIN_MAX});
+  refreshController(STATE);
+  process.exitCode = 76;
+}
+
 async function main(): Promise<void> {
+  if(abandoning){if(!target)fail("--abandon-frozen needs the owner id");const run=argv.find(arg=>arg.startsWith("--run="))?.slice(6)??"";say(`operator abandonment recorded: ${await abandonFrozen(STATE,target,because,run)}`);return;}
+  if (withdrawing) { if (!target) fail("usage: land.ts --withdraw <commit|entry>"); requestWithdrawal(sharedCheckout(),target); return; }
   if (process.env.NTS_LAND_LOCKED !== "1") {
     try {assertLandingEnvironment();reportLauncherDrops(process.env);} catch(error) {fail((error as Error).message);}
   }
+  if (trainWorker) { await runController(sharedCheckout()); return; }
+
   if (!target) fail("which commit? `node tooling/lanes/land.ts <commit> [--dry-run]`");
   const root = sharedCheckout();
   const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
@@ -967,6 +1054,7 @@ async function main(): Promise<void> {
     // tree's, over the commits since it left main.
     const from = git(["merge-base", base, sha], root);
     const owed = owedSteps(tree, `${from}..${sha}`);
+    say(`${short} owes: ${describe(owed)}`);
     const problem = environmentProblem(tree, owed);
     if (problem) fail(problem);
     if (dryRun) {
@@ -983,24 +1071,7 @@ async function main(): Promise<void> {
   }
 
   await underTheLock(sha, tree);
-  ledgerAt(root, git(["rev-parse", "main"], root));
-  // Under the lock. A process started with the lock already held has no entry
-  // yet: it queues itself here, with this process as the one to answer.
-  const id = process.env.NTS_LAND_ENTRY ?? enqueue(sha, tree);
-  if (git(["rev-parse", "main"], root) === sha && !resultOf(id)) fail(`${short} is main already`);
-  for (let limit = TRAIN_MAX; ; ) {
-    drainReady(root);
-    const result = resultOf(id);
-    if (result) {
-      if (result.state !== "landed") fail(result.message);
-      say(result.message);
-      if (result.landing !== sha) say("the branch it came from: `git rebase main` drops the commits that landed");
-      return;
-    }
-    const train = compose(waiting(),(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0).slice(0, limit).map(p=>p.entry);
-    if (train.length === 0) fail(`this landing (${id}) is in no queue: run land.ts again`);
-    limit = runTrain(root, train) === "halve" ? Math.max(1, Math.floor(train.length / 2)) : TRAIN_MAX;
-  }
+
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {

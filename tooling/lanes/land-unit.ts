@@ -51,14 +51,16 @@ try {
   const systemdArgument=(s:string)=>'"'+s.replaceAll("\\","\\\\").replaceAll('"','\\"').replaceAll("%","%%")+'"';
   const collector=gateCommand(process.execPath,[cleanup,"--repo",repo,"--post-stop",unit]);
   const after=[collector.command,...collector.args].map(systemdArgument).join(" ");
+  const client=gateCommand(process.execPath,[land,sha]);
   checked("systemd-run", [
     "--user", "--collect", "--quiet", `--unit=${unit}`, `--working-directory=${tree}`,
     `--property=StandardOutput=append:${log}`, `--property=StandardError=append:${log}`,
     "--property=LimitCORE=0",
     `--property=ExecStopPost=${after}`,
     `--setenv=NTS_LAND_AUTHOR_BRANCH=${authorBranch}`,
+    `--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,
     ...(process.env.NTS_LAND_AUTHOR_ADDRESS ? [`--setenv=NTS_LAND_AUTHOR_ADDRESS=${process.env.NTS_LAND_AUTHOR_ADDRESS}`] : []),
-    ...systemdEnvironment(), process.execPath, land, sha,
+    ...systemdEnvironment(), client.command, ...client.args,
   ], root);
   manifest.preparingPid=null;recordManifest();
   console.log(`queued ${sha} as ${unit}\nlog: ${log}`);

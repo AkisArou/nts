@@ -11,15 +11,17 @@ import { spawnTest as processTest, waitFor } from "../gate/test-wait.ts";
 // all waiting, as a lane does behind a half-hour gate.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, symlinkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { after, test } from "node:test";
+import { after, test as nativeTest, type TestContext, type TestOptions } from "node:test";
 import assert from "node:assert/strict";
-import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
+import { cpuList, gateCpus, inheritedCpus, gateCommand } from "../gate/affinity.ts";
 import { readLedger, VerificationLedger } from "./verification-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
 import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
+import {randomUUID} from "node:crypto";
+import {systemdEnvironment} from "../gate/environment.ts";
 import {selectorFixture} from "./selector-fixture.ts";
 
 // Fake gates read their own fixture controls from a private file. The real
@@ -27,6 +29,7 @@ import {selectorFixture} from "./selector-fixture.ts";
 function saveControls(env:NodeJS.ProcessEnv):void {
   if (!env.LAND_TEST_CONTROLS) return;
   const quote=(value:string)=>"'"+value.replaceAll("'", "'\\''")+"'";
+  writeFileSync(env.LAND_TEST_CONTROLS+".json",JSON.stringify({imports:[...(env.NODE_OPTIONS??"").matchAll(/--import=([^ ]+)/g)].map(match=>match[1])}));
   writeFileSync(env.LAND_TEST_CONTROLS,Object.entries(env).filter(([k,v])=>k.startsWith("LAND_TEST_") && v!==undefined).map(([k,v])=>`export ${k}=${quote(v!)}`).join("\n")+"\n");
 }
 const spawnTest:typeof processTest=(command,args,options,what)=>{saveControls(options?.env ?? {});return processTest(command,args,options,what);};
@@ -78,9 +81,27 @@ REQUESTED_STEPS
 type Scratch = { root: string; home: string; gates: string; env: NodeJS.ProcessEnv };
 
 const made: string[] = [];
-after(() => {
-  for (const dir of made) rmSync(dir, { recursive: true, force: true });
-});
+const ownUnits: string[] = [];
+const ownClients = new Set<Promise<Landed>>();
+async function cleanupFixtures():Promise<void> {
+  for(const unit of ownUnits.splice(0))processTest("systemctl",["--user","stop",unit],{encoding:"utf8"});
+  await Promise.all([...ownClients]);
+  for (const dir of made.splice(0)) {
+    const trains=join(dir,"home/.cache/nts-land/trains");
+    for(const name of existsSync(trains)?readdirSync(trains):[]) {
+      const manifest=join(trains,name,"owner.json");if(!existsSync(manifest))continue;
+      const owner=JSON.parse(readFileSync(manifest,"utf8"));
+      processTest("systemctl",["--user","stop",owner.unit],{encoding:"utf8"});
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+after(cleanupFixtures);
+function test(name:string,optionsOrBody:TestOptions|((t:TestContext)=>unknown),body?:(t:TestContext)=>unknown) {
+  const options=typeof optionsOrBody==="function"?{}:optionsOrBody;
+  const run=typeof optionsOrBody==="function"?optionsOrBody:body!;
+  return nativeTest(name,options,async t=>{try{return await run(t);}finally{await cleanupFixtures();}});
+}
 
 function scratch(): Scratch {
   const dir = mkdtempSync(join(tmpdir(), "land-test-"));
@@ -89,6 +110,14 @@ function scratch(): Scratch {
   const home = join(dir, "home");
   mkdirSync(join(home, ".cache/nts-parallel-20261004/mainctl"), { recursive: true });
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
+  const source = new URL("../../", import.meta.url).pathname;
+  for (const folder of ["tooling/gate", "tooling/lanes"]) cpSync(join(source,folder),join(root,folder),{recursive:true});
+  writeFileSync(join(root,".gitignore"),"node_modules\n");
+  symlinkSync(join(source,"node_modules"),join(root,"node_modules"));
+  writeFileSync(join(root,"tooling/lanes/inputs.sh"),'#!/bin/sh\nln -sfn "$2/node_modules" "$3/node_modules"\n');
+  const runtime=join(root,"tooling/lanes/land.ts"),context=join(dir,"controls.sh.json");
+  writeFileSync(runtime,readFileSync(runtime,"utf8").replace('const argv = process.argv.slice(2);',`const argv = process.argv.slice(2);if(process.env.NTS_LAND_TRAIN_UNIT){for(const preload of JSON.parse(readFileSync(${JSON.stringify(context)},'utf8')).imports)await import(/^[a-z][a-z0-9+.-]*:/i.test(preload)?preload:pathToFileURL(preload).href);}`));
+
   for (const project of ["java-from-ts", "ts-from-java"]) {
     mkdirSync(join(root, "tests/interop", project), { recursive: true });
     writeFileSync(join(root, "tests/interop", project, "build.sh"), "#!/bin/sh\nexit 0\n");
@@ -117,6 +146,7 @@ function scratch(): Scratch {
   });
   const s = { root, home, gates: join(dir, "gates.log"), env };
   run(s, root, ["init", "-q", "-b", "main"]);
+  run(s, root, ["config", "user.name", "t"]); run(s,root,["config","user.email","t@t"]);
   run(s, root, ["add", "-A"]);
   run(s, root, ["commit", "-q", "-m", "base"]);
   return s;
@@ -146,16 +176,27 @@ function lane(s: Scratch, name: string, files: Record<string, string>): string {
 
 type Landed = { status: number | null; out: string };
 
-function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; done: Promise<Landed> } {
+type QueuedRecord={id:string;sha:string;pid:number;unit?:string;durable?:boolean};
+function queuedForUnit(s:Scratch,unit:string):QueuedRecord|undefined {
+  const queue=join(s.home,".cache/nts-land/pending");
+  for(const name of existsSync(queue)?readdirSync(queue):[]){
+    if(!name.endsWith(".json"))continue;
+    try{const row=JSON.parse(readFileSync(join(queue,name),"utf8"));if(name===row.id+".json"&&row.unit===unit)return row;}catch{}
+  }
+}
+function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; done: Promise<Landed>; unit:string; record:()=>QueuedRecord|undefined } {
   saveControls(s.env);
-  const child = cpus
-    ? spawn("taskset", ["-c", cpus, process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env })
-    : spawn(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env });
+  const unit=`nts-test-land-client-${randomUUID().slice(0,8)}`;ownUnits.push(unit);
+  const command=cpus?"taskset":process.execPath,args=cpus?["-c",cpus,process.execPath,LAND,"HEAD"]:[LAND,"HEAD"];
+  const client=gateCommand(command,args);
+  const controls=Object.entries(s.env).filter(([key,value])=>value!==undefined&&(/^(?:NTS_|LAND_TEST_|GIT_|NODE_OPTIONS$)/.test(key)||launcherPolicyNames({[key]:value}).length>0)).map(([key,value])=>`--setenv=${key}=${value}`);
+  const child=spawn("systemd-run",["--user","--wait","--pipe","--quiet","--collect",`--unit=${unit}`,`--working-directory=${tree}`,"--property=LimitCORE=0","--property=Nice=19",...systemdEnvironment(s.env),...controls,`--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,client.command,...client.args]);
   let out = "";
   child.stdout?.on("data", (d) => (out += d));
   child.stderr?.on("data", (d) => (out += d));
-  const done = new Promise<Landed>((resolve) => child.on("exit", (status) => resolve({ status, out })));
-  return { child, done };
+  const done = new Promise<Landed>((resolve,reject) => {child.on("error",reject);child.on("close",status=>resolve({status,out}));});
+  ownClients.add(done);void done.finally(()=>ownClients.delete(done));
+  return { child, done,unit,record:()=>queuedForUnit(s,unit) };
 }
 
 function fastGate(s: Scratch): void {
@@ -187,7 +228,7 @@ test("tree-only changes land without a queue entry or full gate", async () => {
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /tree-only checks, no train/);
   assert.equal(run(s, s.root, ["rev-parse", "main"]), run(s, tree, ["rev-parse", "HEAD"]));
-  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/pending")));
   assert.equal(gates(s), 0);
   const saved = readLedger(join(s.home, ".cache/nts-land/verification"))!;
   assert.equal(saved.mode, "strict");
@@ -275,40 +316,24 @@ test("a coordinator docs commit is accounted for by the next strict train",async
 });
 
 test("a train waits for the gate resource without retaining the landing lock",async()=>{
-  const s=scratch();
-  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"# nts-gate-tree-lock-handoff: 8\n"+controls(s,STAND_IN_GATE+reportContext));
-  // The marker is on its own line after a leading newline, as in pinned.sh.
-  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),"\n"+readFileSync(join(s.root,"tooling/gate/pinned.sh"),"utf8"));
-  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","lock handoff"]);
-  const tree=lane(s,"tsrs/resource-wait",{"one.txt":"one\n"});
-  const lock=join(s.home,".cache/nts-land.lock"),held=join(s.home,"probe-held"),release=join(s.home,"release-probe");
-  const bin=join(s.home,"bin"),probe=join(bin,"probe.ts");mkdirSync(bin);
-  // Queue publication precedes the lander's initial lock probe. Hold that
-  // probe until the test observes it: the old immediate assertion must fail
-  // here regardless of how the scheduler orders the parent and child.
-  writeFileSync(probe,`import {writeFileSync,existsSync} from "node:fs";\nimport {waitFor} from ${JSON.stringify(new URL("../gate/test-wait.ts",import.meta.url).pathname)};\nwriteFileSync(${JSON.stringify(held)},"");\nawait waitFor("the test to release the initial lock probe",()=>existsSync(${JSON.stringify(release)}));\n`);
-  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
-  // exec preserves the unrelated descriptor-8 gate-resource handoff too.
-  writeFileSync(join(bin,"flock"),`#!/bin/sh\nif [ "$#" = 3 ] && [ "$1" = -n ] && [ "$2" = ${quote(lock)} ] && [ "$3" = true ]; then\n  exec /usr/bin/flock -n "$2" ${quote(process.execPath)} ${quote(probe)}\nfi\nexec /usr/bin/flock "$@"\n`);chmodSync(join(bin,"flock"),0o755);
-  s.env.PATH=bin+":"+s.env.PATH;
-  const resource=GateResource.tryAcquire(join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"))!;
-  const pending=land(s,tree),queue=join(s.home,".cache/nts-land/queue");
+  const s=scratch(),tree=lane(s,"tsrs/resource-wait",{"one.txt":"one\n"});
+  const lock=join(s.home,".cache/nts-land.lock"),resourcePath=join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock");
+  const resource=GateResource.tryAcquire(resourcePath)!;
+  const pending=land(s,tree);
   let result:Landed;
   try {
     const stopped=()=>pending.child.exitCode===null?undefined:`lander exited ${pending.child.exitCode}`;
-    await until("the lander's initial lock probe",()=>existsSync(held),{stopped});
-    assert.ok(existsSync(queue) && readdirSync(queue).length>0);
-    assert.equal(spawnTest("/usr/bin/flock",["-n",lock,"true"]).status,1,"queue publication does not prove the landing lock is free");
-    writeFileSync(release,"");
-    await until("the landing lock to be released while the gate resource is busy",()=>{
-      const checked=spawnTest("/usr/bin/flock",["-n",lock,"true"]);
-      assert.ok(checked.status===0 || checked.status===1,checked.stderr);
-      return checked.status===0;
-    },{stopped});
+    const manifest=join(s.home,".cache/nts-land/train-owner.json");
+    await until("the train owner's durable manifest",()=>existsSync(manifest),{stopped});
+    const owner=JSON.parse(readFileSync(manifest,"utf8")),inode=statSync(resourcePath).ino;
+    await until("the train service blocked on the gate resource",()=>readFileSync("/proc/locks","utf8").split("\n").some(line=>{
+      const fields=line.trim().split(/\s+/);if(!fields.includes("->")||!fields.some(field=>field.endsWith(`:${inode}`)))return false;
+      const pid=fields[5];try{return readFileSync(`/proc/${pid}/cgroup`,"utf8").includes(`/${owner.unit}.service`);}catch{return false;}
+    }),{stopped});
+    const checked=spawnTest("/usr/bin/flock",["-n",lock,"true"]);
+    assert.equal(checked.status,0,`the service holds no landing lock while blocked on its resource: ${checked.stderr}`);
     assert.equal(gates(s),0);
-  } finally {
-    writeFileSync(release,"");resource.close();result=await pending.done;
-  }
+  } finally { resource.close();result=await pending.done; }
   assert.equal(result.status,0,result.out);
 });
 
@@ -321,21 +346,26 @@ test("an older lock holder waiting for pinned.sh cannot deadlock a new train",as
   const holder=spawn("flock",[join(s.home,".cache/nts-land.lock"),"sh","-c",'touch "$1"; while [ ! -f "$2" ]; do sleep 0.02; done; flock "$3" true',"_",ready,go,gateLock]);
   const stopped=new Promise<number|null>(resolve=>holder.on("close",resolve));
   await until("old holder to take landing lock",()=>existsSync(ready));
-  const pending=land(s,tree),queue=join(s.home,".cache/nts-land/queue");
-  await until("new train to queue",()=>existsSync(queue) && readdirSync(queue).length>0);
+  const pending=land(s,tree),queue=join(s.home,".cache/nts-land/pending");
+  await until("new train final queue record",()=>pending.record()!==undefined);
   writeFileSync(go,"");assert.equal(await stopped,0);
   const result=await pending.done;assert.equal(result.status,0,result.out);
 });
 
-test("an unwritable verification journal refuses before any fast-forward", async () => {
+test("an unwritable verification journal holds the submission until recovery", async () => {
   const s=scratch(), tree=lane(s,"ledger-unavailable",{"change":"one\n"});
   const base=run(s,s.root,["rev-parse","main"]);
   const directory=join(s.home,".cache/nts-land");mkdirSync(directory,{recursive:true});
   writeFileSync(join(directory,"verification"),"this is not a directory");
-  const result=await land(s,tree).done;
-  assert.notEqual(result.status,0,result.out);
-  assert.equal(run(s,s.root,["rev-parse","main"]),base);
-  assert.equal(gates(s),0);
+  const pending=land(s,tree),state=join(directory,"status.json");
+  try {
+    await until("the verification journal hold",()=>existsSync(state)&&JSON.parse(readFileSync(state,"utf8")).resource==="verification-ledger");
+    assert.equal(run(s,s.root,["rev-parse","main"]),base);
+    assert.equal(readdirSync(join(directory,"pending")).length,1);
+    assert.equal(gates(s),0);
+  }finally{rmSync(join(directory,"verification"),{force:true});}
+  const result=await pending.done;
+  assert.equal(result.status,0,result.out);assert.equal(gates(s),1);
 });
 
 test("a fast landing replays and rechecks if main moves before the short lock", async () => {
@@ -345,7 +375,7 @@ test("a fast landing replays and rechecks if main moves before the short lock", 
   const wait = join(s.home, "checking"); s.env.LAND_TEST_FAST_WAIT = wait;
   const pending = land(s, tree);
   await until("private tree checks", () => existsSync(wait));
-  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/pending")));
   writeFileSync(join(s.root, "peer.txt"), "peer\n");
   run(s, s.root, ["add", "peer.txt"]);
   run(s, s.root, ["commit", "-q", "-m", "a peer lands"]);
@@ -370,7 +400,7 @@ test("a failed tree check refuses immediately without moving main or queueing", 
   assert.equal(result.status, 1, result.out);
   assert.match(result.out, /tree-check FAIL/);
   assert.equal(run(s, s.root, ["rev-parse", "main"]), base);
-  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/pending")));
 });
 
 test("changed owed rules on main route a previously fast change through the gate", async () => {
@@ -394,7 +424,7 @@ test("a tree-only landing refuses an ancestor holding the landing lock", () => {
   const result = spawnTest("flock", [join(s.home, ".cache/nts-land.lock"), process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8",});
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /run land.ts bare/);
-  assert.ok(!existsSync(join(s.home, ".cache/nts-land/queue")));
+  assert.ok(!existsSync(join(s.home, ".cache/nts-land/pending")));
 });
 
 // Check the state itself; the common guard reports a hung fixture by name.
@@ -481,7 +511,7 @@ test("low disk holds every queued submission until admission recovers", async ()
     assert.equal(held.train.length,3);
     assert.ok(Number.isFinite(Date.parse(held.since)));
     assert.ok(held.age_s>=0);
-    assert.equal(readdirSync(join(s.home,".cache/nts-land/queue")).filter(n=>n.endsWith(".json")).length,3);
+    assert.equal(readdirSync(join(s.home,".cache/nts-land/pending")).filter(n=>n.endsWith(".json")).length,3);
     assert.equal(readFileSync(cache,"utf8"),"keep the warm profile\n");
     assert.equal(gates(s),0,"a resource hold starts no gate");
   } finally {
@@ -509,7 +539,7 @@ test("missing gate environment refuses before queueing or waiting for a held loc
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /ANDROID_HOME is missing; required by step dex/);
     assert.match(result.stderr, /node tooling\/lanes\/land-unit.ts/);
-    assert.equal(existsSync(join(s.home, ".cache/nts-land/queue")), false);
+    assert.equal(existsSync(join(s.home, ".cache/nts-land/pending")), false);
     assert.equal(gates(s), 0);
   } finally {
     process.kill(-holder.pid!, "SIGTERM");
@@ -522,9 +552,10 @@ test("the locked train rechecks capabilities before starting its gate", async ()
     "tooling/gate/owed.mjs": selectorFixture({steps:'["dex"]',projects:"null"}),
     "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({fake: [],dex: ["android"]}));\n',
   });
-  s.env.ANDROID_HOME = "";
-  // Enter at the train half, bypassing the pre-queue check as its flock child does.
-  s.env.NTS_LAND_LOCKED = "1";
+  s.env.ANDROID_HOME="/declared/android";
+  const preload=join(s.home,"remove-capability.ts");
+  writeFileSync(preload,'if(process.env.NTS_LAND_TRAIN_UNIT)delete process.env.ANDROID_HOME;\n');
+  s.env.NODE_OPTIONS=`--import=${preload}`;
   const result = await land(s, tree).done;
   assert.equal(result.status, 1, result.out);
   assert.match(result.out, /ANDROID_HOME is missing; required by step dex/);
@@ -539,11 +570,11 @@ async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
   const holder = spawn("flock", [lock, process.execPath, "-e", "process.stdin.resume()"], { detached: true });
   await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
   // One at a time, so the queue's order is the order given.
-  const queue = join(s.home, ".cache/nts-land/queue");
+  const queue = join(s.home, ".cache/nts-land/pending");
   const landings = [];
   for (const tree of trees) {
     landings.push(land(s, tree));
-    await until(`${tree} to queue`, () => existsSync(queue) && readdirSync(queue).length === landings.length);
+    await until(`${tree} final queue record`, () => landings.at(-1)!.record()!==undefined);
   }
   process.kill(-holder.pid!, "SIGTERM");
   return Promise.all(landings.map((l) => l.done));
@@ -573,7 +604,7 @@ test("landing refuses a caller checker override before enqueue", async () => {
   const result = await land(s, a).done;
   assert.equal(result.status, 1, result.out);
   assert.match(result.out,/launcher verdict-policy.*NTS_CHECKERS/);
-  assert.equal(existsSync(join(s.home,".cache/nts-land/queue")),false);
+  assert.equal(existsSync(join(s.home,".cache/nts-land/pending")),false);
 });
 
 test("the gate and its grandchild exclude the measurement core, preserving an E-core caller", { skip: process.platform !== "linux" }, async () => {
@@ -718,14 +749,18 @@ test("a landing that conflicts with one ahead of it is refused, and the train go
   const a = lane(s, "a", { "shared.txt": "from a\n" });
   const b = lane(s, "b", { "shared.txt": "from b\n" });
   const c = lane(s, "c", { "c.txt": "c\n" });
-  const [ra, rb, rc] = await landTogether(s, [a, b, c]);
+  const later=["d","e","f","g"].map(name=>lane(s,name,{[`${name}.txt`]:`${name}\n`}));
+  const [ra, rb, rc,...rest] = await landTogether(s, [a, b, c,...later]);
   assert.equal(ra.status, 0, ra.out);
   assert.equal(rc.status, 0, rc.out);
   assert.equal(rb.status, 1, rb.out);
+  for(const result of rest)assert.equal(result.status,0,result.out);
   assert.match(rb.out, /does not replay onto main \(\w+\) or the 1 landing\(s\) ahead of it/);
   assert.equal(readFileSync(join(a, "shared.txt"), "utf8"), "from a\n");
   assert.equal(run(s, s.root, ["show", "main:shared.txt"]), "from a");
   assert.equal(gates(s), 1);
+  const owner=JSON.parse(readFileSync(join(s.home,".cache/nts-land/train-owner.json"),"utf8"));
+  assert.match(readFileSync(owner.trace,"utf8"),/does not replay onto main/);
 });
 
 test("a landing alone still lands, and its changes already on main land as nothing", async () => {
@@ -774,8 +809,8 @@ test("a landing lands the commit it was queued with, though its tree moves on wh
   const holder = spawn("flock", [lock, process.execPath, "-e", "process.stdin.resume()"], { detached: true });
   await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
   const landing = land(s, a);
-  const queue = join(s.home, ".cache/nts-land/queue");
-  await until("it to queue", () => existsSync(queue) && readdirSync(queue).length === 1);
+  const queue = join(s.home, ".cache/nts-land/pending");
+  await until("its final queue record", () => landing.record()!==undefined);
   writeFileSync(join(a, "later.txt"), "later\n");
   run(s, a, ["add", "-A"]);
   run(s, a, ["commit", "-q", "-m", "later"]);
@@ -906,7 +941,7 @@ test("a launcher profile override refuses before queueing and leaves its cache a
   s.env.CARGO_PROFILE_DEV_OPT_LEVEL="2";
   const result=await land(s,tree).done;
   assert.equal(result.status,1,result.out);assert.match(result.out,/launcher verdict-policy.*CARGO_PROFILE_DEV_OPT_LEVEL/);
-  assert.equal(existsSync(join(s.home,".cache/nts-land/queue")),false);
+  assert.equal(existsSync(join(s.home,".cache/nts-land/pending")),false);
 });
 
 test("a non-canonical green summary cannot land",async()=>{
@@ -936,7 +971,7 @@ test("a dead queued prerequisite cannot be silently replayed through its descend
   const aSha=run(s,a,["rev-parse","HEAD"]),b=join(s.home,"Projects/nts-lanes/dependent");
   run(s,s.root,["worktree","add","-q","-b","dependent",b,aSha]);
   writeFileSync(join(b,"dependent"),"second\n");run(s,b,["add","dependent"]);run(s,b,["commit","-qm","dependent"]);
-  const queue=join(s.home,".cache/nts-land/queue");mkdirSync(queue,{recursive:true});
+  const queue=join(s.home,".cache/nts-land/pending");mkdirSync(queue,{recursive:true});
   writeFileSync(join(queue,"withdrawn.json"),JSON.stringify({id:"withdrawn",sha:aSha,tree:a,pid:2147483647,at:0}));
   const result=await land(s,b).done;
   assert.equal(result.status,1,result.out);
@@ -948,24 +983,10 @@ test("a dead queued prerequisite cannot be silently replayed through its descend
 
 test("a withdrawn frozen member leaves before the surviving train is halved",async()=>{
   const s=scratch(),bad=lane(s,"withdrawn-red",{RED:"red\n"}),a=lane(s,"survivor-a",{a:"green\n"}),b=lane(s,"survivor-b",{b:"green\n"});
-  const badSha=run(s,bad,["rev-parse","HEAD"]),trigger=join(s.home,"withdrawn"),preload=join(s.home,"withdraw-observation.ts");
-  // Only the observation of this scratch submitter changes. No real process
-  // receives a signal; the frozen train and its baseline still run normally.
-  writeFileSync(preload,`import fs from "node:fs";import path from "node:path";
-const kill=process.kill;process.kill=function(pid,signal){
- if(signal===0&&fs.existsSync(${JSON.stringify(trigger)})){
-  const queue=${JSON.stringify(join(s.home,".cache/nts-land/queue"))};
-  for(const file of fs.existsSync(queue)?fs.readdirSync(queue):[]){
-   if(!file.endsWith(".json"))continue;const entry=JSON.parse(fs.readFileSync(path.join(queue,file),"utf8"));
-   if(entry.sha===${JSON.stringify(badSha)}&&entry.pid===pid)throw Object.assign(new Error("scratch submitter withdrawn"),{code:"ESRCH"});
-  }
- }
- return kill.call(process,pid,signal);
-};\n`);
-  s.env.NODE_OPTIONS=`--import=${preload}`;
+  const badSha=run(s,bad,["rev-parse","HEAD"]);
   const gate=join(s.root,"tooling/gate/pinned.sh");
-  writeFileSync(gate,readFileSync(gate,"utf8")+`\nif [ -e "$NTS_GATE_TREE/RED" ]; then touch '${trigger}'; fi\n`);
-  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","withdrawal observation"]);
+  writeFileSync(gate,readFileSync(gate,"utf8")+`\nif [ -e "$NTS_GATE_TREE/RED" ]; then node tooling/lanes/land.ts --withdraw '${badSha}'; fi\n`);
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","withdrawal request"]);
   const [withdrawn,...survivors]=await landTogether(s,[bad,a,b]);
   assert.notEqual(withdrawn.status,0,withdrawn.out);
   for(const result of survivors)assert.equal(result.status,0,result.out);
@@ -1016,7 +1037,7 @@ test("a dirty docs ready entry is retained without blocking the next product tra
   const ready=land(s,docs),second=land(s,b);
   try {
     await until("the checked docs ready intent",()=>pendingReady(s).length===1);
-    await until("the next product to queue",()=>readdirSync(join(s.home,".cache/nts-land/queue")).filter(n=>n.endsWith(".json")).length===2);
+    await until("the next product final record",()=>second.record()!==undefined);
     writeFileSync(join(s.root,"docs/page.md"),"conflicting local edit\n");
   }finally{releaseTrain(s,0);}
   try {
@@ -1048,10 +1069,171 @@ exec ${quote(actual)} "$@"
  try {
   const state=join(s.home,".cache/nts-land/status.json");
   await until("the selector infrastructure hold",()=>existsSync(state)&&JSON.parse(readFileSync(state,"utf8")).resource==="selector");
-  assert.equal(readdirSync(join(s.home,".cache/nts-land/queue")).filter(n=>n.endsWith(".json")).length,3);
+  assert.equal(readdirSync(join(s.home,".cache/nts-land/pending")).filter(n=>n.endsWith(".json")).length,3);
   assert.equal(gates(s),0);
  }finally{writeFileSync(go,"restored\n");}
  for(const result of await results)assert.equal(result.status,0,result.out);
  assert.equal(gates(s),1);
  for(const path of ["a","b","c"])assert.ok(onMain(s,path));
+});
+
+
+function serviceSubmission(s: Scratch, tree: string): string {
+  saveControls(s.env);
+  const unit=`nts-test-land-submit-${randomUUID().slice(0,8)}`;ownUnits.push(unit);
+  const client=gateCommand(process.execPath,[LAND,"HEAD"]);
+  const result=spawnTest("systemd-run",["--user","--collect",`--unit=${unit}`,`--working-directory=${tree}`,"--property=LimitCORE=0",...systemdEnvironment(s.env),`--setenv=NTS_LAND_HOME=${s.home}`,`--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,client.command,...client.args],{encoding:"utf8"});
+  assert.equal(result.status,0,result.stderr);return unit;
+}
+function frozenBarrier(s: Scratch): {entered:string;release:string} {
+  const entered=join(s.home,"frozen-entered"),release=join(s.home,"frozen-release");
+  const file=join(s.root,"tooling/gate/pinned.sh");
+  writeFileSync(file,readFileSync(file,"utf8").replace("verdict=green step=PASS",`touch '${entered}'\nwhile [ ! -e '${release}' ]; do sleep 0.02; done\nverdict=green step=PASS`));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","frozen gate barrier"]);
+  return {entered,release};
+}
+function states(s: Scratch) {
+  const directory=join(s.home,".cache/nts-land/results");
+  return existsSync(directory)?readdirSync(directory).filter(file=>file.endsWith(".json")).map(file=>JSON.parse(readFileSync(join(directory,file),"utf8"))):[];
+}
+test("the service bootstrap gates only its own immutable submission before using main",async()=>{
+  const s=scratch(),service=readFileSync(join(s.root,"tooling/lanes/train-service.ts"),"utf8");
+  run(s,s.root,["rm","tooling/lanes/train-service.ts"]);run(s,s.root,["commit","-qm","main before the service"]);
+  const a=lane(s,"bootstrap",{"tooling/lanes/train-service.ts":service,a:"own\n"}),b=lane(s,"after-bootstrap",{b:"later\n"});
+  const own=run(s,a,["rev-parse","HEAD"]);
+  for(const result of await landTogether(s,[a,b]))assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),2);
+  const first=readFileSync(s.gates,"utf8").trim().split("\n")[0].trim();assert.equal(first,own);
+  assert.equal(spawnTest("git",["cat-file","-e",`${first}:b`],{cwd:s.root,env:s.env}).status,128);
+  assert.ok(onMain(s,"a")&&onMain(s,"b"));
+});
+
+test("stopping a submission service cannot kill its frozen train or the other member", async()=>{
+  const s=scratch(),barrier=frozenBarrier(s);
+  const a=lane(s,"service-a",{a:"green\n"}),b=lane(s,"service-b",{b:"green\n"});
+  const lock=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"));assert.ok(lock);
+  let first:string;
+  try {
+    first=serviceSubmission(s,a);const second=serviceSubmission(s,b);
+    await until("both durable final records",()=>[first,second].every(unit=>queuedForUnit(s,unit)!==undefined));
+  } finally {lock.close();}
+  await until("the frozen train",()=>existsSync(barrier.entered));
+  const status=JSON.parse(readFileSync(join(s.home,".cache/nts-land/status.json"),"utf8"));
+  assert.match(status.holder_unit,/^nts-test-land-train-/);assert.equal(status.train.length,2);assert.notEqual(status.holder_unit,first!);
+  for(const unit of [first!,status.holder_unit]){
+    const pid=Number(spawnTest("systemctl",["--user","show",unit,"--property=MainPID","--value"],{encoding:"utf8"}).stdout.trim());
+    assert.ok(pid>0,unit);const cpus=cpuList(inheritedCpus(pid));
+    assert.ok(cpus.every(cpu=>cpu!==4&&cpu!==5),`${unit}: ${cpus.join(",")}`);
+  }
+  const stopped=spawnTest("systemctl",["--user","stop",first!],{encoding:"utf8"});assert.equal(stopped.status,0,stopped.stderr);
+  const requested=spawnTest(process.execPath,[LAND,"--withdraw",run(s,a,["rev-parse","HEAD"])],{cwd:s.root,env:s.env,encoding:"utf8"});assert.equal(requested.status,0,requested.stderr);
+  writeFileSync(barrier.release,"continue");
+  await until("both frozen dispositions",()=>states(s).length===2);
+  assert.ok(states(s).every(result=>result.state==="landed"),JSON.stringify(states(s)));
+  assert.equal(gates(s),1);assert.ok(onMain(s,"a")&&onMain(s,"b"));
+  await until("the leader to retire answered entries",()=>readdirSync(join(s.home,".cache/nts-land/pending")).length===0);
+  assert.deepEqual(readdirSync(join(s.home,".cache/nts-land/pending")),[],"answers remove entries without waiting for their submitters");
+});
+test("a restarted service re-gates frozen members before composing a late arrival",async()=>{
+  const s=scratch(),barrier=frozenBarrier(s),a=lane(s,"restart-a",{a:"green\n"}),b=lane(s,"restart-b",{b:"green\n"}),c=lane(s,"restart-c",{c:"green\n"});
+  const lock=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"));assert.ok(lock);
+  const submitters:string[]=[];
+  try {submitters.push(serviceSubmission(s,a),serviceSubmission(s,b));await until("two restart final records",()=>submitters.every(unit=>queuedForUnit(s,unit)!==undefined));} finally {lock.close();}
+  await until("first frozen run",()=>existsSync(barrier.entered));
+  const owner=JSON.parse(readFileSync(join(s.home,".cache/nts-land/train-owner.json"),"utf8"));
+  submitters.push(serviceSubmission(s,c));
+  await until("late arrival final record",()=>queuedForUnit(s,submitters.at(-1)!)!==undefined);
+  for(const unit of submitters){const stopped=spawnTest("systemctl",["--user","stop",unit],{encoding:"utf8"});assert.equal(stopped.status,0,stopped.stderr);}
+  const stop=spawnTest("systemctl",["--user","kill","--kill-whom=all","--signal=SIGKILL",owner.unit],{encoding:"utf8"});assert.equal(stop.status,0,stop.stderr);
+  writeFileSync(barrier.release,"continue");
+  await until("all recovered dispositions",()=>states(s).length===3);
+  assert.ok(states(s).every(result=>result.state==="landed"),JSON.stringify(states(s)));
+  const pins=readFileSync(s.gates,"utf8").trim().split("\n").map(line=>line.split(" ")[0]);
+  assert.equal(pins.length,3);assert.equal(pins[0],pins[1],"the interrupted train is re-gated at its frozen tip");
+  assert.equal(spawnTest("git",["cat-file","-e",`${pins[1]}:c`],{cwd:s.root,encoding:"utf8"}).status,128,"the late member is not smuggled into recovery");
+  assert.ok(onMain(s,"a")&&onMain(s,"b")&&onMain(s,"c"));
+});
+
+test("recovering an answered legacy entry preserves its result bytes and original train",async()=>{
+  const s=scratch(),base=run(s,s.root,["rev-parse","HEAD"]),store=join(s.home,".cache/nts-land"),id="1-1";
+  mkdirSync(join(store,"queue"),{recursive:true});mkdirSync(join(store,"results"));
+  writeFileSync(join(store,"queue",id+".json"),JSON.stringify({id,sha:base,pid:process.pid,tree:s.root,at:1}));
+  const path=join(store,"results",id+".json"),original=JSON.stringify({state:"landed",message:"legacy proof",landing:base,main:base,trainUnit:"original-unit",trace:"original-trace"},null,4)+"\n";writeFileSync(path,original);
+  const result=await land(s,lane(s,"after-legacy-answer",{a:"green\n"})).done;assert.equal(result.status,0,result.out);
+  assert.equal(readFileSync(path,"utf8"),original);assert.equal(existsSync(join(store,"queue",id+".json")),false);
+});
+
+test("a failed fixture stops and reaps its polling clients before removing their roots",async()=>{
+  const s=scratch(),tree=lane(s,"aborted-client",{a:"green\n"}),lock=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"))!;
+  const pending=land(s,tree);
+  try{
+    await until("the client final record before deliberate fixture failure",()=>pending.record()!==undefined);
+    try{throw new Error("deliberate fixture assertion failure");}catch(error){assert.match(String(error),/deliberate fixture/);}finally{await cleanupFixtures();}
+    const result=await pending.done;assert.doesNotMatch(result.out,/LANDED/);assert.notEqual(pending.child.exitCode,null);
+    assert.equal(existsSync(s.root),false);
+    const state=spawnTest("systemctl",["--user","show",pending.unit,"--property=ActiveState","--value"],{encoding:"utf8"}).stdout.trim();
+    assert.ok(!["active","activating","deactivating"].includes(state),state);
+  }finally{lock.close();}
+});
+
+test("legacy queue records and durable submissions share one service without changing the legacy format",async()=>{
+  const s=scratch(),barrier=frozenBarrier(s),a=lane(s,"migration-a",{a:"green\n"}),b=lane(s,"migration-b",{b:"green\n"});
+  serviceSubmission(s,a);await until("the first migration train",()=>existsSync(barrier.entered));
+  const store=join(s.home,".cache/nts-land"),queue=join(store,"pending"),held=join(s.home,"publication-held"),fifo=join(s.home,"publish-record");
+  assert.equal(spawnTest("mkfifo",[fifo],{encoding:"utf8"}).status,0);
+  const preload=join(s.home,"hold-publication.ts");
+  writeFileSync(preload,`import fs from 'node:fs';import {syncBuiltinESMExports}from'node:module';const rename=fs.renameSync;fs.renameSync=function(from,to){if(!process.env.NTS_LAND_TRAIN_UNIT&&String(to).includes('/pending/')){fs.writeFileSync(${JSON.stringify(held)},String(from));fs.readFileSync(${JSON.stringify(fifo)});}return rename.call(this,from,to);};syncBuiltinESMExports();`);
+  s.env.NODE_OPTIONS=`--import=${preload}`;
+  const pending=land(s,b);
+  await until("the pending record before its atomic publication",()=>existsSync(held),{stopped:()=>pending.child.exitCode===null?undefined:`client exited ${pending.child.exitCode}`});
+  const temporary=readFileSync(held,"utf8");
+  try{
+    assert.equal(readdirSync(queue).length,2,"the old raw count is satisfied by one unpublished temporary");
+    assert.equal(pending.record(),undefined,"a temporary is never a completed submission");
+  }finally{writeFileSync(fifo,"publish");}
+  await until("the specific completed migration record",()=>pending.record()!==undefined);
+  assert.throws(()=>readFileSync(temporary,"utf8"),{code:"ENOENT"},"the old raw-name reader races with rename");
+  const entry={...pending.record()!};delete entry.durable;delete entry.unit;const name=entry.id+".json";
+  mkdirSync(join(store,"queue"),{recursive:true});writeFileSync(join(store,"queue",name),JSON.stringify(entry));rmSync(join(queue,name));
+  writeFileSync(barrier.release,"continue");
+  const result=await pending.done;assert.equal(result.status,0,result.out);
+  await until("both migrated dispositions",()=>states(s).length===2);
+  assert.equal(gates(s),2);assert.equal(readdirSync(join(store,"queue")).length,0);
+  assert.ok(onMain(s,"a")&&onMain(s,"b"));
+});
+
+test("a legacy waiter and a measurement waiter both acquire the lock between service trains",async()=>{
+  const s=scratch(),barrier=frozenBarrier(s),a=lane(s,"fair-a",{a:"green\n"}),b=lane(s,"fair-b",{b:"green\n"});
+  serviceSubmission(s,a);await until("first fairness train",()=>existsSync(barrier.entered));
+  const second=serviceSubmission(s,b);await until("second fairness final record",()=>queuedForUnit(s,second)!==undefined);
+  const resource=join(s.home,".cache/nts-parallel-20261004/mainctl/gate-tree.lock"),landing=join(s.home,".cache/nts-land.lock");
+  const legacy=join(s.home,"legacy-acquired"),measurement=join(s.home,"measurement-acquired");
+  const reader=(path:string)=>"readFileSync("+JSON.stringify(path)+",'utf8')";
+  const holders=[spawn("sh",["-c",'exec 8>>"$1"; exec 9>>"$2"; flock 8; flock 9; touch "$3"',"legacy",resource,landing,legacy]),spawn("sh",["-c",'exec 9>>"$1"; flock 9; touch "$2"',"measurement",landing,measurement])];
+  const completed=holders.map(child=>new Promise<void>((resolve,reject)=>{child.on("error",reject);child.on("close",code=>code===0?resolve():reject(new Error(`lock waiter exited ${code}`)));}));
+  // Both subprocesses really block in flock before the gate is released.
+  const blocked=(child:ChildProcess)=>{
+    const p= `/proc/${child.pid}/task/${child.pid}/children`;
+    if(!existsSync(p))return false;const ids=readFileSync(p,"utf8").trim().split(/\s+/);
+    return readFileSync("/proc/locks","utf8").split("\n").some(line=>line.includes("->")&&ids.includes(line.trim().split(/\s+/)[5]));
+  };
+  await until("both kernel lock waiters",()=>holders.every(blocked));
+  writeFileSync(barrier.release,"continue");
+  await Promise.all(completed);
+  await until("both service trains finish",()=>states(s).length===2);
+  assert.equal(existsSync(legacy),true);assert.equal(existsSync(measurement),true);assert.equal(gates(s),2);
+});
+test("a lander change refreshes the controller from main before the next train",async()=>{
+  const s=scratch(),versions=join(s.home,"controller-versions"),file=join(s.root,"tooling/lanes/land.ts");
+  writeFileSync(file,readFileSync(file,"utf8").replace('const argv = process.argv.slice(2);',`const argv = process.argv.slice(2);if(argv.includes('--train-worker'))appendFileSync(${JSON.stringify(versions)},'version-one\\n');`));
+  run(s,s.root,["add","tooling/lanes/land.ts"]);run(s,s.root,["commit","-qm","controller version one"]);
+  const barrier=frozenBarrier(s),a=lane(s,"upgrade-a",{"tooling/lanes/land.ts":readFileSync(file,"utf8").replace('version-one','version-two')}),b=lane(s,"upgrade-b",{b:"green\n"});
+  serviceSubmission(s,a);await until("upgrade train started",()=>existsSync(barrier.entered));const second=serviceSubmission(s,b);
+  await until("post-upgrade final record",()=>queuedForUnit(s,second)!==undefined);
+  const initialOwner=JSON.parse(readFileSync(join(s.home,".cache/nts-land/train-owner.json"),"utf8")),upgrade=run(s,a,["rev-parse","HEAD"]);
+  run(s,s.root,["update-ref",`refs/archive/land-trains/${initialOwner.id}-${upgrade}`,upgrade]);
+  writeFileSync(barrier.release,"continue");
+  await until("both upgraded dispositions",()=>states(s).length===2);
+  const lines=readFileSync(versions,"utf8").trim().split("\n");assert.equal(lines[0],"version-one");assert.ok(lines.includes("version-two"),lines.join(" "));assert.equal(gates(s),2);
+  const owner=JSON.parse(readFileSync(join(s.home,".cache/nts-land/train-owner.json"),"utf8"));assert.equal(run(s,s.root,["show",`${owner.sha}:tooling/lanes/land.ts`]).includes("version-two"),true);
 });

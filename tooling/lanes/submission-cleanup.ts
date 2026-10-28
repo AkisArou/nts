@@ -27,10 +27,10 @@ function unitState(unit:string):string {
 }
 function alive(pid:number):boolean {try{process.kill(pid,0);return true;}catch(e){return (e as NodeJS.ErrnoException).code!=="ESRCH";}}
 function references(state:string,tree:string,head:string):string|null {
-  const queue=join(state,"queue");
-  for(const file of existsSync(queue)?readdirSync(queue):[]) {
+  for(const path of ["pending","queue"].flatMap(name=>{const dir=join(state,name);return existsSync(dir)?readdirSync(dir).map(file=>join(dir,file)):[];})) {
+    const file=path.slice(path.lastIndexOf("/")+1);
     if(!file.endsWith(".json"))continue;
-    const entry=JSON.parse(readFileSync(join(queue,file),"utf8"));
+    const entry=JSON.parse(readFileSync(path,"utf8"));
     if(resolve(entry.tree??"/")===tree || entry.sha===head)return `still queued as ${entry.id??file}`;
   }
   const path=join(state,"status.json");
