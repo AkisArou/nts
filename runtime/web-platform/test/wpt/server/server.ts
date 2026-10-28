@@ -8,6 +8,7 @@ import { Socket } from "node:net";
 import { extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleEventSource } from "./eventsource-handlers.ts";
+import { handleFetchResource } from "./fetch-handlers.ts";
 import { handleHttpResource } from "./http-resources.ts";
 import { WptWebSocketPeer } from "./peer.ts";
 import { WptServerState } from "./state.ts";
@@ -18,6 +19,7 @@ import { handleWebSocket } from "./websocket-handlers.ts";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const types: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json",
   ".html": "text/html; charset=utf-8",
   ".htm": "text/html; charset=utf-8",
   ".event_stream": "text/event-stream",
@@ -128,6 +130,7 @@ export async function startWptServer(): Promise<WptServer> {
     try { url = requestURL(request, secure); }
     catch { response.writeHead(400).end(); return; }
     if (await handleEventSource(request, response, url)) return;
+    if (await handleFetchResource(request, response, url, state)) return;
     if (await handleHttpResource(request, response, url, state)) return;
     await serveStatic(request, response, url, ports);
   };
