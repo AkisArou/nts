@@ -648,6 +648,10 @@ function gate(root: string, base: string, landing: string, members: string[], re
     const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
     if (summary.environment?.canonical !== true) return {ok:false,run,state:"red",message:"non-canonical or unrecorded environment is not landing evidence"};
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
+    const acceptedSkips = new Set<string>((summary.steps ?? [])
+      .filter((s: { accepted?: boolean }) => s.accepted === true)
+      .map((s: { name: string }) => s.name));
+    const standingSkips = STANDING_GATE_POLICY.NTS_GATE_ACCEPT_SKIP.split(/\s+/);
     // The full gate is whatever the run requested: every step all.sh defines.
     const steps: string[] = owed.steps === "all"
       ? [...new Set<string>([...(summary.requested ?? []), ...required.steps])]
@@ -655,7 +659,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     if (steps.length === 0) return { ok: false, run, state: "red", message: `the summary requested no steps; see ${run}` };
     const wrong = steps.filter((s) => {
       const v = byName.get(s);
-      return !(v === "PASS" || (v === "SKIPPED" && ACCEPT_SKIP.includes(s)));
+      return !(v === "PASS" || (v === "SKIPPED" && standingSkips.includes(s) && acceptedSkips.has(s)));
     });
     if (gated.status !== 0 || gated.signal || gated.error || summary.verdict !== "green" || wrong.length > 0) {
       const failed = wrong.length ? wrong : steps;

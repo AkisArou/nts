@@ -201,6 +201,31 @@ test("a strict landing journals its own range and author without an optimistic p
   assert.equal(actual,"on-device");
 });
 
+for(const scenario of [
+  {name:"an accepted on-device skip",step:"on-device",accepted:true,lands:true},
+  {name:"an unaccepted on-device skip",step:"on-device",accepted:false,lands:false},
+  {name:"an accepted skip outside standing policy",step:"fake",accepted:true,lands:false},
+]) test(`the real post-gate decision handles ${scenario.name}`,async()=>{
+  const s=scratch(),base=run(s,s.root,["rev-parse","main"]);
+  writeFileSync(join(s.root,"tooling/gate/run.mjs"),'process.stdout.write(JSON.stringify({fake:[],"on-device":[]}));\n');
+  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),`process.stdout.write('NTS_GATE_STEPS="${scenario.step}" sh tooling/gate/all.sh\\n');\n`);
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
+node - "$NTS_GATE_RUN_DIR/summary.json" <<'VERDICT'
+const fs=require("node:fs"),path=process.argv[2],summary=JSON.parse(fs.readFileSync(path));
+summary.steps[0]={...summary.steps[0],name:${JSON.stringify(scenario.step)},verdict:"SKIPPED",accepted:${scenario.accepted}};
+fs.writeFileSync(path,JSON.stringify(summary));
+VERDICT
+`));
+  run(s,s.root,["add","tooling/gate"]);run(s,s.root,["commit","-qm","skip verdict control"]);
+  const before=run(s,s.root,["rev-parse","main"]),tree=lane(s,"tsrs/skip-verdict",{"one.txt":"one\n"});
+  const tip=run(s,tree,["rev-parse","HEAD"]),result=await land(s,tree).done;
+  assert.equal(result.status,scenario.lands?0:1,result.out);
+  assert.doesNotMatch(result.out,/ReferenceError/);
+  assert.equal(run(s,s.root,["rev-parse","main"]),scenario.lands?tip:before);
+  if(!scenario.lands) assert.match(result.out,new RegExp(`${scenario.step}=SKIPPED`));
+  assert.notEqual(before,base);
+});
+
 test("a failed post-FF ledger write reports the real landing and recovers on restart", async () => {
   const s = scratch(), tree = lane(s,"ledger-restart",{"one.txt":"one\n"});
   const tip=run(s,tree,["rev-parse","HEAD"]), directory=join(s.home,".cache/nts-land/verification");
