@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "scope": "HTTP resource and case-inventory preparation only. No nts network Fetch WPT file is executed and no production Fetch fix is claimed.",
+  "observedDate": "2026-10-28",
+  "sourceBaseCommit": "d283612e61b15210c2db9c5b29d0007f49ca6b3b",
+  "testedImplementationCommit": "8efc19cb00b1d366bc60b0034668ed3d10da6215",
+  "testedImplementationTree": "a75cc9792d41c36076503b903159a7a89277ae1e",
+  "toolchain": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2",
+    "nodeCorpusCommit": "71b8b174857e25106d39b61a9e6f30d927da8b01"
+  },
+  "prerequisites": [
+    {
+      "pullRequest": 27,
+      "state": "open",
+      "head": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f"
+    },
+    {
+      "pullRequest": 45,
+      "state": "open",
+      "head": "19bbb4991c18ebb776766627b4a948ff09a85fbb"
+    }
+  ],
+  "commands": [
+    {
+      "command": "pnpm install --frozen-lockfile",
+      "exitCode": 0,
+      "output": "Lockfile is up to date, resolution step is skipped. Done using pnpm v10.15.0. No dependency or lockfile change."
+    },
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0,
+      "output": "No diagnostics."
+    },
+    {
+      "command": "pnpm exec tsc --ignoreConfig --noEmit --target esnext --lib esnext --module preserve --moduleResolution bundler --types node --allowImportingTsExtensions --strict --noImplicitReturns --noUncheckedIndexedAccess --noUnusedLocals --noUnusedParameters --erasableSyntaxOnly --skipLibCheck runtime/web-platform/test/wpt/server/fetch-handlers.ts runtime/web-platform/test/wpt-fetch-server.test.ts",
+      "exitCode": 0,
+      "output": "No diagnostics."
+    },
+    {
+      "command": "node --expose-gc --test runtime/web-platform/test/wpt-fetch-server.test.ts",
+      "exitCode": 0,
+      "summary": {
+        "nodeEntries": 18,
+        "controlSubtests": 17,
+        "passed": 18,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "output": "tests 18; pass 18; fail 0; cancelled 0; skipped 0. These are original HTTP resource controls, not WPT case counts."
+    },
+    {
+      "command": "sh tooling/conformance/web-platform/check.sh",
+      "exitCode": 0,
+      "nodeSummary": {
+        "tests": 1082,
+        "passed": 1077,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 5
+      },
+      "upstreamSummary": {
+        "upstreamTests": 2817,
+        "applicableTests": 2772,
+        "passed": 2772,
+        "failed": 0,
+        "notApplicable": 45
+      },
+      "compiledAxis": "Skipped: no nts compiler. Host evidence alone does not demonstrate compilation.",
+      "output": "tests 1082; pass 1077; fail 0; cancelled 0; skipped 5\n{\"upstreamTests\":2817,\"applicableTests\":2772,\"passed\":2772,\"failed\":0,\"notApplicable\":45}\ncheck.sh: SKIPPING the compiled axis -- no compiler."
+    }
+  ],
+  "inventoryAudit": {
+    "upstreamPaths": 292,
+    "uniqueInventoryPaths": 292,
+    "allPathSHA256AndGitBlobHashesMatch": true,
+    "supportReferences": 8,
+    "externalResourceReferences": 12,
+    "licenseVerified": true,
+    "undiciStatusGitBlob": "ab8fa7691b341058075d5dc9c503bbcf419293dd",
+    "newCandidateFiles": 36,
+    "existingNetworkExtensionFiles": 9,
+    "namedMixedFileExclusions": 160,
+    "ntsNetworkFetchExecution": "not run; prerequisite landings required"
+  },
+  "sourceFiles": [
+    {
+      "path": "runtime/web-platform/test/wpt/server/fetch-handlers.ts",
+      "sha256": "842c42a306826d82c3d72ead74a911663ab7fd8b985c1f2c62970dad647723af",
+      "gitBlob": "e5fb2a6d13fcaeed10a8c0a50fc0b3030f8e1c3f",
+      "size": 14012,
+      "mode": "100644"
+    },
+    {
+      "path": "runtime/web-platform/test/wpt/server/server.ts",
+      "sha256": "eae8f375e8a94cad3d9ab0944a7f8869551df3be66734371ecd2f1ea0d30f2cb",
+      "gitBlob": "fe86341fd226e6e5f04a69d94a67cad5ad8cdcc6",
+      "size": 9105,
+      "mode": "100644"
+    },
+    {
+      "path": "runtime/web-platform/test/wpt-fetch-server.test.ts",
+      "sha256": "7c76587f7cd19857d9a37f7e9d954d4aa65e4b7450f8f7527b70b62a49eb40a1",
+      "gitBlob": "b18b4a95269209254ac25947e0e88f3a10192b41",
+      "size": 20256,
+      "mode": "100644"
+    },
+    {
+      "path": "tooling/conformance/web-platform/check.sh",
+      "sha256": "abced4b7ac3d81f83a778022be6ca10fea2b4608bcef3a903c201b5d9403034a",
+      "gitBlob": "e54b874a8f5dacb2ef6f09f750f63825813989da",
+      "size": 6392,
+      "mode": "100755"
+    },
+    {
+      "path": "runtime/web-platform/test/wpt/fetch-network/README.md",
+      "sha256": "07f9a52eebb97d62bc4f9ea85983b413a2364b233aa8774b96cc58137eb81f50",
+      "gitBlob": "ccde5ac4fdc87313a1bd772f8b7f2e93ad08f6e0",
+      "size": 11774,
+      "mode": "100644"
+    },
+    {
+      "path": "runtime/web-platform/test/wpt/fetch-network/inventory.json",
+      "sha256": "7b7ce64412e068ea81fbaaac9a2c59546be152d9f0d2167c21227ee9eb48b834",
+      "gitBlob": "20d990ab9e5895e31649324436a325f154778b51",
+      "size": 355827,
+      "mode": "100644"
+    }
+  ],
+  "environmentNotes": [
+    "Native TypeScript checking and loopback listeners required the execution environment's authorized unsandboxed mode; sandbox /proc and bind errors were not counted as implementation failures.",
+    "The first full-gate attempt stopped because the ignored third_party/node WPT corpus was absent. Its pinned v24.20.0 checkout was provisioned, then the complete gate was rerun successfully.",
+    "The authoritative final full gate includes all reviewed handler corrections, including an explicitly empty reason phrase. Earlier exploratory runs are superseded.",
+    "Only an additive Fetch dispatch import/call and JSON MIME entry change server.ts; WebSocket peer, upgrade handling, and other existing server handlers are byte-identical to the base."
+  ]
+}
