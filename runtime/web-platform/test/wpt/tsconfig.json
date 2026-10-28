@@ -23,6 +23,8 @@
     "../streams-wpt-policy.test.ts",
     "./versions.ts",
     "./verify-versions.ts",
-    "../wpt-versions.test.ts"
+    "../wpt-versions.test.ts",
+    "../wpt-compression.test.ts",
+    "./compression-streams/census.ts"
   ]
 }
