@@ -78,6 +78,84 @@ function sendValue(socket: WebSocket, value: unknown): void {
   send.call(socket, value);
 }
 
+function setBinaryTypeValue(socket: WebSocket, value: unknown): void {
+  const bindings: { binaryType: unknown } = socket;
+  bindings.binaryType = value;
+}
+
+// WebSockets 3.1 binaryType and Web IDL 3.7.6 enumeration attribute setters:
+// ToString precedes membership checking; unrecognized converted strings are ignored.
+// https://websockets.spec.whatwg.org/#dom-websocket-binarytype
+// https://webidl.spec.whatwg.org/#es-attributes
+suite("WebSocket.binaryType retains its default, valid literals and invalid-string control", (t) => {
+  const { socket } = controlledSocket(t);
+  assert.equal(socket.binaryType, "blob");
+  socket.binaryType = "arraybuffer";
+  assert.equal(socket.binaryType, "arraybuffer");
+  for (const value of ["invalid", "ArrayBuffer", "", undefined, null, 17, true, 23n]) {
+    setBinaryTypeValue(socket, value);
+    assert.equal(socket.binaryType, "arraybuffer");
+  }
+  socket.binaryType = "blob";
+  assert.equal(socket.binaryType, "blob");
+});
+
+suite("WebSocket.binaryType converts objects to strings exactly once", (t) => {
+  const { socket } = controlledSocket(t);
+  let conversions = 0;
+  setBinaryTypeValue(socket, {
+    toString() {
+      conversions++;
+      return "arraybuffer";
+    },
+  });
+  assert.equal(conversions, 1);
+  assert.equal(socket.binaryType, "arraybuffer");
+  setBinaryTypeValue(socket, {
+    [Symbol.toPrimitive](hint: string) {
+      assert.equal(hint, "string");
+      conversions++;
+      return "blob";
+    },
+  });
+  assert.equal(conversions, 2);
+  assert.equal(socket.binaryType, "blob");
+});
+
+suite("WebSocket.binaryType ignores an unrecognized string after object conversion", (t) => {
+  const { socket } = controlledSocket(t);
+  socket.binaryType = "arraybuffer";
+  let conversions = 0;
+  setBinaryTypeValue(socket, {
+    toString() {
+      conversions++;
+      return "invalid";
+    },
+  });
+  assert.equal(conversions, 1);
+  assert.equal(socket.binaryType, "arraybuffer");
+});
+
+suite("WebSocket.binaryType rejects a Symbol without changing its value", (t) => {
+  const { socket } = controlledSocket(t);
+  socket.binaryType = "arraybuffer";
+  assert.throws(() => setBinaryTypeValue(socket, Symbol("binaryType")), TypeError);
+  assert.equal(socket.binaryType, "arraybuffer");
+});
+
+suite("WebSocket.binaryType propagates coercion failures without changing its value", (t) => {
+  const { socket } = controlledSocket(t);
+  socket.binaryType = "arraybuffer";
+  const failure = new Error("binaryType conversion");
+  assert.throws(() => setBinaryTypeValue(socket, { toString() { throw failure; } }),
+    (error: unknown) => error === failure);
+  assert.equal(socket.binaryType, "arraybuffer");
+  assert.throws(() => setBinaryTypeValue(socket, {
+    [Symbol.toPrimitive]() { return Symbol("binaryType"); },
+  }), TypeError);
+  assert.equal(socket.binaryType, "arraybuffer");
+});
+
 suite("WebSocket.send checks and converts its required argument before readyState", (t) => {
   const { socket } = controlledSocket(t);
   // @ts-expect-error -- missing the required union argument must throw TypeError.
