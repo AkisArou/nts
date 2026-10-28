@@ -111,6 +111,9 @@ export type {
   UnderlyingSinkWriteCallback,
 } from "./streams/writable.ts";
 
+export { CompressionStream, DecompressionStream } from "./compression/compression-stream.ts";
+export type { CompressionFormat } from "./provider/compression.ts";
+
 export { Headers } from "./fetch/headers.ts";
 export type { HeaderSequenceEntry, HeadersInit } from "./fetch/headers.ts";
 

@@ -1,4 +1,5 @@
 import { coerceToDOMString, requireArguments } from "../core/webidl.ts";
+import { currentWebPlatformRuntime, hasWebPlatformRuntime } from "../provider/environment.ts";
 import type {
   CompressionContext,
   CompressionFailure,
@@ -13,6 +14,11 @@ import type { WritableStream } from "../streams/writable.ts";
 const constructionKey: unique symbol = Symbol("Compression Streams construction");
 const isView = ArrayBuffer.isView;
 const emptyBytes = new Uint8Array(0);
+
+/** Bootstrap owns the environment slot; an absent capability has no host fallback. */
+function currentCompressionProvider(): CompressionProvider | undefined {
+  return hasWebPlatformRuntime() ? currentWebPlatformRuntime().compression : undefined;
+}
 
 /** Web IDL enum conversion; format names are case-sensitive. */
 function compressionFormat(value: unknown): CompressionFormat {
@@ -139,12 +145,13 @@ export class CompressionStream {
   constructor(format: unknown, key: symbol | undefined = undefined, provider?: CompressionProvider) {
     requireArguments(arguments, 1, "CompressionStream");
     const normalized = compressionFormat(format);
-    // Runtime assembly is a separate integration step: its files are occupied by
-    // open PRs. Only this module's embedding factory can supply a capability.
-    if (key !== constructionKey || provider === undefined) {
+    // Web IDL converts format before the constructor steps. Extra public
+    // arguments cannot replace the environment-owned capability.
+    const capability = key === constructionKey ? provider : currentCompressionProvider();
+    if (capability === undefined) {
       throw new TypeError("CompressionStream requires an installed compression provider");
     }
-    this.#transform = compressionTransform(normalized, provider, false);
+    this.#transform = compressionTransform(normalized, capability, false);
   }
 
   get readable(): ReadableStream<Uint8Array> {
@@ -167,10 +174,11 @@ export class DecompressionStream {
   constructor(format: unknown, key: symbol | undefined = undefined, provider?: CompressionProvider) {
     requireArguments(arguments, 1, "DecompressionStream");
     const normalized = compressionFormat(format);
-    if (key !== constructionKey || provider === undefined) {
+    const capability = key === constructionKey ? provider : currentCompressionProvider();
+    if (capability === undefined) {
       throw new TypeError("DecompressionStream requires an installed compression provider");
     }
-    this.#transform = compressionTransform(normalized, provider, true);
+    this.#transform = compressionTransform(normalized, capability, true);
   }
 
   get readable(): ReadableStream<Uint8Array> {

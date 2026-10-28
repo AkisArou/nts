@@ -69,21 +69,26 @@ WebSocket negotiation, tail handling, or context-takeover policy into native cod
 The canonical `CompressionStream` and `DecompressionStream` classes in
 `src/compression/compression-stream.ts` implement the
 [Compression Standard §§2–5](https://compression.spec.whatwg.org/) using the shared
-`TransformStream`. Internal embedding factories supply their capability; ordinary
-public construction and the public/provider barrel exports await runtime assembly
-integration. The classes are not yet exposed as Web globals. This staged boundary
-keeps the existing open runtime-assembly and barrel changes separate. Brotli is
-outside this implementation's three-format scope.
+`TransformStream`. Public construction obtains the capability from the installed
+environment-owned `WebPlatformRuntime`, supplied through `WebPlatformOptions.compression`.
+The runtime captures it once without opening a native context; each stream owns
+the context created by its constructor. Existing streams retain that context
+when the active runtime changes. Missing capability produces a `TypeError`.
+The public barrel exports the canonical classes, and the provider barrel exports
+the capability types. Provider bootstrap owns global exposure. Internal embedding
+factories remain outside both barrels. Brotli is outside this implementation's
+three-format scope.
 
 The compression test provider lives only in `test/node-compression-provider.ts`
 and calls `node:zlib`'s synchronous native streaming handle on the pinned Node 24
 host. Native strict end handling prevents concatenated gzip members and ignored
 trailing bytes. No compression primitive or checksum is implemented in shared
 TypeScript. Focused tests cover both the stream algorithms and the reusable
-capability; the unedited WPT `compression/` import follows the shared adapter's
-landing. Descriptor-only and patched-intrinsic-accessor cases are left out under
-the cloud-agent rules. Migrating WebSocket's existing provider is a separate change
-after the realtime stack lands.
+capability and public runtime integration; the unedited WPT `compression/` import
+awaits the canonical shared versions table on main. Descriptor-only and
+patched-intrinsic-accessor cases are left out under the cloud-agent rules.
+Migrating WebSocket's existing provider is a separate change after the realtime
+stack lands.
 
 `WebSocket` and `WebSocketStream` share one URL, protocol-offer, close-code,
 and close-reason conversion layer and the same provider `WebSocketSession`.

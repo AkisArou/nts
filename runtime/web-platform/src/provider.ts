@@ -323,3 +323,12 @@ export type {
   CryptoByteSignature, CryptoEcdsaSignature, CryptoSignature, CryptoAgreementParameters,
   CryptoHkdfParameters, CryptoPbkdf2Parameters, CryptoDerivationParameters, CryptoFailure, CryptoProvider,
 } from "./provider/crypto.ts";
+
+export type {
+  CompressionContext,
+  CompressionFailure,
+  CompressionFlush,
+  CompressionFormat,
+  CompressionProvider,
+  CompressionResult,
+} from "./provider/compression.ts";

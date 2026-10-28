@@ -36,6 +36,7 @@ import { BlobURLStore } from "../file/object-url.ts";
 import { createCrypto } from "../crypto/crypto.ts";
 import type { Crypto } from "../crypto/crypto.ts";
 import type { CryptoProvider } from "./crypto.ts";
+import type { CompressionProvider } from "./compression.ts";
 import { Http1Transport } from "../http1/transport.ts";
 import type { Http1Options } from "../http1/transport.ts";
 import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
@@ -84,6 +85,8 @@ export interface WebPlatformOptions {
   digest?: DigestProvider;
   /** Native Web Crypto capability. Bootstrap owns global and secure-context exposure. */
   crypto?: CryptoProvider;
+  /** Native streaming compression capability. Bootstrap owns global exposure. */
+  compression?: CompressionProvider;
   http1?: Http1Options;
   /** Environment/explicit proxy policy shared by Fetch, EventSource and WebSocket. */
   proxy?: WebPlatformProxyOptions;
@@ -138,6 +141,8 @@ export class WebPlatformRuntime
   readonly caches: CacheStorage;
   /** One environment-owned facade, absent when no native capability was supplied. */
   readonly crypto: Crypto | undefined;
+  /** Captured capability; each Compression Stream creates and owns its context. */
+  readonly compression: CompressionProvider | undefined;
   readonly transport: WebSocketTransport;
 
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
@@ -165,6 +170,7 @@ export class WebPlatformRuntime
     this.scheduler = primitives.scheduler;
     const cryptoProvider = options.crypto;
     this.crypto = cryptoProvider === undefined ? undefined : createCrypto(primitives.random, cryptoProvider, this.scheduler);
+    this.compression = options.compression;
     this.urls = primitives.urls;
     this.baseURL = options.baseURL;
     this.origin = options.origin;
