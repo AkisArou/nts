@@ -146,6 +146,58 @@ function isAirCase(value: unknown): value is AirCase {
 }
 // END AIR.
 
+// BEGIN BASIC: add this complete section with the Basic case.
+interface BasicCase extends AresCase {
+  runBasic(): string[];
+}
+
+function isBasicCase(value: unknown): value is BasicCase {
+  return isAresCase(value) && "runBasic" in value && typeof value.runBasic === "function";
+}
+
+{
+  const name = "ares6-basic";
+  const benchmark = modules.get(name);
+  if (benchmark !== undefined) {
+    assert.ok(isBasicCase(benchmark), `${name}: missing interpreter outputs`);
+    checked.add(name);
+
+    test(`${name}: five complete original programs match their native expectations and output hashes`, () => {
+      // runBasic executes every original expect(program, expected) from
+      // Basic/benchmark.js, including the entire 1,070-line RNG output and
+      // 2,000-element sieve. These additional SHA256 values were recorded
+      // independently from simulate(prepare(program)) in the unmodified JS.
+      const outputs = benchmark.runBasic();
+      assert.equal(outputs.length, 5);
+      assert.deepEqual(outputs.slice(0, 3), [
+        "hello, world!\n",
+        "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n",
+        "98\n",
+      ]);
+      const oracles = [
+        { length: 14, lines: 1, sha256: "4dca0fd5f424a31b03ab807cbae77eb32bf2d089eed1cee154b3afed458de0dc" },
+        { length: 21, lines: 10, sha256: "bf794518e35d7f1ce3a50b3058c4191bb9401e568fc645d77e10b0f404cf1f22" },
+        { length: 3, lines: 1, sha256: "4960a9ce196ee53a9ae6f2b038ebf5bb7949312406eabe79835e766b4a3d0d88" },
+        { length: 4763, lines: 1070, sha256: "dc7979b8a08ca3282decfea4c9901e5304e0d0a4e21b7d0d79b77546f27a77e3" },
+        { length: 1318, lines: 303, sha256: "21cfb1500f58f3f79581c93e714df8b66c0d7fbad46bf1e87cd421c9e9971171" },
+      ];
+      for (let i = 0; i < oracles.length; i++) {
+        assert.equal(outputs[i].length, oracles[i].length, `program ${i}: complete output length`);
+        assert.equal(outputs[i].split("\n").length - 1, oracles[i].lines, `program ${i}: complete output lines`);
+        assert.equal(sha256(outputs[i]), oracles[i].sha256, `program ${i}: every output byte`);
+      }
+    });
+
+    test(`${name}: each iteration resets the original RNG and runs all five programs`, () => {
+      assert.equal(benchmark.work(0), 0);
+      assert.equal(benchmark.work(1), 4076667242);
+      assert.equal(benchmark.work(2), 2769964224);
+      assert.equal(benchmark.work(1), 4076667242);
+    });
+  }
+}
+// END BASIC.
+
 test("every installed ARES-6 case has program-specific correctness checks", () => {
   assert.deepEqual(cases.filter((name) => !checked.has(name)), [], "installed rows without independent oracles");
 });
