@@ -18,6 +18,7 @@
     "../abort-wpt-policy.test.ts",
     "../wpt-events-abort.test.ts",
     "../wpt-streams.test.ts",
+    "../streams-wpt-policy.test.ts",
     "../wpt-harness.test.ts"
   ]
 }
