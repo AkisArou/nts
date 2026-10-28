@@ -120,6 +120,7 @@ node --expose-gc \
   runtime/web-platform/test/wpt-server.test.ts \
   runtime/web-platform/test/wpt-websocket-server.test.ts \
   runtime/web-platform/test/wpt-eventsource-server.test.ts \
+  runtime/web-platform/test/wpt-websocket.test.ts \
   runtime/web-platform/test/weak-listener.test.ts
 # The upstream corpus exits nonzero while the eight named structural failures stand,
 # and `set -e` made every step after it unreachable -- including the compiled axis,
