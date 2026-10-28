@@ -6,6 +6,7 @@ import { coerceToUSVString } from "../core/webidl.ts";
 import { Blob } from "../file/blob.ts";
 import { FormData } from "../forms/form-data.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
+import { decodeURLEncoded } from "../forms/urlencoded-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
 import { parseMIMEType, serializeMIMEType } from "../forms/mime.ts";
 import type { MIMEType } from "../forms/mime.ts";
@@ -350,9 +351,7 @@ export abstract class Body {
     if (mime?.essence === "multipart/form-data") return decodeMultipart(bytes, mime);
     if (mime?.essence !== "application/x-www-form-urlencoded")
       throw new TypeError("Unsupported form Content-Type");
-    const result = new FormData();
-    for (const [name, value] of new URLSearchParams(decodeUTF8(bytes))) result.append(name, value);
-    return result;
+    return decodeURLEncoded(bytes);
   }
 
   protected abstract [bodyContentType](): string | null;
