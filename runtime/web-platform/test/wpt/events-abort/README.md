@@ -88,3 +88,10 @@ brands, callback invocation, event initialization, signal sequence conversion,
 and composite-signal retention. They are included in the strict test TypeScript
 project. They do not establish complete prototype independence for every abort
 operation: controller-triggered dispatch still uses existing symbol-keyed hooks.
+
+The descriptor-only control for Event interface constants is deferred. The
+constructor uses plain `static readonly` declarations because nts compiles
+classes to fixed layouts and does not yet support property descriptors. This
+removes the descriptor extension introduced by this PR; pre-existing prototype
+surface initialization remains outside that change. The deferred local control
+is reported as a skip, separately from the seven upstream capability blocks.
