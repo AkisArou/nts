@@ -681,44 +681,13 @@ export class EventTarget {
   #dispatch(event: Event, trusted: boolean): boolean {
     event[eventBegin](this, trusted);
     this.dispatchDepth++;
-    const listenerCount = this.listeners.length;
     try {
       if (!event[eventStoppedBeforeTarget]) {
-        for (let index = 0; index < listenerCount; index++) {
-          const item = this.listeners[index];
-          if (item === undefined) continue;
-          if (item.removed || item.type !== event.type) continue;
-          // `stopImmediatePropagation()` hides the rest of the list from ordinary
-          // listeners. A resisting listener is internal and is not something script
-          // registered, so script stopping propagation does not cancel it; scanning
-          // continues rather than breaking, or the resisting listener would be
-          // unreachable behind the one that stopped.
-          if (event[eventStopped] && !item.resistStopPropagation) continue;
-          // A finalization callback is not synchronous with collection, so the
-          // liveness of the resource is decided here rather than trusting that the
-          // registry has already run.
-          if (item.weakResource !== null && item.weakResource.deref() === undefined) {
-            this.#removeRecord(item);
-            continue;
-          }
-          if (item.once) this.#removeRecord(item);
-          event[eventSetPassiveListener](item.passive);
-          try {
-            if (isEventListener(item.callback)) {
-              item.callback.call(this, event);
-            } else {
-              const handleEvent = item.callback.handleEvent;
-              if (typeof handleEvent !== "function") {
-                throw new TypeError("EventListener.handleEvent must be callable");
-              }
-              handleEvent.call(item.callback, event);
-            }
-          } catch (error) {
-            this[eventTargetReportError](error);
-          } finally {
-            event[eventSetPassiveListener](false);
-          }
-        }
+        // DOM dispatch invokes even a target with no parent twice: capturing,
+        // then bubbling. Both invocations expose AT_TARGET as eventPhase.
+        // https://dom.spec.whatwg.org/#concept-event-dispatch
+        this.#invoke(event, true);
+        this.#invoke(event, false);
       }
     } finally {
       event[eventEnd]();
@@ -726,6 +695,47 @@ export class EventTarget {
       if (this.dispatchDepth === 0) this.#compactListeners();
     }
     return !event.defaultPrevented;
+  }
+
+  #invoke(event: Event, capture: boolean): void {
+    // Each invocation clones the listener list. A length snapshot is equivalent
+    // while dispatchDepth prevents compaction and removals mark their records.
+    // Listeners added during capture can therefore run in the later invocation.
+    // https://dom.spec.whatwg.org/#concept-event-inner-invoke
+    const listenerCount = this.listeners.length;
+    const propagationStopped = event[eventStoppedBeforeTarget];
+    for (let index = 0; index < listenerCount; index++) {
+      const item = this.listeners[index];
+      if (item === undefined) continue;
+      if (item.removed || item.type !== event.type || item.capture !== capture) continue;
+      // Internal resisting listeners remain reachable even when a script listener
+      // stops the ordinary invocation. No public option requests this behavior.
+      if ((propagationStopped || event[eventStopped]) && !item.resistStopPropagation) continue;
+      // A finalization callback is not synchronous with collection, so the
+      // liveness of the resource is decided here rather than trusting that the
+      // registry has already run.
+      if (item.weakResource !== null && item.weakResource.deref() === undefined) {
+        this.#removeRecord(item);
+        continue;
+      }
+      if (item.once) this.#removeRecord(item);
+      event[eventSetPassiveListener](item.passive);
+      try {
+        if (isEventListener(item.callback)) {
+          item.callback.call(this, event);
+        } else {
+          const handleEvent = item.callback.handleEvent;
+          if (typeof handleEvent !== "function") {
+            throw new TypeError("EventListener.handleEvent must be callable");
+          }
+          handleEvent.call(item.callback, event);
+        }
+      } catch (error) {
+        this[eventTargetReportError](error);
+      } finally {
+        event[eventSetPassiveListener](false);
+      }
+    }
   }
 
   /** Property handlers occupy their registration position, just like ordinary listeners. */
