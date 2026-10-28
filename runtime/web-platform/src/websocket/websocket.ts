@@ -44,6 +44,13 @@ interface PendingSend {
   value: string | Blob | Uint8Array;
 }
 
+interface WebSocketHandlerSlot<E extends Event> extends EventHandlerSlot<WebSocket, E> {
+  value: unknown;
+}
+
+// LegacyTreatNonObjectAsNull retains non-callable objects, but invoking them does nothing.
+function ignoreNonCallableHandler(): void {}
+
 const webSocketConstructorKey: unique symbol = Symbol("construct NTS WebSocket");
 
 /**
@@ -87,59 +94,82 @@ export class WebSocket extends EventTarget {
   private sends: Promise<void> = Promise.resolve();
   private closeQueued = false;
   private registered = false;
-  private readonly openHandler: EventHandlerSlot<WebSocket, Event> = {
+  private readonly openHandler: WebSocketHandlerSlot<Event> = {
+    value: null,
     callback: null,
     listener: null,
   };
-  private readonly errorHandler: EventHandlerSlot<WebSocket, Event> = {
+  private readonly errorHandler: WebSocketHandlerSlot<Event> = {
+    value: null,
     callback: null,
     listener: null,
   };
-  private readonly messageHandler: EventHandlerSlot<WebSocket, MessageEvent<WebSocketData>> = {
+  private readonly messageHandler: WebSocketHandlerSlot<MessageEvent<WebSocketData>> = {
+    value: null,
     callback: null,
     listener: null,
   };
-  private readonly closeHandler: EventHandlerSlot<WebSocket, CloseEvent> = {
+  private readonly closeHandler: WebSocketHandlerSlot<CloseEvent> = {
+    value: null,
     callback: null,
     listener: null,
   };
 
   get onopen(): ((this: WebSocket, event: Event) => void) | null {
-    return this.openHandler.callback;
+    return this.openHandler.value as ((this: WebSocket, event: Event) => void) | null;
   }
 
   set onopen(callback: ((this: WebSocket, event: Event) => void) | null) {
-    this[eventTargetSetHandler](this, this.openHandler, "open", callback, (_event): _event is Event => true);
+    this.#setHandler(this.openHandler, "open", callback, (_event): _event is Event => true);
   }
 
   get onerror(): ((this: WebSocket, event: Event) => void) | null {
-    return this.errorHandler.callback;
+    return this.errorHandler.value as ((this: WebSocket, event: Event) => void) | null;
   }
 
   set onerror(callback: ((this: WebSocket, event: Event) => void) | null) {
-    this[eventTargetSetHandler](this, this.errorHandler, "error", callback, (_event): _event is Event => true);
+    this.#setHandler(this.errorHandler, "error", callback, (_event): _event is Event => true);
   }
 
   get onmessage(): ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null {
-    return this.messageHandler.callback;
+    return this.messageHandler.value as ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null;
   }
 
   set onmessage(callback: ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null) {
-    this[eventTargetSetHandler](this, this.messageHandler, "message", callback, isSocketMessageEvent);
+    this.#setHandler(this.messageHandler, "message", callback, isSocketMessageEvent);
   }
 
   get onclose(): ((this: WebSocket, event: CloseEvent) => void) | null {
-    return this.closeHandler.callback;
+    return this.closeHandler.value as ((this: WebSocket, event: CloseEvent) => void) | null;
   }
 
   set onclose(callback: ((this: WebSocket, event: CloseEvent) => void) | null) {
-    this[eventTargetSetHandler](
-      this,
+    this.#setHandler(
       this.closeHandler,
       "close",
       callback,
       (event): event is CloseEvent => event instanceof CloseEvent,
     );
+  }
+
+  #setHandler<E extends Event>(
+    slot: WebSocketHandlerSlot<E>,
+    type: string,
+    value: unknown,
+    accepts: (event: Event) => event is E,
+  ): void {
+    let callback: ((this: WebSocket, event: E) => void) | null = null;
+    if (typeof value === "function") {
+      slot.value = value;
+      callback = value as (this: WebSocket, event: E) => void;
+    } else if (typeof value === "object" && value !== null) {
+      slot.value = value;
+      // A non-null value activates the handler, keeping its position among listeners.
+      callback = ignoreNonCallableHandler;
+    } else {
+      slot.value = null;
+    }
+    this[eventTargetSetHandler](this, slot, type, callback, accepts);
   }
 
   constructor(url: string, protocols?: string | readonly string[]);
