@@ -29,6 +29,8 @@
     "../wpt-files-forms.test.ts",
     "../file-forms-wpt-policy.test.ts",
     "../file-reader-wpt-policy.test.ts",
-    "../file-forms-urlencoded-policy.test.ts"
+    "../file-forms-urlencoded-policy.test.ts",
+    "../wpt-domexception.test.ts",
+    "../domexception-policy.test.ts"
   ]
 }
