@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,10 +69,20 @@ const packageName = (path: string) => {
 };
 const members = /^members\s*=\s*\[([\s\S]*?)\]/m.exec(readFileSync(join(root, "Cargo.toml"), "utf8"))?.[1];
 if (!members) throw new Error("workspace members absent");
+const memberDirs: string[] = [];
 for (const [, member] of members.matchAll(/"([^"]+)"/g)) {
   if (/[?*\[\]]/.test(member)) throw new Error(`explicit workspace members required: ${member}`);
+  memberDirs.push(member);
   ownPackages.add(packageName(join(root, member, "Cargo.toml")));
 }
+// The vendored-data convention: an owned crate that vendors data keeps the
+// data's license at `<crate>/data/LICENSE`. Discovering those paths and
+// comparing with the declared list means a new vendored input fails --check
+// until it is declared -- the declaration cannot be forgotten. Upstream
+// third_party crates are not workspace members and stay with the vendored
+// projects above.
+const discoverDataLicenses = (): string[] =>
+  memberDirs.map((member) => `${member}/data/LICENSE`).filter((path) => existsSync(join(root, path)));
 const vendorPackages = [...visited.values()].filter((p) => !p.source && !ownPackages.has(p.name));
 const licenceNames = (path: string) => readdirSync(path).filter((name) => /^(?:LICEN[CS]E|COPYING|COPYRIGHT|NOTICE|UNLICENSE)/i.test(name)).sort();
 
@@ -134,7 +144,7 @@ const projects: Vendored[] = JSON.parse(readFileSync(vendorPath, "utf8"));
 const data: VendoredData[] = JSON.parse(readFileSync(dataPath, "utf8"));
 const loadText = (digest: string) => readFileSync(join(destination, "texts", `${digest}.txt`));
 const loadLicense = (path: string) => readFileSync(join(root, path));
-function verify(records: Attribution[], vendors: Vendored[], vendoredData: VendoredData[], readText = loadText, readLicense = loadLicense): Set<string> {
+function verify(records: Attribution[], vendors: Vendored[], vendoredData: VendoredData[], discovered: string[] = discoverDataLicenses(), readText = loadText, readLicense = loadLicense): Set<string> {
   const byKey = new Map(records.map((p) => [key(p), p]));
   const expected = new Set(registry.map(key));
   if (byKey.size !== records.length) throw new Error("duplicate compiler attribution");
@@ -191,6 +201,11 @@ function verify(records: Attribution[], vendors: Vendored[], vendoredData: Vendo
   for (const name of dataByName.keys()) {
     if (!declaredData.some((d) => d.name === name)) throw new Error(`undeclared vendored data attribution: ${name}`);
   }
+  for (const path of discovered) {
+    if (!declaredData.some((d) => d.license === path)) {
+      throw new Error(`undeclared vendored data licence: ${path}; declare it in licenses.ts and run licenses.ts --update`);
+    }
+  }
   return texts;
 }
 const textFiles = verify(inventory, projects, data);
@@ -206,15 +221,19 @@ if (args[0] === "--check") {
   tsrs.texts = tsrs.texts.filter((t) => t.upstream !== "NOTICE");
   assert.throws(() => verify(inventory, noNotice, data), /missing vendored licence\/NOTICE/);
   const corrupt = inventory[0].texts[0].sha256;
-  assert.throws(() => verify(inventory, projects, data, (digest) => digest === corrupt ? Buffer.concat([loadText(digest), Buffer.from("corrupt")]) : loadText(digest)), /modified licence text/);
+  assert.throws(() => verify(inventory, projects, data, discoverDataLicenses(), (digest) => digest === corrupt ? Buffer.concat([loadText(digest), Buffer.from("corrupt")]) : loadText(digest)), /modified licence text/);
   assert.ok(declaredData.length, "vendored data inputs are declared");
   assert.throws(() => verify(inventory, projects, data.filter((d) => d.name !== declaredData[0].name)), /vendored data attribution missing or stale/);
   assert.throws(
-    () => verify(inventory, projects, data, loadText, (path) => {
+    () => verify(inventory, projects, data, discoverDataLicenses(), loadText, (path) => {
       if (path === declaredData[0].license) throw new Error("ENOENT (injected)");
       return loadLicense(path);
     }),
     /vendored data licence missing/,
+  );
+  assert.throws(
+    () => verify(inventory, projects, data, [...discoverDataLicenses(), "compiler/core/data/LICENSE"]),
+    /undeclared vendored data licence: compiler\/core\/data\/LICENSE/,
   );
 }
 process.stdout.write(`compiler attributions: ${registry.length} registry packages, ${vendorPackages.length} vendored crates in ${projects.length} projects, ${data.length} vendored data inputs, ${textFiles.size} verbatim texts verified\n`);
