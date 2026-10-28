@@ -26,8 +26,8 @@ export type Module = {schema: number; state: string; preparation: string; functi
 export type Case = {family: string; name: string; config: string; entry: string | null};
 export type Row = {case: Case; state: string; module?: Module; error?: string; status?: number | null};
 export const CONSTRUCTORS = ["nts_map_new", "nts_set_new", "nts_table_new", "nts_map_copy"];
-const ELIGIBILITY = ["Dynamic", "Empty", "I32", "F64", "Bool", "Optional<I32>",
-  "Optional<F64>", "Optional<Bool>", "Unit<null>", "Unit<undefined>"];
+const ELIGIBILITY = ["Dynamic", "Empty", "I32", "F64", "Bool", "String", "Optional<I32>",
+  "Optional<F64>", "Optional<Bool>", "Optional<String>", "Unit<null>", "Unit<undefined>"];
 function require(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
 }
@@ -105,7 +105,7 @@ export function summarize(population: Case[], rows: Row[]) {
         sole: affected.filter(a => a.inspection_complete && barriers(a).length === 1).length});
     }
   }
-  return {schema: 1, scope: "Authoritative current-provider value eligibility by prepared identity, clones included. Keys and precise managed categories unprovided. Recognized writes are diagnostic witnesses, not a closed-writer proof or hypothetical selection.",
+  return {schema: 1, scope: "Authoritative current-provider payload eligibility by prepared identity, clones included. Unsupported slot or payload proofs remain explicit. Recognized writes are diagnostic witnesses, not a closed-writer proof or hypothetical selection.",
     modules: population.length, measured: measured.length,
     failures: rows.filter(r => r.state !== "PASS").map(r => ({family: r.case.family, name: r.case.name, state: r.state, status: r.status, error: r.error})),
     functions: measured.reduce((n, r) => n + r.module!.functions, 0),

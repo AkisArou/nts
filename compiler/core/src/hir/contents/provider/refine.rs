@@ -2,7 +2,7 @@
 //! Stop at a merge, unknown predicate or cycle. No new alias/dominator pass.
 
 use super::{Budget, Facts, Func, HirType, OpKind, Tags, Terminator, ValueFact, ValueId};
-use crate::hir::{BinOp, BlockId, UnOp, tags};
+use crate::hir::{BinOp, BlockId, UnOp};
 
 #[derive(Clone, Copy, Default)]
 enum Incoming {
@@ -160,11 +160,5 @@ fn compared(func: &Func, value: ValueId, lhs: ValueId, rhs: ValueId) -> Option<T
     let OpKind::ConstInt(tag) = func.value(rhs).kind else {
         return None;
     };
-    match u32::try_from(tag).ok()? {
-        tags::NUMBER => Some(Tags::NUMBER),
-        tags::BOOLEAN => Some(Tags::BOOLEAN),
-        tags::NULL => Some(Tags::NULL),
-        tags::UNDEFINED => Some(Tags::UNDEFINED),
-        _ => None,
-    }
+    Tags::from_runtime(u32::try_from(tag).ok()?)
 }

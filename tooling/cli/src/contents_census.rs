@@ -70,7 +70,7 @@ fn report(prepared: &hir::Prepared, preparation: &str) -> Value {
         "state": "PASS",
         "preparation": preparation,
         "unit": "prepared allocation identities, including named clones",
-        "scope": "current-provider value eligibility, not selected or emitted typed storage; keys and precise managed categories are unprovided",
+        "scope": "current-provider value eligibility, not selected or emitted typed storage; unsupported slot or payload proofs remain explicit",
         "functions": prepared.program.funcs.len(),
         "pruned_functions": prepared.pruned,
         "uncompiled_functions": prepared.program.uncompiled.len(),
@@ -170,6 +170,16 @@ fn eligibility(fact: ValueFact) -> (&'static str, &'static str) {
         return ("Dynamic", reason.reason());
     };
     let optional = tags.contains(Tags::UNDEFINED);
+    if tags == Tags::STRING || tags == Tags::STRING.union(Tags::UNDEFINED) {
+        return (
+            if optional {
+                "Optional<String>"
+            } else {
+                "String"
+            },
+            "closed string payload",
+        );
+    }
     if tags == Tags::NUMBER || tags == Tags::NUMBER.union(Tags::UNDEFINED) {
         // Values preserve observable -0. A truncating accumulator's looser
         // zero policy cannot license an int32 storage column.
@@ -202,7 +212,9 @@ fn eligibility(fact: ValueFact) -> (&'static str, &'static str) {
     if tags == Tags::NUMBER.without(Tags::NUMBER) {
         return ("Empty", "no stored payload");
     }
-    if tags.contains(Tags::MANAGED) && !tags.contains(Tags::NUMBER) && !tags.contains(Tags::BOOLEAN)
+    if tags.intersects(Tags::REFERENCE)
+        && !tags.contains(Tags::NUMBER)
+        && !tags.contains(Tags::BOOLEAN)
     {
         return ("Dynamic", "precise managed payload layout unprovided");
     }
@@ -213,16 +225,7 @@ fn fact_json(fact: ValueFact) -> Value {
     match fact {
         ValueFact::Unknown(reason) => json!({"unknown": reason.reason()}),
         ValueFact::Known { tags, numbers } => {
-            let names: Vec<_> = [
-                (Tags::NUMBER, "number"),
-                (Tags::BOOLEAN, "boolean"),
-                (Tags::NULL, "null"),
-                (Tags::UNDEFINED, "undefined"),
-                (Tags::MANAGED, "managed"),
-            ]
-            .into_iter()
-            .filter_map(|(tag, name)| tags.contains(tag).then_some(name))
-            .collect();
+            let names: Vec<_> = tags.names().collect();
             // String endpoints retain infinities rather than serializing them
             // as JSON null. Numeric facts never stand apart from possible tags.
             json!({"tags": names, "numbers": {"lo": numbers.lo.to_string(), "hi": numbers.hi.to_string(),
@@ -246,6 +249,15 @@ mod tests {
             maybe_negative_zero: false,
         };
         let known = |tags, numbers| ValueFact::Known { tags, numbers };
+        assert_eq!(eligibility(known(Tags::STRING, Facts::BOTTOM)).0, "String");
+        assert_eq!(
+            eligibility(known(Tags::STRING.union(Tags::UNDEFINED), Facts::BOTTOM)).0,
+            "Optional<String>"
+        );
+        assert_eq!(
+            eligibility(known(Tags::REFERENCE, Facts::BOTTOM)).0,
+            "Dynamic"
+        );
         assert_eq!(eligibility(known(Tags::NUMBER, numbers)).0, "I32");
         assert_eq!(
             eligibility(known(Tags::NUMBER.union(Tags::UNDEFINED), numbers)).0,

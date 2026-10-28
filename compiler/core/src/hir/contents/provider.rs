@@ -4,7 +4,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Facts, Tags, Unknown, ValueFact};
+use super::{CollectionSlot, Facts, Tags, Unknown, ValueFact};
 use crate::hir::{self, Callee, Func, HirType, OpKind, Origin, Terminator, ValueId};
 
 mod refine;
@@ -48,6 +48,8 @@ pub struct Container {
 #[derive(Debug, Default)]
 pub struct FunctionFacts {
     values: Vec<ValueFact>,
+    contents: FxHashMap<ValueId, Option<ValueFact>>,
+    identities: FxHashMap<ValueId, Identity>,
     pub containers: Vec<Container>,
     pub visits: usize,
     pub budget_exhaustions: usize,
@@ -91,6 +93,38 @@ enum Observation {
 fn ignore_observation(_: Observation) {}
 
 impl FunctionFacts {
+    /// Query only a complete, immutable HIR snapshot. Known is a licence from
+    /// all actual writers of one closed fresh identity, including wider
+    /// aliases. It is never a licence from the receiver's written type.
+    /// A graph rewrite invalidates this snapshot and must query a fresh one.
+    #[must_use]
+    pub fn contents(&self, receiver: ValueId, slot: CollectionSlot) -> ValueFact {
+        if let Some(why) = self.fallback {
+            return ValueFact::Unknown(why);
+        }
+        if slot == CollectionSlot::Key {
+            return ValueFact::Unknown(Unknown::NotAnalysed);
+        }
+        let root = if self.contents.contains_key(&receiver) {
+            receiver
+        } else if let Some(identity) = self.identities.get(&receiver) {
+            if identity.unknown || identity.roots.len() != 1 {
+                return ValueFact::Unknown(Unknown::AmbiguousIdentity);
+            }
+            let Some(&root) = identity.roots.iter().next() else {
+                return ValueFact::Unknown(Unknown::AmbiguousIdentity);
+            };
+            root
+        } else {
+            return ValueFact::Unknown(Unknown::NotAnalysed);
+        };
+        self.contents
+            .get(&root)
+            .copied()
+            .flatten()
+            .unwrap_or(ValueFact::Unknown(Unknown::RecursiveValue))
+    }
+
     #[must_use]
     pub fn value(&self, id: ValueId) -> ValueFact {
         self.values
@@ -191,7 +225,7 @@ impl FunctionFacts {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct Identity {
     roots: FxHashSet<ValueId>,
     unknown: bool,
@@ -437,9 +471,12 @@ fn propagated(
     let func = identities.func;
     Ok(match &func.value(id).kind {
         OpKind::Erase { value, .. } => values[value.0 as usize].map(|fact| {
-            if matches!(func.value(*value).ty, HirType::Managed(_)) {
-                // Erase's Absent contract selects the tag of a null pointer.
-                // Keep both alternatives in this first cleanup-only slice.
+            if matches!(func.value(*value).ty, HirType::Managed(_))
+                && matches!(fact, ValueFact::Known { tags, .. }
+                    if tags.intersects(Tags::NULL.union(Tags::UNDEFINED)))
+            {
+                // Keep the possible zero-pointer alternatives. A concrete
+                // non-null producer, such as a string literal, needs neither.
                 fact.join(ValueFact::Known {
                     tags: Tags::NULL.union(Tags::UNDEFINED),
                     numbers: Facts::BOTTOM,
@@ -583,6 +620,8 @@ fn analyze(
                 contents: contents[&value].unwrap_or(ValueFact::Unknown(Unknown::RecursiveValue)),
             })
             .collect(),
+        contents,
+        identities: identities.cache,
         visits: identities.budget.used(),
         budget_exhaustions: 0,
         fallback: None,
@@ -627,6 +666,7 @@ fn scalar(func: &Func, op: &hir::Op) -> Option<ValueFact> {
         })
     };
     match &op.kind {
+        OpKind::ConstString(_) => return known(Tags::STRING),
         OpKind::ConstUndefined => return Some(ValueFact::undefined()),
         OpKind::ConstNull => return known(Tags::NULL),
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::BlockParam(_)
@@ -677,7 +717,7 @@ fn scalar(func: &Func, op: &hir::Op) -> Option<ValueFact> {
         }
         HirType::Bool => known(Tags::BOOLEAN),
         HirType::Managed(_) | HirType::BigInt => {
-            known(Tags::MANAGED.union(Tags::NULL).union(Tags::UNDEFINED))
+            known(Tags::REFERENCE.union(Tags::NULL).union(Tags::UNDEFINED))
         }
         HirType::Erased => match op.kind {
             OpKind::Call { .. } | OpKind::Convert(_) => None,
@@ -885,6 +925,45 @@ mod tests {
         );
         assert!(positive.containers[0].contents.numeric().is_some());
         assert!(!FunctionFacts::of(&managed).value(ValueId(9)).is_inert());
+    }
+
+    #[test]
+    fn collection_licence_uses_identity_and_all_writers_not_the_view_type() {
+        for stored in [
+            op(OpKind::ConstFloat(4.0), number()),
+            op(
+                OpKind::ConstString(JsText::Utf8("owned".to_owned())),
+                string(),
+            ),
+        ] {
+            let body = fixture(stored);
+            let facts = FunctionFacts::of(&body);
+            let root = facts.contents(ValueId(1), CollectionSlot::Value);
+            assert_eq!(root, facts.containers[0].contents);
+            assert_eq!(facts.contents(ValueId(7), CollectionSlot::Value), root);
+            assert_eq!(
+                facts.contents(ValueId(1), CollectionSlot::Key),
+                ValueFact::Unknown(Unknown::NotAnalysed)
+            );
+            assert_eq!(
+                facts.contents(ValueId(0), CollectionSlot::Value),
+                ValueFact::Unknown(Unknown::AmbiguousIdentity)
+            );
+        }
+    }
+
+    #[test]
+    fn collection_licence_does_not_hide_budget_exhaustion_behind_an_unprovided_slot() {
+        let mut body = fixture(op(OpKind::ConstFloat(4.0), number()));
+        body.values
+            .resize(MAX_VALUES + 1, op(OpKind::ConstUndefined, HirType::Erased));
+        let facts = FunctionFacts::of(&body);
+        for slot in [CollectionSlot::Key, CollectionSlot::Value] {
+            assert_eq!(
+                facts.contents(ValueId(1), slot),
+                ValueFact::Unknown(Unknown::Budget)
+            );
+        }
     }
 
     #[test]

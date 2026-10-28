@@ -13,6 +13,14 @@ pub use provider::{Container, FunctionFacts, Inspection, RecognizedWrite, Reject
 
 use super::{BlockId, Callee, HirType, OpKind, Origin, Program, ValueId};
 
+/// The stored payload whose complete writer set licenses a representation.
+/// Occupancy and a read's possible absence are separate from these slots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CollectionSlot {
+    Key,
+    Value,
+}
+
 #[derive(Debug, Clone)]
 pub struct Read {
     pub function: String,
@@ -110,17 +118,76 @@ pub(super) fn elide(program: &mut Program, before_counting: &[usize]) -> Report 
     report
 }
 
-/// Possible payload kinds. Managed includes strings, bigint boxes, symbols,
-/// foreign values and every other counted reference; none is licensed inert.
+/// Possible payload kinds, using the one tag numbering in `hir::tags`.
+/// Reference masks include managed objects and foreign handles; neither is
+/// licensed inert. A broad reference mask proves no particular payload kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Tags(u8);
+pub struct Tags(u32);
 
 impl Tags {
-    pub const NUMBER: Self = Self(1);
-    pub const BOOLEAN: Self = Self(2);
-    pub const NULL: Self = Self(4);
-    pub const UNDEFINED: Self = Self(8);
-    pub const MANAGED: Self = Self(16);
+    pub const NUMBER: Self = Self(1 << super::tags::NUMBER);
+    pub const BOOLEAN: Self = Self(1 << super::tags::BOOLEAN);
+    pub const NULL: Self = Self(1 << super::tags::NULL);
+    pub const UNDEFINED: Self = Self(1 << super::tags::UNDEFINED);
+    pub const STRING: Self = Self(1 << super::tags::STRING);
+    pub const FUNCTION: Self = Self(1 << super::tags::FUNCTION);
+    pub const SYMBOL: Self = Self(1 << super::tags::SYMBOL);
+    pub const OBJECT: Self = Self(1 << super::tags::OBJECT);
+    pub const BIGINT: Self = Self(1 << super::tags::BIGINT);
+    pub const HANDLE_GOBJECT: Self = Self(1 << super::tags::HANDLE_GOBJECT);
+    pub const HANDLE_OBJC: Self = Self(1 << super::tags::HANDLE_OBJC);
+    pub const HANDLE_COM: Self = Self(1 << super::tags::HANDLE_COM);
+    pub const HANDLE_HOST: Self = Self(1 << super::tags::HANDLE_HOST);
+    pub const MANAGED: Self = Self::STRING
+        .union(Self::FUNCTION)
+        .union(Self::SYMBOL)
+        .union(Self::OBJECT)
+        .union(Self::BIGINT);
+    pub const FOREIGN: Self =
+        Self(((1 << super::tags::HANDLE_BLOCK_SIZE) - 1) << super::tags::HANDLE_BLOCK);
+    pub const REFERENCE: Self = Self::MANAGED.union(Self::FOREIGN);
+
+    #[must_use]
+    pub const fn from_runtime(tag: u32) -> Option<Self> {
+        let all = Self::REFERENCE
+            .union(Self::NUMBER)
+            .union(Self::BOOLEAN)
+            .union(Self::NULL)
+            .union(Self::UNDEFINED);
+        if tag < u32::BITS && all.0 & (1 << tag) != 0 {
+            Some(Self(1 << tag))
+        } else {
+            None
+        }
+    }
+
+    pub fn names(self) -> impl Iterator<Item = &'static str> {
+        let named_foreign = Self::HANDLE_GOBJECT
+            .union(Self::HANDLE_OBJC)
+            .union(Self::HANDLE_COM)
+            .union(Self::HANDLE_HOST);
+        [
+            (Self::NUMBER, "number"),
+            (Self::BOOLEAN, "boolean"),
+            (Self::NULL, "null"),
+            (Self::UNDEFINED, "undefined"),
+            (Self::STRING, "string"),
+            (Self::FUNCTION, "function"),
+            (Self::SYMBOL, "symbol"),
+            (Self::OBJECT, "object"),
+            (Self::BIGINT, "bigint"),
+            (Self::HANDLE_GOBJECT, "gobject"),
+            (Self::HANDLE_OBJC, "objc"),
+            (Self::HANDLE_COM, "com"),
+            (Self::HANDLE_HOST, "host"),
+        ]
+        .into_iter()
+        .filter_map(move |(tag, name)| self.contains(tag).then_some(name))
+        .chain(
+            self.intersects(Self::FOREIGN.without(named_foreign))
+                .then_some("other-foreign"),
+        )
+    }
 
     #[must_use]
     pub const fn union(self, other: Self) -> Self {
@@ -130,6 +197,11 @@ impl Tags {
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
+    }
+
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
     }
 
     #[must_use]
@@ -144,7 +216,7 @@ impl Tags {
 
     #[must_use]
     pub const fn is_inert(self) -> bool {
-        self.0 != 0 && self.0 & Self::MANAGED.0 == 0
+        self.0 != 0 && self.0 & Self::REFERENCE.0 == 0
     }
 }
 
@@ -184,6 +256,13 @@ pub enum ValueFact {
 }
 
 impl ValueFact {
+    /// Every possible tag must be allowed, and an empty payload does not
+    /// vacuously license any particular representation or operation.
+    #[must_use]
+    pub const fn has_only(self, allowed: Tags) -> bool {
+        matches!(self, Self::Known { tags, .. } if tags.0 != 0 && tags.0 & !allowed.0 == 0)
+    }
+
     #[must_use]
     pub const fn number(numbers: Facts) -> Self {
         Self::Known {
@@ -245,17 +324,9 @@ impl std::fmt::Display for ValueFact {
             Self::Unknown(why) => write!(f, "Unknown({})", why.reason()),
             Self::Known { tags, numbers } => {
                 let mut separator = "";
-                for (tag, name) in [
-                    (Tags::NUMBER, "number"),
-                    (Tags::BOOLEAN, "boolean"),
-                    (Tags::NULL, "null"),
-                    (Tags::UNDEFINED, "undefined"),
-                    (Tags::MANAGED, "managed"),
-                ] {
-                    if tags.contains(tag) {
-                        write!(f, "{separator}{name}")?;
-                        separator = "|";
-                    }
+                for name in tags.names() {
+                    write!(f, "{separator}{name}")?;
+                    separator = "|";
                 }
                 if separator.is_empty() {
                     write!(f, "empty")?;
@@ -329,5 +400,50 @@ mod tests {
         assert!(zero.numeric().is_some_and(|n| n.maybe_negative_zero));
         assert!(zero.join(nan).numeric().is_some_and(|n| n.maybe_nan));
         assert!(zero.is_inert());
+    }
+
+    #[test]
+    fn narrow_kind_licences_require_the_whole_nonempty_tag_set() {
+        let string = ValueFact::Known {
+            tags: Tags::STRING,
+            numbers: Facts::BOTTOM,
+        };
+        assert!(string.has_only(Tags::STRING));
+        assert!(!string.join(ValueFact::undefined()).has_only(Tags::STRING));
+        assert!(
+            !ValueFact::Known {
+                tags: Tags::REFERENCE,
+                numbers: Facts::BOTTOM
+            }
+            .has_only(Tags::STRING)
+        );
+        assert!(
+            !ValueFact::Known {
+                tags: Tags(0),
+                numbers: Facts::BOTTOM
+            }
+            .has_only(Tags::STRING)
+        );
+        assert!(!ValueFact::Unknown(Unknown::OpenWriterSet).has_only(Tags::STRING));
+    }
+
+    #[test]
+    fn precise_reference_tags_keep_every_reference_counted() {
+        for tag in [
+            super::super::tags::STRING,
+            super::super::tags::FUNCTION,
+            super::super::tags::SYMBOL,
+            super::super::tags::OBJECT,
+            super::super::tags::BIGINT,
+            super::super::tags::HANDLE_GOBJECT,
+            super::super::tags::HANDLE_OBJC,
+            super::super::tags::HANDLE_COM,
+            super::super::tags::HANDLE_HOST,
+        ] {
+            let tags = Tags::from_runtime(tag).expect("known runtime tag");
+            assert!(!tags.is_inert());
+            assert!(Tags::REFERENCE.contains(tags));
+        }
+        assert_eq!(Tags::from_runtime(32), None);
     }
 }

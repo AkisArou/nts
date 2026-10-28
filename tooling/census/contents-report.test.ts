@@ -38,6 +38,11 @@ test("same-named functions remain distinct prepared identities", () => {
   const m = parseModule(JSON.stringify(module([{}, {function_index: 1}])));
   assert.equal(m.rows.length, 2);
 });
+test("precise string licences remain counted storage candidates", () => {
+  const m = parseModule(JSON.stringify(module([{value_eligibility: "String", fact: {tags: ["string"]}}])));
+  const s = summarize([item], [{case: item, state: "PASS", module: m}]);
+  assert.equal(s.groups[0].candidates, 1);
+});
 test("comparison refuses a different corpus population", () => {
   const a = summarize([item], [{case: item, state: "PASS", module: module()}]);
   const other = {...item, name: "other"};
