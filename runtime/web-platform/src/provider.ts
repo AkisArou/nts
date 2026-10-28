@@ -4,6 +4,13 @@
  * This is not part of the public Web API surface. Provider code imports this
  * entry point instead of depending on the shared runtime's internal layout.
  */
+export { createPerformance } from "./performance/performance.ts";
+export type {
+  PerformanceCapabilities,
+  PerformanceTimeOrigin,
+  PerformanceDetailCloner,
+  PerformanceDetailCloneResult,
+} from "./provider/performance.ts";
 export type {
   BoundAddress,
   ByteConnection,
