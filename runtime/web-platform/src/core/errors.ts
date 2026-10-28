@@ -4,6 +4,7 @@ import { coerceToDOMString } from "./webidl.ts";
 export class DOMException extends Error {
   readonly #exceptionName: string;
   readonly #exceptionMessage: string;
+  readonly [Symbol.toStringTag] = "DOMException";
   static readonly INDEX_SIZE_ERR = 1;
   static readonly DOMSTRING_SIZE_ERR = 2;
   static readonly HIERARCHY_REQUEST_ERR = 3;
@@ -203,24 +204,6 @@ export class DOMException extends Error {
     }
   }
 }
-// Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
-// written inline rather than through a helper.
-// Web IDL member attributes; DOMException prototype carries no non-standard names.
-for (const key of Object.getOwnPropertyNames(DOMException.prototype)) {
-  if (key === "constructor") continue;
-  const descriptor = Object.getOwnPropertyDescriptor(DOMException.prototype, key);
-  if (descriptor === undefined || descriptor.enumerable) continue;
-  descriptor.enumerable = true;
-  Object.defineProperty(DOMException.prototype, key, descriptor);
-}
-Object.defineProperty(DOMException.prototype, Symbol.toStringTag, {
-  value: "DOMException",
-  writable: false,
-  enumerable: false,
-  configurable: true,
-});
-
-
 export function abortError(): DOMException {
   return new DOMException("The operation was aborted", "AbortError");
 }

@@ -41,6 +41,8 @@
     "../wpt-websocket-stream-lifetime.test.ts",
     "../websocket-stream-wpt-policy.test.ts",
     "../wpt-eventsource.test.ts",
-    "../eventsource-wpt-policy.test.ts"
+    "../eventsource-wpt-policy.test.ts",
+    "../wpt-domexception.test.ts",
+    "../domexception-policy.test.ts"
   ]
 }

@@ -48,6 +48,8 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/wpt-streams.test.ts \
   runtime/web-platform/test/wpt-fetch-data.test.ts \
   runtime/web-platform/test/wpt-files-forms.test.ts \
+  runtime/web-platform/test/wpt-domexception.test.ts \
+  runtime/web-platform/test/domexception-policy.test.ts \
   runtime/web-platform/test/fetch-headers-wpt-policy.test.ts \
   runtime/web-platform/test/fetch-body-wpt-policy.test.ts \
   runtime/web-platform/test/fetch-multipart-wpt-policy.test.ts \
