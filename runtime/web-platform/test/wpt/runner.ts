@@ -359,39 +359,18 @@ export function runWptHtmlScripts(
   fixture: WptFixture,
   support: ReadonlyMap<string, string>,
 ): void {
-  const harnessScripts: string[] = [];
-  const dependencies: string[] = [];
-  const scripts: { source: string; path: string; lineOffset: number }[] = [];
-  for (const match of source.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
-    const attributes = match[1] ?? "";
-    assert.doesNotMatch(attributes, /\b(?:type|async|defer|nomodule)\b/i);
-    const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes);
-    if (src !== null) {
-      const reference = src[1] ?? src[2] ?? src[3];
-      assert.ok(reference);
-      const url = new URL(reference, `https://wpt.invalid/${fixture.path}`);
-      assert.equal(url.origin, "https://wpt.invalid", "HTML support must be a local pinned path");
-      assert.equal(url.search, "", "HTML support cannot require server-side parameters");
-      assert.equal(url.hash, "", "HTML support fragments are not supported");
-      const path = url.pathname.slice(1);
-      if (path === "resources/testharness.js" || path === "resources/testharnessreport.js") {
-        harnessScripts.push(reference);
-      } else {
-        dependencies.push(path);
-        const script = support.get(path);
-        assert.notEqual(script, undefined, `unpinned HTML support script: ${path}`);
-        scripts.push({ source: script!, path, lineOffset: 0 });
-      }
-    } else {
-      const openingEnd = source.indexOf(">", match.index) + 1;
-      const lineOffset = source.slice(0, openingEnd).split("\n").length - 1;
-      scripts.push({ source: match[2] ?? "", path: fixture.path, lineOffset });
-    }
+  assert.equal(fixture.format, "html", "HTML helpers require an HTML fixture");
+  const context: WptFixtureContext = {
+    fixture, metadata: metadata(source, "html"),
+    url: new URL(fixture.path, resolutionRoot), timeoutMilliseconds: defaultTimeouts.default,
+  };
+  const { entries } = scriptEntries(fixture, source, context, support);
+  // This standalone helper has no server substitution hook. The full runner
+  // retains its verified network query/substitution support.
+  for (const script of entries) {
+    assert.equal(script.url.search, "", "HTML support cannot require server-side parameters");
   }
-  // Validate the complete dependency plan before executing any fixture code.
-  assert.deepEqual(harnessScripts, fixture.harnessScripts, "HTML harness imports must match manifest");
-  assert.deepEqual(dependencies, fixture.support, "HTML scripts must match pinned dependencies");
-  for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
+  for (const script of entries) harness.run(script.source, script.path, script.lineOffset);
 }
 
 /** Run an area manifest with only the globals supplied by its source provider. */
