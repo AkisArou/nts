@@ -1,6 +1,6 @@
 import { spawnTest, testProcessResult, TEST_HANG_MS } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { constants, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -82,16 +82,28 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
 test("aggregate OOM retains a survivor verdict and per-worker counters outlive scopes", { timeout: TEST_HANG_MS }, async (t) => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const memory = new MemoryRun({ budgetBytes: 256 * 2 ** 20, id: "aggregate-oom-control" });
+  const fifo = spawnTest("mkfifo", [join(directory, "release")], { encoding: "utf8" });
+  assert.equal(fifo.status, 0, fifo.stderr);
+  const budgetBytes = 512 * 2 ** 20;
+  const workerBytes = 2 * 2 ** 30;
+  // The API bounds each worker by its reservation. Tighten this test's own
+  // parent afterwards, leaving worker ceilings above the victim's request.
+  const memory = new MemoryRun({ budgetBytes: workerBytes, id: "aggregate-oom-control" });
+  t.after(() => memory.close());
+  const tightened = spawnTest("systemctl", ["--user", "set-property", "--runtime", memory.slice, `MemoryMax=${budgetBytes}`], { encoding: "utf8" });
+  assert.equal(tightened.status, 0, tightened.stderr);
+  assert.equal(Number(readFileSync(join(CGROUP, memory.group, "memory.max"), "utf8")), budgetBytes);
   const rows: any[] = [];
   let deltas: number[] = [];
   let aggregate = 0;
   await runMemoryWorkers({
-    paths: ["survivor", "victim", "after"], jobs: 2, memory, workerBytes: 192 * 2 ** 20,
+    paths: ["survivor", "victim", "after"], jobs: 2, memory, workerBytes,
     args: () => [fixture, directory],
     onRow: (row) => {
       rows.push(row);
-      if (row.bucket === "memory-cap") writeFileSync(join(directory, "release"), "ready");
+      // The survivor opens the FIFO before readiness. A dead/missing reader
+      // fails with ENXIO; the parent never blocks its own test hang guard.
+      if (row.path === "victim" && row.bucket === "memory-cap") writeFileSync(join(directory, "release"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK });
       deltas = readdirSync(join(CGROUP, memory.group)).filter((name) => name.endsWith(".slice")).map((name) => kills(join(memory.group, name))).sort();
       aggregate = memory.aggregateOoms();
     },
@@ -99,6 +111,17 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
   assert.deepEqual(rows.map((row) => [row.path, row.bucket]).sort(), [["after", "strict-pass"], ["survivor", "strict-pass"], ["victim", "memory-cap"]]);
   assert.deepEqual(deltas, [0, 1], "only the actual killed worker increments oom_kill");
   assert.ok(aggregate > 0, "the aggregate ceiling, not a worker ceiling, fired");
+  const survivor = JSON.parse(readFileSync(join(directory, "survivor-ready"), "utf8"));
+  const victim = JSON.parse(readFileSync(join(directory, "victim-request"), "utf8"));
+  assert.equal(survivor.heldBytes, 4 * 2 ** 20, "the survivor never fills a fraction of the cap");
+  assert.ok(survivor.residentBytes < budgetBytes / 4, `survivor needs ample headroom: ${JSON.stringify(survivor)}`);
+  assert.equal(survivor.workerBytes, workerBytes);
+  assert.equal(survivor.aggregateBytes, budgetBytes);
+  assert.equal(victim.requestedBytes, budgetBytes * 2, "only the victim exceeds the entire aggregate");
+  assert.equal(victim.oomScoreAdj, 1000, "the allocating fixture is the chosen kernel victim");
+  assert.equal(victim.aggregateBytes, budgetBytes);
+  assert.equal(victim.workerBytes, workerBytes);
+  assert.ok(victim.requestedBytes < victim.workerBytes, "the request cannot reach a worker cap");
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
 });
 
