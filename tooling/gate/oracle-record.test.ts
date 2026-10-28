@@ -34,6 +34,9 @@ test("checked-in promises use compact sorted rows with complete measured identit
   const text = readFileSync(new URL("../../results/oracle-counts.json", import.meta.url), "utf8");
   assert.ok(Buffer.byteLength(text) < 1_000_000);
   const index = JSON.parse(text), lines = text.trimEnd().split("\n");
+  const jsx = index.rows.find((row: { source: string }) => row.source === "tests/programs/jsx/src/main.tsx");
+  assert.equal(jsx.kind, "no-oracle");
+  assert.equal(jsx.reason, "no generated cases; node cannot load .tsx directly");
   assert.equal(index.version, 1);
   assert.equal(index.generator_version, 1);
   assert.equal(index.seed, null);
@@ -49,10 +52,10 @@ test("checked-in promises use compact sorted rows with complete measured identit
     assert.deepEqual(Object.keys(row.keys).sort(), ["c", "jvm", "llvm"]);
     for (const key of Object.values(row.keys)) assert.match(key as string, /^[0-9a-f]{32}$/);
     if (row.kind === "no-oracle") {
-      assert.equal(row.source, "tests/programs/jsx/src/main.tsx");
       assert.equal("count" in row, false);
+      assert.equal("complete" in row, false);
       assert.match(row.source_digest, /^[0-9a-f]{32}$/);
-      assert.equal(row.reason, "no generated cases; node cannot load .tsx directly");
+      assert.ok(typeof row.reason === "string" && row.reason.trim().length > 0);
       continue;
     }
     assert.equal(row.kind, "measured"); assert.equal(row.complete, true);
