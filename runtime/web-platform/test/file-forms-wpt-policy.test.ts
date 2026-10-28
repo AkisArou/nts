@@ -6,7 +6,7 @@ import type { TestContext } from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import { Blob, File, _createBlobFromExternalSource } from "../src/file/blob.ts";
 import * as blobInternals from "../src/file/blob.ts";
-import type { BlobExternalSource } from "../src/file/blob.ts";
+import type { BlobExternalSource, BlobOptions, BlobPart } from "../src/file/blob.ts";
 import type { ReadableStream } from "../src/streams/readable.ts";
 
 function useRuntime(t: TestContext): void {
@@ -97,3 +97,64 @@ test("internal Blob streams preserve external-reader cancellation and reopening"
   assert.deepEqual(await readAll(blobInternals.getBlobStream(blob)), [1, 2, 3, 4]);
   assert.deepEqual(calls, ["open", "read", "read", "close"]);
 });
+
+// https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+// https://w3c.github.io/FileAPI/#constructorBlob
+for (const factory of [
+  { name: "Blob", create: (parts: Iterable<BlobPart>, options: BlobOptions): Blob => new Blob(parts, options) },
+  { name: "File", create: (parts: Iterable<BlobPart>, options: BlobOptions): Blob => new File(parts, "file", options) },
+]) {
+  test(`${factory.name} preserves a part conversion error without closing the iterator or reading options`, (t) => {
+    useRuntime(t);
+    const marker = new Error("part conversion");
+    let closed = false;
+    let optionReads = 0;
+    function* parts(): Generator<unknown> {
+      try {
+        yield { toString(): never { throw marker; } };
+      } finally {
+        closed = true;
+      }
+    }
+    assert.throws(() => factory.create(parts() as unknown as Iterable<BlobPart>, {
+      get endings(): "transparent" { optionReads++; return "transparent"; },
+    }), (error) => error === marker);
+    assert.equal(closed, false);
+    assert.equal(optionReads, 0);
+  });
+
+  test(`${factory.name} caches iterator methods and converts parts before options`, async (t) => {
+    useRuntime(t);
+    const order: string[] = [];
+    let nextReads = 0;
+    let index = 0;
+    let methodReceiver: unknown;
+    let nextReceiver: unknown;
+    const next = function (this: unknown): IteratorResult<unknown> {
+      nextReceiver = this;
+      order.push("next");
+      return index++ === 0
+        ? { done: false, value: { toString(): string { order.push("part"); return "abc"; } } }
+        : { done: true, value: undefined };
+    };
+    (next as unknown as { call: () => never }).call = () => {
+      throw new Error("next.call is not abstract Call");
+    };
+    const iterator = { get next(): typeof next { nextReads++; return next; } };
+    const method = function (this: unknown): typeof iterator { methodReceiver = this; return iterator; };
+    (method as unknown as { call: () => never }).call = () => {
+      throw new Error("iterator method.call is not abstract Call");
+    };
+    const parts = { get [Symbol.iterator](): typeof method { order.push("iterator"); return method; } };
+    const blob = factory.create(parts as unknown as Iterable<BlobPart>, {
+      get endings(): "transparent" { order.push("endings"); return "transparent"; },
+      get type(): string { order.push("type"); return "TEXT/PLAIN"; },
+    });
+    assert.deepEqual(order, ["iterator", "next", "part", "next", "endings", "type"]);
+    assert.equal(nextReads, 1);
+    assert.equal(methodReceiver, parts);
+    assert.equal(nextReceiver, iterator);
+    assert.equal(blob.type, "text/plain");
+    assert.equal(await blob.text(), "abc");
+  });
+}
