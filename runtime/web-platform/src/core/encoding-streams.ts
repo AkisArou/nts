@@ -12,7 +12,7 @@
 // of the next. Encoding each chunk independently would turn one astral character split
 // across a boundary into two replacement characters, and every value would still round-trip
 // for input that happened not to straddle one.
-import { requireDictionary } from "./webidl.ts";
+import { coerceToDOMString, requireDictionary } from "./webidl.ts";
 import { TextDecoder, TextEncoder } from "./encoding.ts";
 import type {
   AllowSharedBufferSource,
@@ -130,7 +130,9 @@ export class TextEncoderStream {
     const flush = (): Uint8Array => this.#flushPending();
     this.#transform = new TransformStream<string, Uint8Array>({
       transform(chunk, controller) {
-        const bytes = encode(String(chunk));
+        // Encoding #encode-and-enqueue-a-chunk converts to DOMString, which rejects
+        // Symbols while preserving code units for pairs split between chunks.
+        const bytes = encode(coerceToDOMString(chunk));
         if (bytes.length > 0) controller.enqueue(bytes);
       },
       flush(controller) {
