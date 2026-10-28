@@ -131,3 +131,57 @@ for (const factory of bodyFactories) {
     assert.equal(calls, 0);
   });
 }
+
+// https://fetch.spec.whatwg.org/#dom-response
+// Dictionary conversion precedes extraction; extraction precedes initialization.
+test("Response body extraction rejects a locked stream before checking status", () => {
+  const stream = new ReadableStream<Uint8Array>();
+  const oracleStream = new globalThis.ReadableStream<Uint8Array>();
+  const reader = stream.getReader();
+  const oracleReader = oracleStream.getReader();
+  try {
+    assert.throws(() => new globalThis.Response(oracleStream, { status: 0 }), TypeError);
+    assert.throws(() => new Response(stream, { status: 0 }), TypeError);
+  } finally {
+    reader.releaseLock();
+    oracleReader.releaseLock();
+  }
+});
+
+test("Response body extraction rejects a disturbed stream before checking status", async () => {
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+  const oracleStream = new globalThis.ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+  const reader = stream.getReader();
+  const oracleReader = oracleStream.getReader();
+  await reader.read();
+  await oracleReader.read();
+  reader.releaseLock();
+  oracleReader.releaseLock();
+  assert.throws(() => new globalThis.Response(oracleStream, { status: 0 }), TypeError);
+  assert.throws(() => new Response(stream, { status: 0 }), TypeError);
+});
+
+test("Response body extraction follows complete init dictionary conversion", () => {
+  const stream = new ReadableStream<Uint8Array>();
+  const oracleStream = new globalThis.ReadableStream<Uint8Array>();
+  const reader = stream.getReader();
+  const oracleReader = oracleStream.getReader();
+  const marker = new Error("status conversion");
+  const init = { get status(): number { throw marker; } };
+  try {
+    assert.throws(() => new globalThis.Response(oracleStream, init), (error) => error === marker);
+    assert.throws(() => new Response(stream, init), (error) => error === marker);
+  } finally {
+    reader.releaseLock();
+    oracleReader.releaseLock();
+  }
+});
+
+test("Response body extraction leaves a usable stream unlocked when status is invalid", async () => {
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+  const oracleStream = new globalThis.ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+  assert.throws(() => new globalThis.Response(oracleStream, { status: 0 }), RangeError);
+  assert.throws(() => new Response(stream, { status: 0 }), RangeError);
+  assert.equal(stream.locked, oracleStream.locked);
+  assert.equal(await new Response(stream).text(), await new globalThis.Response(oracleStream).text());
+});
