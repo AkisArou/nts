@@ -218,6 +218,8 @@ export class TextDecoder {
   #upper: number = 0xbf;
   #bomSeen: boolean = false;
   #doNotFlush: boolean = false;
+  #inputQueue: Uint8Array = emptyBytes;
+  #inputPosition: number = 0;
 
   constructor(label = "utf-8", options?: TextDecoderOptions) {
     const convertedLabel = coerceToDOMString(label);
@@ -250,11 +252,27 @@ export class TextDecoder {
     this.#pendingByte = -1;
     this.#pendingLead = -1;
   }
-  #replacement(): void {
+  #replacement(position: number): void {
     this.#resetSequence();
     if (this.#decoderFatal) {
+      this.#inputPosition = position;
       throw invalidEncodedData(this.#decoderEncoding);
     }
+  }
+
+  #appendInput(input: Uint8Array<ArrayBufferLike>): Uint8Array {
+    const remaining = this.#inputQueue.length - this.#inputPosition;
+    const bytes = new Uint8Array(remaining + input.length);
+    bytes.set(this.#inputQueue.subarray(this.#inputPosition));
+    bytes.set(input, remaining);
+    this.#inputQueue = bytes;
+    this.#inputPosition = 0;
+    return bytes;
+  }
+
+  #clearInput(): void {
+    this.#inputQueue = emptyBytes;
+    this.#inputPosition = 0;
   }
 
   /**
@@ -290,7 +308,7 @@ export class TextDecoder {
         }
         // The lead was unpaired. It is an error on its own, and the unit that revealed
         // it is then processed as a fresh one rather than swallowed with it.
-        this.#utf16Error();
+        this.#utf16Error(index + 1, unit);
         emit(0xfffd);
       }
 
@@ -299,7 +317,7 @@ export class TextDecoder {
         continue;
       }
       if (unit >= 0xdc00 && unit <= 0xdfff) {
-        this.#utf16Error();
+        this.#utf16Error(index + 1);
         emit(0xfffd);
         continue;
       }
@@ -310,13 +328,27 @@ export class TextDecoder {
     if (this.#pendingLead !== -1 || this.#pendingByte !== -1) {
       this.#pendingLead = -1;
       this.#pendingByte = -1;
-      this.#utf16Error();
+      this.#utf16Error(input.length);
       emit(0xfffd);
     }
   }
 
-  #utf16Error(): void {
-    if (this.#decoderFatal) throw invalidEncodedData(this.#decoderEncoding);
+  #utf16Error(position: number, restoredUnit = -1): void {
+    if (!this.#decoderFatal) return;
+    this.#inputPosition = position;
+    if (restoredUnit !== -1) {
+      // The shared UTF-16 decoder restores both bytes of the code unit
+      // after a leading-surrogate error, even if its first byte arrived
+      // in an earlier call. A later decode must see them before new input.
+      const bytes = new Uint8Array(2 + this.#inputQueue.length - position);
+      const bigEndian = this.#decoderEncoding === "utf-16be";
+      bytes[0] = bigEndian ? restoredUnit >> 8 : restoredUnit & 255;
+      bytes[1] = bigEndian ? restoredUnit & 255 : restoredUnit >> 8;
+      bytes.set(this.#inputQueue.subarray(position), 2);
+      this.#inputQueue = bytes;
+      this.#inputPosition = 0;
+    }
+    throw invalidEncodedData(this.#decoderEncoding);
   }
 
   decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {
@@ -325,12 +357,15 @@ export class TextDecoder {
     const stream = convertTextDecodeOptions(args[1]);
     if (!this.#doNotFlush) {
       this.#resetSequence();
+      this.#clearInput();
       this.#bomSeen = false;
     }
     this.#doNotFlush = stream;
     // The method's byte-copy step follows Web IDL argument conversion.
     // An options getter can mutate or detach a previously validated input.
-    const input = bufferSourceBytes(args[0]);
+    // Keep an owned queue: after a fatal streaming error, unprocessed bytes
+    // survive and must not observe a later mutation of the caller's input.
+    const input = this.#appendInput(bufferSourceBytes(args[0]));
 
     let bomSeen = this.#bomSeen;
     const pieces: string[] = [];
@@ -348,6 +383,7 @@ export class TextDecoder {
     };
     if (this.#decoderEncoding !== "utf-8") {
       this.#decodeUTF16(input, stream, emit);
+      this.#clearInput();
       this.#bomSeen = bomSeen;
       pieces.push(ascii);
       return pieces.join("");
@@ -376,12 +412,12 @@ export class TextDecoder {
           if (byte === 0xf0) this.#lower = 0x90;
           if (byte === 0xf4) this.#upper = 0x8f;
         } else {
-          this.#replacement();
+          this.#replacement(i);
           emit(0xfffd);
         }
       } else {
         if (byte < this.#lower || byte > this.#upper) {
-          this.#replacement();
+          this.#replacement(i);
           emit(0xfffd);
           continue;
         }
@@ -399,12 +435,13 @@ export class TextDecoder {
     }
     if (!stream) {
       if (this.#needed !== 0) {
-        this.#replacement();
+        this.#replacement(input.length);
         emit(0xfffd);
       }
       this.#resetSequence();
       bomSeen = false;
     }
+    this.#clearInput();
     this.#bomSeen = bomSeen;
     pieces.push(ascii);
     return pieces.join("");
