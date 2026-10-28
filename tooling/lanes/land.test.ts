@@ -972,3 +972,64 @@ const kill=process.kill;process.kill=function(pid,signal){
   assert.equal(gates(s),3,"one red train, its green base, then both survivors together");
   assert.ok(onMain(s,"a"));assert.ok(onMain(s,"b"));assert.equal(onMain(s,"RED"),false);
 });
+
+function boundaryFixture():Scratch {
+  const s=scratch();fastGate(s);
+  s.env.LAND_TEST_FAST_CHECKS=join(s.home,"private-checks");
+  s.env.LAND_TEST_TRAIN_EVENTS=join(s.home,"train-events");
+  s.env.LAND_TEST_TRAIN_WAIT=join(s.home,"release-train");
+  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),selectorFixture({body:"const paths=changes.map(c=>c.path);",steps:'paths.every(p=>p.startsWith("docs/"))?["tree-check"]:["fake"]',projects:"null"}));
+  const pinned=join(s.root,"tooling/gate/pinned.sh");
+  writeFileSync(pinned,readFileSync(pinned,"utf8")+`
+if [ -n "\${LAND_TEST_TRAIN_WAIT:-}" ]; then
+ echo "$sha" >> "$LAND_TEST_TRAIN_EVENTS"
+ while [ ! -f "$LAND_TEST_TRAIN_WAIT.$sha" ]; do sleep 0.02; done
+fi
+`);
+  mkdirSync(join(s.root,"docs"));writeFileSync(join(s.root,"docs/page.md"),"base\n");
+  run(s,s.root,["add","tooling","docs"]);run(s,s.root,["commit","-qm","boundary fixture"]);
+  return s;
+}
+function gateEvents(s:Scratch):string[]{const path=s.env.LAND_TEST_TRAIN_EVENTS!;return existsSync(path)?readFileSync(path,"utf8").trim().split("\n").filter(Boolean):[];}
+function releaseTrain(s:Scratch,index:number):void{writeFileSync(`${s.env.LAND_TEST_TRAIN_WAIT}.${gateEvents(s)[index]}`,"release\n");}
+function pendingReady(s:Scratch):{blockedReason?:string}[]{const dir=join(s.home,".cache/nts-land/ready");return existsSync(dir)?readdirSync(dir).filter(n=>n.endsWith(".json")).map(n=>JSON.parse(readFileSync(join(dir,n),"utf8"))):[];}
+
+test("docs submitted during a train land at its boundary with identical staged root content",async()=>{
+  const s=boundaryFixture(),product=lane(s,"boundary-product",{product:"green\n"}),docs=lane(s,"boundary-docs",{"docs/page.md":"ready\n"});
+  const first=land(s,product);
+  await until("the product train's actual gate",()=>gateEvents(s).length===1);
+  const ready=land(s,docs);
+  try {
+    await until("the checked docs ready intent",()=>pendingReady(s).length===1);
+    writeFileSync(join(s.root,"docs/page.md"),"ready\n");run(s,s.root,["add","docs/page.md"]);
+  }finally{releaseTrain(s,0);}
+  for(const result of await Promise.all([first.done,ready.done]))assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),1,"docs use their private checks at the same train boundary");
+  assert.equal(run(s,s.root,["show","main:docs/page.md"]),"ready");
+  assert.equal(run(s,s.root,["diff","--cached","--name-only"]),"");
+  assert.equal(pendingReady(s).length,0);
+});
+
+test("a dirty docs ready entry is retained without blocking the next product train",async()=>{
+  const s=boundaryFixture(),a=lane(s,"before-docs",{a:"green\n"}),b=lane(s,"after-docs",{b:"green\n"}),docs=lane(s,"dirty-docs",{"docs/page.md":"ready\n"});
+  const first=land(s,a);await until("the first actual product gate",()=>gateEvents(s).length===1);
+  const ready=land(s,docs),second=land(s,b);
+  try {
+    await until("the checked docs ready intent",()=>pendingReady(s).length===1);
+    await until("the next product to queue",()=>readdirSync(join(s.home,".cache/nts-land/queue")).filter(n=>n.endsWith(".json")).length===2);
+    writeFileSync(join(s.root,"docs/page.md"),"conflicting local edit\n");
+  }finally{releaseTrain(s,0);}
+  try {
+    await until("the next product gate despite blocked docs",()=>gateEvents(s).length===2);
+    const pending=pendingReady(s);assert.equal(pending.length,1);assert.match(pending[0].blockedReason??"",/root checkout conflict/);
+    assert.equal(readFileSync(join(s.root,"docs/page.md"),"utf8"),"conflicting local edit\n");
+  }finally{releaseTrain(s,1);}
+  for(const result of await Promise.all([first.done,second.done]))assert.equal(result.status,0,result.out);
+  assert.equal(run(s,s.root,["show","main:docs/page.md"]),"base");
+  assert.equal(gates(s),2);
+  writeFileSync(join(s.root,"docs/page.md"),"base\n");
+  let completed:Landed|undefined;void ready.done.then(result=>{completed=result;});
+  await until("the ready docs landing after its local conflict is cleared",()=>completed!==undefined);
+  const result=completed!;assert.equal(result.status,0,result.out);
+  assert.equal(run(s,s.root,["show","main:docs/page.md"]),"ready");
+});

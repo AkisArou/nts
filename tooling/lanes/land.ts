@@ -59,6 +59,8 @@ import { VerificationLedger, declaredShadowSteps, unionChecks, type Author, type
 import { GateResource, supportsResourceHandoff } from "./gate-resource.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import {compose} from "./composition.ts";
+import {rootTrial} from "./root-trial.ts";
+import {publishReady,removeReady,snapshotReady,type ReadyEntry,type ReadyProof} from "./ready.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -68,6 +70,7 @@ const STATE = join(HOME, ".cache/nts-land");
 const QUEUE = join(STATE, "queue");
 const RESULTS = join(STATE, "results");
 const DISPOSITIONS = join(STATE, "submission-dispositions");
+const READY = join(STATE,"ready");
 const VERIFICATION = join(STATE, "verification");
 /** The most landings one gate carries: a red train is halved, so this bounds the gates a red one costs. */
 const TRAIN_MAX = Number(process.env.NTS_LAND_TRAIN_MAX ?? 6);
@@ -207,69 +210,116 @@ function treeOnly(tree: string, owed: Owed, short: string): string | null {
   return dir;
 }
 
-/** Replay and check privately. The landing lock covers only the final FF.
- * If main moves, release it, replay and check again; never trust the old check
- * for the new tree. This path creates no queue entry or shared gate tree. */
-async function fastLane(root: string, sha: string, tree: string): Promise<boolean> {
-  const author = authorOf(tree);
-  const directory = join(STATE, "fast");
-  mkdirSync(directory, { recursive: true });
-  const scratch = mkdtempSync(join(directory, `${sha.slice(0, 12)}-`));
-  const checked = join(scratch, "tree");
+/** Check privately, then publish an intent instead of joining flock's waiters. */
+function readyProof(root:string,sha:string,checked:string,author:Author):ReadyProof|null|"regular" {
+  const base=git(["rev-parse","main"],root),tip=replayOnto(root,base,base,sha);
+  if(!tip)fail(`${sha.slice(0,12)} does not replay onto main: rebase onto main by hand, then land`);
+  if(tip===base)return null;
+  if(!existsSync(join(checked,".git")))git(["worktree","add","-q","--detach",checked,tip],root);
+  else git(["switch","-q","--detach",tip],checked);
+  const inputs=join(checked,"tooling/lanes/inputs.sh");
+  if(existsSync(inputs))execFileSync("sh",[inputs,"gate",root,checked],{cwd:checked});
+  const owed=owedSteps(checked,`${base}..${tip}`);
+  if(!onlyTree(checked,owed))return "regular";
+  const problem=environmentProblem(checked,owed);if(problem)fail(problem);
+  const run=treeOnly(checked,owed,tip.slice(0,12));if(!run)fail("tree-only landing produced no checks");
+  return {base,tip,checked,run,author};
+}
+async function fastLane(root:string,sha:string,tree:string):Promise<boolean> {
+  const author=authorOf(tree),directory=join(STATE,"fast");mkdirSync(directory,{recursive:true});
+  const scratch=mkdtempSync(join(directory,`${sha.slice(0,12)}-`)),checked=join(scratch,"tree");
+  const id=`ready-${sha}-${process.pid}-${Date.now()}`;
   try {
-    for (;;) {
-      const base = git(["rev-parse", "main"], root);
-      const tip = replayOnto(root, base, base, sha);
-      if (!tip) fail(`${sha.slice(0, 12)} does not replay onto main: rebase onto main by hand, then land`);
-      if (tip === base) { say(`${sha.slice(0, 12)}'s changes are on main already`); return true; }
-      if (!existsSync(join(checked, ".git"))) git(["worktree", "add", "-q", "--detach", checked, tip], root);
-      else git(["switch", "-q", "--detach", tip], checked);
-      const inputs = join(checked, "tooling/lanes/inputs.sh");
-      if (existsSync(inputs)) execFileSync("sh", [inputs, "gate", root, checked], { cwd: checked });
-      const owed = owedSteps(checked, `${base}..${tip}`);
-      if (!onlyTree(checked, owed)) return false;
-      const problem = environmentProblem(checked, owed);
-      if (problem) fail(problem);
-      const run = treeOnly(checked, owed, tip.slice(0, 12));
-      if (!run) fail("tree-only landing produced no checks");
-      // Use land's existing kernel lock, with a short locked child. No outer
-      // unit or second lock, and no queue. 75 means replay, never gate failure.
-      const final = spawnSync("flock", [LOCK, process.execPath, process.argv[1], sha], {
-        cwd: tree, stdio: "inherit", env: { ...process.env, NTS_LAND_LOCKED: "1",
-          NTS_LAND_FAST: JSON.stringify({ base, tip, checked, run, author }) },
+    const proof=readyProof(root,sha,checked,author);
+    if(proof==="regular")return false;
+    if(!proof){say(`${sha.slice(0,12)}'s changes are on main already`);return true;}
+    publishReady(READY,{version:1,id,sha,tree,pid:process.pid,at:Date.now(),proof});
+    let reported="";
+    for(;;) {
+      const result=resultOf(id);
+      if(result){
+        if(result.state==="regular")return false;
+        if(result.state!=="landed")fail(result.message);
+        say(result.message);return true;
+      }
+      const current=snapshotReady(READY).find(e=>e.id===id);
+      if(current?.blockedReason&&current.blockedReason!==reported){reported=current.blockedReason;say(`ready landing kept: ${reported}`);}
+      // A busy leader drains this directory before its next train. When idle,
+      // any ready submitter can perform exactly that drain without blocking.
+      const final=spawnSync("flock",["-n","-E","75",LOCK,process.execPath,process.argv[1],sha],{
+        cwd:tree,stdio:"inherit",env:{...process.env,NTS_LAND_LOCKED:"1",NTS_LAND_FAST:"ready"},
       });
-      if (final.status === 75) { say("main moved: replaying and rechecking the tree-only landing"); continue; }
-      if (final.status !== 0) fail("tree-only landing refused; main was not advanced");
-      return true;
+      if(final.status!==0&&final.status!==75){
+        const reason=`ready-boundary worker held (exit ${final.status}, signal ${final.signal}); intent retained`;
+        if(reason!==reported){reported=reason;say(reason);}
+      }
+      await sleep(500);
     }
-  } finally {
-    if (existsSync(join(checked, ".git"))) spawnSync("git", ["worktree", "remove", "--force", checked], { cwd: root });
-    rmSync(scratch, { recursive: true, force: true });
+  }finally {
+    removeReady(READY,id);
+    if(existsSync(join(checked,".git")))spawnSync("git",["worktree","remove","--force",checked],{cwd:root});
+    rmSync(scratch,{recursive:true,force:true});
   }
 }
 
-function fastForward(root: string, sha: string): void {
-  const { base, tip, checked, run, author } = JSON.parse(process.env.NTS_LAND_FAST!);
-  if (lockHolder() === null || !isAncestor(lockHolder()!)) fail("fast landing does not hold the landing lock");
-  if (git(["rev-parse", "main"], root) !== base) { process.exitCode = 75; return; }
-  if (git(["rev-parse", "HEAD"], checked) !== tip || git(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], checked)) fail("checked tree changed before fast-forward");
-  const owed = owedSteps(checked, `${base}..${tip}`);
-  if (!onlyTree(checked, owed)) fail("the checked change no longer owes only tree checks");
-  const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8"));
-  const observed = summary.identities?.commit;
-  if (summary.environment?.canonical !== true || summary.verdict !== "green" || typeof observed !== "string" || !/^[0-9a-f]{12,40}$/.test(observed)
-      || git(["rev-parse", "--verify", `${observed}^{commit}`], checked) !== tip || owed.steps === "all"
-      || owed.steps.some(name => !summary.steps.some((s: {name: string; verdict: string}) => s.name === name && s.verdict === "PASS"))) fail("missing green checks for the exact tree-only tip");
-  const ledger = ledgerAt(root, base);
-  const transaction = ledger.prepare(base, tip, [{ id: `fast-${sha}-${Date.now()}`, submitted: sha, base, tip,
-    author: author ?? {lane:null,address:null}, owed }], "tree-only", { commit: tip, run, checks: owed });
-  execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
-  finishLedger(ledger, transaction, tip);
-  const note = `gate green ${new Date().toISOString()} tree-only steps: ${owed.steps.join(" ")}\nlogs: ${run}`;
-  spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, tip], { cwd: root });
-  if (tip !== sha) spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", `${note}\nlanded as: ${tip}`, sha], { cwd: root });
-  status({ state: "landed", commit: tip, base, run, fast: true });
-  say(`LANDED ${sha.slice(0, 12)} as ${tip.slice(0, 12)}: tree-only checks, no train`);
+/** The leader owns the landing lock throughout this bounded snapshot. */
+function drainReady(root:string):void {
+  const frozen=compose(snapshotReady(READY),(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0);
+  for(const {entry} of frozen) {
+    if(resultOf(entry.id)){removeReady(READY,entry.id);continue;}
+    if(!alive(entry.pid)){disposition(entry,"withdrawn");removeReady(READY,entry.id);continue;}
+    try {
+      let proof:ReadyProof|null|"regular"=entry.proof;
+      if(git(["rev-parse","main"],root)!==proof.base){
+        say("main moved: replaying and rechecking the ready landing");
+        proof=readyProof(root,entry.sha,proof.checked,proof.author);
+      }
+      if(proof==="regular"){
+        mkdirSync(RESULTS,{recursive:true});writeFileSync(join(RESULTS,entry.id+".json"),JSON.stringify({state:"regular",message:"changed rules require a train"}));removeReady(READY,entry.id);continue;
+      }
+      if(!proof){answer(entry,{state:"landed",message:`${entry.sha.slice(0,12)}'s changes are on main already`});removeReady(READY,entry.id);continue;}
+      const result=fastForward(root,entry,proof);
+      if(result){
+        if(entry.blockedReason!==result)say(`ready ${entry.sha.slice(0,12)} kept: ${result}`);
+        publishReady(READY,{...entry,proof,blockedReason:result});
+        continue;
+      }
+      removeReady(READY,entry.id);
+    }catch(error){
+      if(error instanceof Refused){answer(entry,{state:"red",message:error.message});removeReady(READY,entry.id);}
+      else {
+        const reason=`ready setup held: ${String(error)}`;
+        if(entry.blockedReason!==reason)say(reason);
+        publishReady(READY,{...entry,blockedReason:reason});
+      }
+    }
+  }
+}
+
+/** Returns a local-checkout conflict without answering or abandoning the intent. */
+function fastForward(root:string,entry:ReadyEntry,proof:ReadyProof):string|null {
+  const {sha}=entry,{base,tip,checked,run,author}=proof;
+  if(lockHolder()===null||!isAncestor(lockHolder()!))fail("fast landing does not hold the landing lock");
+  if(git(["rev-parse","main"],root)!==base)return "main moved before the ready fast-forward";
+  if(git(["rev-parse","HEAD"],checked)!==tip||git(["status","--porcelain","--untracked-files=no","--ignore-submodules=all"],checked))fail("checked tree changed before fast-forward");
+  const owed=owedSteps(checked,`${base}..${tip}`);
+  if(!onlyTree(checked,owed))fail("the checked change no longer owes only tree checks");
+  const summary=JSON.parse(readFileSync(join(run,"summary.json"),"utf8")),observed=summary.identities?.commit;
+  if(summary.environment?.canonical!==true||summary.verdict!=="green"||typeof observed!=="string"||!/^[0-9a-f]{12,40}$/.test(observed)
+      ||git(["rev-parse","--verify",`${observed}^{commit}`],checked)!==tip||owed.steps==="all"
+      ||owed.steps.some(name=>!summary.steps.some((s:{name:string;verdict:string})=>s.name===name&&s.verdict==="PASS")))fail("missing green checks for the exact tree-only tip");
+  const conflict=rootTrial(root,base,tip,join(STATE,"root-trials"));
+  if(conflict)return conflict;
+  const ledger=ledgerAt(root,base),transaction=ledger.prepare(base,tip,[{id:entry.id,submitted:sha,base,tip,author,owed}],"tree-only",{commit:tip,run,checks:owed});
+  const moved=spawnSync("git",["merge","--ff-only","-q",tip],{cwd:root,env:{...process.env,NTS_LAND:"1"},encoding:"utf8"});
+  if(moved.status!==0){ledger.recover(git(["rev-parse","main"],root));return `root checkout conflict: ${moved.stderr.trim()||moved.error?.message}`;}
+  finishLedger(ledger,transaction,tip);
+  const note=`gate green ${new Date().toISOString()} tree-only steps: ${owed.steps.join(" ")}\nlogs: ${run}`;
+  spawnSync("git",["notes","--ref=land","add","-f","-m",note,tip],{cwd:root});
+  if(tip!==sha)spawnSync("git",["notes","--ref=land","add","-f","-m",`${note}\nlanded as: ${tip}`,sha],{cwd:root});
+  status({state:"landed",commit:tip,base,run,fast:true});
+  answer(entry,{state:"landed",message:`LANDED ${sha.slice(0,12)} as ${tip.slice(0,12)}: tree-only checks, no train`,landing:tip,main:tip,run});
+  return null;
 }
 
 function describe(owed: Owed): string {
@@ -366,7 +416,7 @@ function replayOnto(root: string, base: string, onto: string, sha: string, ownFr
 /** A landing waiting for the lock: one file in QUEUE, named by its id. */
 type Entry = { id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks; author?: Author };
 /** What became of a landing, written by whichever process gated it. */
-type Result = { state: "landed" | "red" | "conflict" | "unrun"; message: string; landing?: string; main?: string; run?: string };
+type Result = { state: "landed" | "red" | "conflict" | "unrun" | "regular"; message: string; landing?: string; main?: string; run?: string };
 
 function enqueue(sha: string, tree: string): string {
   mkdirSync(QUEUE, { recursive: true });
@@ -903,7 +953,7 @@ async function main(): Promise<void> {
   const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
   const short = sha.slice(0, 12);
   const tree = process.cwd();
-  if (process.env.NTS_LAND_LOCKED === "1" && process.env.NTS_LAND_FAST) { fastForward(root, sha); return; }
+  if (process.env.NTS_LAND_LOCKED === "1" && process.env.NTS_LAND_FAST === "ready") { drainReady(root); return; }
   // Asked when the landing is queued; under the lock the tree may have moved on.
   if (process.env.NTS_LAND_LOCKED !== "1" && git(["rev-parse", "HEAD"], tree) !== sha) {
     fail(`run from a tree whose HEAD is ${short}: owed.mjs answers with the rules as that commit has them`);
@@ -938,6 +988,7 @@ async function main(): Promise<void> {
   const id = process.env.NTS_LAND_ENTRY ?? enqueue(sha, tree);
   if (git(["rev-parse", "main"], root) === sha && !resultOf(id)) fail(`${short} is main already`);
   for (let limit = TRAIN_MAX; ; ) {
+    drainReady(root);
     const result = resultOf(id);
     if (result) {
       if (result.state !== "landed") fail(result.message);
