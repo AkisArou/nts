@@ -17,13 +17,12 @@ Ranked by how much each blocks or how much harm it does today.
 
 | # | question | recommendation |
 |---|---|---|
-| 1 | **The builtins mechanism:** how each target says what it provides. Every global outside one fixed list waits on it (G1) | Approve [`foundations/builtins.md`](foundations/builtins.md), proposed 10-27 |
-| 2 | **What happens when a type's claim is false at run time:** holes read 0, out-of-range reads abort, and on C and LLVM an object stored through a covariant array is called as the wrong class (L4, L5, L6) | One policy: represent `undefined` where JavaScript produces it (X1 generalized), check widening stores, throw `TypeError` on a failed erased cast. **user** (10-27): an erased value asserted to a type it does not have throws a catchable `TypeError`; every other false claim behaves as node does |
-| 3 | **Exceptions escape `try`** through closures in fields and overrides; stack exhaustion aborts (L14, L15) | A raising flag for every indirect call; everything JavaScript throws is catchable |
-| 4 | **The clock and randomness** are refused although decision 2 provides them (G12) | Implement decision 2 as [builtins](foundations/builtins.md#the-clock-and-randomness) designs it |
-| 5 | **Decorators are silently dropped** (L10) | Refuse them until implemented |
-| 6 | **No dependency policy, and system packages in the build** (libuv, OpenSSL, clang) against the decisions (D-1, T-1) | Write the policy; bundle the toolchain (zig) |
-| 7 | **Compiled programs cannot be debugged or give stack traces** (X-1, X-2) | Line tables and `#line` by default; `Error.stack` from them |
+| 1 | **What happens when a type's claim is false at run time:** holes read 0, out-of-range reads abort, and on C and LLVM an object stored through a covariant array is called as the wrong class (L4, L5, L6) | One policy: represent `undefined` where JavaScript produces it (X1 generalized), check widening stores, throw `TypeError` on a failed erased cast. **user** (10-27): an erased value asserted to a type it does not have throws a catchable `TypeError`; every other false claim behaves as node does |
+| 2 | **Exceptions escape `try`** through closures in fields and overrides; stack exhaustion aborts (L14, L15) | A raising flag for every indirect call; everything JavaScript throws is catchable |
+| 3 | **The clock and randomness** are refused although decision 2 provides them (G12) | Implement decision 2 as [builtins](foundations/builtins.md#the-clock-and-randomness) designs it |
+| 4 | **Decorators are silently dropped** (L10) | Refuse them until implemented |
+| 5 | **No dependency policy, and system packages in the build** (libuv, OpenSSL, clang) against the decisions (D-1, T-1) | Write the policy; bundle the toolchain (zig) |
+| 6 | **Compiled programs cannot be debugged or give stack traces** (X-1, X-2) | Line tables and `#line` by default; `Error.stack` from them |
 
 ## 1. Language and compiler
 
@@ -60,7 +59,7 @@ Ranked by how much each blocks or how much harm it does today.
 
 | # | question | today | recommendation |
 |---|---|---|---|
-| G1 | The provider mechanism | one name list for every target; NTS1100 stops a build that reaches a missing builtin | Proposed: [`foundations/builtins.md`](foundations/builtins.md) |
+| G1 | The provider mechanism | one name list for every target; NTS1100 stops a build that reaches a missing builtin | **user** (10-28): [`foundations/builtins.md`](foundations/builtins.md) approved; being built from its stage 1 |
 | G2 | Host or own, feature by feature | only Intl and RegExp decided (host on JS hosts) | Own by default (exactness); the host only where decided; Node addons own |
 | G3 | Feature detection: `typeof X === "undefined"`, `"X" in globalThis` | folds for intrinsics only | Fold both forms per target at compile time; `globalThis` itself is L24 |
 | G4 | Node's types in the one lib | no rule | `types: ["node"]` where a profile provides `node:*`; node's timer types on native, the DOM's elsewhere |

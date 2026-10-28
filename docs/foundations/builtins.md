@@ -1,6 +1,6 @@
 # Builtins
 
-**Status:** proposed, for the user's approval; stages 1 and 2 are partly built.
+**Status:** approved by the user; stages 1 and 2 are partly built.
 It carries out the eleven decisions listed at the end. The study it comes from,
 with its 51 probes, is [in the records](../records/notebooks/studies/builtins.md),
 with [its prior art](../records/notebooks/studies/builtins-prior-art.md).
@@ -261,6 +261,11 @@ recommendations:
   Wasm, `console`, and shared memory.
 
 ## Decisions
+
+This page is approved as a whole (10-28,
+[log](../records/notebooks/decisions-log.md#builtins-mechanism-10-28)): a package declares
+what it can provide in its `package.json`, each target's profile orders the
+providers, and an app's `nts.config.ts` may override a choice.
 
 From the user ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)):
 

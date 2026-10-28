@@ -146,8 +146,8 @@ The designs and their build orders are in [`foundations/`](foundations).
    ([results](../results)).
 3. **Then:** memory stage 3 (per-site regions, json-parse first), Unicode
    stages 2–3, the strings stages D and E, numbers, and the keyed hash.
-4. **The builtins mechanism** ([builtins](foundations/builtins.md)), once
-   approved, from its stage 1. The clock and randomness come with stage 6.
+4. **The builtins mechanism** ([builtins](foundations/builtins.md)), approved,
+   from its stage 1. The clock and randomness come with stage 6.
 
 ## Phase 3: conformance-driven development
 

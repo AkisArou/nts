@@ -287,6 +287,16 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   `toString` the compiler can see is called, so no other program pays for it
   ("go with L27 as recommended").
 
+## Builtins mechanism (10-28)
+
+- **The builtins design is approved as a whole** (register G1,
+  `foundations/builtins.md`): "I agree to all docs/foundations/builtins.md!".
+  Asked why a package declares what it provides in `package.json` rather than
+  in `nts.config.ts` per target: what a package can provide belongs to the
+  package and must be readable as data without running any dependency's code
+  (most providers have no `nts.config.ts`); each target's preference is its
+  profile's; an app's own choice is its `nts.config.ts` override.
+
 ## Compiler settings (10-28)
 
 - **A program compiles only under `strict`** (register L8): every flag
