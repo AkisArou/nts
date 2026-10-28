@@ -1,7 +1,9 @@
 {
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "rootDir": "../../../..",
     "composite": false,
     "incremental": false,
@@ -15,6 +17,7 @@
     "../event-wpt-policy.test.ts",
     "../abort-wpt-policy.test.ts",
     "../wpt-events-abort.test.ts",
+    "../wpt-streams.test.ts",
     "../wpt-harness.test.ts"
   ]
 }
