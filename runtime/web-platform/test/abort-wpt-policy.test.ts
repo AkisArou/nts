@@ -156,3 +156,47 @@ test("AbortSignal.any accepts a branded signal even after its prototype changes"
   assert.equal(combined.aborted, true);
   assert.equal(combined.reason, reason);
 });
+
+const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
+
+async function collected(reference: WeakRef<object>): Promise<boolean> {
+  assert.equal(typeof globalThis.gc, "function", "run this suite with --expose-gc");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await tick();
+    globalThis.gc?.();
+    await tick();
+    if (reference.deref() === undefined) return true;
+  }
+  return false;
+}
+
+function observedComposite(sources: AbortSignal[], listener: () => void): WeakRef<AbortSignal> {
+  const signal = AbortSignal.any(sources);
+  signal.addEventListener("abort", listener);
+  return new WeakRef(signal);
+}
+
+// https://dom.spec.whatwg.org/#abortsignal-garbage-collection
+// Aborted signals no longer need the strong retention required for active dependents.
+test("an aborted composite is released by sources that have not aborted", async () => {
+  const first = new AbortController();
+  const second = new AbortController();
+  const reference = observedComposite([first.signal, second.signal], () => {});
+  first.abort();
+  assert.equal(await collected(reference), true);
+  // Keep both source objects live through collection, particularly the non-aborted source.
+  assert.equal(first.signal.aborted, true);
+  assert.equal(second.signal.aborted, false);
+});
+
+test("an active source retains an observed composite until it aborts", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const reference = observedComposite([controller.signal], () => calls++);
+  await tick();
+  globalThis.gc?.();
+  await tick();
+  assert.notEqual(reference.deref(), undefined);
+  controller.abort();
+  assert.equal(calls, 1);
+});

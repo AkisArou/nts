@@ -297,7 +297,13 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     if (this.#selfReference !== null) {
       for (const reference of this.#sourceSignals) {
         const source = reference.deref();
-        if (source !== undefined) source.#removeDependentSignal(this.#selfReference);
+        if (source !== undefined) {
+          source.#removeDependentSignal(this.#selfReference);
+          // Only non-aborted dependents with observers require strong retention.
+          // Release every source, including sources that have not themselves aborted.
+          // https://dom.spec.whatwg.org/#abortsignal-garbage-collection
+          if (this.#retainedBySources) source.#releaseDependentSignal(this);
+        }
       }
     }
     this.#sourceSignals.length = 0;
