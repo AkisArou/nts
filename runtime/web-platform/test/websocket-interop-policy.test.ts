@@ -78,6 +78,179 @@ function syntaxError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "SyntaxError";
 }
 
+// WebSockets 3.1 and Web IDL 3.2.25: DOMString or sequence<DOMString>.
+// https://websockets.spec.whatwg.org/#dom-websocket
+// https://webidl.spec.whatwg.org/#es-union
+// https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+const JavaScriptWebSocket = WebSocket as new (url: string, protocols?: unknown) => WebSocket;
+
+suite("WebSocket protocols retain omitted, undefined, string and sequence controls", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  new WebSocket("ws://example.test/socket");
+  new JavaScriptWebSocket("ws://example.test/socket", undefined);
+  new WebSocket("ws://example.test/socket", "Chat");
+  new WebSocket("ws://example.test/socket", ["Chat", "Other"]);
+  assert.deepEqual(handshakes.map((handshake) => handshake.protocols), [
+    [], [], ["Chat"], ["Chat", "Other"],
+  ]);
+});
+
+for (const [label, value, expected] of [
+  ["explicit null", null, "null"],
+  ["number", 17, "17"],
+  ["boolean", true, "true"],
+  ["bigint", 23n, "23"],
+] as const) {
+  suite(`WebSocket protocols convert ${label} to a single DOMString`, (t) => {
+    const { handshakes } = controlledRuntime(t);
+    new JavaScriptWebSocket("ws://example.test/socket", value);
+    assert.deepEqual(handshakes.map((handshake) => handshake.protocols), [[expected]]);
+  });
+}
+
+suite("WebSocket protocols convert an ordinary stringifiable object once", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  let conversions = 0;
+  new JavaScriptWebSocket("ws://example.test/socket", {
+    toString() {
+      conversions++;
+      return "Chat";
+    },
+  });
+  assert.equal(conversions, 1);
+  assert.deepEqual(handshakes.map((handshake) => handshake.protocols), [["Chat"]]);
+});
+
+suite("WebSocket protocols use string fallback for a null or undefined iterator method", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  for (const method of [null, undefined]) {
+    const observations: string[] = [];
+    new JavaScriptWebSocket("ws://example.test/socket", {
+      get [Symbol.iterator]() {
+        observations.push("iterator");
+        return method;
+      },
+      toString() {
+        observations.push("toString");
+        return "Chat";
+      },
+    });
+    assert.deepEqual(observations, ["iterator", "toString"]);
+  }
+  assert.deepEqual(handshakes.map((handshake) => handshake.protocols), [["Chat"], ["Chat"]]);
+});
+
+suite("WebSocket protocols capture iterator and next methods once with their receivers", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  const observations: string[] = [];
+  let index = 0;
+  const iterator = {
+    get next() {
+      observations.push("get next");
+      return function (this: unknown): IteratorResult<unknown> {
+        assert.equal(this, iterator);
+        observations.push("next");
+        if (index++ === 0) {
+          return { done: false, value: { toString() { observations.push("convert"); return "Chat"; } } };
+        }
+        return { done: true, get value(): never { return assert.fail("done skips value"); } };
+      };
+    },
+  };
+  const protocols = {
+    get [Symbol.iterator]() {
+      observations.push("get iterator");
+      return function (this: unknown) {
+        assert.equal(this, protocols);
+        observations.push("iterator");
+        return iterator;
+      };
+    },
+    toString(): never { return assert.fail("the iterable branch must not stringify its container"); },
+  };
+  new JavaScriptWebSocket("ws://example.test/socket", protocols);
+  assert.deepEqual(observations, ["get iterator", "iterator", "get next", "next", "convert", "next"]);
+  assert.deepEqual(handshakes.map((handshake) => handshake.protocols), [["Chat"]]);
+});
+
+suite("WebSocket protocol conversion propagates string and iterator failures before connecting", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  const failure = new Error("protocol conversion");
+  assert.throws(() => new JavaScriptWebSocket("ws://example.test/socket", Symbol("protocol")), TypeError);
+  for (const protocols of [
+    { toString() { throw failure; } },
+    { get [Symbol.iterator](): never { throw failure; } },
+    { [Symbol.iterator]() { throw failure; } },
+  ]) {
+    assert.throws(() => new JavaScriptWebSocket("ws://example.test/socket", protocols),
+      (error: unknown) => error === failure);
+  }
+  for (const protocols of [
+    { [Symbol.iterator]: 17, toString: () => "Chat" },
+    { [Symbol.iterator]: () => null },
+    { [Symbol.iterator]: () => ({ next: 17 }) },
+    { [Symbol.iterator]: () => ({ next: () => null }) },
+  ]) assert.throws(() => new JavaScriptWebSocket("ws://example.test/socket", protocols), TypeError);
+  assert.deepEqual(handshakes, []);
+});
+
+suite("WebSocket protocol sequence conversion finishes before token validation without IteratorClose", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  const failure = new Error("later element conversion");
+  let returns = 0;
+  let nexts = 0;
+  const protocols = {
+    [Symbol.iterator]() {
+      return {
+        next(): IteratorResult<unknown> {
+          nexts++;
+          if (nexts === 1) return { done: false, value: "invalid token" };
+          return { done: false, value: { toString() { throw failure; } } };
+        },
+        return(): IteratorResult<unknown> {
+          returns++;
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+  assert.throws(() => new JavaScriptWebSocket("ws://example.test/socket", protocols),
+    (error: unknown) => error === failure);
+  assert.equal(nexts, 2);
+  assert.equal(returns, 0);
+  assert.deepEqual(handshakes, []);
+});
+
+suite("WebSocket converts URL then protocols before parsing the URL", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  const observations: string[] = [];
+  const Constructor = WebSocket as new (url: unknown, protocols: unknown) => WebSocket;
+  assert.throws(() => new Constructor({
+    toString() { observations.push("url"); return "not an absolute URL"; },
+  }, {
+    toString() { observations.push("protocols"); return "Chat"; },
+  }), syntaxError);
+  assert.deepEqual(observations, ["url", "protocols"]);
+  assert.deepEqual(handshakes, []);
+});
+
+suite("WebSocket converted protocol elements retain ASCII-insensitive duplicate rejection", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  assert.throws(() => new JavaScriptWebSocket("ws://example.test/socket", [
+    { toString: () => "Chat" }, { toString: () => "cHAT" },
+  ]), syntaxError);
+  assert.deepEqual(handshakes, []);
+});
+
+suite("WebSocketStream protocols remain sequence-only when WebSocket accepts string fallback", (t) => {
+  const { handshakes } = controlledRuntime(t);
+  const Constructor = WebSocketStream as new (url: string, options: { protocols: unknown }) => WebSocketStream;
+  for (const protocols of ["Chat", null, 17, { toString: () => "Chat" }, {
+    [Symbol.iterator]: null, toString: () => "Chat",
+  }]) assert.throws(() => new Constructor("ws://example.test/socket", { protocols }), TypeError);
+  assert.deepEqual(handshakes, []);
+});
+
 // WHATWG WebSockets 3.1 constructor step 9 says values must not repeat.
 // ASCII-insensitive comparison is the selected interop policy, not an explicit
 // case-folding requirement in that wording. The original offer is preserved.
