@@ -7,7 +7,7 @@
   "scope": [
     "eventsource/"
   ],
-  "inventoryNote": "The complete pinned eventsource directory contains 98 paths: 66 test entry files, 13 resources, 16 browser-worker support scripts and 3 metadata files. Forty-five ordinary-host fixture bodies with 79 registrations are imported unchanged. Twenty-one browser, prototype-mutation or wall-clock-sensitive fixture files with 27 registrations are explicitly excluded. All selected registrations, including the three Fetch CORS-policy cases, start unblocked for the observed baseline.",
+  "inventoryNote": "45 unchanged fixture bodies register 79 cases. The initial all-enabled baseline is recorded separately. Three negative CORS leaves remain named Fetch-policy blocks; the other 76 registrations run. All 98 directory paths are inventoried, including 21 excluded fixtures with 27 registrations.",
   "specification": {
     "name": "HTML Standard: Server-sent events",
     "sourceURL": "https://html.spec.whatwg.org/multipage/server-sent-events.html",
@@ -261,8 +261,21 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 6,
-      "blockedTests": {},
-      "expectedRunnableTests": 6,
+      "blockedTests": {
+        "EventSource: cross-origin allow-origin: http://example.org should fail": {
+          "category": "fetch-cors-policy",
+          "reason": "Requires Fetch to reject a cross-origin response with missing or mismatched Access-Control-Allow-Origin. The ordinary-host Fetch policy does not enforce browser CORS; Fetch source is owned by the separate task and network Fetch remains deferred. Positive resource/origin cases still run."
+        },
+        "EventSource: cross-origin allow-origin:'' should fail": {
+          "category": "fetch-cors-policy",
+          "reason": "Requires Fetch to reject a cross-origin response with missing or mismatched Access-Control-Allow-Origin. The ordinary-host Fetch policy does not enforce browser CORS; Fetch source is owned by the separate task and network Fetch remains deferred. Positive resource/origin cases still run."
+        },
+        "EventSource: cross-origin No allow-origin should fail": {
+          "category": "fetch-cors-policy",
+          "reason": "Requires Fetch to reject a cross-origin response with missing or mismatched Access-Control-Allow-Origin. The ordinary-host Fetch policy does not enforce browser CORS; Fetch source is owned by the separate task and network Fetch remains deferred. Positive resource/origin cases still run."
+        }
+      },
+      "expectedRunnableTests": 3,
       "timeoutCategory": "reconnect",
       "declaredTitle": "EventSource: cross-origin",
       "declaredGlobals": null,

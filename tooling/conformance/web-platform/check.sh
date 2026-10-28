@@ -83,6 +83,7 @@ node --expose-gc \
   runtime/web-platform/test/event-timestamp-bare.test.ts \
   runtime/web-platform/test/eventsource.test.ts \
   runtime/web-platform/test/eventsource-timing.test.ts \
+  runtime/web-platform/test/eventsource-wpt-policy.test.ts \
   runtime/web-platform/test/file-url.test.ts \
   runtime/web-platform/test/flat-store.test.ts \
   runtime/web-platform/test/fuzz.test.ts \
