@@ -287,3 +287,32 @@ test("Headers.forEach preserves a callback error and stops traversal", () => {
   }), (error) => error === marker);
   assert.deepEqual(visited, ["a"]);
 });
+
+// https://webidl.spec.whatwg.org/#es-operations
+// https://fetch.spec.whatwg.org/#concept-headers-append
+for (const operation of ["append", "set"] as const) {
+  test(`Headers.${operation} converts its value before validating HTTP name syntax`, () => {
+    const headers = new Headers([["kept", "one"]]);
+    const marker = new Error("value conversion failed");
+    let reads = 0;
+    const value = { toString(): never { reads++; throw marker; } };
+    assert.throws(() => headers[operation]("bad name", value as unknown as string),
+      (error) => error === marker);
+    assert.equal(reads, 1);
+    assert.deepEqual([...headers], [["kept", "one"]]);
+  });
+
+  test(`Headers.${operation} converts each argument once in order and stops on conversion failure`, () => {
+    const headers = new Headers();
+    const order: string[] = [];
+    const name = { toString(): string { order.push("name"); return "X"; } };
+    const value = { toString(): string { order.push("value"); return " one "; } };
+    headers[operation](name as unknown as string, value as unknown as string);
+    assert.deepEqual(order, ["name", "value"]);
+    assert.equal(headers.get("x"), "one");
+    order.length = 0;
+    assert.throws(() => headers[operation]("\u0100", value as unknown as string), TypeError);
+    assert.deepEqual(order, []);
+    assert.deepEqual([...headers], [["x", "one"]]);
+  });
+}
