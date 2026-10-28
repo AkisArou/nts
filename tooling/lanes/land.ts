@@ -58,6 +58,7 @@ import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.t
 import { VerificationLedger, declaredShadowSteps, unionChecks, type Author, type LandingRecord } from "./verification-ledger.ts";
 import { GateResource, supportsResourceHandoff } from "./gate-resource.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
+import {compose} from "./composition.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -66,6 +67,7 @@ const LOCK = join(HOME, ".cache/nts-land.lock");
 const STATE = join(HOME, ".cache/nts-land");
 const QUEUE = join(STATE, "queue");
 const RESULTS = join(STATE, "results");
+const DISPOSITIONS = join(STATE, "submission-dispositions");
 const VERIFICATION = join(STATE, "verification");
 /** The most landings one gate carries: a red train is halved, so this bounds the gates a red one costs. */
 const TRAIN_MAX = Number(process.env.NTS_LAND_TRAIN_MAX ?? 6);
@@ -330,9 +332,9 @@ function unrun(steps: { log?: string }[], touched: string[]): string[] {
  * `--ref-action print` writes nothing: the replayed commits exist as objects,
  * and become reachable when main moves to them.
  */
-function replayOnto(root: string, base: string, onto: string, sha: string): string | null {
+function replayOnto(root: string, base: string, onto: string, sha: string, ownFrom?:string): string | null {
   if (spawnSync("git", ["merge-base", "--is-ancestor", onto, sha], { cwd: root }).status === 0) return sha;
-  const from = git(["merge-base", base, sha], root);
+  const from = ownFrom ?? git(["merge-base", base, sha], root);
   // **Only the commits whose change is not on main already**, as `git rebase`
   // skips them. The fixture-first workflow lands a subject on its own, as a
   // replayed copy when main has moved, and then the fix from the branch that
@@ -391,6 +393,21 @@ function resultOf(id: string): Result | null {
 function answer(entry: Entry, result: Result): void {
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(join(RESULTS, `${entry.id}.json`), JSON.stringify(result));
+  disposition(entry,result.state === "landed" ? "landed" : "refused");
+}
+
+function disposition(entry:Entry,state:"landed"|"refused"|"withdrawn"):void {
+  mkdirSync(DISPOSITIONS,{recursive:true});
+  const path=join(DISPOSITIONS,`${entry.id}.json`);
+  writeFileSync(`${path}.tmp`,JSON.stringify({entry,state}));
+  renameSync(`${path}.tmp`,path);
+}
+
+function alreadyInMain(root:string,base:string,sha:string):boolean {
+  if(spawnSync("git",["merge-base","--is-ancestor",sha,base],{cwd:root}).status===0)return true;
+  const from=git(["merge-base",base,sha],root);
+  if(git(["rev-list","--merges",`${from}..${sha}`],root))return false;
+  return !git(["cherry",base,sha,from],root).split("\n").some(line=>line.startsWith("+ "));
 }
 
 /**
@@ -418,7 +435,10 @@ function waiting(): Entry[] {
     } catch {
       continue; // being written
     }
-    if (!alive(entry.pid)) rmSync(path, { force: true });
+    if (!alive(entry.pid)) {
+      if(!resultOf(entry.id))disposition(entry,"withdrawn");
+      rmSync(path, { force: true });
+    }
     else if (!resultOf(entry.id)) entries.push(entry);
   }
   return entries.sort((a, b) => a.at - b.at);
@@ -718,9 +738,18 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
   const base = git(["rev-parse", "main"], root);
   let tip = base;
   const members: { entry: Entry; landing: string }[] = [];
-  for (const entry of train) {
-    const landing = replayOnto(root, base, tip, entry.sha);
+  const unavailable=existsSync(DISPOSITIONS)?readdirSync(DISPOSITIONS).filter(n=>n.endsWith(".json")).map(n=>JSON.parse(readFileSync(join(DISPOSITIONS,n),"utf8"))).filter(r=>r.state!=="landed"):[];
+  const inTrain=new Set(train.map(e=>e.sha));
+  for (const {entry,prerequisites,from} of compose(train,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0)) {
     const short = entry.sha.slice(0, 12);
+    const failed=prerequisites.find(p=>resultOf(p.id)&&resultOf(p.id)!.state!=="landed");
+    const missing=unavailable.find(r=>r.entry.sha!==entry.sha&&!inTrain.has(r.entry.sha)&&spawnSync("git",["merge-base","--is-ancestor",r.entry.sha,entry.sha],{cwd:root}).status===0&&!alreadyInMain(root,base,r.entry.sha));
+    if(failed||missing) {
+      const prerequisite=failed?.sha??missing.entry.sha;
+      answer(entry,{state:"conflict",message:`${short} has a withdrawn or refused prerequisite ${prerequisite.slice(0,12)}; rebase or explicitly resubmit that prerequisite before landing this stack`});
+      continue;
+    }
+    const landing = replayOnto(root, base, tip, entry.sha,from);
     if (!landing) {
       const behind = members.length > 0 ? ` or the ${members.length} landing(s) ahead of it in this train` : "";
       answer(entry, { state: "conflict", message: `${short} does not replay onto main (${base.slice(0, 12)})${behind} without a conflict: rebase onto main by hand, then land` });
@@ -798,7 +827,10 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
       writeFileSync(`${path}.tmp`, JSON.stringify(next));
       renameSync(`${path}.tmp`, path);
     }
-    if (remaining.length !== members.length) return "done";
+    const active=remaining.filter(({entry})=>alive(entry.pid)&&existsSync(join(QUEUE,`${entry.id}.json`)));
+    for(const {entry} of remaining)if(!active.some(m=>m.entry.id===entry.id))disposition(entry,"withdrawn");
+    if(active.length!==remaining.length)say(`withdrawn members leave the failed train before recomposition: ${remaining.filter(m=>!active.includes(m)).map(m=>m.entry.sha.slice(0,12)).join(" ")}`);
+    if (active.length !== members.length) return "done";
     if (members.length > 1) {
       say(`a train of ${members.length} was ${gated.state}: gating its first half on its own next`);
       return "halve";
@@ -913,7 +945,7 @@ async function main(): Promise<void> {
       if (result.landing !== sha) say("the branch it came from: `git rebase main` drops the commits that landed");
       return;
     }
-    const train = waiting().slice(0, limit);
+    const train = compose(waiting(),(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0).slice(0, limit).map(p=>p.entry);
     if (train.length === 0) fail(`this landing (${id}) is in no queue: run land.ts again`);
     limit = runTrain(root, train) === "halve" ? Math.max(1, Math.floor(train.length / 2)) : TRAIN_MAX;
   }

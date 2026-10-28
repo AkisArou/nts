@@ -916,3 +916,59 @@ test("a non-canonical green summary cannot land",async()=>{
   assert.equal(result.status,1,result.out);assert.match(result.out,/non-canonical or unrecorded environment is not landing evidence/);
   assert.equal(run(s,s.root,["rev-parse","main"]),before);
 });
+
+test("reverse-queued stacked submissions land their own ranges in one train",async()=>{
+  const s=scratch();
+  const a=lane(s,"stack-a",{"shared":"first\n"});
+  const aSha=run(s,a,["rev-parse","HEAD"]),b=join(s.home,"Projects/nts-lanes/stack-b");
+  run(s,s.root,["worktree","add","-q","-b","stack-b",b,aSha]);
+  writeFileSync(join(b,"shared"),"second\n");run(s,b,["add","shared"]);run(s,b,["commit","-qm","stack-b"]);
+  writeFileSync(join(s.root,"main-moved"),"new main\n");run(s,s.root,["add","main-moved"]);run(s,s.root,["commit","-qm","main moved"]);
+  const results=await landTogether(s,[b,a]);
+  for(const result of results)assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),1);
+  assert.equal(run(s,s.root,["show","main:shared"]),"second");
+  assert.equal(run(s,s.root,["log","-1","--format=%s"]),"stack-b");
+});
+
+test("a dead queued prerequisite cannot be silently replayed through its descendant",async()=>{
+  const s=scratch(),a=lane(s,"withdrawn-base",{"base-change":"first\n"});
+  const aSha=run(s,a,["rev-parse","HEAD"]),b=join(s.home,"Projects/nts-lanes/dependent");
+  run(s,s.root,["worktree","add","-q","-b","dependent",b,aSha]);
+  writeFileSync(join(b,"dependent"),"second\n");run(s,b,["add","dependent"]);run(s,b,["commit","-qm","dependent"]);
+  const queue=join(s.home,".cache/nts-land/queue");mkdirSync(queue,{recursive:true});
+  writeFileSync(join(queue,"withdrawn.json"),JSON.stringify({id:"withdrawn",sha:aSha,tree:a,pid:2147483647,at:0}));
+  const result=await land(s,b).done;
+  assert.equal(result.status,1,result.out);
+  assert.match(result.out,/withdrawn or refused prerequisite/);
+  assert.equal(gates(s),0);
+  assert.equal(onMain(s,"base-change"),false);
+  assert.equal(onMain(s,"dependent"),false);
+});
+
+test("a withdrawn frozen member leaves before the surviving train is halved",async()=>{
+  const s=scratch(),bad=lane(s,"withdrawn-red",{RED:"red\n"}),a=lane(s,"survivor-a",{a:"green\n"}),b=lane(s,"survivor-b",{b:"green\n"});
+  const badSha=run(s,bad,["rev-parse","HEAD"]),trigger=join(s.home,"withdrawn"),preload=join(s.home,"withdraw-observation.ts");
+  // Only the observation of this scratch submitter changes. No real process
+  // receives a signal; the frozen train and its baseline still run normally.
+  writeFileSync(preload,`import fs from "node:fs";import path from "node:path";
+const kill=process.kill;process.kill=function(pid,signal){
+ if(signal===0&&fs.existsSync(${JSON.stringify(trigger)})){
+  const queue=${JSON.stringify(join(s.home,".cache/nts-land/queue"))};
+  for(const file of fs.existsSync(queue)?fs.readdirSync(queue):[]){
+   if(!file.endsWith(".json"))continue;const entry=JSON.parse(fs.readFileSync(path.join(queue,file),"utf8"));
+   if(entry.sha===${JSON.stringify(badSha)}&&entry.pid===pid)throw Object.assign(new Error("scratch submitter withdrawn"),{code:"ESRCH"});
+  }
+ }
+ return kill.call(process,pid,signal);
+};\n`);
+  s.env.NODE_OPTIONS=`--import=${preload}`;
+  const gate=join(s.root,"tooling/gate/pinned.sh");
+  writeFileSync(gate,readFileSync(gate,"utf8")+`\nif [ -e "$NTS_GATE_TREE/RED" ]; then touch '${trigger}'; fi\n`);
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","withdrawal observation"]);
+  const [withdrawn,...survivors]=await landTogether(s,[bad,a,b]);
+  assert.notEqual(withdrawn.status,0,withdrawn.out);
+  for(const result of survivors)assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),3,"one red train, its green base, then both survivors together");
+  assert.ok(onMain(s,"a"));assert.ok(onMain(s,"b"));assert.equal(onMain(s,"RED"),false);
+});
