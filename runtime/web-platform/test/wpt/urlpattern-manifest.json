@@ -1,0 +1,155 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "urlpattern": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "fixtures": [
+    {
+      "path": "urlpattern/urlpattern.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/urlpattern.any.js",
+      "sha256": "8e8f63551402b0b14ffedaba165c7d103430e705a335d744bd540db83348d174",
+      "gitBlob": "7d47d22609bf8eb14386b0363e36b86f77b2780d",
+      "format": "javascript",
+      "support": [
+        "urlpattern/resources/urlpatterntests.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 370,
+      "blockedTests": {}
+    },
+    {
+      "path": "urlpattern/urlpattern.https.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/urlpattern.https.any.js",
+      "sha256": "8e8f63551402b0b14ffedaba165c7d103430e705a335d744bd540db83348d174",
+      "gitBlob": "7d47d22609bf8eb14386b0363e36b86f77b2780d",
+      "format": "javascript",
+      "support": [
+        "urlpattern/resources/urlpatterntests.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 370,
+      "blockedTests": {}
+    },
+    {
+      "path": "urlpattern/urlpattern-constructor.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/urlpattern-constructor.any.js",
+      "sha256": "1bd1e358e89e767f647824bca98584131d65f806de3324ef2786bc1c729f90d0",
+      "gitBlob": "9290911d4b1c77141305f3914badf1ad1cbf6205",
+      "format": "javascript",
+      "support": [],
+      "harnessScripts": [],
+      "expectedTests": 2,
+      "blockedTests": {}
+    },
+    {
+      "path": "urlpattern/urlpattern-hasregexpgroups.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/urlpattern-hasregexpgroups.any.js",
+      "sha256": "3ddb2100f7b62cc0ff17d1e193cb6ded16be9cab07402bb783172a8ddeed3085",
+      "gitBlob": "33133d2511b065ca94cc5e793066cc8111b4d6e6",
+      "format": "javascript",
+      "support": [
+        "urlpattern/resources/urlpattern-hasregexpgroups-tests.js"
+      ],
+      "harnessScripts": [],
+      "expectedTests": 1,
+      "blockedTests": {}
+    },
+    {
+      "path": "urlpattern/urlpattern-empty-regexp-group.html",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/urlpattern-empty-regexp-group.html",
+      "sha256": "e771813ba8fb7b9d38af822c00697e27c54ec4c375ec896aa9fcb5f32f47c86c",
+      "gitBlob": "529184880446661aa8ec7109aaca3807a67e4f00",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 2,
+      "blockedTests": {}
+    }
+  ],
+  "support": [
+    {
+      "path": "urlpattern/resources/urlpatterntests.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/resources/urlpatterntests.js",
+      "sha256": "b7f8d058e73d85827a7e5611420edbf8fe6b54a1bb451ba09f30f7f696ae9e8b",
+      "gitBlob": "761f96b6fd3392027f357ce79c11734d9b97557f"
+    },
+    {
+      "path": "urlpattern/resources/urlpatterntestdata.json",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/resources/urlpatterntestdata.json",
+      "sha256": "f52a8ba3940de7e55ad47dc58eab5bccb697d7d76335c20ed7aaef6b85b98ab9",
+      "gitBlob": "272b51ef692183730529d39e05642611d147f6c9"
+    },
+    {
+      "path": "urlpattern/resources/urlpattern-hasregexpgroups-tests.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/urlpattern/resources/urlpattern-hasregexpgroups-tests.js",
+      "sha256": "130329152a601d2242b26eaed2b7a7837972a34c5df324ca284ab23fd986b2d4",
+      "gitBlob": "4be886e4a5390d7d43356d853cc00c7bbb23d361"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+    "sourceURL": "https://github.com/web-platform-tests/wpt/blob/5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03/LICENSE.md",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
+    "identifier": "BSD-3-Clause",
+    "note": "Copy the original licence bytes; preserve every existing fixture header and do not insert new text into upstream files."
+  },
+  "excluded": [
+    {
+      "path": "urlpattern/urlpattern-compare.tentative.https.any.js",
+      "reason": "Tentative generate/compareComponent are not part of the URLPattern Standard."
+    },
+    {
+      "path": "urlpattern/urlpattern-detached-frame-regexp.html",
+      "reason": "Requires a real Document and detached iframe RegExp realm; browser lifecycle capability is unavailable."
+    },
+    {
+      "path": "urlpattern/urlpattern-generate.tentative.any.js",
+      "reason": "Tentative generate/compareComponent are not part of the URLPattern Standard."
+    },
+    {
+      "path": "urlpattern/urlpattern-compare.tentative.any.js",
+      "reason": "Tentative generate/compareComponent are not part of the URLPattern Standard."
+    },
+    {
+      "path": "urlpattern/resources/urlpattern-compare-tests.tentative.js",
+      "reason": "Tentative generate/compareComponent are not part of the URLPattern Standard."
+    },
+    {
+      "path": "urlpattern/resources/urlpattern-compare-test-data.json",
+      "reason": "Tentative generate/compareComponent are not part of the URLPattern Standard."
+    },
+    {
+      "path": "urlpattern/resources/urlpattern-generate-test-data.json",
+      "reason": "Tentative generate/compareComponent are not part of the URLPattern Standard."
+    }
+  ],
+  "metadata": [
+    "urlpattern/WEB_FEATURES.yml",
+    "urlpattern/META.yml"
+  ],
+  "summary": {
+    "fixtureFiles": 5,
+    "registeredTests": 745,
+    "blockedTests": 0,
+    "runnableTests": 745
+  },
+  "nodeStatus": {
+    "path": "test/wpt/status/urlpattern.json",
+    "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+    "content": "{\n  \"urlpattern-generate.tentative.any.js\": {\n    \"skip\": \"generate function is not yet included in the URLPattern spec\"\n  },\n  \"resources/urlpattern-compare-tests.tentative.js\": {\n    \"skip\": \"compareComponent function is not yet included in the URLPattern spec\"\n  },\n  \"urlpattern-compare.tentative.any.js\": {\n    \"skip\": \"compareComponent function is not yet included in the URLPattern spec\"\n  },\n  \"urlpattern-compare.tentative.https.any.js\": {\n    \"skip\": \"compareComponent function is not yet included in the URLPattern spec\"\n  }\n}\n"
+  }
+}

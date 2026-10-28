@@ -343,6 +343,7 @@ export async function executeWptFixture(
     harness = new WptHarness(globals, fixture.blockedTests, context.timeoutMilliseconds, {
       exposeSelf: environment.exposeSelf,
       defaultTestName: fixture.defaultTestName, globalAliases: environment.globalAliases,
+      maxTests: fixture.expectedTests,
     });
     for (const error of startupErrors) harness.reportError(error);
     for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);

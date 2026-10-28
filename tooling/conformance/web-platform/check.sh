@@ -55,6 +55,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/wpt-performance.test.ts \
   runtime/web-platform/test/wpt-performance-adapter.test.ts \
   runtime/web-platform/test/performance-policy.test.ts \
+  runtime/web-platform/test/wpt-urlpattern.test.ts \
   runtime/web-platform/test/fetch-headers-wpt-policy.test.ts \
   runtime/web-platform/test/fetch-body-wpt-policy.test.ts \
   runtime/web-platform/test/fetch-multipart-wpt-policy.test.ts \
@@ -62,6 +63,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/file-reader-wpt-policy.test.ts \
   runtime/web-platform/test/file-forms-urlencoded-policy.test.ts \
   runtime/web-platform/test/navigator-user-agent-policy.test.ts \
+  runtime/web-platform/test/urlpattern-policy.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \
   runtime/web-platform/test/abort-wpt-policy.test.ts \
