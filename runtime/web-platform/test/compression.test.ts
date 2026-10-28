@@ -33,8 +33,8 @@ import { NodeCompressionProvider } from "./node-compression-provider.ts";
 // Web IDL enum conversion: https://webidl.spec.whatwg.org/#es-enumeration
 // Streams transform setup: https://streams.spec.whatwg.org/#transformstream-set-up
 // Descriptor-only and intrinsic-prototype-spoofing cases are outside nts's layout.
-// Runtime/global assembly is a separate stage; these tests inject only through
-// the internal factories and never use the host's CompressionStream classes.
+// These algorithm controls inject only through the internal factories; public
+// runtime construction is covered separately in compression-runtime.test.ts.
 
 interface ByteTransform {
   readonly readable: ReadableStream<Uint8Array>;
@@ -189,7 +189,7 @@ const bufferSources: readonly { name: string; make: (buffer: ArrayBuffer) => unk
   { name: "DataView", make: (buffer) => new DataView(buffer) },
 ];
 
-test("compression classes keep canonical identity and staged construction guards", async () => {
+test("compression classes keep canonical identity and reject public construction without a runtime", async () => {
   assert.throws(() => new CompressionStream("gzip"), TypeError);
   assert.throws(() => new DecompressionStream("gzip"), TypeError);
   const compressor = createCompressionStream("gzip", new RecordingProvider());
