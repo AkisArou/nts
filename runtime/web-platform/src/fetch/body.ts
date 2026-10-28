@@ -5,7 +5,8 @@ import { Blob } from "../file/blob.ts";
 import { FormData } from "../forms/form-data.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
-import { parseMIMEType } from "../forms/mime.ts";
+import { parseMIMEType, serializeMIMEType } from "../forms/mime.ts";
+import type { MIMEType } from "../forms/mime.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
 import { parsePlainText } from "../json/plain.ts";
 import type { RandomSource } from "../provider/primitives.ts";
@@ -77,6 +78,54 @@ export function convertBodyInit(input: BodyInit | null | undefined): BodyInit | 
  * interface prototype carries the interface's members and nothing else.
  */
 export const bodyContentType: unique symbol = Symbol("Body content type");
+
+/** Fetch's extract-a-MIME-type over the combined Content-Type header value. */
+function extractBodyMIMEType(value: string | null): MIMEType | null {
+  if (value === null) return null;
+  let charset: string | null = null;
+  let essence: string | null = null;
+  let mimeType: MIMEType | null = null;
+  let start = 0;
+  let position = 0;
+  while (position <= value.length) {
+    const character = value.charAt(position);
+    if (character === '"') {
+      // Get/decode/split preserves quoted strings, including escaped quotes and
+      // commas. An unterminated quoted string consumes the remaining input.
+      position++;
+      while (position < value.length) {
+        const quoted = value.charAt(position++);
+        if (quoted === '"') break;
+        if (quoted === "\\" && position < value.length) position++;
+      }
+      continue;
+    }
+    if (position < value.length && character !== ",") {
+      position++;
+      continue;
+    }
+    const temporaryMimeType = parseMIMEType(value.slice(start, position));
+    if (temporaryMimeType !== null && temporaryMimeType.essence !== "*/*") {
+      mimeType = temporaryMimeType;
+      if (mimeType.essence !== essence) {
+        charset = mimeType.parameters.get("charset") ?? null;
+        essence = mimeType.essence;
+      } else if (!mimeType.parameters.has("charset") && charset !== null) {
+        const parameters = new Map(mimeType.parameters);
+        parameters.set("charset", charset);
+        mimeType = {
+          type: mimeType.type,
+          subtype: mimeType.subtype,
+          essence: mimeType.essence,
+          parameters,
+        };
+      }
+    }
+    position++;
+    start = position;
+  }
+  return mimeType;
+}
 
 export class BodyState {
   stream: ReadableStream<Uint8Array> | null;
@@ -261,12 +310,14 @@ export abstract class Body {
   }
 
   async blob(): Promise<Blob> {
-    return new Blob([await this.bodyState.consume()], { type: this[bodyContentType]() ?? "" });
+    const bytes = await this.bodyState.consume();
+    const mime = extractBodyMIMEType(this[bodyContentType]());
+    return new Blob([bytes], { type: mime === null ? "" : serializeMIMEType(mime) });
   }
 
   async formData(): Promise<FormData> {
     const bytes = await this.bodyState.consume();
-    const mime = parseMIMEType(this[bodyContentType]() ?? "");
+    const mime = extractBodyMIMEType(this[bodyContentType]());
 
     if (mime?.essence === "multipart/form-data") return decodeMultipart(bytes, mime);
     if (mime?.essence !== "application/x-www-form-urlencoded")
