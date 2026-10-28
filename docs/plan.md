@@ -203,6 +203,12 @@ The designs and their build orders are in [`foundations/`](foundations).
    - WebSocket as the client only: the server code in `runtime/web-platform`
      is removed once the realtime pull requests have landed, and the client's
      conformance tests get a peer of their own;
+   - Brotli for `CompressionStream` and `DecompressionStream` once the
+     compression pull requests have landed, then Web Crypto's Modern
+     Algorithms, as node implements them, once the Web Crypto chain has
+     landed. The Web Crypto cloud agent writes the TypeScript and its
+     maintainer the native half, over the brotli and OpenSSL built from node's
+     sources;
    - `runtime/sdk` becoming `runtime/app` (`@nts/app`), its web-standard parts
      moving to `runtime/web-platform` and its lib subset retired;
    - the floor's `WebAssembly` API last, through an embedded engine linked

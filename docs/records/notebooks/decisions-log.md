@@ -346,6 +346,18 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   of the test tree that no compiled program links. It replaces the removed
   server code as the WebSocket peer of the WPT resource server. Asked, the
   user answered "Yes I am ok with the ws dev dependency".
+- **Brotli and Web Crypto's Modern Algorithms are scheduled.** Asked whether
+  each is in its specification and whether node or Chrome supports it, the
+  user answered "If so, yes we should schedule it and add it to our plan for
+  implementation whenever you think we should". `"brotli"` is a
+  `CompressionFormat` of the WHATWG Compression Standard; node accepts it from
+  v24.7.0 and v22.20.0, and Firefox ships it. The Modern Algorithms are a WICG
+  extension of the Web Cryptography API. Node implements it from v24.7.0
+  (ML-KEM, ML-DSA, SHA-3, cSHAKE, AES-OCB, ChaCha20-Poly1305, `getPublicKey`,
+  `supports`), adding KMAC and Argon2 in v24.8.0, TurboSHAKE and KangarooTwelve
+  in v25.9.0, and hybrid KEMs in v26.10.0; Chrome is still experimenting with
+  it. Its scope in nts is what node implements. Both are native, over the
+  brotli and OpenSSL that nts builds from node's sources.
 
 ## Contributors and packages (10-28)
 
