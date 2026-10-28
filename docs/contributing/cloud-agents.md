@@ -7,13 +7,19 @@ and [`workflow.md`](workflow.md); this page is what differs.
 
 ## What a cloud agent works on
 
-Plain TypeScript in `runtime/web-platform`, for features whose provider is
-source code ([which kind of provider](../foundations/builtins.md#which-kind-of-provider)):
-the specification-defined API surfaces and policy, and the conformance tests
-that hold them to their specifications. Never a feature the compiler or
-native code provides: whatever depends on the layout of the values it is
-given (`structuredClone`, string conversions) and whatever has a known native
-winner (SIMD transcoding, compression, cryptography) is built inside nts.
+Plain TypeScript in `runtime/web-platform`, and the conformance tests that
+hold it to its specifications:
+
+- the specification-defined API surfaces and policy of features whose
+  provider is source code ([which kind of provider](../foundations/builtins.md#which-kind-of-provider));
+- the TypeScript surface of a native feature over its capability, where a
+  maintainer's handoff assigns it: the Web Cryptography API over
+  `host:crypto`'s primitives.
+
+Never the work the compiler or native code does: whatever depends on the
+layout of the values it is given (`structuredClone`, string conversions) and
+whatever has a known native winner (SIMD transcoding, compression, the
+cryptographic primitives themselves) is built inside nts.
 
 Out of scope: `compiler/`, `runtime/c/`, `tooling/` (except adding a test file
 to `tooling/conformance/web-platform/check.sh`'s list), `docs/` (except a

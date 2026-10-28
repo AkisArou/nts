@@ -73,12 +73,12 @@ replacement for a slower one:
 | kind | when | features |
 |---|---|---|
 | **compiler** | the work depends on the layout of the values it is given | `Map`, `Set`, arrays and strings; `JSON.stringify` and typed `JSON.parse`; `structuredClone`, and the messages `MessagePort` carries; the walk `console` does over a typed value; `RegExp` literal patterns, matched by code generated at compile time |
-| **native, from the start** | a native implementation is known to win | converting between strings and bytes, with SIMD in `runtime/c`: UTF-8 for `TextEncoder` and `TextDecoder`, base64 for `atob` and `btoa`, UTF-8 validation for WebSocket text; compression through a vendored library (`CompressionStream`); `crypto` through OpenSSL; `Intl` through ICU; `WebAssembly` through an engine. On the JVM the JDK's own (intrinsified) code, on JS hosts the host's |
+| **native, from the start** | a native implementation is known to win | converting between strings and bytes, with SIMD in `runtime/c`: UTF-8 for `TextEncoder` and `TextDecoder`, base64 for `atob` and `btoa`, UTF-8 validation for WebSocket text; compression through a vendored library (`CompressionStream`); the primitives under `crypto` through OpenSSL; `Intl` through ICU; `WebAssembly` through an engine. On the JVM the JDK's own (intrinsified) code, on JS hosts the host's |
 | **source** | everything else | API surfaces, protocol state machines and policy: Fetch, Streams, HTTP, cookies, events, forms, `Temporal`'s calendar arithmetic |
 
 A native feature's TypeScript is its API surface over a `host:` capability
-(`host:utf8`, `host:base64`, `host:zlib`), so one surface serves every
-target. Each feature is held to a benchmark row against node and Bun, and a
+(`host:utf8`, `host:base64`, `host:zlib`, `host:crypto`), so one surface
+serves every target. Each feature is held to a benchmark row against node and Bun, and a
 source provider that loses is fixed in the compiler first, where the same
 weakness slows ordinary programs too. URL parsing is expected to need native
 code as well, as node's Ada parser shows; its benchmark row decides.
@@ -319,8 +319,10 @@ From the open-questions audit, also 10-28
 - **`types: ["node"]` wherever a profile provides `node:*`:** native programs
   see node's types, timers included; Chromium and browsers see the DOM's (G4).
 - **Randomness and crypto:** the OS's secure random generator on each target,
-  as `host:random`; `crypto.subtle` from the vendored OpenSSL on native, the
-  JCA on the JVM, and the host on JS hosts (G16).
+  as `host:random`. `crypto.subtle` is shared TypeScript in
+  `runtime/web-platform`, owning every step the specification defines, over
+  primitives from the vendored OpenSSL on native and the JCA on the JVM
+  (`host:crypto`); on JS hosts it is the host's (G16).
 - **`console` formats values as node's `util.inspect` does,** and writes to
   each platform's log (G18). The walk over a typed value is generated per
   type by the compiler; the formatting rules are shared TypeScript.

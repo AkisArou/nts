@@ -341,6 +341,16 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   compiles each with nts, gates and lands it. The user proposed ChatGPT for
   "typescript library code" in `runtime/{ecmascript,web-platform,nodejs}`,
   and chose the WinterTC gaps over `runtime/sdk` as the start.
+- **A second cloud task takes the Web Cryptography API** (the coordinator,
+  asked by the user for a second, larger cloud task): its specification
+  steps (algorithm normalization, key formats, usages, errors, the
+  `CryptoKey`'s slots) are shared TypeScript in
+  `runtime/web-platform/src/crypto`, over a primitive interface,
+  `host:crypto`, that OpenSSL and the JCA implement; its test is WPT's
+  `WebCryptoAPI` at the revision node 24.20 vendors. RegExp and Temporal
+  were too far along to need one: on the host, RegExp passed 1,874 of
+  test262's 1,896 RegExp tests that day, and Temporal's recorded result is
+  4,567 of 4,603.
 - **`runtime/sdk` becomes `runtime/app` (`@nts/app`):** its web-standard
   parts (`Notification`, the Async Clipboard, Web Share, Geolocation, the
   sensors) move to `runtime/web-platform` as `web:` features, with each
