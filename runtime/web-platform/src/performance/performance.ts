@@ -220,7 +220,7 @@ export class PerformanceMeasure extends PerformanceEntry {
 
 /** HR Time and User Timing for a non-Window environment. */
 export class Performance extends EventTarget {
-  readonly #monotonic: () => number;
+  readonly #runtime: WebPlatformRuntime;
   readonly #origin: number;
   readonly #epochOrigin: number | undefined;
   readonly #cloner: PerformanceDetailCloner | undefined;
@@ -237,14 +237,14 @@ export class Performance extends EventTarget {
     if (origin !== undefined && (!Number.isFinite(origin.epochMilliseconds) || !Number.isFinite(origin.monotonicMilliseconds))) {
       throw new TypeError("Performance time origin must contain finite clock values");
     }
-    this.#monotonic = construction.runtime.monotonicMilliseconds.bind(construction.runtime);
+    this.#runtime = construction.runtime;
     this.#origin = origin?.monotonicMilliseconds ?? 0;
     this.#epochOrigin = origin?.epochMilliseconds;
     this.#cloner = construction.capabilities.detailCloner;
   }
 
-  // The hot path is one captured provider call and one constant subtraction.
-  now(): number { return this.#monotonic() - this.#origin; }
+  // The hot path is one direct provider method call and one constant subtraction.
+  now(): number { return this.#runtime.monotonicMilliseconds() - this.#origin; }
 
   get timeOrigin(): number {
     if (this.#epochOrigin === undefined) {
@@ -275,7 +275,7 @@ export class Performance extends EventTarget {
 
   #makeMarkData(name: string, options: ConvertedMarkOptions): EntryConstruction {
     if (options.start !== undefined && options.start < 0) throw new TypeError("Mark startTime must not be negative");
-    const start = options.start ?? this.#monotonic() - this.#origin;
+    const start = options.start ?? this.#runtime.monotonicMilliseconds() - this.#origin;
     const detail = cloneDetail(options.detail, this.#cloner);
     return new EntryConstruction(name, "mark", start, 0, detail);
   }
@@ -309,7 +309,7 @@ export class Performance extends EventTarget {
     else if (typeof options !== "string" && options.end !== undefined) end = this.#timestamp(options.end);
     else if (typeof options !== "string" && options.start !== undefined && options.duration !== undefined) {
       end = this.#timestamp(options.start) + this.#timestamp(options.duration);
-    } else end = this.#monotonic() - this.#origin;
+    } else end = this.#runtime.monotonicMilliseconds() - this.#origin;
 
     let start: number;
     if (typeof options !== "string" && options.start !== undefined) start = this.#timestamp(options.start);

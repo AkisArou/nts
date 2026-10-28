@@ -16,7 +16,10 @@
     "xhr": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
     "xhr/formdata": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
     "webidl/ecmascript-binding/es-exceptions": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-    "html/webappapis": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742"
+    "html/webappapis": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "hr-time": "34cafd797e58dad280d20040eee012d49ccfa91f",
+    "performance-timeline": "94caab7038b27c16d605fa3547dacbee3a2fde4e",
+    "user-timing": "5ae85bf8267ac617833dc013dee9774c9e2a18b7"
   },
   "files": {
     "common/blank.html": {
@@ -683,6 +686,14 @@
       "sha256": "74d569fadfbde3742590e8087e1ad92491f13a5df0867aca90f0591547f24f6d",
       "gitBlob": "ce3e3579d7c2c74c27d907ccd25c953588ef87f2"
     },
+    "hr-time/basic.any.js": {
+      "sha256": "83751a3306d9ee4f9c83e405bd91c293476b25240e958d0277f5e80a93cd8c67",
+      "gitBlob": "4cd6e42dfc2274ac04ab46fb2f12d30ca150865b"
+    },
+    "hr-time/monotonic-clock.any.js": {
+      "sha256": "cfbbde21f4ffcb2e3e4d60542297ece40089364b90720de646c7a716afdfb6e9",
+      "gitBlob": "c53b04d844e4f587891595c09c56e336f3893f9b"
+    },
     "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html": {
       "sha256": "c0fb97b890aeb587d92cc632a418e8e4e7a92f447981f335571083dacf86b4f8",
       "gitBlob": "4319deee7b50163a68e556ee7f401373fab7495b"
@@ -690,6 +701,10 @@
     "LICENSE.md": {
       "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
       "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+    },
+    "performance-timeline/performanceentry-tojson.any.js": {
+      "sha256": "aa7fd6ddc5f172c9eb54a9be6941c683f540915b6358fb1bc0e736a85bcac6ce",
+      "gitBlob": "44f0156eec19241970028c28e5897be4d6f1cb81"
     },
     "resources/testharness.js": {
       "sha256": "7a108d7cfa98ac413ddb38f82fd509fb2037dfcc25ccf466567520cbb6bdf1fa",
@@ -1035,6 +1050,86 @@
     "url/urlencoded-parser.any.js": {
       "sha256": "9d3514f33a6bce8ab4d0163a77d79f0231ef30239ca237cf75f9e206a8b0c3e8",
       "gitBlob": "847465cb9214e1feac1babb6a1b86ecec9597028"
+    },
+    "user-timing/clear_all_marks.any.js": {
+      "sha256": "b5efcfaad5934c383be44596f1ec74e5a606990f70409ae8493e7f96d28ecf59",
+      "gitBlob": "35cd2a04f610369f69442bd27e2e8f00f01a27b1"
+    },
+    "user-timing/clear_all_measures.any.js": {
+      "sha256": "0057a98fd421332b64b7b0bc80597fcdc7b0a003b8edf735d3938bf56aa6cd0b",
+      "gitBlob": "32c993f2827a301feb7bcb69c11317d4020f12f2"
+    },
+    "user-timing/clear_non_existent_mark.any.js": {
+      "sha256": "f74b2a757397c4be454b2ce3645ede5830ec749f29b5d107caf0439371e5a6c4",
+      "gitBlob": "c7d8b4786134015f7aea7ab1852ef7ad0277926b"
+    },
+    "user-timing/clear_non_existent_measure.any.js": {
+      "sha256": "311898bd94d26a8f07b9e5e12e251cd81197a919706d83ea9c2bbd914371a00f",
+      "gitBlob": "9de0b5f266d4e2815f28fb29468ea571ba7a1bad"
+    },
+    "user-timing/clear_one_mark.any.js": {
+      "sha256": "6e6844bef0278656db15833e0504219e258607d0157ec6e6d7375ec586502954",
+      "gitBlob": "c180199d8c9f9224311d09c2299d2f1220dff970"
+    },
+    "user-timing/clear_one_measure.any.js": {
+      "sha256": "568062688d22b721a803f7bcc2880587fcd5d305d2dc2d3ca74cdab8b152764b",
+      "gitBlob": "a5e663772c8bbe9ce9f845ac471fbf10dd5a2867"
+    },
+    "user-timing/entry_type.any.js": {
+      "sha256": "ed18748fe847e72a3367a089b2dd7aae9ad7f4c877ad202923e251acf21cb233",
+      "gitBlob": "1e37453d09d42ea9c530bc2902cccb8f66fd6efd"
+    },
+    "user-timing/mark-entry-constructor.any.js": {
+      "sha256": "ea31875d8e54925219a2241d0edfb1cd2afb215b0f315ebbeb2b9f043415b005",
+      "gitBlob": "ef9c403dda67236893e72f0f65a4bff4718b12ed"
+    },
+    "user-timing/mark-errors.any.js": {
+      "sha256": "431c69918c2e24f51f31bff94d22be112b7c0f343d9d25c423db5136174d488c",
+      "gitBlob": "39bafc045cb721c520d99b3f38c8e460bf6d4bcc"
+    },
+    "user-timing/mark-l3.any.js": {
+      "sha256": "9b903b18302d8d6a34000542db68ffac4d8b04ca3644008ee8466ba3d5130262",
+      "gitBlob": "407a5c8bba6a3c82a05df6a54d829b37f3a72264"
+    },
+    "user-timing/mark-measure-feature-detection.html": {
+      "sha256": "6923092e3186a6daecb586b3c10c7c177a8b7d32b8471e4c4eadb9077767a1c8",
+      "gitBlob": "6f1ad489e95680fc5d1be4e25dcaa2eeee9a0aa5"
+    },
+    "user-timing/mark-measure-return-objects.any.js": {
+      "sha256": "c24e02c8d67fb38f54f8afccd51fcd5a4803cfe2e1f2ae7f9dee1619a195e50e",
+      "gitBlob": "bb15c5839818babf731bfec600395e13e5b794aa"
+    },
+    "user-timing/mark.any.js": {
+      "sha256": "831224e2cf0fe06c2b3fa5a0a4162dcb16a1752a739ff9a4f2356d80218a0e6c",
+      "gitBlob": "7e814d2074ca8bb9015bea02b741ce9875decec2"
+    },
+    "user-timing/measure_syntax_err.any.js": {
+      "sha256": "5e1587ce95cfb26fb9ee544e458fde58e2d234b8d514c4cc05052c62304a1f4a",
+      "gitBlob": "9b762a40906351500527b9464837f50c04f77f3b"
+    },
+    "user-timing/measure-l3.any.js": {
+      "sha256": "e93efe2e27e2bcc244fed0cdfb4c705884f462657471a30b32dc7e9ff3179bba",
+      "gitBlob": "642b55ab635e2c021d99c1aaf3e924ca2c5c0c29"
+    },
+    "user-timing/measure-with-dict.any.js": {
+      "sha256": "9fdc63e13d899f3bad040da20ac079671277f2d9144c518ff50ae91ef2267548",
+      "gitBlob": "b452feb0de6fbb4749208baf0153bb12ab79ef04"
+    },
+    "user-timing/resources/user-timing-helper.js": {
+      "sha256": "0bb55d3f261a5beac0248e08e4837298ae0236dc85b53c460675a28a20c0370d",
+      "gitBlob": "8d43768ec2819620bf637c41918e8a6e6bc72181"
+    },
+    "user-timing/structured-serialize-detail.any.js": {
+      "sha256": "632d8d086b3ebcee2eae8080c43561d4093e0e415496a0edc882b68245e28b9e",
+      "gitBlob": "dcceffde278df17a1dcf86f9ee11c519bbdc1abd"
+    },
+    "user-timing/user_timing_exists.any.js": {
+      "sha256": "82ab5156834e8183910b54b010a2b7e7bfd7388e744914ae0957c8fefe3aa07c",
+      "gitBlob": "adf9052ebd58d8b3bb7ad85bca385095212b38ea"
+    },
+    "user-timing/user-timing-tojson.html": {
+      "sha256": "bba6fb530d347f2cfe28d90f8327f51b1df1c0f8a72ee7ad877b300f696d531d",
+      "gitBlob": "6aef7fa904ab958a4c3f8600ea592fac418d0522"
     },
     "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js": {
       "sha256": "b85850f07bd97c6424439f0c79e2297a2321d4e3989001f9e217192474b0827e",
