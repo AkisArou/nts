@@ -292,8 +292,12 @@ export function slice<T>(begin = 0, end = Infinity) {
                     let local_begin = begin;
                     let local_end = end - local_begin;
                     // Skip the first X values
-                    while (local_begin-- > 0)
-                        iterator.next!();
+                    while (local_begin-- > 0) {
+                        const next = iterator.next;
+                        if (typeof next !== "function")
+                            throw new TypeError("iterator.next is not a function");
+                        next.call(iterator);
+                    }
                     // Loop through the remaining items until the end is reached
                     for await (let datum of iterator) {
                         yield datum;
@@ -311,8 +315,12 @@ export function slice<T>(begin = 0, end = Infinity) {
                 let local_begin = begin;
                 let local_end = end - local_begin;
                 // Skip the first X values
-                while (local_begin-- > 0)
-                    iterator.next!();
+                while (local_begin-- > 0) {
+                    const next = iterator.next;
+                    if (typeof next !== "function")
+                        throw new TypeError("iterator.next is not a function");
+                    next.call(iterator);
+                }
                 // Loop through the remaining items until the end is reached
                 for (let datum of iterator) {
                     yield datum;
