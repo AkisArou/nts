@@ -13,7 +13,6 @@ import { executeWptFixture, loadWptFixtures, runWptFixtures } from "./wpt/runner
 import type { WptFixture, WptManifest, WptRunnerOptions, WptSource } from "./wpt/runner.ts";
 import type { WptVersions } from "./wpt/versions.ts";
 
-import type { WptVersions } from "./wpt/versions.ts";
 
 function corpus(t: TestContext): {
   root: URL;
