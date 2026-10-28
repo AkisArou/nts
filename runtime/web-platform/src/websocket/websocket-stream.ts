@@ -305,7 +305,6 @@ export class WebSocketStream {
         // A concurrent read is authoritative for the peer's close code. Raw
         // transports commonly reject the write just before that read settles.
         this.#state = "closing";
-        this.#closeReadable();
         this.#ensureCloseDrain();
       }
       throw writeError;
@@ -344,7 +343,8 @@ export class WebSocketStream {
 
     this.#state = "closing";
     this.#closeOrigin = origin;
-    this.#closeReadable();
+    // Draft sections 4.1 and 5: the readable finishes on protocol closure,
+    // so a failed closing handshake can still error its pending reads.
     if (origin === "public" || origin === "readable-cancel") {
       this.#errorWritable(invalidStateError());
     }

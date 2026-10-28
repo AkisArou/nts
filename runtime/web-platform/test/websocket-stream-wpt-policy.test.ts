@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
-import { WebSocketError, WebSocketStream } from "../src/index.ts";
+import { DOMException, WebSocketError, WebSocketStream } from "../src/index.ts";
 import type {
   SocketIncoming,
   SocketMessage,
@@ -14,6 +14,15 @@ import type {
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 60_000 }, fn);
 };
+
+// An event-loop checkpoint, without an assertion about elapsed machine time.
+const checkpoint = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+function observeSettlement(promise: Promise<unknown>): { settled: boolean } {
+  const result = { settled: false };
+  promise.then(() => { result.settled = true; }, () => { result.settled = true; });
+  return result;
+}
 
 class ControlledSession implements WebSocketSession {
   readonly protocol = "";
@@ -195,4 +204,99 @@ suite("WebSocketStream cancel and abort preserve valid WebSocketError close info
       assert.deepEqual(sessions[next++]?.closes, [{ code: error.closeCode, reason: error.reason }]);
     }
   }
+});
+
+// Draft sections 4.1 and 5: starting a handshake does not finish the readable.
+for (const operation of ["public close", "writer close", "writable abort"] as const) {
+  for (const clean of [true, false]) {
+    suite(`WebSocketStream ${operation} keeps a read pending until ${clean ? "clean" : "abnormal"} closure`, async (t) => {
+      const session = new ControlledSession();
+      controlledRuntime(t, session);
+      const stream = new WebSocketStream("ws://example.test/socket");
+      const { readable, writable } = await stream.opened;
+      const read = readable.getReader().read();
+      const readState = observeSettlement(read);
+      let closing: Promise<void>;
+      if (operation === "public close") {
+        stream.close();
+        closing = Promise.resolve();
+      } else if (operation === "writer close") {
+        closing = writable.getWriter().close();
+      } else {
+        closing = writable.abort(new Error("application abort"));
+      }
+      observeSettlement(closing);
+      await session.waitForCloses(1);
+      await checkpoint();
+      assert.equal(readState.settled, false, "a close request cannot complete a pending read");
+
+      session.push({
+        kind: "close",
+        code: clean ? 1000 : 1006,
+        reason: "",
+        wasClean: clean,
+        failed: !clean,
+      });
+      if (clean) {
+        assert.deepEqual(await stream.closed, { closeCode: 1000, reason: "" });
+        assert.deepEqual(await read, { value: undefined, done: true });
+        await closing;
+      } else {
+        const error = await stream.closed.then(
+          () => assert.fail("an abnormal closing handshake must reject"),
+          (reason: unknown) => reason,
+        );
+        assert.ok(error instanceof WebSocketError);
+        assert.equal(error.closeCode, 1006);
+        await assert.rejects(read, (reason: unknown) => reason === error);
+        if (operation === "writer close") {
+          await assert.rejects(closing, (reason: unknown) => reason === error);
+        } else {
+          await closing;
+        }
+      }
+    });
+  }
+}
+
+suite("WebSocketStream send failure preserves the readable until peer close feedback", async (t) => {
+  const session = new ControlledSession();
+  controlledRuntime(t, session);
+  const stream = new WebSocketStream("ws://example.test/socket");
+  const { readable, writable } = await stream.opened;
+  const read = readable.getReader().read();
+  const readState = observeSettlement(read);
+  const accepted = Promise.withResolvers<void>();
+  session.sendGates.push(accepted);
+  const write = writable.getWriter().write("pending");
+  observeSettlement(write);
+  await session.waitForSends(1);
+  accepted.reject(new Error("peer stopped receiving"));
+  await assert.rejects(write, (error: unknown) =>
+    error instanceof DOMException && error.name === "InvalidStateError");
+  await checkpoint();
+  assert.equal(readState.settled, false, "write failure must preserve pending peer feedback");
+  session.push({ kind: "close", code: 4001, reason: "peer", wasClean: true, failed: false });
+  const error = await stream.closed.then(
+    () => assert.fail("unwritten data must reject closed"),
+    (reason: unknown) => reason,
+  );
+  assert.ok(error instanceof WebSocketError);
+  assert.equal(error.closeCode, 4001);
+  assert.equal(error.reason, "peer");
+  await assert.rejects(read, (reason: unknown) => reason === error);
+});
+
+suite("WebSocketStream readable cancellation still closes the readable immediately", async (t) => {
+  const session = new ControlledSession();
+  controlledRuntime(t, session);
+  const stream = new WebSocketStream("ws://example.test/socket");
+  const { readable } = await stream.opened;
+  const reader = readable.getReader();
+  const read = reader.read();
+  await reader.cancel();
+  assert.deepEqual(await read, { value: undefined, done: true });
+  session.push({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
+  await assert.rejects(stream.closed, WebSocketError);
+  assert.deepEqual(await reader.read(), { value: undefined, done: true });
 });
