@@ -100,6 +100,31 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN LAZY COLLECTIONS: add with the lazy iterator case.
+{
+  const name = "jetstream-lazy-collections";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+    test(`${name}: all nine original pipeline outputs, BigInts and NaN are retained`, () => {
+      const result = module.render(1);
+      assert.ok(isRecord(result));
+      assert.equal(result.totalLength, 635);
+      const encoded = JSON.stringify(result, (_key: string, value: unknown): unknown => {
+        if (typeof value === "bigint") return { $bigint: value.toString() };
+        if (typeof value === "number" && Number.isNaN(value)) return { $number: "NaN" };
+        return value;
+      });
+      assert.equal(sha256(encoded), "1dc06cbe68909d8b8046b88def9ad7171215af0f05a2aab82597246b7fcdbf75");
+      assert.equal(module.work(1), 3341292288);
+      assert.equal(module.work(2), 3102909952);
+      assert.throws(() => module.work(0), /this.totalLength of undefined is invalid/);
+    });
+  }
+}
+// END LAZY COLLECTIONS.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
