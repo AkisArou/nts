@@ -57,3 +57,86 @@ test("encoding operations accept genuine subclass receivers", () => {
   assert.deepEqual(new Encoder().encodeInto("\ud83d\udc99", destination), { read: 2, written: 4 });
   assert.equal(new Decoder().decode(destination), "\ud83d\udc99");
 });
+
+// Web IDL §3.2.26 converts BufferSource without reading its bytes. Encoding
+// §7.2 takes the byte copy only after converting the options dictionary.
+test("TextDecoder treats a detached DataView as an empty byte sequence", () => {
+  const buffer = Uint8Array.of(0x61).buffer;
+  const view = new DataView(buffer);
+  buffer.transfer();
+  let optionsRead = false;
+  assert.equal(new TextDecoder().decode(view, {
+    get stream() {
+      optionsRead = true;
+      return false;
+    },
+  }), "");
+  assert.equal(optionsRead, true);
+});
+
+test("TextDecoder reads the bytes after converting stream options", () => {
+  const bytes = Uint8Array.of(0x61);
+  assert.equal(new TextDecoder().decode(bytes, {
+    get stream() {
+      bytes[0] = 0x62;
+      return false;
+    },
+  }), "b");
+});
+
+test("TextDecoder accepts a DataView detached during option conversion", () => {
+  const buffer = Uint8Array.of(0x61).buffer;
+  const view = new DataView(buffer);
+  assert.equal(new TextDecoder().decode(view, {
+    get stream() {
+      buffer.transfer();
+      return false;
+    },
+  }), "");
+});
+
+test("TextDecoder rejects resizable buffer inputs before options conversion", () => {
+  const inputs = [
+    new ArrayBuffer(2, { maxByteLength: 4 }),
+    new SharedArrayBuffer(2, { maxByteLength: 4 }),
+    new Uint8Array(new ArrayBuffer(2, { maxByteLength: 4 })),
+    new DataView(new ArrayBuffer(2, { maxByteLength: 4 })),
+    new Uint8Array(new SharedArrayBuffer(2, { maxByteLength: 4 })),
+    new DataView(new SharedArrayBuffer(2, { maxByteLength: 4 })),
+  ];
+  for (const input of inputs) {
+    let optionsRead = false;
+    assert.throws(() => new TextDecoder().decode(input, {
+      get stream() {
+        optionsRead = true;
+        return false;
+      },
+    }), TypeError);
+    assert.equal(optionsRead, false);
+  }
+});
+
+test("TextEncoder.encodeInto rejects resizable destinations after source conversion", () => {
+  for (const buffer of [
+    new ArrayBuffer(2, { maxByteLength: 4 }),
+    new SharedArrayBuffer(2, { maxByteLength: 4 }),
+  ]) {
+    let converted = false;
+    const encoder = new TextEncoder();
+    const encodeInto = encoder.encodeInto as (source: unknown, destination: Uint8Array) => unknown;
+    assert.throws(() => encodeInto.call(encoder, {
+      toString() {
+        converted = true;
+        return "a";
+      },
+    }, new Uint8Array(buffer)), TypeError);
+    assert.equal(converted, true);
+  }
+});
+
+test("fixed shared buffers remain valid at both encoding boundaries", () => {
+  const buffer = new SharedArrayBuffer(4);
+  const bytes = new Uint8Array(buffer);
+  assert.deepEqual(new TextEncoder().encodeInto("\ud83d\udc99", bytes), { read: 2, written: 4 });
+  assert.equal(new TextDecoder().decode(new DataView(buffer)), "\ud83d\udc99");
+});

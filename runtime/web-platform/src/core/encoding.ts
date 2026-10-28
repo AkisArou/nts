@@ -17,10 +17,34 @@ export interface TextEncoderEncodeIntoResult {
 
 const emptyBytes = new Uint8Array(0);
 
+/** Encoding uses [AllowShared], but not Web IDL's [AllowResizable]. */
+function requireFixedBuffer(buffer: ArrayBufferLike): void {
+  if (
+    (buffer instanceof ArrayBuffer && buffer.resizable) ||
+    (buffer instanceof SharedArrayBuffer && buffer.growable)
+  ) {
+    throw new TypeError("Encoding buffer sources must have fixed length");
+  }
+}
+
 function requireUint8Array(value: Uint8Array, name: string): void {
   if (!(value instanceof Uint8Array)) {
     throw new TypeError(name + " must be a Uint8Array");
   }
+  requireFixedBuffer(value.buffer);
+}
+
+function requireBufferSource(input: AllowSharedBufferSource | undefined): void {
+  if (input === undefined) return;
+  if (ArrayBuffer.isView(input)) {
+    requireFixedBuffer(input.buffer);
+    return;
+  }
+  if (input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+    requireFixedBuffer(input);
+    return;
+  }
+  throw new TypeError("TextDecoder input must be an ArrayBuffer or ArrayBufferView");
 }
 
 function bufferSourceBytes(
@@ -30,9 +54,10 @@ function bufferSourceBytes(
     return emptyBytes;
   }
   if (ArrayBuffer.isView(input)) {
-    // A view whose buffer was transferred reports zero length, and constructing over it
-    // throws. Web IDL says getting a copy of a detached buffer source yields an empty byte
-    // sequence, so an emptied view decodes to nothing rather than failing.
+    // Check the underlying buffer first: DataView.byteLength itself throws
+    // after detachment. Web IDL's byte-copy operation returns an empty
+    // sequence for every detached view, including a DataView.
+    if (input.buffer.byteLength === 0) return emptyBytes;
     if (input.byteLength === 0) return emptyBytes;
     return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   }
@@ -334,13 +359,16 @@ export class TextDecoder {
 
   decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {
     this.#brand();
-    const input = bufferSourceBytes(args[0]);
+    requireBufferSource(args[0]);
     const stream = convertTextDecodeOptions(args[1]);
     if (!this.doNotFlush) {
       this.#resetSequence();
       this.bomSeen = false;
     }
     this.doNotFlush = stream;
+    // The method's byte-copy step follows Web IDL argument conversion.
+    // An options getter can mutate or detach a previously validated input.
+    const input = bufferSourceBytes(args[0]);
 
     let bomSeen = this.bomSeen;
     const pieces: string[] = [];
