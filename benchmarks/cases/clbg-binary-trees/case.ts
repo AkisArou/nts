@@ -10,22 +10,18 @@
  */
 
 // The single-threaded Node.js #7 program, with its command-line input passed
-// as n and its console output collected into a string. The constructor's type
-// assertion is erased by Node: the original function still returns a plain
-// object, and the original `new TreeNode(...)` calls are retained.
-interface TreeNode {
+// as n and its console output collected into a string. Its two-field node is
+// transcribed as a class so construction has a checked TypeScript layout;
+// the recursive construction and item-check algorithms are unchanged.
+class TreeNode {
   left: TreeNode | null;
   right: TreeNode | null;
-}
 
-const TreeNode = function TreeNode(
-  left: TreeNode | null,
-  right: TreeNode | null,
-): TreeNode {
-  return { left, right };
-} as unknown as {
-  new (left: TreeNode | null, right: TreeNode | null): TreeNode;
-};
+  constructor(left: TreeNode | null, right: TreeNode | null) {
+    this.left = left;
+    this.right = right;
+  }
+}
 
 function itemCheck(node: TreeNode): number {
   if (node.left === null) {
