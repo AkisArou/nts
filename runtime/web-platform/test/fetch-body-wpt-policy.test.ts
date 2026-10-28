@@ -185,3 +185,53 @@ test("Response body extraction leaves a usable stream unlocked when status is in
   assert.equal(stream.locked, oracleStream.locked);
   assert.equal(await new Response(stream).text(), await new globalThis.Response(oracleStream).text());
 });
+
+// https://webidl.spec.whatwg.org/#es-dictionary
+// https://fetch.spec.whatwg.org/#initialize-a-response
+for (const operation of ["constructor", "json"] as const) {
+  const construct = (init: NonNullable<ConstructorParameters<typeof Response>[1]>): Response =>
+    operation === "constructor" ? new Response(null, init) : Response.json(1, init);
+  const oracle = (init: ConstructorParameters<typeof globalThis.Response>[1]): globalThis.Response =>
+    operation === "constructor" ? new globalThis.Response(null, init) : globalThis.Response.json(1, init);
+
+  for (const member of ["status", "statusText"] as const) {
+    test(`Response ${operation} converts ${member} before validating header syntax`, () => {
+      const marker = new Error(`${member} conversion`);
+      const init = {
+        headers: [["bad name", "value"]] as [string, string][],
+        get status(): number {
+          if (member === "status") throw marker;
+          return 200;
+        },
+        get statusText(): string { throw marker; },
+      };
+      assert.throws(() => oracle(init), (error) => error === marker);
+      assert.throws(() => construct(init), (error) => error === marker);
+    });
+  }
+
+  test(`Response ${operation} validates status before filling converted headers`, () => {
+    const init = { headers: [["bad name", "value"]] as [string, string][], status: 0 };
+    assert.throws(() => oracle(init), RangeError);
+    assert.throws(() => construct(init), RangeError);
+  });
+
+  test(`Response ${operation} still converts header ByteStrings before later dictionary members`, () => {
+    let statusReads = 0;
+    const init = {
+      headers: [["x-name", "\u0100"]] as [string, string][],
+      get status(): number { statusReads++; return 200; },
+    };
+    assert.throws(() => oracle(init), TypeError);
+    assert.throws(() => construct(init), TypeError);
+    assert.equal(statusReads, 0);
+  });
+}
+
+test("Response json serializes its value before filling converted headers", () => {
+  const marker = new Error("JSON serialization");
+  const data = { toJSON(): never { throw marker; } };
+  const init = { headers: [["bad name", "value"]] as [string, string][] };
+  assert.throws(() => globalThis.Response.json(data, init), (error) => error === marker);
+  assert.throws(() => Response.json(data, init), (error) => error === marker);
+});
