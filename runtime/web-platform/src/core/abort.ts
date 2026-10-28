@@ -22,6 +22,14 @@ function isObject(value: unknown): value is object {
   return value !== null && (typeof value === "object" || typeof value === "function");
 }
 
+// Capture abstract Call once. Reading next.call would invoke an observable
+// property on the iterator's function; binding here also avoids a per-step array.
+// https://tc39.es/ecma262/#sec-call
+const callIteratorNext: (
+  next: Iterator<AbortSignal>["next"],
+  receiver: Iterator<AbortSignal>,
+) => IteratorResult<AbortSignal> = Function.prototype.call.bind(Function.prototype.call);
+
 const abortSignalConstructorKey: unique symbol = Symbol("construct NTS AbortSignal");
 
 export class AbortSignal extends EventTarget implements AbortSignalOperations {
@@ -134,7 +142,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     if (typeof next !== "function") throw new TypeError("The signal iterator must have a next method");
     const converted: AbortSignal[] = [];
     while (true) {
-      const result = next.call(iterator);
+      const result = callIteratorNext(next, iterator);
       if (!isObject(result)) throw new TypeError("The signal iterator result must be an object");
       if (result.done) break;
       const signal = result.value;
