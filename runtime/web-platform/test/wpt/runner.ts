@@ -352,6 +352,8 @@ export async function executeWptFixture(
     return results;
   } finally {
     await environment.close();
+    // A provider may report an error during close without throwing.
+    if (harness !== undefined) harness.assertNoErrors();
   }
 }
 

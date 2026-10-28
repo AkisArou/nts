@@ -719,6 +719,13 @@ export class WptHarness {
 
   recordError(error: unknown): void { this.errors.push(error); }
 
+  /** Recheck recorded failures after awaited provider teardown, before file success. */
+  assertNoErrors(): void {
+    if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
+      throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
+    }
+  }
+
   inTest<T>(test: WptTest, callback: () => T): T {
     return this.asyncTest.run(test, callback);
   }
@@ -763,9 +770,7 @@ export class WptHarness {
       for (const name of Object.keys(this.blocks)) {
         assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
       }
-      if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
-        throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
-      }
+      this.assertNoErrors();
       return this.tests.map((test) => test.result);
     } finally {
       cancelRegistrationTimeout();
