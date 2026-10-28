@@ -49,6 +49,32 @@ impl Frontend {
         })
     }
 
+    /// Inspect the checked sources after generated roots and source transforms
+    /// have settled through the same driver stages as [`Self::snapshot`].
+    /// Native handles remain on the session thread; the visitor returns owned
+    /// data only. This does not build a full semantic graph or lower a program.
+    ///
+    /// # Errors
+    /// Source stages do not settle, syntax capture fails, or the visitor fails.
+    pub fn inspect_sources<R: Send, E: From<SnapshotError> + Send>(
+        &mut self,
+        config: &Utf8Path,
+        visitor: impl FnMut(
+            &crate::transform::TransformInput<'_>,
+            &crate::transform::NodeTypes<'_>,
+        ) -> Result<R, E>
+        + Send,
+    ) -> Result<Vec<R>, E> {
+        let config = if config.is_absolute() {
+            config.to_owned()
+        } else {
+            self.options.cwd.join(config)
+        };
+        native::run(self.options.clone(), |session| {
+            driver::inspect_sources(self, session, &config, visitor)
+        })
+    }
+
     /// `cwd` is explicit and absolute. No process directory or environment is
     /// changed while checking a project.
     #[must_use]

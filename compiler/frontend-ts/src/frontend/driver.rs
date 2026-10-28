@@ -21,9 +21,9 @@ use crate::{
     transform::{NodeTypes, REVISION_ROUNDS, TransformInput},
 };
 
-enum Action {
+enum Action<'s> {
     Recheck(SourceChanges),
-    Done(Box<SemanticSnapshot>),
+    Ready(Checked<'s, DiagnosticsSelected>),
 }
 
 enum Phase {
@@ -68,6 +68,18 @@ pub(super) fn inspect<R: Send, E: From<SnapshotError> + Send>(
             "the requested native program is missing".into(),
         ))
     })?;
+    let results = inspect_files(project, &mut inclusion, &mut visitor)?;
+    // Capture and diagnostics use independent checkers. Only owned results
+    // survive, as for the complete snapshot producer.
+    let _finished = checked.finish();
+    Ok(results)
+}
+
+fn inspect_files<R, E: From<SnapshotError>>(
+    project: Project<'_>,
+    inclusion: &mut Inclusion,
+    visitor: &mut impl FnMut(&TransformInput<'_>, &NodeTypes<'_>) -> Result<R, E>,
+) -> Result<Vec<R>, E> {
     let mut results = Vec::new();
     for file in inclusion.files(project)? {
         let captured = native_ast::capture(file, SourceId(0))?;
@@ -81,10 +93,28 @@ pub(super) fn inspect<R: Send, E: From<SnapshotError> + Send>(
             &types,
         )?);
     }
-    // Capture and diagnostics use independent checkers. Only owned results
-    // survive, as for the complete snapshot producer.
-    let _finished = checked.finish();
     Ok(results)
+}
+
+/// Inspect precisely the world obtained after the capture driver's existing
+/// generation, added-root, transform and revision stages have settled.
+/// No complete semantic graph or lowering is performed for this inspection.
+pub(super) fn inspect_sources<R, E: From<SnapshotError>>(
+    frontend: &mut Frontend,
+    session: &mut Session,
+    config: &camino::Utf8Path,
+    mut visitor: impl FnMut(&TransformInput<'_>, &NodeTypes<'_>) -> Result<R, E>,
+) -> Result<Vec<R>, E> {
+    run_sources(frontend, session, config, |driver, _, checked| {
+        let project = checked.projects().next().ok_or_else(|| {
+            E::from(SnapshotError::Project(
+                "the requested native program is missing".into(),
+            ))
+        })?;
+        let results = inspect_files(project, &mut driver.inclusion, &mut visitor)?;
+        let _finished = checked.finish();
+        Ok(results)
+    })
 }
 
 /// Choose the exact source boundary before any semantic transform/capture work.
@@ -110,6 +140,19 @@ pub(super) fn capture(
     session: &mut Session,
     config: &camino::Utf8Path,
 ) -> Result<SemanticSnapshot, SnapshotError> {
+    run_sources(frontend, session, config, Driver::snapshot)
+}
+
+fn run_sources<R, E: From<SnapshotError>>(
+    frontend: &mut Frontend,
+    session: &mut Session,
+    config: &camino::Utf8Path,
+    mut ready: impl for<'s> FnMut(
+        &mut Driver,
+        &mut Frontend,
+        Checked<'s, DiagnosticsSelected>,
+    ) -> Result<R, E>,
+) -> Result<R, E> {
     let config = canonical_config(config)?;
     let project_root = config
         .parent()
@@ -138,21 +181,21 @@ pub(super) fn capture(
                 Some(changes) => session.revise(changes),
             }
             .map_err(|error| SnapshotError::Project(error.to_string()))?;
-            driver.step(frontend, checked)?
+            driver.prepare(frontend, checked)?
         };
         match action {
             Action::Recheck(next) => changes = Some(next),
-            Action::Done(snapshot) => return Ok(*snapshot),
+            Action::Ready(checked) => return ready(&mut driver, frontend, checked),
         }
     }
 }
 
 impl Driver {
-    fn step(
+    fn prepare<'s>(
         &mut self,
         frontend: &mut Frontend,
-        checked: Checked<'_>,
-    ) -> Result<Action, SnapshotError> {
+        checked: Checked<'s>,
+    ) -> Result<Action<'s>, SnapshotError> {
         if matches!(self.phase, Phase::Initial) {
             let project = checked.projects().next().ok_or_else(|| {
                 SnapshotError::Project("the requested native program is missing".into())
@@ -222,29 +265,37 @@ impl Driver {
                     self.phase = Phase::Capture;
                     return Ok(Action::Recheck(SourceChanges::default()));
                 }
-                Phase::Capture => {
-                    let files = self.inclusion.files(project)?;
-                    // Resolution uses the session's explicit cwd. Serialized
-                    // source/module identities use the requested config's root,
-                    // as the frontend's URI contract requires.
-                    let mut snapshot =
-                        Capture::syntax(&self.project_root, files, project.semantics())?
-                            .finish()?;
-                    let finished = checked.finish();
-                    let project = finished.projects().next().ok_or_else(|| {
-                        SnapshotError::Project("the requested native program is missing".into())
-                    })?;
-                    crate::capture::append_diagnostics(
-                        &mut snapshot,
-                        &self.project_root,
-                        project,
-                        finished.diagnostics(),
-                    )?;
-                    self.record_transform(frontend, &mut snapshot)?;
-                    return Ok(Action::Done(Box::new(snapshot)));
-                }
+                Phase::Capture => return Ok(Action::Ready(checked)),
             }
         }
+    }
+
+    fn snapshot(
+        &mut self,
+        frontend: &mut Frontend,
+        checked: Checked<'_, DiagnosticsSelected>,
+    ) -> Result<SemanticSnapshot, SnapshotError> {
+        let project = checked.projects().next().ok_or_else(|| {
+            SnapshotError::Project("the requested native program is missing".into())
+        })?;
+        let files = self.inclusion.files(project)?;
+        // Resolution uses the session's explicit cwd. Serialized
+        // source/module identities use the requested config's root,
+        // as the frontend's URI contract requires.
+        let mut snapshot =
+            Capture::syntax(&self.project_root, files, project.semantics())?.finish()?;
+        let finished = checked.finish();
+        let project = finished.projects().next().ok_or_else(|| {
+            SnapshotError::Project("the requested native program is missing".into())
+        })?;
+        crate::capture::append_diagnostics(
+            &mut snapshot,
+            &self.project_root,
+            project,
+            finished.diagnostics(),
+        )?;
+        self.record_transform(frontend, &mut snapshot)?;
+        Ok(snapshot)
     }
 
     fn generate(
