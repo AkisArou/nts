@@ -350,6 +350,11 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   compiles each with nts, gates and lands it. The user proposed ChatGPT for
   "typescript library code" in `runtime/{ecmascript,web-platform,nodejs}`,
   and chose the WinterTC gaps over `runtime/sdk` as the start.
+- **No GPL code in the repository** (the coordinator, asked by the user to
+  decide): sources nts carries are permissively licensed. Octane's Box2D
+  port came with Octane's GPL-2.0-or-later driver around the zlib-licensed
+  engine; the engine stays, the driver is replaced with an original scene.
+  The rule is in `docs/contributing/cloud-agents.md`.
 - **A second cloud task takes the Web Cryptography API** (the coordinator,
   asked by the user for a second, larger cloud task): its specification
   steps (algorithm normalization, key formats, usages, errors, the

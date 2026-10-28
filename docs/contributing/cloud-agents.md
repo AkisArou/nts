@@ -18,6 +18,9 @@ Plain TypeScript, and the tests that hold it to its specification:
   suite, each with its C++ reference (and a Java one where the suite has
   it), where a handoff assigns them. A port is transcribed, not rewritten,
   and a program nts refuses is kept as it is: the refusal is the finding.
+  Only permissively licensed code enters the repository (MIT, BSD, Apache,
+  zlib, Boost, ISC, Unicode). A part under the GPL or LGPL is left out, or
+  replaced with original code written without reference to it.
 
 Never the work the compiler or native code does: whatever depends on the
 layout of the values it is given (`structuredClone`, string conversions) and
@@ -69,7 +72,9 @@ does. In particular:
 - **Classes and interfaces are typed layouts:** declare every field, with its
   type, in the class body. A constructor function from older JavaScript
   becomes a `class` with the same fields: strict TypeScript refuses `new` on
-  a plain function, and no cast (`as unknown as`) may force it through.
+  a plain function, and no cast (`as unknown as`) may force it through. A
+  prototype used as a namespace (`Vector.prototype.add(a, b)` with explicit
+  operands) becomes `static` methods with the same bodies.
 - **Imports stay inside the package** or go through the provider interfaces
   in `src/provider/`. Platform services (the clock, sockets, files) are
   provider capabilities, never node's modules.
@@ -95,6 +100,12 @@ a cloud environment.
   edge cases included. Cases taken from web-platform-tests are copied
   unedited, keep their licence header (BSD-3-Clause), and name their source
   path and revision.
+- **One revision per web-platform-tests directory,** recorded with each
+  file's hash in the adapter's versions table, as node pins its own copy. A
+  shared directory (`common/`, `resources/`) exists once, at the newest
+  revision any imported directory needs: a pull request that needs a newer
+  one updates it for every test and reports any result that changes, rather
+  than keeping a second copy.
 
 ## A pull request
 
