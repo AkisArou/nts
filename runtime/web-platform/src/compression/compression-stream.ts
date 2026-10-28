@@ -12,7 +12,6 @@ import type { ReadableStream } from "../streams/readable.ts";
 import type { WritableStream } from "../streams/writable.ts";
 
 const constructionKey: unique symbol = Symbol("Compression Streams construction");
-const isView = ArrayBuffer.isView;
 const emptyBytes = new Uint8Array(0);
 
 /** Bootstrap owns the environment slot; an absent capability has no host fallback. */
@@ -36,7 +35,7 @@ function compressionFormat(value: unknown): CompressionFormat {
  * before enqueue can invoke script, and the provider cannot retain its input.
  */
 function compressionBytes(value: unknown): Uint8Array {
-  if (isView(value)) {
+  if (ArrayBuffer.isView(value)) {
     const buffer = value.buffer;
     if (!(buffer instanceof ArrayBuffer) || buffer.resizable) {
       throw new TypeError("Compression chunks require an ordinary fixed ArrayBuffer");

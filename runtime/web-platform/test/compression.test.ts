@@ -245,7 +245,7 @@ for (const direction of directions) {
     }
   });
 
-  test(direction.name + " rejects non-BufferSource, shared and resizable chunks on both sides", { timeout: 10_000 }, async () => {
+  test(direction.name + " rejects non-BufferSource, shared and resizable chunks on both sides", async () => {
     const shared = new SharedArrayBuffer(8);
     const resizable = new ArrayBuffer(8, { maxByteLength: 16 });
     const bad: readonly unknown[] = [
@@ -404,7 +404,7 @@ for (const direction of directions) {
 }
 
 for (const format of formats) {
-  test(format + " compresses multiple chunks and flushes a complete native stream", { timeout: 10_000 }, async () => {
+  test(format + " compresses multiple chunks and flushes a complete native stream", async () => {
     const input = bytes(128 * 1024 + 37);
     const chunks = [input.subarray(0, 1), new Uint8Array(0), input.subarray(1, 32769), input.subarray(32769)];
     const compressed = join(await transform(createCompressionStream(format, new NodeCompressionProvider()), chunks));
@@ -425,7 +425,7 @@ for (const format of formats) {
     await expectTypeError(createDecompressionStream(format, new NodeCompressionProvider()), []);
   });
 
-  test(format + " accepts each ordinary BufferSource kind as compression input", { timeout: 10_000 }, async () => {
+  test(format + " accepts each ordinary BufferSource kind as compression input", async () => {
     const input = bytes(32);
     for (const kind of bufferSources) {
       const compressed = join(await transform(createCompressionStream(format, new NodeCompressionProvider()), [kind.make(input.slice().buffer)]));
@@ -433,7 +433,7 @@ for (const format of formats) {
     }
   });
 
-  test(format + " accepts each ordinary BufferSource kind as decompression input", { timeout: 10_000 }, async () => {
+  test(format + " accepts each ordinary BufferSource kind as decompression input", async () => {
     // Generate a native stream divisible by eight, so every view exposes the
     // same exact bytes without inventing padding after the compressed stream.
     let input = bytes(1);
@@ -466,7 +466,7 @@ for (const format of formats) {
     ])), expected);
   });
 
-  test(format + " accepts every split across native headers, blocks and trailers", { timeout: 10_000 }, async () => {
+  test(format + " accepts every split across native headers, blocks and trailers", async () => {
     const input = bytes(31);
     const encoded = nativeCompress(format, input);
     for (let split = 0; split <= encoded.length; split++) {
@@ -477,7 +477,7 @@ for (const format of formats) {
     }
   });
 
-  test(format + " rejects every incomplete prefix on finish", { timeout: 10_000 }, async () => {
+  test(format + " rejects every incomplete prefix on finish", async () => {
     const encoded = nativeCompress(format, bytes(23));
     for (let length = 0; length < encoded.length; length++) {
       await expectTypeError(createDecompressionStream(format, new NodeCompressionProvider()), [encoded.subarray(0, length)]);
