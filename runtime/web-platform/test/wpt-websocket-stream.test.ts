@@ -12,6 +12,7 @@ import type { WptManifest } from "./wpt/runner.ts";
 import { createWptRuntime } from "./wpt/server/runtime.ts";
 import { startWptServer } from "./wpt/server/server.ts";
 import { substitute } from "./wpt/server/substitutions.ts";
+import { createDrainableTransport } from "./wpt/websocket-stream-conformance/drainable-transport.ts";
 
 const root = new URL("./wpt/", import.meta.url);
 const original = JSON.parse(readFileSync(new URL("websocket-stream-conformance/manifest.json", root), "utf8")) as WptManifest;
@@ -32,11 +33,18 @@ test("WPT WebSocketStream — pinned tentative ordinary-host corpus", { timeout:
     assert.deepEqual(server.errors, [], "the resource server recorded an unexpected failure");
   });
   await runWptFixtures(suite, root, manifest, (reportError, context) => {
-    const runtime = createWptRuntime(server, {
+    const options = {
       baseURL: context.url.href,
       origin: context.url.origin,
       websocket: { connectTimeoutMs: 60_000, handshakeTimeoutMs: 60_000, closeTimeoutMs: 60_000 },
-    }, reportError);
+    };
+    // The first runtime owns the real transport; the second exposes the package
+    // APIs over that capability. Observe whole provider sends so fixture cleanup
+    // does not reject the GC test's deliberately unawaited writes. Nothing wraps
+    // WebSocketStream or handles the promises returned to the unchanged WPT.
+    const transportOwner = createWptRuntime(server, options, reportError);
+    const activity = createDrainableTransport(transportOwner.transport);
+    const runtime = createWptRuntime(server, { ...options, webSocketTransport: activity.transport }, reportError);
     return {
       globals: {
         AbortController, AbortSignal, DOMException, ReadableStream, TextDecoder,
@@ -49,8 +57,13 @@ test("WPT WebSocketStream — pinned tentative ordinary-host corpus", { timeout:
       },
       globalAliases: ["self"],
       async close() {
-        runtime.close();
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        try {
+          await activity.drain();
+        } finally {
+          runtime.close();
+          transportOwner.close();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }
       },
     };
   }, {
