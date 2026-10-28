@@ -1,5 +1,5 @@
 import { trimHTTPWhitespace } from "../core/ascii.ts";
-import { coerceToByteString } from "../core/webidl.ts";
+import { coerceToByteString, requireArguments } from "../core/webidl.ts";
 import { idlIterator, idlIteratorPrototype } from "../core/idl-iterator.ts";
 
 /** Transport entries retain wire order and duplicates. Public iteration is sorted. */
@@ -77,6 +77,15 @@ function isObject(value: unknown): value is object {
 // https://tc39.es/ecma262/#sec-call
 const callWithoutArguments: (callback: () => unknown, receiver: object) => unknown =
   Function.prototype.call.bind(Function.prototype.call);
+
+type HeaderForEachCallback = (this: unknown, value: string, name: string, parent: Headers) => void;
+const callForEachCallback: (
+  callback: HeaderForEachCallback,
+  receiver: unknown,
+  value: string,
+  name: string,
+  parent: Headers,
+) => void = Function.prototype.call.bind(Function.prototype.call);
 
 function iteratorMethod(value: object): (() => unknown) | undefined {
   const method = (value as { readonly [Symbol.iterator]?: unknown })[Symbol.iterator];
@@ -220,6 +229,7 @@ export class Headers {
   }
 
   append(name: string, value: string): void {
+    requireArguments(arguments, 2, "Headers.append");
     this.#appendConverted(name, value);
   }
 
@@ -232,6 +242,7 @@ export class Headers {
   }
 
   set(name: string, value: string): void {
+    requireArguments(arguments, 2, "Headers.set");
     const key = normalizeName(name);
     const normalized = normalizeValue(value);
     this.#writable();
@@ -253,6 +264,7 @@ export class Headers {
   }
 
   delete(name: string): void {
+    requireArguments(arguments, 1, "Headers.delete");
     const key = normalizeName(name);
     this.#writable();
     this.#sortedCache = null;
@@ -266,6 +278,7 @@ export class Headers {
   }
 
   get(name: string): string | null {
+    requireArguments(arguments, 1, "Headers.get");
     return this.#get(normalizeName(name));
   }
 
@@ -287,6 +300,7 @@ export class Headers {
   }
 
   has(name: string): boolean {
+    requireArguments(arguments, 1, "Headers.has");
     const key = normalizeName(name);
     for (const entry of this.#list) {
       if (entry[0] === key) {
@@ -399,11 +413,16 @@ export class Headers {
   }
 
   forEach(
-    callback: (this: unknown, value: string, name: string, parent: Headers) => void,
-    thisArg?: unknown,
+    callback: HeaderForEachCallback,
+    thisArg: unknown = undefined,
   ): void {
+    // Iterable forEach validates even when the list is empty, then invokes the
+    // callback with abstract Call rather than looking up a public .call method.
+    // https://webidl.spec.whatwg.org/#es-forEach
+    requireArguments(arguments, 1, "Headers.forEach");
+    if (typeof callback !== "function") throw new TypeError("Headers callback must be callable");
     for (const entry of this.#entrySteps()) {
-      callback.call(thisArg, entry[1], entry[0], this);
+      callForEachCallback(callback, thisArg, entry[1], entry[0], this);
     }
   }
 
