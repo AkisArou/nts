@@ -91,6 +91,12 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
         String::from_utf8_lossy(&listed.stderr)
     );
     let bodies = bodies(&String::from_utf8_lossy(&listed.stdout));
+    assert_representations(&bodies);
+    compare_unit_reads_with_node(&dir);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn assert_representations(bodies: &[(String, String)]) {
     let body = |name: &str| {
         bodies.iter().find(|(found, _)| found == name).map_or_else(
             || panic!("no `{name}` in the program class"),
@@ -159,8 +165,6 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
             "{refused}:\n{listing}"
         );
     }
-    compare_unit_reads_with_node(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 fn compare_unit_reads_with_node(dir: &std::path::Path) {
