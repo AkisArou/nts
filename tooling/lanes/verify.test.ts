@@ -1,4 +1,4 @@
-import { launcherPolicyNames } from "../gate/canonical-environment.ts";
+import { hostEnvironment, launcherPolicyNames } from "../gate/canonical-environment.ts";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {spawn,spawnSync,execFileSync} from "node:child_process";
@@ -14,7 +14,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   const repo=join(directory,"repo"),home=join(directory,"home"),state=join(home,".cache/nts-land"),store=join(state,"verification");
   mkdirSync(join(repo,"tooling/gate"),{recursive:true});mkdirSync(home);
   const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith("NTS_") && !k.startsWith("GIT_") && !launcherPolicyNames({[k]:process.env[k]}).length));
-  Object.assign(env,{NTS_LAND_HOME:home,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"});
+  Object.assign(env,{HOME:home,CARGO_HOME:hostEnvironment(process.env).CARGO_HOME,RUSTUP_HOME:hostEnvironment(process.env).RUSTUP_HOME,NTS_LAND_HOME:home,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"});
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8"}).trim();
   writeFileSync(join(repo,"tooling/gate/owed.mjs"),`import {execFileSync} from "node:child_process";
 const range=process.argv[process.argv.indexOf("--range")+1];

@@ -1,4 +1,4 @@
-import { launcherPolicyNames } from "../gate/canonical-environment.ts";
+import { hostEnvironment, launcherPolicyNames } from "../gate/canonical-environment.ts";
 import { spawnTest as processTest, waitFor } from "../gate/test-wait.ts";
 // land.ts against a scratch repository and a stand-in gate: the train.
 //
@@ -93,6 +93,9 @@ function scratch(): Scratch {
   const env: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(process.env)) if (!k.startsWith("GIT_") && !k.startsWith("NTS_") && !launcherPolicyNames({[k]:v}).length) env[k] = v;
   Object.assign(env, {
+    HOME: home,
+    CARGO_HOME: hostEnvironment(process.env).CARGO_HOME,
+    RUSTUP_HOME: hostEnvironment(process.env).RUSTUP_HOME,
     NTS_LAND_HOME: home,
     LAND_TEST_GATES: join(dir, "gates.log"),
     LAND_TEST_CONTROLS: join(dir,"controls.sh"),
@@ -386,6 +389,16 @@ test("a tree-only landing refuses an ancestor holding the landing lock", () => {
 // Check the state itself; the common guard reports a hung fixture by name.
 const until = waitFor;
 
+function observeDisk(s:Scratch,availableBytes:number):void {
+  const preload=join(s.home,"disk-observation.ts");
+  writeFileSync(preload,`import fs from "node:fs";
+import {syncBuiltinESMExports} from "node:module";
+const actual=fs.statfsSync;
+fs.statfsSync=(...args)=>{const observed=actual(...args);return {...observed,bavail:typeof observed.bsize==="bigint"?BigInt(${availableBytes})/observed.bsize:Math.floor(${availableBytes}/observed.bsize)};};
+syncBuiltinESMExports();\n`);
+  s.env.NODE_OPTIONS=`--import=${preload}`;
+}
+
 test("a landing keeps its warm cache and uses one optimized line-table variant", async () => {
   const s = scratch();
   const tree = lane(s, "warm-tests", { "change": "one\n" });
@@ -403,6 +416,7 @@ test("a landing keeps its warm cache and uses one optimized line-table variant",
 
 test("an oversized Cargo cache is cleaned whole and the train proceeds", async () => {
   const s = scratch();
+  observeDisk(s,80*2**30);
   writeFileSync(join(s.root, "Cargo.toml"), "[workspace]\n");
   run(s, s.root, ["add", "Cargo.toml"]);
   run(s, s.root, ["commit", "-q", "-m", "Cargo workspace"]);
@@ -442,9 +456,8 @@ test("low disk still refuses a train and keeps a warm profile", () => {
   writeFileSync(cache, "keep the warm profile\n");
   // Replace the free-space observation without filling the shared disk. The
   // preload must survive the lander's re-entry under its own flock.
-  const preload = join(s.home, "low-disk.ts");
-  writeFileSync(preload, `import fs from "node:fs";\nimport { syncBuiltinESMExports } from "node:module";\nconst actual = fs.statfsSync;\nfs.statfsSync = (...args) => ({ ...actual(...args), bavail: 1 });\nsyncBuiltinESMExports();\n`);
-  const result = spawnTest(process.execPath, [LAND, "HEAD"], { cwd: tree, env: { ...s.env, NODE_OPTIONS: `--import=${preload}` }, encoding: "utf8" });
+  observeDisk(s,1);
+  const result = spawnTest(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8" });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /working space above the 40 GiB disk floor/);
   assert.equal(readFileSync(cache, "utf8"), "keep the warm profile\n");
