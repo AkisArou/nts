@@ -11,8 +11,8 @@ import { Blob } from "../file/blob.ts";
 import { stringifyPlain } from "../json/plain.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
-import { Headers } from "./headers.ts";
-import type { HeaderEntry, HeadersInit } from "./headers.ts";
+import { Headers, convertHeadersInit, createHeadersFromConvertedInit } from "./headers.ts";
+import type { ConvertedHeadersInit, HeaderEntry, HeadersInit } from "./headers.ts";
 import { headersGuardIsImmutable, headersMakeImmutable } from "./headers.ts";
 import { bodyContentType } from "./body.ts";
 
@@ -32,9 +32,14 @@ export interface ResponseContext {
 export type ResponseType = "basic" | "cors" | "default" | "error" | "opaque" | "opaqueredirect";
 
 interface ConvertedResponseInit {
-  readonly headers: Headers | undefined;
+  readonly headers: ConvertedHeadersInit | undefined;
   readonly status: number;
   readonly statusText: string;
+}
+
+interface InternalResponseConstruction {
+  readonly context: ResponseContext;
+  readonly init?: ConvertedResponseInit;
 }
 
 function convertResponseInit(init: ResponseInit | null | undefined): ConvertedResponseInit {
@@ -43,10 +48,10 @@ function convertResponseInit(init: ResponseInit | null | undefined): ConvertedRe
   }
   requireDictionary(init, "Response init");
 
-  // Web IDL converts dictionary members in lexicographic order. Constructing
-  // Headers here also consumes and converts an iterable before `status` is read.
+  // Web IDL converts dictionary members in lexicographic order. Fetch validates
+  // HTTP syntax later, when initialize-response fills the converted header list.
   const headerInit = init.headers;
-  const headers = headerInit === undefined ? undefined : new Headers(headerInit);
+  const headers = headerInit === undefined ? undefined : convertHeadersInit(headerInit);
   const statusValue = init.status;
   const status = statusValue === undefined ? 200 : toUnsignedShort(statusValue);
   const statusTextValue = init.statusText;
@@ -78,22 +83,22 @@ export class Response extends Body {
     body: BodyInit | null | undefined,
     init: ResponseInit | null | undefined,
     key: typeof responseConstructorKey,
-    internalContext: ResponseContext,
+    internalConstruction: InternalResponseConstruction,
   );
   constructor(
     body: BodyInit | null = null,
     init: ResponseInit | null = {},
     key: typeof responseConstructorKey | undefined = undefined,
-    internalContext: ResponseContext | undefined = undefined,
+    internalConstruction: InternalResponseConstruction | undefined = undefined,
   ) {
     // The public API is `(body, init)`. Surplus arguments are ignored because the
     // construction key is module-private and therefore unforgeable by script, so a
     // caller cannot substitute the body policy or randomness this response uses.
-    const internal = key === responseConstructorKey && internalContext !== undefined;
-    const context = internal ? internalContext : currentWebPlatformRuntime().requestContext;
+    const internal = key === responseConstructorKey ? internalConstruction : undefined;
+    const context = internal?.context ?? currentWebPlatformRuntime().requestContext;
     // Web IDL converts arguments left to right before the constructor algorithm.
     const convertedBody = convertBodyInit(body);
-    const convertedInit = convertResponseInit(init);
+    const convertedInit = internal?.init ?? convertResponseInit(init);
     // Fetch extracts the body before initialize-response validates the status.
     const state = BodyState.fromConvertedBody(convertedBody, context.random, context.bodyPolicy);
     const status = convertedInit.status;
@@ -103,9 +108,10 @@ export class Response extends Body {
       const c = statusText.charCodeAt(i);
       if ((c < 0x20 && c !== 9) || c > 255 || c === 0x7f) throw new TypeError("Invalid statusText");
     }
+    const headers = convertedInit.headers === undefined
+      ? new Headers() : createHeadersFromConvertedInit(convertedInit.headers);
     if (convertedBody !== null && convertedBody !== undefined && nullBodyStatus(status))
       throw new TypeError("This response status cannot have a body");
-    const headers = convertedInit.headers ?? new Headers();
     if (!headers.has("content-type") && state.type !== null)
       headers.set("content-type", state.type);
     super(state);
@@ -201,12 +207,11 @@ export class Response extends Body {
     // `json()` uses the shared parser.
     const text = stringifyPlain(data);
     if (text === undefined) throw new TypeError("Value is not JSON serializable");
-    const headers = convertedInit.headers ?? new Headers();
-    if (!headers.has("content-type")) headers.set("content-type", "application/json");
-    return new Response(text, {
-      status: convertedInit.status,
-      statusText: convertedInit.statusText,
-      headers,
+    // Keep the converted dictionary so no script-visible init member or iterator
+    // is read again. The body supplies JSON's default type during initialization.
+    return new Response(new Blob([text], { type: "application/json" }), undefined, responseConstructorKey, {
+      context: currentWebPlatformRuntime().requestContext,
+      init: convertedInit,
     });
   }
 
@@ -290,5 +295,5 @@ function createInternalResponse(
   init: ResponseInit | null | undefined,
   context: ResponseContext,
 ): Response {
-  return new Response(body, init, responseConstructorKey, context);
+  return new Response(body, init, responseConstructorKey, { context });
 }
