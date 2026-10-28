@@ -586,11 +586,18 @@ export const eventTargetSetListenerObserver: unique symbol = Symbol("EventTarget
 export const eventTargetSetErrorReporter: unique symbol = Symbol("EventTarget set error reporter");
 export const eventTargetReportError: unique symbol = Symbol("EventTarget report error");
 
+// DOM inner invoke reports listener exceptions without throwing from dispatch.
+// Share this default across targets; provider-bound reporters may replace it.
+// https://dom.spec.whatwg.org/#concept-event-inner-invoke
+function reportEventListenerError(error: unknown): void {
+  if (hasWebPlatformRuntime()) currentWebPlatformRuntime().scheduler.reportError(error);
+}
+
 export class EventTarget {
   readonly #listeners: ListenerRecord[] = [];
   #listenerObserver: ListenerObserver | null = null;
   #dispatchDepth = 0;
-  #errorReporter: (error: unknown) => void = () => {};
+  #errorReporter: (error: unknown) => void = reportEventListenerError;
 
   static {
     registerInternal = (target, type, callback, resource, once, resist): void => {

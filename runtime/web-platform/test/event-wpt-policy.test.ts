@@ -16,8 +16,20 @@ import {
   Event,
   EventTarget,
   addInternalEventListener,
+  eventTargetSetErrorReporter,
 } from "../src/core/events.ts";
 import type { CustomEventInit } from "../src/core/events.ts";
+
+test("listener errors without an installed runtime remain nonthrowing", () => {
+  assert.equal(hasWebPlatformRuntime(), false);
+  const target = new EventTarget();
+  let followingCalls = 0;
+  target.addEventListener("x", () => { throw new Error("no provider installed"); });
+  target.addEventListener("x", () => { followingCalls++; });
+
+  assert.doesNotThrow(() => target.dispatchEvent(new Event("x")));
+  assert.equal(followingCalls, 1);
+});
 
 // DOM, dispatch and inner invoke:
 // https://dom.spec.whatwg.org/#concept-event-dispatch
@@ -357,10 +369,14 @@ test("event handler attributes ignore an own call property on their callback", (
   assert.equal(calls[0]?.event.type, "abort");
 });
 
-function installEventClock(t: TestContext, readClock: () => number): void {
+function installEventClock(
+  t: TestContext,
+  readClock: () => number,
+  reportError?: (error: unknown) => void,
+): void {
   const previous = hasWebPlatformRuntime() ? currentWebPlatformRuntime() : null;
   const runtime = new WebPlatformRuntime({
-    ...createHostNodePrimitives(),
+    ...createHostNodePrimitives({}, reportError),
     monotonicMilliseconds: readClock,
   });
   installWebPlatformRuntime(runtime);
@@ -533,4 +549,62 @@ test("initCustomEvent initializes both interfaces after the prototype is removed
   assert.equal(eventAttribute(event, "bubbles"), true);
   assert.equal(eventAttribute(event, "cancelable"), false);
   assert.equal(eventAttribute(event, "defaultPrevented"), false);
+});
+
+// DOM inner invoke reports callback exceptions while continuing dispatch.
+// https://dom.spec.whatwg.org/#concept-event-inner-invoke
+test("bare EventTarget reports listener errors through the installed scheduler", (t) => {
+  const reported: unknown[] = [];
+  installEventClock(t, () => 0, (error) => { reported.push(error); });
+  const failure = new Error("listener failure");
+  const target = new EventTarget();
+  const order: string[] = [];
+  target.addEventListener("x", () => {
+    order.push("throwing capture");
+    throw failure;
+  }, true);
+  target.addEventListener("x", () => { order.push("following capture"); }, true);
+  target.addEventListener("x", () => { order.push("bubble"); });
+
+  let result: boolean | undefined;
+  assert.doesNotThrow(() => { result = target.dispatchEvent(new Event("x")); });
+  assert.equal(result, true);
+  assert.deepEqual(reported, [failure]);
+  assert.deepEqual(order, ["throwing capture", "following capture", "bubble"]);
+});
+
+test("ordinary AbortSignal reports listener errors through the installed scheduler", (t) => {
+  const reported: unknown[] = [];
+  installEventClock(t, () => 0, (error) => { reported.push(error); });
+  const controller = new AbortController();
+  const failure = new Error("abort listener failure");
+  let followingCalls = 0;
+  controller.signal.addEventListener("abort", () => { throw failure; });
+  controller.signal.addEventListener("abort", () => { followingCalls++; });
+
+  assert.doesNotThrow(() => controller.abort());
+  assert.deepEqual(reported, [failure]);
+  assert.equal(followingCalls, 1);
+});
+
+test("an explicitly bound event reporter takes precedence over the installed scheduler", (t) => {
+  const providerErrors: unknown[] = [];
+  const boundErrors: unknown[] = [];
+  installEventClock(t, () => 0, (error) => { providerErrors.push(error); });
+  class BoundReporterTarget extends EventTarget {
+    constructor(reporter: (error: unknown) => void) {
+      super();
+      this[eventTargetSetErrorReporter](reporter);
+    }
+  }
+  const target = new BoundReporterTarget((error) => { boundErrors.push(error); });
+  const failure = new Error("bound listener failure");
+  let followingCalls = 0;
+  target.addEventListener("x", () => { throw failure; });
+  target.addEventListener("x", () => { followingCalls++; });
+
+  assert.doesNotThrow(() => target.dispatchEvent(new Event("x")));
+  assert.deepEqual(boundErrors, [failure]);
+  assert.deepEqual(providerErrors, []);
+  assert.equal(followingCalls, 1);
 });
