@@ -109,6 +109,7 @@ export class TextEncoder {
   }
 
   encodeInto(...args: [source: string, destination: Uint8Array]): TextEncoderEncodeIntoResult {
+    this.#brand();
     requireArguments(args, 2, "TextEncoder.encodeInto");
     const input = coerceToUSVString(args[0]);
     const destination = args[1];
@@ -252,6 +253,7 @@ export class TextDecoder {
   get ignoreBOM(): boolean {
     return this.#decoderIgnoreBOM;
   }
+  #brand(): void {}
   #resetSequence(): void {
     this.needed = 0;
     this.seen = 0;
@@ -331,6 +333,7 @@ export class TextDecoder {
   }
 
   decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {
+    this.#brand();
     const input = bufferSourceBytes(args[0]);
     const stream = convertTextDecodeOptions(args[1]);
     if (!this.doNotFlush) {
