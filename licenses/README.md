@@ -16,6 +16,15 @@ Full texts are copied here; a distribution needs no source checkout.
 | third_party/react-compiler | 12 | [LICENSE](texts/da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93.txt) |
 | third_party/tsrs | 21 | [LICENSE](texts/a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47.txt), [NOTICE](texts/1a4f42d83bf205aaf1b474e1a8c133cc5365003a188ba5f257d8aa4741355118.txt) |
 
+## Vendored data
+
+Data files the compiler carries derived tables from, declared in
+`tooling/licenses/licenses.ts` because Cargo.lock cannot see them.
+
+| Input | Licence file | Full text |
+| --- | --- | --- |
+| Unicode Character Database 17.0.0 | compiler/unicode/data/LICENSE | [compiler/unicode/data/LICENSE](texts/e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96.txt) |
+
 ## Registry dependencies
 
 | Package | Version | Licence | Texts and notices |

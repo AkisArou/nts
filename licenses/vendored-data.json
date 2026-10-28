@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Unicode Character Database 17.0.0",
+    "license": "compiler/unicode/data/LICENSE",
+    "texts": [
+      {
+        "upstream": "compiler/unicode/data/LICENSE",
+        "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+      }
+    ]
+  }
+]

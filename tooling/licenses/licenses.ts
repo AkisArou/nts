@@ -1,5 +1,6 @@
-// Generate attributions from the compiler's locked closure; check Cargo.lock
-// without network access, Cargo, or a populated registry cache.
+// Generate attributions from the compiler's locked closure plus the declared
+// vendored-data inputs; check Cargo.lock without network access, Cargo, or a
+// populated registry cache.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -17,6 +18,14 @@ type Package = { name: string; version: string; source?: string; checksum?: stri
 type Attribution = { name: string; version: string; source: string; checksum: string; license: string; repository: string | null; texts: { upstream: string; sha256: string }[] };
 type Text = Attribution["texts"][number];
 type Vendored = { directory: string; packages: { name: string; version: string; manifest: string }[]; texts: Text[] };
+type VendoredData = { name: string; license: string; texts: Text[] };
+// Vendored data inputs are not crates, so Cargo.lock cannot see them; they
+// are declared here by hand, each with the repository path of its license
+// file. Verification fails when a declared file is missing or unrecorded,
+// so vendoring data without its license stops at --check, not at release.
+const declaredData: { name: string; license: string }[] = [
+  { name: "Unicode Character Database 17.0.0", license: "compiler/unicode/data/LICENSE" },
+];
 const lock = readFileSync(join(root, "Cargo.lock"), "utf8");
 const packages: Package[] = lock.split("[[package]]").slice(1).map((entry) => {
   const field = (name: string) => new RegExp(`^${name} = "([^"]+)"$`, "m").exec(entry)?.[1];
@@ -48,6 +57,7 @@ visit(cli);
 const registry = [...visited.values()].filter((pkg) => pkg.source).sort((a, b) => key(a).localeCompare(key(b), "en"));
 const inventoryPath = join(destination, "packages.json");
 const vendorPath = join(destination, "vendor-projects.json");
+const dataPath = join(destination, "vendored-data.json");
 const ownPackages = new Set<string>();
 const packageName = (path: string) => {
   const manifest = readFileSync(path, "utf8");
@@ -105,18 +115,26 @@ if (args[0] === "--update") {
   }
   const projects = [...groups.values()].sort((a, b) => a.directory.localeCompare(b.directory, "en"));
   for (const project of projects) project.packages.sort((a, b) => key(a).localeCompare(key(b), "en"));
+  const data: VendoredData[] = declaredData.map(({ name, license }) => ({
+    name,
+    license,
+    texts: copy(root, [license]),
+  }));
   writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
   writeFileSync(vendorPath, `${JSON.stringify(projects, null, 2)}\n`);
+  writeFileSync(dataPath, `${JSON.stringify(data, null, 2)}\n`);
   const links = (texts: Text[]) => texts.map((t) => `[${t.upstream}](texts/${t.sha256}.txt)`).join(", ");
-  writeFileSync(join(destination, "README.md"), `# Compiler dependency attributions\n\nGenerated from Cargo.lock by \`node tooling/licenses/licenses.ts --update\`.\nRoots: the release CLI and native frontend (until it becomes unconditional).\nThis conservative locked closure covers all platform/feature dependency paths.\nThe gate checks completeness and every full licence/notice text offline.\nShip this directory with compiler binary distributions. Ship notices for\nlinked runtime components separately with built programs.\n\n## Vendored code\n\nFull texts are copied here; a distribution needs no source checkout.\n\n| Project | Locked crates | Full texts and notices |\n| --- | --- | --- |\n${projects.map((p) => `| ${p.directory} | ${p.packages.length} | ${links(p.texts)} |`).join("\n")}\n\n## Registry dependencies\n\n| Package | Version | Licence | Texts and notices |\n| --- | --- | --- | --- |\n${inventory.map((p) => `| ${p.name} | ${p.version} | ${p.license} | ${links(p.texts)} |`).join("\n")}\n`);
-  const used = new Set([...inventory, ...projects].flatMap((p) => p.texts.map((t) => `${t.sha256}.txt`)));
+  writeFileSync(join(destination, "README.md"), `# Compiler dependency attributions\n\nGenerated from Cargo.lock by \`node tooling/licenses/licenses.ts --update\`.\nRoots: the release CLI and native frontend (until it becomes unconditional).\nThis conservative locked closure covers all platform/feature dependency paths.\nThe gate checks completeness and every full licence/notice text offline.\nShip this directory with compiler binary distributions. Ship notices for\nlinked runtime components separately with built programs.\n\n## Vendored code\n\nFull texts are copied here; a distribution needs no source checkout.\n\n| Project | Locked crates | Full texts and notices |\n| --- | --- | --- |\n${projects.map((p) => `| ${p.directory} | ${p.packages.length} | ${links(p.texts)} |`).join("\n")}\n\n## Vendored data\n\nData files the compiler carries derived tables from, declared in\n\`tooling/licenses/licenses.ts\` because Cargo.lock cannot see them.\n\n| Input | Licence file | Full text |\n| --- | --- | --- |\n${data.map((d) => `| ${d.name} | ${d.license} | ${links(d.texts)} |`).join("\n")}\n\n## Registry dependencies\n\n| Package | Version | Licence | Texts and notices |\n| --- | --- | --- | --- |\n${inventory.map((p) => `| ${p.name} | ${p.version} | ${p.license} | ${links(p.texts)} |`).join("\n")}\n`);
+  const used = new Set([...inventory, ...projects, ...data].flatMap((p) => p.texts.map((t) => `${t.sha256}.txt`)));
   for (const name of readdirSync(join(destination, "texts"))) if (!used.has(name)) rmSync(join(destination, "texts", name));
 }
 
 const inventory: Attribution[] = JSON.parse(readFileSync(inventoryPath, "utf8"));
 const projects: Vendored[] = JSON.parse(readFileSync(vendorPath, "utf8"));
+const data: VendoredData[] = JSON.parse(readFileSync(dataPath, "utf8"));
 const loadText = (digest: string) => readFileSync(join(destination, "texts", `${digest}.txt`));
-function verify(records: Attribution[], vendors: Vendored[], readText = loadText): Set<string> {
+const loadLicense = (path: string) => readFileSync(join(root, path));
+function verify(records: Attribution[], vendors: Vendored[], vendoredData: VendoredData[], readText = loadText, readLicense = loadLicense): Set<string> {
   const byKey = new Map(records.map((p) => [key(p), p]));
   const expected = new Set(registry.map(key));
   if (byKey.size !== records.length) throw new Error("duplicate compiler attribution");
@@ -152,21 +170,51 @@ function verify(records: Attribution[], vendors: Vendored[], readText = loadText
     }
   }
   for (const pkg of expectedVendor) if (!seenPackages.has(pkg)) throw new Error(`vendored attribution missing: ${pkg}`);
+  const dataByName = new Map(vendoredData.map((d) => [d.name, d]));
+  if (dataByName.size !== vendoredData.length) throw new Error("duplicate vendored data attribution");
+  for (const declared of declaredData) {
+    const record = dataByName.get(declared.name);
+    if (!record || record.license !== declared.license || record.texts.length !== 1) {
+      throw new Error(`vendored data attribution missing or stale: ${declared.name}; run licenses.ts --update`);
+    }
+    let bytes: Buffer;
+    try {
+      bytes = readLicense(declared.license);
+    } catch {
+      throw new Error(`vendored data licence missing: ${declared.license}`);
+    }
+    if (sha256(bytes) !== record.texts[0].sha256 || record.texts[0].upstream !== declared.license) {
+      throw new Error(`vendored data licence changed: ${declared.license}; run licenses.ts --update`);
+    }
+    text(record.texts[0]);
+  }
+  for (const name of dataByName.keys()) {
+    if (!declaredData.some((d) => d.name === name)) throw new Error(`undeclared vendored data attribution: ${name}`);
+  }
   return texts;
 }
-const textFiles = verify(inventory, projects);
+const textFiles = verify(inventory, projects, data);
 if (readdirSync(join(destination, "texts")).some((name) => !textFiles.has(name))) throw new Error("unlisted attribution text; remove texts no longer referenced after regeneration");
 if (args[0] === "--check") {
   // Negative controls operate on owned copies, never edits to checked files.
   const missing = registry.find((p) => !adapterKeys.has(key(p))) ?? registry[0];
   assert.ok(missing, "compiler has registry dependencies");
-  assert.throws(() => verify(inventory.filter((p) => key(p) !== key(missing)), projects), (error) => error instanceof Error && error.message.includes(`missing or stale: ${key(missing)}`));
+  assert.throws(() => verify(inventory.filter((p) => key(p) !== key(missing)), projects, data), (error) => error instanceof Error && error.message.includes(`missing or stale: ${key(missing)}`));
   const noNotice = structuredClone(projects);
   const tsrs = noNotice.find((p) => p.directory === "third_party/tsrs");
   assert.ok(tsrs?.texts.some((t) => t.upstream === "NOTICE"));
   tsrs.texts = tsrs.texts.filter((t) => t.upstream !== "NOTICE");
-  assert.throws(() => verify(inventory, noNotice), /missing vendored licence\/NOTICE/);
+  assert.throws(() => verify(inventory, noNotice, data), /missing vendored licence\/NOTICE/);
   const corrupt = inventory[0].texts[0].sha256;
-  assert.throws(() => verify(inventory, projects, (digest) => digest === corrupt ? Buffer.concat([loadText(digest), Buffer.from("corrupt")]) : loadText(digest)), /modified licence text/);
+  assert.throws(() => verify(inventory, projects, data, (digest) => digest === corrupt ? Buffer.concat([loadText(digest), Buffer.from("corrupt")]) : loadText(digest)), /modified licence text/);
+  assert.ok(declaredData.length, "vendored data inputs are declared");
+  assert.throws(() => verify(inventory, projects, data.filter((d) => d.name !== declaredData[0].name)), /vendored data attribution missing or stale/);
+  assert.throws(
+    () => verify(inventory, projects, data, loadText, (path) => {
+      if (path === declaredData[0].license) throw new Error("ENOENT (injected)");
+      return loadLicense(path);
+    }),
+    /vendored data licence missing/,
+  );
 }
-process.stdout.write(`compiler attributions: ${registry.length} registry packages, ${vendorPackages.length} vendored crates in ${projects.length} projects, ${textFiles.size} verbatim texts verified\n`);
+process.stdout.write(`compiler attributions: ${registry.length} registry packages, ${vendorPackages.length} vendored crates in ${projects.length} projects, ${data.length} vendored data inputs, ${textFiles.size} verbatim texts verified\n`);

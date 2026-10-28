@@ -2,7 +2,10 @@
 
 One directory per UCD release, named `ucd-<major>.<minor>.<patch>`. The
 files are used verbatim as downloaded. They are large; the alternative is a
-network fetch at build time.
+network fetch at build time. `LICENSE` beside the release directories is
+the Unicode License V3 text the data ships under (unicode.org's
+`license.txt`); compiler attributions include it through the declared
+vendored-data list in `tooling/licenses/licenses.ts`.
 
 | file | what the generator reads |
 |---|---|
@@ -22,8 +25,11 @@ compiled program's answers stop matching that node, and
 1. Download the three files for the new release from
    `https://www.unicode.org/Public/<version>/ucd/` into a new directory
    `ucd-<version>/`.
-2. `sha256sum *.txt > SHA256SUMS` inside it, and check the sums against a
-   second download (or the release's published hashes) before trusting them.
+2. Refresh `../LICENSE` from unicode.org's `license.txt`, then
+   `sha256sum *.txt ../LICENSE > SHA256SUMS` inside the new directory, and
+   check the sums against a second download (or the release's published
+   hashes) before trusting them. Update the input's name in
+   `tooling/licenses/licenses.ts` and re-run it with `--update`.
 3. Update `UCD_DIR` and `UNICODE_VERSION` in the crate
    ([../build.rs](../build.rs), [../src/lib.rs](../src/lib.rs)).
 4. Delete the old directory in the same commit: one version per tree, so a
