@@ -114,6 +114,8 @@ function keyState(key: unknown): CryptoKeyState {
  * forgeries and expandos cannot reveal its native handle or alter permissions.
  */
 export class CryptoKey {
+  get [Symbol.toStringTag](): string { return "CryptoKey"; }
+
   constructor(token: symbol | undefined = undefined) {
     if (token !== constructorToken) throw new TypeError("Illegal constructor");
   }

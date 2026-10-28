@@ -148,6 +148,8 @@ function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: Cry
  * Members are plain declarations; descriptor-only Web IDL shape is deferred.
  */
 export class SubtleCrypto {
+  get [Symbol.toStringTag](): string { return "SubtleCrypto"; }
+
   readonly #provider: CryptoProvider;
   readonly #scheduler: Scheduler;
   readonly #random: RandomSource;

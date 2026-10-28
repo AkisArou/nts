@@ -74,6 +74,19 @@ function fixture() {
   return { crypto, random, provider, scheduler, settle };
 }
 
+test("Web Crypto interfaces expose their canonical tags without descriptor machinery", async () => {
+  // Web IDL §§3.1 and 3.7.3; cloud-agents.md represents an interface tag as a getter.
+  const f = fixture();
+  const key = await f.settle(f.crypto.subtle.importKey("raw", new Uint8Array(16), "AES-GCM", false, ["encrypt"]));
+  assert.equal(f.crypto[Symbol.toStringTag], "Crypto");
+  assert.equal(f.crypto.subtle[Symbol.toStringTag], "SubtleCrypto");
+  assert.equal(key[Symbol.toStringTag], "CryptoKey");
+  assert.equal(Object.prototype.toString.call(f.crypto), "[object Crypto]");
+  assert.equal(Object.prototype.toString.call(f.crypto.subtle), "[object SubtleCrypto]");
+  assert.equal(Object.prototype.toString.call(key), "[object CryptoKey]");
+  assert.equal(f.provider.imports, 1);
+});
+
 test("Crypto has no public constructor, including through a subclass", () => {
   assert.equal(Crypto.length, 0);
   assert.throws(() => new Crypto(), illegalConstructor);
