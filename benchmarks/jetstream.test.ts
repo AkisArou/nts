@@ -100,6 +100,44 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN STRING UNPACK CODE SP: complete original workload checks.
+{
+  const name = "jetstream-string-unpack-code-sp";
+  if (modules.has(name)) {
+    checked.add(name);
+    const unpack = await import("./cases/jetstream-string-unpack-code-sp/case.ts");
+
+    test("jetstream-string-unpack-code-sp preserves all four complete packed inputs", () => {
+        assert.equal(unpack.seed, 1);
+        assert.equal(unpack.originalIterations, 120);
+        assert.equal(unpack.work(0), 0);
+        assert.equal(unpack.work(1), 511508);
+        assert.equal(unpack.work(2), 16368256);
+        assert.equal(unpack.work(1), 511508);
+        const outputs = unpack.render(1);
+        assert.equal(outputs.length, 8);
+        assert.deepEqual(outputs.map(({library, text}) => ({library, length: text.length,
+            sha256: createHash("sha256").update(text).digest("hex")})),
+        [0, 1].flatMap(() => [
+            {library: "MochiKit", length: 106415, sha256: "dc5f4ab3f3cebcaf012e13e740b1e549b21e26e35e3d04cf8b32e7e0f2f74a30"},
+            {library: "JQuery", length: 39024, sha256: "c0163714cd1b31332a7af9809bc915843c91ae164c612458df00498abcd4aad3"},
+            {library: "Dojo", length: 72458, sha256: "9f43f41c56fc9cf476d55b74b8ae8ee01878deaddbe1e6586dd90021b7a4fbfe"},
+            {library: "Prototype", length: 37857, sha256: "5956b78dc5ef8b5a87df8aa9ef85c7ec544a15973c1bfc9ccbf0264c8df56600"},
+        ]));
+    });
+  }
+}
+// END STRING UNPACK CODE SP.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
