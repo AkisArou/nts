@@ -297,6 +297,14 @@ function createWptContext(
     registrations++;
     return name ?? `unnamed test ${registrations}`;
   }
+  const excluded = (name) => {
+    const reason = excludedTests[name];
+    if (reason === undefined) return false;
+    assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);
+    seenExcludedTests.add(name);
+    reportNotApplicable(path, name, reason);
+    return true;
+  };
   // The harness runs in a `vm` context and the implementation lives in the host realm, so
   // `Object.prototype` is two different objects and every identity check has to pick one.
   // Most fixtures compare against host-realm implementation objects and need the host's.
@@ -479,6 +487,16 @@ function createWptContext(
     async_test(callbackOrName, explicitName) {
       const callback = typeof callbackOrName === "function" ? callbackOrName : undefined;
       const name = registrationName(callback === undefined ? callbackOrName : explicitName);
+      if (excluded(name)) {
+        // idlharness uses the named form and invokes its steps afterwards.
+        // A named exclusion runs none of those steps and schedules no timer.
+        const ignore = () => {};
+        return {
+          step: ignore, done: ignore, step_timeout: ignore,
+          step_func: () => ignore, step_func_done: () => ignore,
+          unreached_func: () => ignore,
+        };
+      }
       const capability = Promise.withResolvers();
       const timer = setTimeout(
         () => capability.reject(new Error(`Upstream async test timed out: ${name}`)),
@@ -572,13 +590,7 @@ function createWptContext(
     },
     promise_test(fn, name) {
       name = registrationName(name);
-      const reason = excludedTests[name];
-      if (reason !== undefined) {
-        assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);
-        seenExcludedTests.add(name);
-        reportNotApplicable(path, name, reason);
-        return;
-      }
+      if (excluded(name)) return;
       const asynchronousFailure = Promise.withResolvers();
       const cleanups = [];
       const test = {
@@ -648,13 +660,7 @@ function createWptContext(
     },
     test(fn, name) {
       name = registrationName(name);
-      const reason = excludedTests[name];
-      if (reason !== undefined) {
-        assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);
-        seenExcludedTests.add(name);
-        reportNotApplicable(path, name, reason);
-        return;
-      }
+      if (excluded(name)) return;
       const cleanups = [];
       const test = {
         add_cleanup(cleanup) {

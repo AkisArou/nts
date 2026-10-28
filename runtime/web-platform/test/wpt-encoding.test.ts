@@ -25,7 +25,7 @@ const selected = prefix === undefined ? manifest : {
 };
 assert.ok(selected.fixtures.length > 0, "The Encoding fixture filter must select at least one file");
 
-test("WPT Encoding — Node 24.20 directory revision", { timeout: 600000 }, async (suite) => {
+test("WPT Encoding — Node 24.20 directory revision", async (suite) => {
   await runWptFixtures(suite, root, selected, (reportError) => {
     const runtime = createHostNodeWebPlatform({}, {}, reportError);
     return {

@@ -1,10 +1,5 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "revisions": {
-    "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-    "common": "dbd648158d337580885e70a54f929daf215211a0",
-    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
-  },
   "nodeCompatibilityContext": {
     "version": "v24.20.0",
     "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
@@ -17,10 +12,6 @@
   "fixtures": [
     {
       "path": "encoding/api-basics.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-basics.any.js",
-      "sha256": "275fd8bc9bfa775c9b216720851e5ddc257aa74d34c5381d833547188e1e6618",
-      "gitBlob": "768f8159313ece26042dbe20f8894d5c37c3aa48",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -30,10 +21,6 @@
     },
     {
       "path": "encoding/api-invalid-label.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-invalid-label.any.js",
-      "sha256": "a1ecb84af46501f1fbd585224c3361508ec0689e7dfca0d4f04cb281b3479955",
-      "gitBlob": "d88f4ae780d3723e4c30bae81d15528c9faa4fd4",
       "format": "javascript",
       "support": [
         "encoding/resources/encodings.js",
@@ -47,10 +34,6 @@
     },
     {
       "path": "encoding/api-replacement-encodings.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-replacement-encodings.any.js",
-      "sha256": "0401e4275880ed9d652059d594fa382d4bf11d5e5bbb64b24b5aa238d9dd5e87",
-      "gitBlob": "9031cf6638cad850cc26f92a0df829ba4079eb20",
       "format": "javascript",
       "support": [
         "encoding/resources/encodings.js"
@@ -62,10 +45,6 @@
     },
     {
       "path": "encoding/api-surrogates-utf8.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/api-surrogates-utf8.any.js",
-      "sha256": "fe85f6e4f765ee54e3ddecf0407b9d612d978df211b974a99f72ad2a3cfdbab9",
-      "gitBlob": "52d297314940413151667dd60d03bcd154a0b23c",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -75,10 +54,6 @@
     },
     {
       "path": "encoding/encodeInto.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/encodeInto.any.js",
-      "sha256": "b2c34ea99026d067f5130159ad09c4be48db7a17613047410b8f2079b67656d3",
-      "gitBlob": "9ea36d23d08cca0d1c380015d415de2abec95f2a",
       "format": "javascript",
       "support": [
         "common/sab.js"
@@ -95,10 +70,6 @@
     },
     {
       "path": "encoding/textdecoder-arguments.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-arguments.any.js",
-      "sha256": "55d636e4a80128ac5b04dd77fb41a9ba1377ff7f6909d2fa82fdd0d412641828",
-      "gitBlob": "2d137b7aa37e15dbb4a93315f616891fee01a6b2",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -108,10 +79,6 @@
     },
     {
       "path": "encoding/textdecoder-byte-order-marks.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-byte-order-marks.any.js",
-      "sha256": "5bdcdd9a741781da5bee2ed6053d283fc88b985d24c199f485df75265ce9cfa4",
-      "gitBlob": "31350fdf689ed6e8ab277eb0bfdaa7a068d02acb",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -121,10 +88,6 @@
     },
     {
       "path": "encoding/textdecoder-copy.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-copy.any.js",
-      "sha256": "ea6c797666f6159b68a7525a47a5cc07fdae352dd5f3ee438ac0832ea50b95db",
-      "gitBlob": "61de4142bf27a25df5e6dfb0395c9eb392e58334",
       "format": "javascript",
       "support": [
         "common/sab.js"
@@ -136,10 +99,6 @@
     },
     {
       "path": "encoding/textdecoder-eof.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-eof.any.js",
-      "sha256": "98b03ab5d6efff3382ca2d55900738dfc0201859e2c012d2e215d6e39bc59965",
-      "gitBlob": "e41e326aace2440f9f46969bbce6d82c1e582507",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -149,10 +108,6 @@
     },
     {
       "path": "encoding/textdecoder-fatal-streaming.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-fatal-streaming.any.js",
-      "sha256": "5c2bd29cc3a486bcbcf8fcae803ccff3cc627733ac2e914f59f3cb6779d6d576",
-      "gitBlob": "9043b43eae29aa6fe6a593d0f89e7b176b32481e",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -162,10 +117,6 @@
     },
     {
       "path": "encoding/textdecoder-fatal.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-fatal.any.js",
-      "sha256": "a07b3592ac50c16c7ce226047680ff7b2e28cb03e6edda88cab454ec5eb43dd0",
-      "gitBlob": "054b35f21f488795a5d0559bd8ea1fdb243099ae",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -175,10 +126,6 @@
     },
     {
       "path": "encoding/textdecoder-ignorebom.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-ignorebom.any.js",
-      "sha256": "260c4c837d6886bd77d553dd48f0abd8b7f8bb74c68fa341e89424e32a358233",
-      "gitBlob": "e825698ba405230d90da085e6fae70c364cbec16",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -188,10 +135,6 @@
     },
     {
       "path": "encoding/textdecoder-labels.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-labels.any.js",
-      "sha256": "be155d59592f430d7fcc0827d64a0c39e00a56e8c83323127178e6e18113654f",
-      "gitBlob": "efc4ae2d2ea586cf15d2e89369c9bb337b765cfa",
       "format": "javascript",
       "support": [
         "encoding/resources/encodings.js"
@@ -1032,10 +975,6 @@
     },
     {
       "path": "encoding/textdecoder-streaming.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-streaming.any.js",
-      "sha256": "082646a9a94c8803e5fb7b278f1299df5c6cb91f157afc31b3babb981e93be10",
-      "gitBlob": "e473a7056e24d3dbc4383bb904f14e99e559d2f2",
       "format": "javascript",
       "support": [
         "encoding/resources/encodings.js",
@@ -1048,10 +987,6 @@
     },
     {
       "path": "encoding/textdecoder-utf16-surrogates.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textdecoder-utf16-surrogates.any.js",
-      "sha256": "1492915bbdefb5e82320704751ed5749f37d75324d257e80c3f0da8112677800",
-      "gitBlob": "7e8322cd19c2133ea4bf557e0502be343b5d524f",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1061,10 +996,6 @@
     },
     {
       "path": "encoding/textencoder-constructor-non-utf.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textencoder-constructor-non-utf.any.js",
-      "sha256": "7d475912b1eb15e8bdd27f1b35797d1949c142134874715349a4679ba34a3c5d",
-      "gitBlob": "c7136da4dcec995af4593a35252c726e5d4c9e03",
       "format": "javascript",
       "support": [
         "encoding/resources/encodings.js"
@@ -1222,10 +1153,6 @@
     },
     {
       "path": "encoding/textencoder-utf16-surrogates.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/textencoder-utf16-surrogates.any.js",
-      "sha256": "192e02e865ccc3429a45113e31f24d11fabcd9db68f99e310227c7d7a4da9bf7",
-      "gitBlob": "31657516455bd60b803600db9f36f641504d1c15",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1235,10 +1162,6 @@
     },
     {
       "path": "encoding/streams/backpressure.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/backpressure.any.js",
-      "sha256": "2899b94667fe10d0d5c1d1c8d54949d6eaf665f94c8db89a7461bd3b6dabe154",
-      "gitBlob": "0f67e3358414d344132fdf7f8efe072511a7a80e",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1248,10 +1171,6 @@
     },
     {
       "path": "encoding/streams/decode-attributes.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-attributes.any.js",
-      "sha256": "945cb27c26d89462a0ee81c87c9c30448a3d0de7ebbaf21d1881f2a0bce68491",
-      "gitBlob": "f64f45b56acba90f27689e1c4e2934648bf9fec3",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1270,10 +1189,6 @@
     },
     {
       "path": "encoding/streams/decode-bad-chunks.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-bad-chunks.any.js",
-      "sha256": "5a5001d7f8a2d2fc8dda6f69245c0f1022fc16d9c3c44ce8f9bead80259bd2e8",
-      "gitBlob": "21d61427a2bca357af37df1767bac9a538f233b6",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1283,10 +1198,6 @@
     },
     {
       "path": "encoding/streams/decode-ignore-bom.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-ignore-bom.any.js",
-      "sha256": "53a3e9b27e6c4392bc254a96f47ead47039e9fe5e4bf86837fb47d0f9f017b2f",
-      "gitBlob": "92f89c80158c358cdfdc06fdaae6e48e068f9f9f",
       "format": "javascript",
       "support": [
         "encoding/streams/resources/readable-stream-from-array.js",
@@ -1299,10 +1210,6 @@
     },
     {
       "path": "encoding/streams/decode-incomplete-input.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-incomplete-input.any.js",
-      "sha256": "31ddc1ea13ace7d8bbd347bac03ad54221bb8a7f004cc570e3a025163b61a127",
-      "gitBlob": "3add74336df33008685d4eabe32f965db3b722d2",
       "format": "javascript",
       "support": [
         "encoding/streams/resources/readable-stream-from-array.js",
@@ -1315,10 +1222,6 @@
     },
     {
       "path": "encoding/streams/decode-non-utf8.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-non-utf8.any.js",
-      "sha256": "b65c3a7820361ab268a49205ed2f61651748cf0fa8f3b955474981aa50eb68dd",
-      "gitBlob": "effdee3b430de5dac64962054ed9b5763181e3e1",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1357,10 +1260,6 @@
     },
     {
       "path": "encoding/streams/decode-split-character.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-split-character.any.js",
-      "sha256": "076a1ccdc9db48b7fb0256b9809a751bc5c23285fc63047b6e1faee75b10458b",
-      "gitBlob": "d589694fce9f167a20194e106b90aeb23698cdb4",
       "format": "javascript",
       "support": [
         "encoding/streams/resources/readable-stream-from-array.js",
@@ -1373,10 +1272,6 @@
     },
     {
       "path": "encoding/streams/decode-utf8.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/decode-utf8.any.js",
-      "sha256": "869c03cf7ae7fe2a150df5e504913d2f6c7a08c6aceeac5e556a94a6964fc050",
-      "gitBlob": "f6fceb299bdd368ea04c673c3a1c995ebec175fc",
       "format": "javascript",
       "support": [
         "encoding/streams/resources/readable-stream-from-array.js",
@@ -1399,10 +1294,6 @@
     },
     {
       "path": "encoding/streams/encode-bad-chunks.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/encode-bad-chunks.any.js",
-      "sha256": "8cbe37c932054be14d3e66ca80256590ed29dbd27d318bd9afc4fb11b841fcff",
-      "gitBlob": "4a926a67d287c924e7853f5d31fb798d7f704f03",
       "format": "javascript",
       "support": [
         "encoding/streams/resources/readable-stream-from-array.js",
@@ -1415,10 +1306,6 @@
     },
     {
       "path": "encoding/streams/encode-utf8.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/encode-utf8.any.js",
-      "sha256": "1549234d7184e4517a3b207a3eaa4c547c90ed325f446c0e6e2d72337c00dfac",
-      "gitBlob": "a5ba8f91eaf7f54454cbc0f56647db12ac7f6f3b",
       "format": "javascript",
       "support": [
         "encoding/streams/resources/readable-stream-from-array.js",
@@ -1431,10 +1318,6 @@
     },
     {
       "path": "encoding/streams/readable-writable-properties.any.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/readable-writable-properties.any.js",
-      "sha256": "39e964500a4edbc0027348e1ec820166f8d8f383a790329d58450ee66fd9d327",
-      "gitBlob": "8084cb9942145064387e18e685fc7a87c6422e07",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -1444,10 +1327,6 @@
     },
     {
       "path": "encoding/sharedarraybuffer.https.html",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/sharedarraybuffer.https.html",
-      "sha256": "1b3b7dd82bfc5ff41702a00d57c98dddbbf4fac6981df1b62aeaafbd373dd043",
-      "gitBlob": "2cda3e5fb1cf98b0500f8cd67101dc8894f056a0",
       "format": "html",
       "support": [],
       "harnessScripts": [
@@ -1461,46 +1340,23 @@
   ],
   "support": [
     {
-      "path": "common/sab.js",
-      "revision": "dbd648158d337580885e70a54f929daf215211a0",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/sab.js",
-      "sha256": "7f684ef9aaf7ad29822cbf2ab110463836387da97d230665fa2693c894478047",
-      "gitBlob": "a3ea610e165d0d56ef1faab2ed49186d4e03c392"
+      "path": "common/sab.js"
     },
     {
-      "path": "common/subset-tests.js",
-      "revision": "dbd648158d337580885e70a54f929daf215211a0",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/subset-tests.js",
-      "sha256": "72643af8e7b9e580a754dd7201179e104437da2265d4a20a898eaa15c5d7cb32",
-      "gitBlob": "58e93413de4090792f09e02010ef81c4a627d6bf"
+      "path": "common/subset-tests.js"
     },
     {
-      "path": "encoding/resources/encodings.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/resources/encodings.js",
-      "sha256": "1742a28bafab3e3de2fa4a394366af3796d45c46587a51ba98e4fa90ca64ea64",
-      "gitBlob": "80933bf9386cb629537c32ca4dc5c22a81d7e872"
+      "path": "encoding/resources/encodings.js"
     },
     {
-      "path": "encoding/streams/resources/readable-stream-from-array.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/resources/readable-stream-from-array.js",
-      "sha256": "2e48fb1480b3be710716ba28276af1715b72e8c01b40ffe6f9a7c37d6ecbb925",
-      "gitBlob": "5c12ba8c8bba60ef52a689abae17d1f1e0bfc458"
+      "path": "encoding/streams/resources/readable-stream-from-array.js"
     },
     {
-      "path": "encoding/streams/resources/readable-stream-to-array.js",
-      "revision": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218/encoding/streams/resources/readable-stream-to-array.js",
-      "sha256": "46336dd9a0f1bea753ce82fcc08a1ea3321f39333c240357d122d9940d6ef072",
-      "gitBlob": "fda03e2264492296d9b26986d15211384a6a8b16"
+      "path": "encoding/streams/resources/readable-stream-to-array.js"
     }
   ],
   "license": {
-    "path": "LICENSE.md",
-    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
-    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+    "path": "LICENSE.md"
   },
   "nativeCapabilityDependencies": {
     "singleByte": [
@@ -1676,5 +1532,6 @@
       "path": "encoding/utf-32.html",
       "reason": "Browser document encoding, sniffing/rendering, iframe/XHR or form/href encoder case; this file contains none of the four requested TextEncoder/TextDecoder APIs. Not counted as a registered or blocked API case."
     }
-  ]
+  ],
+  "versions": "versions.json"
 }
