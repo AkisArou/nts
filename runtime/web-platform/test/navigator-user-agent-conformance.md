@@ -1,5 +1,8 @@
 # Minimal Navigator.userAgent
 
+Item B8 is stacked on [Performance PR #38](https://github.com/AkisArou/nts/pull/38),
+`chatgpt/performance-user-timing` at `1842831c70a89bebfaf1f1cd26ae872f13d7491e`.
+
 ## Scope and specification
 
 This change implements the requested minimal `Navigator` identity surface:
@@ -42,8 +45,9 @@ defines its typed boundary and source consumer, not a native implementation.
 
 Bootstrap creates one Navigator for its environment and exposes the class and
 instance through the later small provider-bootstrap PR. This change does not
-write to `globalThis`, edit the package barrels, or edit
-`src/provider/web-platform-runtime.ts`. The same source class can serve
+write to `globalThis` or edit `src/provider/web-platform-runtime.ts`.
+The public barrel exports Navigator; the provider barrel exports its factory
+and capability type. The same source class can serve
 independent environments with different explicit capabilities.
 
 ## Conformance controls
@@ -116,8 +120,18 @@ committed source. Its before and restored SHA-256 is
 `027d957380a4b2178c108d1d7756b24791029509cbc5064a371bd45a05c8bf80`.
 The restored run passes all 14 controls. No sabotage is committed.
 
-Native binding, bootstrap exposure, compilation with nts and the final stacked
-integration gate are **not verified** by these host-source checks. The
+Native binding, bootstrap exposure and compilation with nts are **not
+verified** by these host-source checks. The
 maintainers supply the environment capability and own those checks. The
 existing FileReader dependencies and the maintainer-owned 100 ms adapter
 control are unchanged.
+
+## Final stack validation
+
+Both strict TypeScript projects pass. The full ordinary-node gate on the B7
+stack exits zero: **4,291 tests; 3,969 passed, 0 failed, 322 skipped**. The
+broader upstream runner records **2,772 passed, 0 failed, 45 not applicable**.
+The compiled axis explicitly skips because no compiler is available. These
+new stack results are recorded separately from the original #27 source and
+sabotage measurements. Shared-file changes add only this test's entries in
+`wpt/tsconfig.json` and `check.sh`; no adapter behavior changes.

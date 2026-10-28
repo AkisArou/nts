@@ -126,5 +126,24 @@
   "nativeBinding": "not implemented: the provider must supply this environment default User-Agent value and keep it consistent with Fetch",
   "bootstrap": "deferred to the separate provider-bootstrap PR; this change does not edit barrel exports or global exposure",
   "compiledNts": "not verified; maintainers own the compiler and native integration gates",
-  "wholeSuite": "not run in this isolated worktree; parent integration owns the stacked full gate"
+  "wholeSuite": "not run in this isolated worktree; parent integration owns the stacked full gate",
+  "stackValidation": {
+    "basePullRequest": 38,
+    "baseCommit": "1842831c70a89bebfaf1f1cd26ae872f13d7491e",
+    "sourceCommit": "9e64cd07bca6c3dd8d0993c6c034310623f28eed",
+    "sourceTree": "0aa2741fa67626340a245158242833a85a03b318",
+    "fullGate": {
+      "exitCode": 0,
+      "tests": 4291,
+      "pass": 3969,
+      "fail": 0,
+      "skipped": 322,
+      "upstreamPass": 2772,
+      "upstreamFail": 0,
+      "upstreamNotApplicable": 45
+    },
+    "strictProjects": "source and WPT pass",
+    "compiled": "not verified; compiler absent",
+    "logSHA256": "be085c2fe0f20f9259625b4a7ea22c5037c0bd54f16f0dc358e29fee93a65a89"
+  }
 }
