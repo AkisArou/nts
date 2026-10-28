@@ -155,3 +155,7 @@ test("ordinary decoder properties cannot change UTF-16 or BOM state", () => {
   assert.equal(decoder.decode(Uint8Array.of(0xfe, 0x61, 0)), "a");
 });
 
+test("encoding classes retain their ordinary string tags", () => {
+  assert.equal(Object.prototype.toString.call(new TextEncoder()), "[object TextEncoder]");
+  assert.equal(Object.prototype.toString.call(new TextDecoder()), "[object TextDecoder]");
+});
