@@ -5,7 +5,7 @@ import type { TestContext } from "node:test";
 // Install the host environment slot; each control installs its own virtual runtime.
 import "../host/node-runtime.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
-import { Blob, DOMException, EventSource, ReadableStream, TextEncoder } from "../src/index.ts";
+import { Blob, DOMException, Event, EventSource, MessageEvent, ReadableStream, TextEncoder } from "../src/index.ts";
 import type { ReadableStreamDefaultController } from "../src/index.ts";
 import { LimitError } from "../src/core/errors.ts";
 import { installWebPlatformRuntime, VirtualScheduler, WebPlatformRuntime } from "../src/provider.ts";
@@ -309,3 +309,127 @@ for (const operation of ["public close", "runtime close"] as const) {
     assert.equal(clock.nextDeadline, null);
   });
 }
+
+const handlerNames = ["onopen", "onmessage", "onerror"] as const;
+type HandlerName = typeof handlerNames[number];
+
+function setHandlerValue(source: EventSource, name: HandlerName, value: unknown): void {
+  const bindings: Record<HandlerName, unknown> = source;
+  bindings[name] = value;
+}
+
+function closedEventSource(t: TestContext) {
+  const { clock } = virtualRuntime(t, {
+    async dispatch() {
+      return assert.fail("handler conversion controls must not issue a Fetch request");
+    },
+  });
+  const source = new EventSource("https://events.example/handlers");
+  source.close();
+  clock.runPending();
+  return { source, clock };
+}
+
+function handlerEvent(name: HandlerName): Event {
+  return name === "onmessage"
+    ? new MessageEvent("message", { data: "payload" })
+    : new Event(name.slice(2));
+}
+
+// HTML 9.2.2 and 8.1.8.1; Web IDL 3.2.19, 3.2.20 and 3.4.8.
+// https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-idl-attributes
+// https://webidl.spec.whatwg.org/#LegacyTreatNonObjectAsNull
+suite("EventSource EventHandler conversion", async (t) => {
+  for (const name of handlerNames) {
+    await t.test(`${name} invokes its function with the source and event, and null deactivates it`, (t) => {
+      const { source, clock } = closedEventSource(t);
+      const event = handlerEvent(name);
+      let calls = 0;
+      const callback = function (this: EventSource, received: Event): void {
+        assert.equal(this, source);
+        assert.equal(received, event);
+        calls++;
+      };
+      assert.equal(source[name], null);
+      setHandlerValue(source, name, callback);
+      assert.equal(source[name], callback);
+      source.dispatchEvent(event);
+      assert.equal(calls, 1);
+      setHandlerValue(source, name, null);
+      assert.equal(source[name], null);
+      source.dispatchEvent(event);
+      assert.equal(calls, 1);
+      assert.deepEqual(clock.errors, []);
+    });
+
+    await t.test(`${name} converts every non-object primitive to null`, (t) => {
+      const { source, clock } = closedEventSource(t);
+      const event = handlerEvent(name);
+      const primitives: unknown[] = [undefined, false, true, 0, -0, 17, NaN, Infinity, "", "handler", 0n, 1n, Symbol("handler")];
+      for (const value of primitives) {
+        setHandlerValue(source, name, () => assert.fail("a primitive must remove the previous handler"));
+        setHandlerValue(source, name, value);
+        assert.equal(source[name], null);
+        source.dispatchEvent(event);
+      }
+      assert.deepEqual(clock.errors, []);
+    });
+
+    await t.test(`${name} retains non-callable objects without invocation or property reads`, (t) => {
+      const { source, clock } = closedEventSource(t);
+      const event = handlerEvent(name);
+      const object = {
+        get handleEvent(): never { return assert.fail("an EventHandler is not a callback interface"); },
+        get call(): never { return assert.fail("conversion must not read an object's call property"); },
+        get toString(): never { return assert.fail("conversion must not stringify an object"); },
+        get [Symbol.toPrimitive](): never { return assert.fail("conversion must not coerce an object"); },
+      };
+      for (const value of [{}, [], object]) {
+        setHandlerValue(source, name, value);
+        assert.equal(source[name], value);
+        source.dispatchEvent(event);
+      }
+      assert.deepEqual(clock.errors, []);
+      setHandlerValue(source, name, null);
+    });
+
+    await t.test(`${name} preserves its listener position through replacement until conversion clears it`, (t) => {
+      const { source, clock } = closedEventSource(t);
+      const event = handlerEvent(name);
+      const order: string[] = [];
+      const callback = (): void => { order.push("handler"); };
+      source.addEventListener(event.type, () => order.push("before"));
+      setHandlerValue(source, name, {});
+      source.addEventListener(event.type, () => order.push("after"));
+      setHandlerValue(source, name, callback);
+      source.dispatchEvent(event);
+      assert.deepEqual(order, ["before", "handler", "after"]);
+
+      order.length = 0;
+      setHandlerValue(source, name, {});
+      source.dispatchEvent(event);
+      assert.deepEqual(order, ["before", "after"]);
+      setHandlerValue(source, name, callback);
+      order.length = 0;
+      source.dispatchEvent(event);
+      assert.deepEqual(order, ["before", "handler", "after"]);
+
+      setHandlerValue(source, name, undefined);
+      setHandlerValue(source, name, callback);
+      order.length = 0;
+      source.dispatchEvent(event);
+      assert.deepEqual(order, ["before", "after", "handler"]);
+      assert.deepEqual(clock.errors, []);
+    });
+  }
+
+  await t.test("onmessage accepts synthetic Events regardless of their interface or payload", (t) => {
+    const { source, clock } = closedEventSource(t);
+    const events = [new Event("message"), new MessageEvent("message", { data: 17 })];
+    const received: Event[] = [];
+    source.onmessage = (event) => received.push(event);
+    for (const event of events) source.dispatchEvent(event);
+    assert.deepEqual(received, events);
+    assert.deepEqual(clock.errors, []);
+  });
+});
