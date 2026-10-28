@@ -159,3 +159,95 @@ test("encoding classes retain their ordinary string tags", () => {
   assert.equal(Object.prototype.toString.call(new TextEncoder()), "[object TextEncoder]");
   assert.equal(Object.prototype.toString.call(new TextDecoder()), "[object TextDecoder]");
 });
+
+// Encoding §7.2 preserves the I/O queue across streaming calls, including a
+// call that throws. §8.1.1 restores a rejected continuation; §14.2.1 restores
+// both bytes of a non-trailing UTF-16 code unit after a leading surrogate.
+test("a fatal streaming UTF-8 error preserves unprocessed bytes", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.throws(() => decoder.decode(Uint8Array.of(0xff, 0x61), { stream: true }), TypeError);
+  assert.equal(decoder.decode(), "a");
+});
+
+test("a fatal UTF-8 continuation error restores the offending byte", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.throws(() => decoder.decode(Uint8Array.of(0xc2, 0x61, 0x62), { stream: true }), TypeError);
+  assert.equal(decoder.decode(), "ab");
+});
+
+test("successive fatal streaming errors consume one invalid leading byte each", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.throws(() => decoder.decode(Uint8Array.of(0xff, 0xff, 0x61), { stream: true }), TypeError);
+  assert.throws(() => decoder.decode(undefined, { stream: true }), TypeError);
+  assert.equal(decoder.decode(), "a");
+});
+
+test("pending bytes after a fatal streaming error are a copy of the input", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const bytes = Uint8Array.of(0xff, 0x61);
+  assert.throws(() => decoder.decode(bytes, { stream: true }), TypeError);
+  bytes[1] = 0x62;
+  assert.equal(decoder.decode(), "a");
+});
+
+test("new input is appended after a fatal streaming error's remaining queue", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.throws(() => decoder.decode(Uint8Array.of(0xff, 0x61), { stream: true }), TypeError);
+  assert.equal(decoder.decode(Uint8Array.of(0x62)), "ab");
+});
+
+for (const encoding of ["utf-16le", "utf-16be"]) {
+  const bytes = (units: readonly number[]): Uint8Array => {
+    const output = new Uint8Array(units.length * 2);
+    for (let index = 0; index < units.length; index++) {
+      const unit = units[index]!;
+      output[index * 2] = encoding === "utf-16le" ? unit & 255 : unit >> 8;
+      output[index * 2 + 1] = encoding === "utf-16le" ? unit >> 8 : unit & 255;
+    }
+    return output;
+  };
+
+  test(`a fatal ${encoding} leading-surrogate error restores a unit split across calls`, () => {
+    const decoder = new TextDecoder(encoding, { fatal: true });
+    const input = bytes([0xd800, 0x61, 0x62]);
+    assert.equal(decoder.decode(input.subarray(0, 3), { stream: true }), "");
+    assert.throws(() => decoder.decode(input.subarray(3), { stream: true }), TypeError);
+    assert.equal(decoder.decode(), "ab");
+  });
+
+  test(`a fatal ${encoding} trailing-surrogate error preserves following units`, () => {
+    const decoder = new TextDecoder(encoding, { fatal: true });
+    assert.throws(() => decoder.decode(bytes([0xdc00, 0x61]), { stream: true }), TypeError);
+    assert.equal(decoder.decode(), "a");
+  });
+
+  test(`${encoding} emits one replacement for a lead surrogate and odd byte at EOF`, () => {
+    const decoder = new TextDecoder(encoding);
+    const input = bytes([0xd800, 0x61]).subarray(0, 3);
+    assert.equal(decoder.decode(input), "\ufffd");
+    assert.equal(decoder.decode(), "");
+  });
+}
+
+test("a fatal streaming call does not serialize its discarded output or mark a BOM seen", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.throws(() => decoder.decode(Uint8Array.of(0x61, 0xff, 0xef, 0xbb, 0xbf, 0x62), {
+    stream: true,
+  }), TypeError);
+  assert.equal(decoder.decode(), "b");
+});
+
+test("a prior successful streaming call's BOM state survives a later fatal error", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.equal(decoder.decode(Uint8Array.of(0x61), { stream: true }), "a");
+  assert.throws(() => decoder.decode(Uint8Array.of(0xff, 0xef, 0xbb, 0xbf, 0x62), {
+    stream: true,
+  }), TypeError);
+  assert.equal(decoder.decode(), "\ufeffb");
+});
+
+test("a non-streaming fatal call resets its queue on the next decode", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  assert.throws(() => decoder.decode(Uint8Array.of(0xff, 0x61)), TypeError);
+  assert.equal(decoder.decode(Uint8Array.of(0x62)), "b");
+});
