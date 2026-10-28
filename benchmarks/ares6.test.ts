@@ -146,6 +146,89 @@ function isAirCase(value: unknown): value is AirCase {
 }
 // END AIR.
 
+// BEGIN ML: add this complete section with the ML case.
+interface MLCase extends AresCase {
+  originalActivationCount: number;
+  render(n: number): unknown;
+  renderOriginal(): unknown;
+}
+
+function isMLCase(value: unknown): value is MLCase {
+  return isAresCase(value) && "originalActivationCount" in value && typeof value.originalActivationCount === "number" &&
+    "render" in value && typeof value.render === "function" &&
+    "renderOriginal" in value && typeof value.renderOriginal === "function";
+}
+
+function quantizedState(value: unknown): string {
+  return JSON.stringify(value, (_key: string, field: unknown): unknown => {
+    if (typeof field !== "number") return field;
+    assert.ok(Number.isFinite(field), "all trained values must be finite");
+    return Math.round(field * 1e6);
+  });
+}
+
+{
+  const name = "ares6-ml";
+  const benchmark = modules.get(name);
+  if (benchmark !== undefined) {
+    assert.ok(isMLCase(benchmark), `${name}: missing trained-network observations`);
+    checked.add(name);
+
+    test(`${name}: all five original training cases and the full activation sweep match upstream`, () => {
+      // Recorded from the unchanged ml/index.js and its original benchmark.js,
+      // with the same local fixed RNG supplied to the isolated reference VM.
+      // Only the driver's activation-loop bound changes for smaller n. The
+      // full n=14 case runs all 70 original networks and their native assertions.
+      // Hash every model field, weight, bias, label and final probability;
+      // round observed numbers to six decimals to allow math-library low-bit
+      // differences without changing any training or prediction arithmetic.
+      assert.equal(benchmark.originalActivationCount, 14);
+      const oracles = [
+        { n: 0, networks: 0, sha256: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" },
+        { n: 1, networks: 5, sha256: "7a422681622d74ce234ad0ac673dbd1235fa71c08ece0bfc557e1189e918d8f4" },
+        { n: 2, networks: 10, sha256: "b6fa7b762800f52e34aca55b7416e132353d46eff1499de6f984f889587a18ba" },
+        { n: 14, networks: 70, sha256: "e0e1332cf8cc841d3afe03b13bb9555e829771e5a377595a5df40edcb0848069" },
+      ];
+      for (const oracle of oracles) {
+        const output = oracle.n === 14 ? benchmark.renderOriginal() : benchmark.render(oracle.n);
+        assert.ok(Array.isArray(output));
+        const observations: unknown[] = output;
+        assert.equal(observations.length, oracle.networks);
+        assert.equal(sha256(quantizedState(observations)), oracle.sha256, `activation count ${oracle.n}: complete trained state`);
+        if (oracle.n === 1) {
+          const actual = observations.map((observation) => {
+            assert.ok(isRecord(observation) && isRecord(observation.model));
+            return {
+              name: observation.name,
+              iterations: observation.model.iterations,
+              hiddenLayers: observation.model.hiddenLayers,
+              predictions: observation.predictions,
+            };
+          });
+          assert.deepEqual(actual, [
+            { name: "xor", iterations: 40, hiddenLayers: [4], predictions: [false, true, true, true] },
+            { name: "and", iterations: 75, hiddenLayers: [3], predictions: [[1, 0], [1, 0], [1, 0], [0, 1]] },
+            { name: "or", iterations: 40, hiddenLayers: [4], predictions: [0, 1, 1, 1] },
+            { name: "multiclass", iterations: 40, hiddenLayers: [4], predictions: [2, 0, 1, 0] },
+            { name: "big", iterations: 60, hiddenLayers: [20], predictions: [[0, 1]] },
+          ]);
+        }
+      }
+    });
+
+    test(`${name}: the checksum observes trained weights, biases, probabilities and predictions`, () => {
+      // Independently computed from the original VM's observed output, using
+      // the documented six-decimal unsigned polynomial checksum.
+      assert.equal(benchmark.work(0), 0);
+      assert.equal(benchmark.work(1), 272316333);
+      assert.equal(benchmark.work(2), 1026121899);
+      assert.equal(benchmark.work(14), 1936566119);
+      assert.equal(benchmark.work(1), 272316333);
+    });
+  }
+}
+// END ML.
+
 test("every installed ARES-6 case has program-specific correctness checks", () => {
   assert.deepEqual(cases.filter((name) => !checked.has(name)), [], "installed rows without independent oracles");
 });
