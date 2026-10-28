@@ -16,7 +16,7 @@ interface BodySurface {
   arrayBuffer(): Promise<ArrayBuffer>;
   text(): Promise<string>;
   json(): Promise<unknown>;
-  blob(): Promise<{ text(): Promise<string> }>;
+  blob(): Promise<{ readonly type: string; text(): Promise<string> }>;
   formData(): Promise<{ get(name: string): unknown }>;
 }
 
@@ -328,3 +328,70 @@ test("Response internal clone preserves error and redirect status and immutable 
     assert.throws(() => expected.headers.set("x-test", "value"), TypeError);
   }
 });
+
+// https://fetch.spec.whatwg.org/#concept-header-extract-mime-type
+// https://fetch.spec.whatwg.org/#concept-header-value-get-decode-and-split
+for (const factory of bodyFactories) {
+  for (const group of [
+    {
+      name: "validates and serializes MIME types",
+      values: [
+        ["not a mime type", ""],
+        ["Text/Plain ; CHARSET=\"UTF-8\"", "text/plain;charset=utf-8"],
+        ["*/*", ""],
+      ],
+    },
+    {
+      name: "selects the last valid MIME type with the specified charset inheritance",
+      values: [
+        ["text/plain;charset=gbk, text/html", "text/html"],
+        ["text/html;charset=gbk;a=b, text/html;x=y", "text/html;x=y;charset=gbk"],
+        ["text/html;charset=gbk, text/html;charset=utf-8, text/html;x=y", "text/html;x=y;charset=gbk"],
+        ["text/html;charset=gbk, x/x, text/html;x=y", "text/html;x=y"],
+        ["text/html, cannot-parse, */*,", "text/html"],
+      ],
+    },
+    {
+      name: "keeps quoted and escaped commas inside MIME parameters",
+      values: [
+        ['x/x;test="hi,there", y/y;name="a,b"', 'y/y;name="a,b"'],
+        ['x/x;test="a\\\",b", text/html', "text/html"],
+        ['text/html;", x/x', "text/html"],
+      ],
+    },
+  ] as const) {
+    test(`${factory.name}.blob ${group.name}`, async () => {
+      for (const [contentType, expectedType] of group.values) {
+        const subject = factory.create("value", contentType);
+        const oracle = factory.oracle("value", contentType);
+        const expected = await oracle.blob();
+        const actual = await subject.blob();
+        assert.equal(expected.type, expectedType, contentType);
+        assert.equal(actual.type, expected.type, contentType);
+        assert.equal(await actual.text(), await expected.text());
+      }
+    });
+  }
+
+  test(`${factory.name}.formData extracts the MIME type from a combined Content-Type list`, async () => {
+    for (const contentType of [
+      "application/x-www-form-urlencoded, application/x-www-form-urlencoded",
+      "text/plain, application/x-www-form-urlencoded",
+    ]) {
+      const subject = factory.create("a=1", contentType);
+      const oracle = factory.oracle("a=1", contentType);
+      assert.equal((await subject.formData()).get("a"), (await oracle.formData()).get("a"));
+      assert.equal(subject.bodyUsed, true);
+    }
+  });
+
+  test(`${factory.name}.formData rejects an unsupported final MIME type after consuming the body`, async () => {
+    const contentType = "application/x-www-form-urlencoded, text/plain";
+    const subject = factory.create("a=1", contentType);
+    const oracle = factory.oracle("a=1", contentType);
+    await assert.rejects(subject.formData(), TypeError);
+    await assert.rejects(oracle.formData(), TypeError);
+    assert.equal(subject.bodyUsed, oracle.bodyUsed);
+    assert.equal(subject.bodyUsed, true);
+  });
+}
