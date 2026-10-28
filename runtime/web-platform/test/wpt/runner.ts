@@ -38,6 +38,8 @@ export interface WptEnvironment {
   exposeSelf?: boolean;
   /** Real aliases of the fixture's VM global, for example a worker's `self`. */
   globalAliases?: readonly string[];
+  /** The provider connects the separate reportUncaughtException callback. */
+  uncaughtExceptionChannel?: boolean;
   close(): void | Promise<void>;
 }
 
@@ -308,6 +310,7 @@ export function loadWptFixtures(root: URL, manifest: WptManifest, options: WptRu
 
 export type WptEnvironmentFactory = (
   reportError: (error: unknown) => void, context: WptFixtureContext,
+  reportUncaughtException: (error: unknown) => void,
 ) => WptEnvironment | Promise<WptEnvironment>;
 
 /** Execute one prepared fixture, including provider cleanup, for tests or a census. */
@@ -320,10 +323,14 @@ export async function executeWptFixture(
   const { fixture } = context;
   let harness: WptHarness | undefined;
   const startupErrors: unknown[] = [];
+  const startupUncaught: unknown[] = [];
   const environment = await createEnvironment((error) => {
     if (harness === undefined) startupErrors.push(error);
     else harness.reportError(error);
-  }, context);
+  }, context, (error) => {
+    if (harness === undefined) startupUncaught.push(error);
+    else harness.reportUncaughtException(error);
+  });
   try {
     const globals = { ...environment.globals };
     let imported = 0;
@@ -345,8 +352,10 @@ export async function executeWptFixture(
       exposeSelf: environment.exposeSelf,
       defaultTestName: fixture.defaultTestName, globalAliases: environment.globalAliases,
       maxTests: fixture.expectedTests,
+      uncaughtExceptionChannel: environment.uncaughtExceptionChannel,
     });
     for (const error of startupErrors) harness.reportError(error);
+    for (const error of startupUncaught) harness.reportUncaughtException(error);
     for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
     const results = await harness.finish();
     assert.equal(imported, imports.length, "declared importScripts dependency was not loaded");

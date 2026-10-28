@@ -187,6 +187,8 @@ export interface WptHarnessOptions {
   globalAliases?: readonly string[];
   deadlineScheduler?: WptDeadlineScheduler;
   defaultTestName?: string;
+  /** Only a provider with a distinct uncaught-global reporting path may opt in. */
+  uncaughtExceptionChannel?: boolean;
 }
 
 class WptTest {
@@ -428,6 +430,8 @@ export class WptHarness {
   private readonly defaultTestName: string | undefined;
   private readonly maxTests: number;
   private defaultNameCount = 0;
+  private allowUncaughtException = false;
+  private readonly uncaughtExceptionChannel: boolean;
 
   constructor(
     globals: Record<string, unknown>,
@@ -436,6 +440,7 @@ export class WptHarness {
     options: WptHarnessOptions | readonly string[] = {},
   ) {
     this.blocks = blocks;
+    this.uncaughtExceptionChannel = "uncaughtExceptionChannel" in options && options.uncaughtExceptionChannel === true;
     const defaultTestName = "defaultTestName" in options ? options.defaultTestName : undefined;
     assert.ok(defaultTestName === undefined || typeof defaultTestName === "string",
       "WPT defaultTestName must be a string");
@@ -648,9 +653,15 @@ export class WptHarness {
         if (properties !== undefined) {
           assert.ok(typeof properties === "object" && properties !== null, "setup options must be an object");
           for (const [key, value] of Object.entries(properties)) {
-            assert.equal(key, "explicit_done", `unsupported WPT setup option: ${key}`);
-            assert.ok(typeof value === "boolean", "explicit_done must be boolean");
-            this.explicitDone = value;
+            assert.ok(key === "explicit_done" || key === "allow_uncaught_exception",
+              `unsupported WPT setup option: ${key}`);
+            assert.ok(typeof value === "boolean", `${key} must be boolean`);
+            if (key === "explicit_done") this.explicitDone = value;
+            else {
+              assert.equal(this.uncaughtExceptionChannel, true,
+                "allow_uncaught_exception requires a connected uncaught-global reporting channel");
+              this.allowUncaughtException = value;
+            }
           }
         }
         if (callback !== undefined) this.checkSynchronousResult(callback.apply(undefined, []), "setup callback");
@@ -715,6 +726,11 @@ export class WptHarness {
     const test = this.active ?? this.asyncTest.getStore();
     if (test !== undefined && test !== null && !test.closed) test.fail(error);
     else this.recordError(error);
+  }
+
+  /** A provider's actual uncaught-global channel, separate from assertions. */
+  reportUncaughtException(error: unknown): void {
+    if (!this.allowUncaughtException) this.reportError(error);
   }
 
   recordError(error: unknown): void { this.errors.push(error); }
