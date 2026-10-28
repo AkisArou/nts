@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused: index 2 is outside [0, 1)",
+  "node": "exit 1; nts: uncaught Observed: written=3;",
+  "measured_with": "23d9dac2e6721300",
+  "source": "measured"
+}

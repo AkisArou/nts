@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 9,
+        "integer": true,
+        "allowNaN": true,
+        "reason": "The permutation counter requires whole positive sizes; bound factorial work within the Node recorder's budgets while covering benchmark seed 8 and published size 7."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 9,
+        "integer": true,
+        "allowNaN": true,
+        "reason": "The permutation counter requires whole positive sizes; bound factorial work within the Node recorder's budgets while covering benchmark seed 8 and published size 7."
+      }
+    }
+  }
+}
