@@ -1,0 +1,122 @@
+{
+  "scope": "B10 source-owned HTML global error and rejection policy. No production global or Promise-hook binding is included.",
+  "date": "2026-10-28",
+  "node": "v24.20.0",
+  "initialStackBase": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
+  "dependencyCommits": [
+    "13b259964f5414f6679a083bda2ce96bc9ffcca8",
+    "07602ba3330bb526e851675652aefb7ab858285b"
+  ],
+  "sourceCommit": "308e3cc5c8c339464afd3ea1cf201cc3fff83b3a",
+  "sourceAndAdapterSha256": {
+    "runtime/web-platform/src/core/global-errors.ts": "a89e3a5689c72886437bc905c26c54c00a282c123c170fc5f725ea3659332885",
+    "runtime/web-platform/src/provider/global-errors.ts": "280c7d0f4708d493fc49e6f224c16c79e9d3542f2664b2a14f3b7217f4f15245",
+    "runtime/web-platform/test/global-errors-policy.test.ts": "6fc2a72e5dfc3e16e9e23a0c19c9250c0e48d47689d297b2427bc72bc2129fc4",
+    "runtime/web-platform/test/global-errors-harness-policy.test.ts": "14065b2fc02150a8c66380a378b2b7cef890b38d23ccc6d7b7a4b8c1bbdd67df",
+    "runtime/web-platform/test/support/global-errors-driver.ts": "9d325195709d9ca9084be17f2cb09c521d166a152b58f1ba8c8e1db46b1a47bd",
+    "runtime/web-platform/test/wpt-global-errors.test.ts": "7db17c015ce39a9967fc6919f9c3957e2c242a7f47278efa4bc9ceff7d5c9c4b",
+    "runtime/web-platform/test/wpt/harness.ts": "721b62e18d872c7f8e047ea5741ba8e103186ecb244c2bbdfae5e753bafc7098",
+    "runtime/web-platform/test/wpt/runner.ts": "13a7b611cf5b182849286ab635d4092abe35e69dac51378465cb8fe622fe5ce7",
+    "runtime/web-platform/test/wpt/global-errors-manifest.json": "3919289fafe13a3f704bf7ff5a6871c86e9ff64f6c147f88072f76622b807795"
+  },
+  "wptRevision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+  "wptBlob": "b9e7ba25bc6a3938783f7bf32472ba422e815ae2",
+  "before": {
+    "definition": "The same pinned fixture, named integration blocks and final adapter with reportError absent from the VM globals, as it is before the new API. This is an API-absence baseline, not a checkout-wide historical gate.",
+    "counts": {
+      "path": "html/webappapis/scripting/reporterror.any.js",
+      "passed": 1,
+      "failed": 1,
+      "blocked": 3
+    },
+    "falsePositive": "The required-argument case also passes when reportError is absent, because calling an absent method throws TypeError. The local source controls additionally prove the callable exists and has the required arity/receiver behavior.",
+    "failedTest": "self.reportError() doesn't invoke getters",
+    "reason": "The source API does not exist in that baseline."
+  },
+  "after": {
+    "counts": {
+      "path": "html/webappapis/scripting/reporterror.any.js",
+      "passed": 2,
+      "failed": 0,
+      "blocked": 3
+    },
+    "nodeTotals": {
+      "tests": 68,
+      "pass": 65,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 3,
+      "todo": 0
+    },
+    "controls": {
+      "sourcePolicyPassed": 34,
+      "newAdapterPassed": 5,
+      "unchangedAdapterPassed": 22
+    },
+    "command": "node --expose-gc --test --test-isolation=none --test-reporter=tap runtime/web-platform/test/global-errors-policy.test.ts runtime/web-platform/test/global-errors-harness-policy.test.ts runtime/web-platform/test/wpt-global-errors.test.ts runtime/web-platform/test/wpt-harness.test.ts"
+  },
+  "initialAdapterRegression": {
+    "test": "WPT unsupported setup options and missing explicit done fail loudly",
+    "reason": "The first implementation accepted allow_uncaught_exception without a provider channel, invalidating the existing rejection control.",
+    "resolution": "Require explicit WptHarnessOptions.uncaughtExceptionChannel and a distinct reportUncaughtException callback; preserve default refusal. The existing test file was not changed.",
+    "nodeTotalsAtFailure": {
+      "tests": 67,
+      "pass": 63,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 3,
+      "todo": 0
+    }
+  },
+  "sabotage": {
+    "mutation": "Read exception.message before capability extraction",
+    "sourceSha256Before": "a89e3a5689c72886437bc905c26c54c00a282c123c170fc5f725ea3659332885",
+    "mutantSha256": "ee85316e9d142bf04fd11c2f687cd75e91c5674a3b2de7c801ab3271f30ffebc",
+    "exitCode": 1,
+    "wptCounts": [
+      [
+        "html/webappapis/scripting/reporterror.any.js",
+        "1",
+        "1",
+        "3"
+      ]
+    ],
+    "sourceSha256Restored": "a89e3a5689c72886437bc905c26c54c00a282c123c170fc5f725ea3659332885",
+    "restoredExactly": true
+  },
+  "restored": {
+    "counts": {
+      "path": "html/webappapis/scripting/reporterror.any.js",
+      "passed": 2,
+      "failed": 0,
+      "blocked": 3
+    },
+    "nodeTotals": {
+      "tests": 7,
+      "pass": 4,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 3,
+      "todo": 0
+    }
+  },
+  "typeChecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    }
+  ],
+  "compiledNts": "not verified; compiler/provider integration belongs to maintainers",
+  "wholeSuite": "not run in this worktree; parent integration owns the stacked full gate",
+  "excludedPaths": 19,
+  "untouchedDependencies": [
+    "FileReader.readAsDataURL native base64",
+    "FileReader legacy encodings native codecs",
+    "FileReader two event-order cases native microtask checkpoint",
+    "known 100 ms adapter load-sensitive control"
+  ]
+}
