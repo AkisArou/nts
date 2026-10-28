@@ -1,0 +1,119 @@
+{
+  "node": "v24.20.0",
+  "pin": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "outputCharacters": 178076,
+  "outputLines": 5669,
+  "outputSha256": "28257369b7f67d4df464b4d984dd86d32f9205f0b85476a73ff9ad2db29c0a6d",
+  "work1": 1823231877,
+  "work2": 2508845216,
+  "annotationFailure": {
+    "name": "TypeError",
+    "message": "Cannot set property codeOrigin of #<Annotation> which has only a getter"
+  },
+  "sourceFiles": [
+    {
+      "path": "RexBench/OfflineAssembler/registers.js",
+      "bytes": 2221,
+      "sha256": "6edf1f46888e59a92d32c86a45f28ab6b5aeba9ab9105c7d1e38ee486b1bdb59"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/instructions.js",
+      "bytes": 6660,
+      "sha256": "60a428ddb4d2836bd262ae623561fc40548adce590e785e4785356ccf84bcd0c"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/ast.js",
+      "bytes": 28950,
+      "sha256": "a7259b634245a9a4e51ba75a4a2fb7755c40adf19e7c2196c1fe0f89ce45cadd"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/parser.js",
+      "bytes": 35418,
+      "sha256": "c4c72473f64f09839cba5b922b581e0c72d73f0ad684d0acc7bc5e35f904168c"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/file.js",
+      "bytes": 1776,
+      "sha256": "e3cbe2c4cece10b3f1a5714695bdd25b9f3ca5aa58c7329c5ba9c9e9bfe6c01f"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/LowLevelInterpreter.js",
+      "bytes": 57960,
+      "sha256": "98c70d6544ef24eb3b23165a63b7d4f1e5b1e930cb52f9aec914be7ed595ea90"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/LowLevelInterpreter32_64.js",
+      "bytes": 75629,
+      "sha256": "308d51c8dc3ae575b54950009692218dfb7e4c2d584675dda52606d210530b71"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/LowLevelInterpreter64.js",
+      "bytes": 73136,
+      "sha256": "3b145cd58f8ef126f48fab83f6a0213dc4319f699250ce548ff1af90060697b7"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/InitBytecodes.js",
+      "bytes": 9076,
+      "sha256": "79fbf6324577fe71c3c7671fd219d3661dba6d812dd45afd5d13f71b4d4d489a"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/expected.js",
+      "bytes": 217915,
+      "sha256": "97f7ed59fabacedd7b88f8eef1426c96ad4b3199b1a90326bbd45e2ae5463196"
+    },
+    {
+      "path": "RexBench/OfflineAssembler/benchmark.js",
+      "bytes": 2194,
+      "sha256": "9f6b0e49b9230d14bfd99791cd01c67977b03912072432140424ad71d391250d"
+    }
+  ],
+  "fidelity": {
+    "driverAstEquality": true,
+    "completeByteIdenticalInputFiles": [
+      "LowLevelInterpreter.js",
+      "LowLevelInterpreter32_64.js",
+      "LowLevelInterpreter64.js",
+      "InitBytecodes.js",
+      "expected.js"
+    ],
+    "dormantFailures": {
+      "new Annotation({}, \"local\", \"test\")": {
+        "name": "TypeError",
+        "message": "Cannot set property codeOrigin of #<Annotation> which has only a getter"
+      },
+      "new SpecialRegister(\"x\")": {
+        "name": "ReferenceError",
+        "message": "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+      },
+      "parseData(\"if true\\nend\\n\", \"dormant.asm\")": {
+        "name": "TypeError",
+        "message": "True.instance is not a function"
+      },
+      "parseData(\"if false\\nend\\n\", \"dormant.asm\")": {
+        "name": "TypeError",
+        "message": "False.instance is not a function"
+      }
+    }
+  },
+  "timing": {
+    "node": "v24.20.0",
+    "seed": 1,
+    "nanosecondsAndBits": [
+      "26243671.0000 41db2b13e1400000",
+      "23006902.6667 41db2b13e1400000",
+      "24153421.7500 41db2b13e1400000",
+      "28183750.6667 41db2b13e1400000",
+      "28745905.5000 41db2b13e1400000"
+    ],
+    "exception": "Approved policy: seed=1 is one complete original operation; the full input is preserved despite the best local result exceeding 10 ms."
+  },
+  "validation": {
+    "strictTypeScript": "passed; repository TypeScript 7.0.2, strict mode",
+    "jetstreamTests": {
+      "tests": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    }
+  }
+}

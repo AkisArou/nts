@@ -100,6 +100,85 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN OFFLINE ASSEMBLER.
+{
+  const name = "jetstream-offline-assembler";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+
+    test(`${name}: every original assembly input and all expected lines are preserved`, () => {
+      const source = readFileSync(new URL(`${name}/program.ts`, root), "utf8");
+      for (const [file, expected] of [
+  [
+    "LowLevelInterpreter.js",
+    "98c70d6544ef24eb3b23165a63b7d4f1e5b1e930cb52f9aec914be7ed595ea90"
+  ],
+  [
+    "LowLevelInterpreter32_64.js",
+    "308d51c8dc3ae575b54950009692218dfb7e4c2d584675dda52606d210530b71"
+  ],
+  [
+    "LowLevelInterpreter64.js",
+    "3b145cd58f8ef126f48fab83f6a0213dc4319f699250ce548ff1af90060697b7"
+  ],
+  [
+    "InitBytecodes.js",
+    "79fbf6324577fe71c3c7671fd219d3661dba6d812dd45afd5d13f71b4d4d489a"
+  ],
+  [
+    "expected.js",
+    "97f7ed59fabacedd7b88f8eef1426c96ad4b3199b1a90326bbd45e2ae5463196"
+  ]
+]) {
+        const marker = `// Original source: RexBench/OfflineAssembler/${file}\n`;
+        const start = source.indexOf(marker);
+        assert.ok(start >= 0);
+        const begin = start + marker.length;
+        const end = source.indexOf("\n\n// Original source: ", begin);
+        assert.ok(end > begin);
+        const original = source.slice(begin, end).replace("export const expectedASTDumpedAsLines: string[] =", "let expectedASTDumpedAsLines =");
+        assert.equal(sha256(original), expected);
+      }
+    });
+
+    test(`${name}: every one of the 5669 original AST lines matches upstream`, () => {
+      const output = module.render(1);
+      assert.ok(typeof output === "string");
+      assert.equal(output.length, 178076);
+      assert.equal(output.split("\n").length, 5669);
+      assert.equal(sha256(output), "28257369b7f67d4df464b4d984dd86d32f9205f0b85476a73ff9ad2db29c0a6d");
+      assert.equal(module.render(2), output);
+    });
+
+    test(`${name}: dormant source failures are retained rather than repaired`, async () => {
+      const source: unknown = await import(new URL(`${name}/program.ts`, root).href);
+      assert.ok(isRecord(source));
+      const Annotation = source.Annotation;
+      assert.ok(typeof Annotation === "function");
+      assert.throws(() => Reflect.construct(Annotation, [{}, "local", "test"]), {
+        name: "TypeError", message: "Cannot set property codeOrigin of #<Annotation> which has only a getter",
+      });
+      const parseData = source.parseData;
+      assert.ok(typeof parseData === "function");
+      for (const value of ["true", "false"])
+        assert.throws(() => parseData(`if ${value}\nend\n`, "dormant.asm"), {
+          name: "TypeError", message: `${value === "true" ? "True" : "False"}.instance is not a function`,
+        });
+    });
+
+    test(`${name}: opaque count repeats complete parsing and reset operations`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.render(0), "");
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 1823231877);
+      assert.equal(module.work(2), 2508845216);
+    });
+  }
+}
+// END OFFLINE ASSEMBLER.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
