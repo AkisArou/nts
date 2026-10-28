@@ -239,6 +239,11 @@ pub(crate) const COMMANDS: &[Command] = &[
         &[PROJECT, ROOTS, PROVIDER, SHAPE, LISTING],
     ),
     command(
+        "contents-census",
+        " [project]",
+        &[PROJECT, ROOTS, PROVIDER, SHAPE, LISTING],
+    ),
+    command(
         "expect-ir",
         " [project]",
         &[PROJECT, ROOTS, PROVIDER, SHAPE],

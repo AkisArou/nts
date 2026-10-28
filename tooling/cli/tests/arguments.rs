@@ -412,7 +412,9 @@ fn declarations_match_the_options_the_legacy_command_readers_consume() {
             "emit-llvm" => &["project", "roots", "provider", "shape", "emit-llvm"],
             "emit-jvm" => &["project", "roots", "provider", "shape", "emit-jvm"],
             "hir" => &["project", "roots", "provider", "shape", "listing", "hir"],
-            "stats" | "regions" => &["project", "roots", "provider", "shape", "listing"],
+            "stats" | "regions" | "contents-census" => {
+                &["project", "roots", "provider", "shape", "listing"]
+            }
             "expect-ir" => &["project", "roots", "provider", "shape"],
             "facts" => &["project", "facts"],
             "erasure" => &["project", "erasure"],

@@ -15,6 +15,7 @@ mod bind_scratch;
 mod bind_winmd;
 mod build_manifest;
 mod checkers;
+mod contents_census;
 mod emission;
 mod expect_ir;
 #[cfg(test)]
@@ -641,6 +642,7 @@ INSPECTING
   hir          the lowered program; --prepared [--backend c|llvm|jvm] shows backend preparation
   stats        what preparation did to the program, as `key value` counts (takes hir --prepared's flags)
   regions      which calls a region could serve under --rc, and why each other one cannot
+  contents-census  JSON census of bounded content proofs and failed writer contracts (requires --rc)
   expect-ir    check the sources' `// expect-ir:` facts against the program each named backend receives
   facts        the facts lowering derived; --prepared for the prepared program
   refusals     every construct this program was refused for, with its reason
@@ -903,6 +905,12 @@ fn run_command() -> Result<()> {
         Some("regions") => {
             let rest: Vec<String> = args.collect();
             dump_regions(&project(&rest)?)
+        }
+        // Read-only JSON census of the same bounded content provider used by
+        // cleanup and arithmetic. No written generic argument selects a layout.
+        Some("contents-census") => {
+            let rest: Vec<String> = args.collect();
+            contents_census::command(&project(&rest)?)
         }
         // The `// expect-ir:` facts in the project's sources, each checked
         // against the program every backend it names receives.
