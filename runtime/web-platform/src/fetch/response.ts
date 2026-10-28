@@ -94,6 +94,8 @@ export class Response extends Body {
     // Web IDL converts arguments left to right before the constructor algorithm.
     const convertedBody = convertBodyInit(body);
     const convertedInit = convertResponseInit(init);
+    // Fetch extracts the body before initialize-response validates the status.
+    const state = BodyState.fromConvertedBody(convertedBody, context.random, context.bodyPolicy);
     const status = convertedInit.status;
     if (status < 200 || status > 599) throw new RangeError("Response status must be 200..599");
     const statusText = convertedInit.statusText;
@@ -103,7 +105,6 @@ export class Response extends Body {
     }
     if (convertedBody !== null && convertedBody !== undefined && nullBodyStatus(status))
       throw new TypeError("This response status cannot have a body");
-    const state = BodyState.fromConvertedBody(convertedBody, context.random, context.bodyPolicy);
     const headers = convertedInit.headers ?? new Headers();
     if (!headers.has("content-type") && state.type !== null)
       headers.set("content-type", state.type);
