@@ -33,6 +33,9 @@ import type {
 } from "../eventsource/event-source.ts";
 import { Blob } from "../file/blob.ts";
 import { BlobURLStore } from "../file/object-url.ts";
+import { createCrypto } from "../crypto/crypto.ts";
+import type { Crypto } from "../crypto/crypto.ts";
+import type { CryptoProvider } from "./crypto.ts";
 import { Http1Transport } from "../http1/transport.ts";
 import type { Http1Options } from "../http1/transport.ts";
 import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
@@ -79,6 +82,8 @@ export interface WebPlatformOptions {
   fileURLs?: FileURLProvider;
   /** Digest primitive for subresource integrity. Without it, integrity requests fail. */
   digest?: DigestProvider;
+  /** Native Web Crypto capability. Bootstrap owns global and secure-context exposure. */
+  crypto?: CryptoProvider;
   http1?: Http1Options;
   /** Environment/explicit proxy policy shared by Fetch, EventSource and WebSocket. */
   proxy?: WebPlatformProxyOptions;
@@ -131,6 +136,8 @@ export class WebPlatformRuntime
   readonly maxBufferedAmount: number | undefined;
   readonly eventSourcePolicy: EventSourcePolicy;
   readonly caches: CacheStorage;
+  /** One environment-owned facade, absent when no native capability was supplied. */
+  readonly crypto: Crypto | undefined;
   readonly transport: WebSocketTransport;
 
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
@@ -156,6 +163,8 @@ export class WebPlatformRuntime
     this.primitives = primitives;
     this.nativeLineEnding = primitives.nativeLineEnding;
     this.scheduler = primitives.scheduler;
+    const cryptoProvider = options.crypto;
+    this.crypto = cryptoProvider === undefined ? undefined : createCrypto(primitives.random, cryptoProvider, this.scheduler);
     this.urls = primitives.urls;
     this.baseURL = options.baseURL;
     this.origin = options.origin;
