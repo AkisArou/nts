@@ -283,3 +283,34 @@ test("WPT recursive asynchronous registration fails at its inventory bound witho
   assert.equal(executed, 3);
   assert.throws(() => new WptHarness({}, {}, 10000, { maxTests: 0 }), /maxTests/);
 });
+
+test("WPT duplicate registration remains a harness failure when a provider consumes its exception", async () => {
+  const caught: unknown[] = [];
+  const harness = new WptHarness({
+    dispatch(callback: () => void) { try { callback(); } catch (error) { caught.push(error); } },
+  }, {}, 1000, { maxTests: 2 });
+  harness.run(`
+    test(() => {}, "first");
+    dispatch(() => test(() => {}, "first"));
+    test(() => {}, "second");
+  `, "caught-duplicate.js");
+  assert.equal(caught.length, 1);
+  await assert.rejects(harness.finish(), (error) => error instanceof AggregateError &&
+    error.errors.includes(caught[0]));
+});
+
+test("WPT after-done registration remains a harness failure when a provider consumes its exception", async () => {
+  const caught: unknown[] = [];
+  const harness = new WptHarness({
+    dispatch(callback: () => void) { try { callback(); } catch (error) { caught.push(error); } },
+  }, {}, 1000, { maxTests: 1 });
+  harness.run(`
+    setup({ explicit_done: true });
+    test(() => {}, "first");
+    done();
+    dispatch(() => test(() => {}, "late"));
+  `, "caught-after-done.js");
+  assert.equal(caught.length, 1);
+  await assert.rejects(harness.finish(), (error) => error instanceof AggregateError &&
+    error.errors.includes(caught[0]));
+});

@@ -642,23 +642,28 @@ export class WptHarness {
   }
 
   private register(explicitName: string | undefined, kind: TestKind): WptTest {
-    assert.equal(this.registrationClosed, false, "test registered after done()");
-    assert.equal(this.cleanupErrors.length, 0, "test registered after cleanup failure");
-    if (this.tests.length >= this.maxTests) {
-      const error = new Error("WPT test registration exceeded the declared inventory limit");
+    let name = explicitName;
+    try {
+      assert.equal(this.registrationClosed, false, "test registered after done()");
+      assert.equal(this.cleanupErrors.length, 0, "test registered after cleanup failure");
+      if (this.tests.length >= this.maxTests) {
+        this.closeRegistration();
+        throw new Error("WPT test registration exceeded the declared inventory limit");
+      }
+      if (name === undefined) {
+        if (this.defaultTestName === undefined) name = `unnamed test ${this.tests.length + 1}`;
+        else {
+          name = this.defaultTestName + (this.defaultNameCount === 0 ? "" : " " + this.defaultNameCount);
+          this.defaultNameCount++;
+        }
+      }
+      assert.equal(this.names.has(name), false, `duplicate WPT test name: ${name}`);
+    } catch (error) {
+      // A provider may catch a callback exception and intentionally suppress its
+      // uncaught-global report. Registration integrity is still a harness error.
       this.recordError(error);
-      this.closeRegistration();
       throw error;
     }
-    let name = explicitName;
-    if (name === undefined) {
-      if (this.defaultTestName === undefined) name = `unnamed test ${this.tests.length + 1}`;
-      else {
-        name = this.defaultTestName + (this.defaultNameCount === 0 ? "" : " " + this.defaultNameCount);
-        this.defaultNameCount++;
-      }
-    }
-    assert.equal(this.names.has(name), false, `duplicate WPT test name: ${name}`);
     this.names.add(name);
     const test = new WptTest(this, name, this.timeout, kind);
     this.tests.push(test);
