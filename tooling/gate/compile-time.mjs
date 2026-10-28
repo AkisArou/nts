@@ -157,7 +157,7 @@ for (const module of modules) {
   }
   sumNow += t.g;
   sumWas += was;
-  const ratio = t.g / Math.max(was, 0.1);
+  const ratio = t.g / was;
   if (ratio >= RATIO) {
     failures += 1;
     lines.push(`  SLOWER        ${module}: ${was.toFixed(1)} -> ${t.g.toFixed(1)} G instructions, ${ratio.toFixed(2)}x (${t.cpu?.toFixed(1) ?? "?"} s of CPU) -- profile it before anything else`);

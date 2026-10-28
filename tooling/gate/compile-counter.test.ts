@@ -78,6 +78,11 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
   const smallBlowup = check({ ...valid, instructions: 20e9 });
   assert.equal(smallBlowup.status, 1);
   assert.match(smallBlowup.stdout, /SLOWER/);
+  // tty is below 0.1 G: its published relative limit applies there too.
+  writeFileSync(join(gate, "compile-times.tsv"), table.replace("subject\t100", "subject\t0.052"));
+  const tinyBlowup = check({ ...valid, instructions: 0.0624e9, cpu_s: 0.01 });
+  assert.equal(tinyBlowup.status, 1, tinyBlowup.stdout + tinyBlowup.stderr);
+  assert.match(tinyBlowup.stdout, /SLOWER/);
   writeFileSync(join(gate, "compile-times.tsv"), table);
   writeFileSync(join(kept, "meta.json"), JSON.stringify({ ...meta, counter_scope: undefined }));
   const legacy = check(valid);
