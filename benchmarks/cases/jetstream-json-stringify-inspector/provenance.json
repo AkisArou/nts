@@ -1,0 +1,168 @@
+{
+  "releaseRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sourceIntegrity": {
+    "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "sources": [
+      "SeaMonster/inspector-json-payload.js.z",
+      "SeaMonster/json-stringify-inspector.js"
+    ],
+    "expandedSourceBytes": 7336062,
+    "expandedSourceSha256": "e872884149325d5b010ddbebbe96805abd712b22d30d627cc3d8c386acb1fa2b",
+    "literalBytes": 7334697,
+    "literalSha256": "ae148988bd4255b0c273fe31539e4e8a7f90d9b4555da9a90a30180d10cf3c01",
+    "literalExactMatch": true,
+    "dataFileBytes": 7336791,
+    "dataFileSha256": "c3dbc48f8506914dbe4394d3b5e2487e74149f2a3b9634a54ab148e5639ab2d3",
+    "checksum": "Initialize with complete string length; mix 64 evenly spaced code units with *31 and unsigned truncation. Mix each complete iteration with *31 and unsigned truncation."
+  },
+  "fullOriginalComparison": {
+    "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "node": "v24.20.0",
+    "originalConstructorResult": null,
+    "records": 846,
+    "utf16Length": 7333850,
+    "utf8Bytes": 7333850,
+    "sha256": "f7594b93901565ac9bef3ec74fe2365a568d2514f0480ac3f1cea1613c376b85",
+    "checksum": 500652281,
+    "work0": 0,
+    "work1": 500652281,
+    "work2": 3135971104,
+    "fullOutputEquality": true,
+    "literalTextEquality": true,
+    "repeatOutputEquality": true,
+    "independentCallEquality": true,
+    "timingPerformed": false
+  },
+  "embeddedInputProvenance": {
+    "sources": [
+      {
+        "name": "app.js.map",
+        "url": "https://raw.githubusercontent.com/WebKit/WebKit/b64265f153b3178bfb4ca9f51736289f57982fce/PerformanceTests/Speedometer/resources/todomvc/vanilla-examples/es2015-babel-webpack/dist/bundle.app.930ad8b83126862d7445.js.map",
+        "bytes": 82524,
+        "sha256": "11d7f8092789719bd5123c6e5ef31f2d24a65a4872cf04f2041e389e917838af",
+        "gitBlob": "c21a4701438785b29d13c55c1e42cebc44213813"
+      },
+      {
+        "name": "vendor.js.map",
+        "url": "https://raw.githubusercontent.com/WebKit/WebKit/b64265f153b3178bfb4ca9f51736289f57982fce/PerformanceTests/Speedometer/resources/todomvc/vanilla-examples/es2015-babel-webpack/dist/bundle.vendor.577c6bc09319b27fed34.js.map",
+        "bytes": 5139,
+        "sha256": "1f6d59b370ad6d86bd5c7b401e78400dc28ee7d0dcbffaacc5010c2c7b03a70e",
+        "gitBlob": "699c6ed764b3121806c150a677c3ada03185248f"
+      },
+      {
+        "name": "InteractiveRunner.html",
+        "url": "https://raw.githubusercontent.com/WebKit/WebKit/b64265f153b3178bfb4ca9f51736289f57982fce/PerformanceTests/Speedometer/InteractiveRunner.html",
+        "bytes": 6079,
+        "sha256": "b53fce3b7388d7773606de60ebb17edc20e5b7e70c46866e5b66949d5e606e2a",
+        "gitBlob": "3e6f078405f6772c56582480a9ba1d2981a9e4ea"
+      },
+      {
+        "name": "TodoMVC-LICENSE",
+        "url": "https://raw.githubusercontent.com/WebKit/WebKit/b64265f153b3178bfb4ca9f51736289f57982fce/PerformanceTests/Speedometer/resources/todomvc/license.md",
+        "bytes": 1166,
+        "sha256": "32238c5c6759b589ea768661b6eb0fcb42449b74d57cdf09928743f2e1eb748d",
+        "gitBlob": "9275d4371020294b6a107e454a0d1819f8b71c31"
+      },
+      {
+        "name": "webpack-LICENSE",
+        "url": "https://raw.githubusercontent.com/webpack/webpack/v2.1.0-beta.20/LICENSE",
+        "bytes": 1082,
+        "sha256": "d6934621e435228cd2717deef4273399a068a0c3d96a04fdb51d87368486dfc5",
+        "gitBlob": "cee2e7f6b1646e5724a6ad15b4b88465ed40d56e"
+      },
+      {
+        "name": "css-loader-README.md",
+        "url": "https://raw.githubusercontent.com/webpack/css-loader/v0.23.1/README.md",
+        "bytes": 7417,
+        "sha256": "271946baa577dfe59f8e2a63085ad20f9dc6e90af95710a6862c0b98d6a0bea0",
+        "gitBlob": "005ddb8aa9b7823f67c3279819309792d9ca5410"
+      },
+      {
+        "name": "css-loader-css-base.js",
+        "url": "https://raw.githubusercontent.com/webpack/css-loader/v0.23.1/lib/css-base.js",
+        "bytes": 1456,
+        "sha256": "9ca7740d1682cf33c8de83997cd2862de858382ebadf5bf8fb3738e10a89b3fa",
+        "gitBlob": "3f7919797355819f7897e6133db65d070afdef24"
+      }
+    ],
+    "checks": {
+      "vendor.js.map": {
+        "exactMatch": true,
+        "characters": 5139,
+        "sha256": "1f6d59b370ad6d86bd5c7b401e78400dc28ee7d0dcbffaacc5010c2c7b03a70e"
+      },
+      "app.js.map": {
+        "exactMatch": true,
+        "characters": 82524,
+        "sha256": "11d7f8092789719bd5123c6e5ef31f2d24a65a4872cf04f2041e389e917838af"
+      },
+      "InteractiveRunner.html": {
+        "exactInlineScriptMatch": true,
+        "characters": 5522,
+        "sha256": "4f79cb4d68db1f293353b23c30d9425ce616258c16334ec7d50b30c77a2f8362"
+      },
+      "css-loader": {
+        "upstreamSourceIsPrefixAfterCRLFNormalization": true,
+        "inlineMITNotice": true,
+        "characters": 1619
+      }
+    }
+  },
+  "timing": {
+    "node": "v24.20.0",
+    "nodeExecutableSha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+    "machine": "Linux-6.18.55-x86_64-with-glibc2.39",
+    "timing": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "fullOriginalInputs": true,
+    "opaqueInput": "1 supplied through argv",
+    "ntsRun": false,
+    "cases": [
+      {
+        "name": "jetstream-json-stringify-inspector",
+        "seed": 1,
+        "processes": [
+          {
+            "nsPerOp": 18500024.25,
+            "bits": "41bdd758f9000000",
+            "stderr": ""
+          },
+          {
+            "nsPerOp": 16513454.4,
+            "bits": "41bdd758f9000000",
+            "stderr": ""
+          },
+          {
+            "nsPerOp": 18142783.2,
+            "bits": "41bdd758f9000000",
+            "stderr": ""
+          },
+          {
+            "nsPerOp": 17343210.4,
+            "bits": "41bdd758f9000000",
+            "stderr": ""
+          },
+          {
+            "nsPerOp": 17114148.6,
+            "bits": "41bdd758f9000000",
+            "stderr": ""
+          }
+        ],
+        "bestNsPerOp": 16513454.4,
+        "sourceSha256": "21ac4c2a5fc63b8bd79b26be144aaa97b962f89f81bc2c61717a150d56ccafd0"
+      }
+    ],
+    "affinity": "CPU0 of this cloud environment; maintainer-machine reserved CPUs are not used.",
+    "checkpoint": "34a6a6b88",
+    "caseDependencies": {
+      "jetstream-json-stringify-inspector/data.ts": "c3dbc48f8506914dbe4394d3b5e2487e74149f2a3b9634a54ab148e5639ab2d3"
+    }
+  },
+  "status": "Draft: full input preserved; minimum positive seed exceeds requested10ms ceiling.",
+  "validation": {
+    "node": "v24.20.0",
+    "strictTypeScript": true,
+    "firstPRTests": 4,
+    "ntsCompiled": false,
+    "maintainerOracleCountsRecorded": false
+  }
+}
