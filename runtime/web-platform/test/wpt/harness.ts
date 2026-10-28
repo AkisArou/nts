@@ -88,8 +88,8 @@ const hostDeadline: WptDeadlineScheduler = (callback, milliseconds) => {
 };
 
 export interface WptHarnessOptions {
-  globalAliases?: readonly string[];
   exposeSelf?: boolean;
+  globalAliases?: readonly string[];
   deadlineScheduler?: WptDeadlineScheduler;
 }
 
@@ -452,8 +452,6 @@ export class WptHarness {
     // Alias the actual context global, not the host's globals dictionary. This
     // preserves self === globalThis and never exposes Node's competing Web APIs.
     const realmGlobal = new Script("globalThis").runInContext(this.context) as Record<string, unknown>;
-    const globalAliases = "globalAliases" in options ? options.globalAliases ?? [] :
-      Array.isArray(options) ? options : [];
     for (const alias of globalAliases) {
       assert.match(alias, /^[A-Za-z_$][\w$]*$/, "invalid WPT global alias");
       assert.ok(!(alias in realmGlobal), `WPT alias would replace an existing global: ${alias}`);
