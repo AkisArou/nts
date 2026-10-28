@@ -33,6 +33,8 @@ export interface WptManifest {
 export interface WptEnvironment {
   globals: Record<string, unknown>;
   exposeSelf?: boolean;
+  /** The provider connects the separate reportUncaughtException callback. */
+  uncaughtExceptionChannel?: boolean;
   close(): void | Promise<void>;
 }
 
@@ -94,7 +96,10 @@ export async function runWptFixtures(
   suite: TestContext,
   root: URL,
   manifest: WptManifest,
-  createEnvironment: (reportError: (error: unknown) => void) => WptEnvironment,
+  createEnvironment: (
+    reportError: (error: unknown) => void,
+    reportUncaughtException: (error: unknown) => void,
+  ) => WptEnvironment,
 ): Promise<void> {
   verified(root, manifest.license);
   const support = new Map(manifest.support.map((source) => [source.path, verified(root, source)]));
@@ -105,7 +110,10 @@ export async function runWptFixtures(
       assert.ok(timeouts.length <= 1 && timeouts.every((value) => value === "long"),
         "Unsupported WPT timeout metadata");
       let harness: WptHarness;
-      const environment = createEnvironment((error) => harness.reportError(error));
+      const environment = createEnvironment(
+        (error) => harness.reportError(error),
+        (error) => harness.reportUncaughtException(error),
+      );
       file.after(async () => {
         await environment.close();
         // Provider callbacks can report a failure during close without throwing.
@@ -118,6 +126,7 @@ export async function runWptFixtures(
           exposeSelf: environment.exposeSelf,
           defaultTestName: fixture.defaultTestName,
           maxTests: fixture.expectedTests,
+          uncaughtExceptionChannel: environment.uncaughtExceptionChannel,
         });
       const scripts = [...source.matchAll(/^\/\/ META: script=(.+)$/gm)].map((match) => {
         const reference = match[1];

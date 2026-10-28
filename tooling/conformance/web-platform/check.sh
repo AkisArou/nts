@@ -54,6 +54,7 @@ node --expose-gc \
   runtime/web-platform/test/navigator-user-agent-policy.test.ts \
   runtime/web-platform/test/urlpattern-policy.test.ts \
   runtime/web-platform/test/urlpattern-adapter-policy.test.ts \
+  runtime/web-platform/test/global-errors-harness-policy.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \
   runtime/web-platform/test/abort-wpt-policy.test.ts \

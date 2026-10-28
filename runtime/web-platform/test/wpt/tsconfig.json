@@ -40,6 +40,7 @@
     "../navigator-user-agent-policy.test.ts",
     "../wpt-urlpattern.test.ts",
     "../urlpattern-policy.test.ts",
-    "../urlpattern-adapter-policy.test.ts"
+    "../urlpattern-adapter-policy.test.ts",
+    "../global-errors-harness-policy.test.ts"
   ]
 }
