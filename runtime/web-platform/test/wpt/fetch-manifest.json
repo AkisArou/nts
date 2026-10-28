@@ -2803,8 +2803,49 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 13,
-      "blockedTests": {},
-      "expectedRunnableTests": 13,
+      "blockedTests": {
+        "Basic operation with one property": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Basic operation with one property and a proto": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Correct operation ordering with two properties": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Correct operation ordering with two properties one of which has an invalid name": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Correct operation ordering with two properties one of which has an invalid value": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Correct operation ordering with non-enumerable properties": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Correct operation ordering with undefined descriptors": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Correct operation ordering with repeated keys": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Basic operation with Symbol keys": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        },
+        "Operation with non-enumerable Symbol keys": {
+          "category": "language-profile",
+          "reason": "nts uses fixed layouts with no Proxy, exotic objects or prototype/descriptor reflection. Headers records use Object.entries own enumerable string keys; this Proxy-ordering or symbol-key case is outside that source profile."
+        }
+      },
+      "expectedRunnableTests": 3,
       "registrations": [
         {
           "kind": "test",
@@ -7352,8 +7393,8 @@
     "selectedFixtureFiles": 54,
     "selectedSupportFiles": 5,
     "expectedRegisteredTests": 780,
-    "explicitlyBlockedTests": 166,
-    "expectedRunnableTests": 614,
+    "explicitlyBlockedTests": 176,
+    "expectedRunnableTests": 604,
     "blocksByCategory": {
       "server-security-profile": 117,
       "adapter-realm": 9,
@@ -7361,7 +7402,8 @@
       "wpt-server-template": 4,
       "stale-wpt-expectation": 2,
       "provider-capability": 1,
-      "compiler-capability": 2
+      "compiler-capability": 2,
+      "language-profile": 10
     },
     "deferredNetworkDependentRegistrations": 19,
     "excludedSourcePaths": 62,
@@ -7450,5 +7492,14 @@
       "method": "BodyState.clone",
       "reason": "ArrayBuffer/DataView body-stream cloning requires compiler-owned structuredClone; no native implementation is supplied by this source contribution."
     }
+  },
+  "recordConversionProfile": {
+    "rulesURL": "https://github.com/AkisArou/nts/blob/main/docs/contributing/cloud-agents.md",
+    "verified": "2026-10-28",
+    "ruleBlob": "9c0a6efdea78bd637c802515c88f256afebc8b09",
+    "algorithm": "Object.entries: own enumerable string keys in ECMAScript property order, with entry values gathered before ByteString conversion.",
+    "exclusions": "The ten named headers-record cases require Proxy observation, exotic own-key/descriptor behavior, or symbol-key rejection; those features are outside the nts source profile.",
+    "ordinaryGetterQualification": "Gathering values first also changes getter/coercion and invalid-key/getter order for ordinary objects. Supplemental controls name and defer those full-Web-IDL expectations, and test the requested Object.entries behavior explicitly.",
+    "unchangedCompilerDependencies": "The two Response clone cases requiring structuredClone remain compiler-capability blocks."
   }
 }

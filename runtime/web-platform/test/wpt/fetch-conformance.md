@@ -85,11 +85,15 @@ selection runs the same fixture bytes, adapter and named applicability rules
 against source at the Streams base and against the corrected source.
 
 The initial diagnostic run was **591 pass / 144 fail / 45 blocked**. The
-classification review explicitly defers 117 browser security-profile cases,
+initial classification review defers 117 browser security-profile cases,
 two inconsistent empty-FormData expectations and two compiler-owned clone
-dependencies. Those 121 reclassifications are not source fixes. The final
-selection's actual source improvement is **591 pass / 23 fail / 166 blocked**
-to **614 pass / 0 fail / 166 blocked**.
+dependencies. The subsequent maintainer-requested Object.entries profile
+excludes ten Proxy-ordering/symbol-key cases by name. These applicability
+changes are not source fixes. With that final selection, the original-source
+baseline is **591 pass / 13 fail / 176 blocked**, and the corrected source is
+**604 pass / 0 fail / 176 blocked**. The earlier reviewed candidate, before
+this profile revision, recorded 614 / 0 / 166; that historical count does not
+apply to the current selection.
 
 | WPT path | Before: pass / fail / blocked | After: pass / fail / blocked |
 | --- | ---: | ---: |
@@ -105,7 +109,7 @@ to **614 pass / 0 fail / 166 blocked**.
 | `fetch/api/headers/headers-forbidden-override.any.js` | 18 / 0 / 72 | 18 / 0 / 72 |
 | `fetch/api/headers/headers-no-cors.any.js` | 0 / 0 / 8 | 0 / 0 / 8 |
 | `fetch/api/headers/headers-normalize.any.js` | 3 / 0 / 0 | 3 / 0 / 0 |
-| `fetch/api/headers/headers-record.any.js` | 3 / 10 / 0 | 13 / 0 / 0 |
+| `fetch/api/headers/headers-record.any.js` | 3 / 0 / 10 | 3 / 0 / 10 |
 | `fetch/api/headers/headers-structure.any.js` | 8 / 0 / 0 | 8 / 0 / 0 |
 | `fetch/api/request/forbidden-method.any.js` | 6 / 0 / 0 | 6 / 0 / 0 |
 | `fetch/api/request/request-clone-readable-stream-body.any.js` | 1 / 0 / 0 | 1 / 0 / 0 |
@@ -147,7 +151,7 @@ to **614 pass / 0 fail / 166 blocked**.
 | `fetch/api/response/response-stream-disturbed-6.any.js` | 5 / 0 / 0 | 5 / 0 / 0 |
 | `fetch/api/response/response-stream-disturbed-by-pipe.any.js` | 2 / 0 / 0 | 2 / 0 / 0 |
 | `fetch/api/response/response-stream-with-broken-then.any.js` | 0 / 0 / 6 | 0 / 0 / 6 |
-| **Total** | **591 / 23 / 166** | **614 / 0 / 166** |
+| **Total** | **591 / 13 / 176** | **604 / 0 / 176** |
 
 The four baseline passes in `body/textstream.any.js` are negative assertions
 that can also succeed when the method is absent. Its ten positive cases fail
@@ -163,20 +167,23 @@ edited or relabeled WPT cases.
 
 | Supplemental source-policy file | Original source at `35be6b18` | Corrected source |
 | --- | ---: | ---: |
-| `fetch-headers-wpt-policy.test.ts` | 11 pass / 24 fail | 35 pass / 0 fail |
+| `fetch-headers-wpt-policy.test.ts` | 14 pass / 21 fail / 3 deferred | 35 pass / 0 fail / 3 deferred |
 | `fetch-body-wpt-policy.test.ts` | 8 pass / 42 fail | 50 pass / 0 fail |
 | `fetch-multipart-wpt-policy.test.ts` | 3 pass / 2 fail | 5 pass / 0 fail |
-| **Total** | **22 pass / 68 fail** | **90 pass / 0 fail** |
+| **Total** | **25 pass / 65 fail / 3 deferred** | **90 pass / 0 fail / 3 deferred** |
 
 1. Separate [HeadersInit Web IDL conversion](https://webidl.spec.whatwg.org/#es-union)
    from [Fetch header filling](https://fetch.spec.whatwg.org/#concept-headers-fill).
    Complete dictionary conversion before HTTP validation, cache iterator
    methods and preserve the specified abrupt-completion behavior. Request
    and Response share converted values without invoking script getters twice.
-2. Follow [Web IDL record conversion](https://webidl.spec.whatwg.org/#es-to-record):
-   take the own-key list once, recheck each descriptor just before processing
-   it, convert the key before reading/converting the value, reject enumerable
-   symbol keys, and skip properties deleted by an earlier getter.
+2. Convert records with the maintainer-selected [Object.entries algorithm](https://tc39.es/ecma262/#sec-object.entries):
+   own enumerable string keys in ECMAScript property order, with values
+   gathered before ByteString conversion. No Reflect or descriptor reads
+   remain in record conversion. Full Web IDL Proxy/symbol and per-property
+   read/coerce observations are outside this selected profile, as detailed
+   below. Integer-index keys retain Object.entries numeric ordering; other
+   string keys retain insertion order.
 3. Enforce [required operation arguments](https://webidl.spec.whatwg.org/#es-operations)
    and [forEach callback conversion/invocation](https://webidl.spec.whatwg.org/#es-forEach).
    Empty headers still validate the callback; calls do not read a user-owned
@@ -223,27 +230,60 @@ The final unused combined header-conversion export was removed after the
 repository's unrouted-export gate identified it. The private normalization
 helper remains; no allowance was added to the gate.
 
-### Maintainer review requested: exact record enumeration
+### Record conversion: accepted source profile
 
-The cloud rules require asking in the PR before using Reflect. Please review
-the narrow `Reflect.ownKeys` use and `Object.getOwnPropertyDescriptor` reads
-in Headers record conversion. These implement Web IDL's complete own-key list
-and per-key enumerability check; `Object.keys` alone misses enumerable symbols
-and cannot preserve the required observation order after getters mutate later
-properties. The controls make those differences concrete. No new
-`Object.defineProperty`, descriptor mutation or Proxy implementation is added.
-If nts refuses these operations, that dependency needs maintainer/compiler
-handling; host success does not establish compiler support.
+The maintainer requested Object.entries conversion under the revised
+[cloud-agent rules](https://github.com/AkisArou/nts/blob/main/docs/contributing/cloud-agents.md),
+verified at blob `9c0a6efdea78bd637c802515c88f256afebc8b09`. nts has fixed
+layouts and excludes Proxy/exotic objects and prototype/descriptor reflection.
+The record-conversion Reflect.ownKeys and getOwnPropertyDescriptor calls have
+been removed. No new descriptor definitions or prototype operations are added.
+
+These ten unchanged upstream cases in `headers-record.any.js` are named skips
+with that reason, including cases which happened to pass under Object.entries
+but still exercise unsupported Proxy semantics:
+
+- `Basic operation with one property`
+- `Basic operation with one property and a proto`
+- `Correct operation ordering with two properties`
+- `Correct operation ordering with two properties one of which has an invalid name`
+- `Correct operation ordering with two properties one of which has an invalid value`
+- `Correct operation ordering with non-enumerable properties`
+- `Correct operation ordering with undefined descriptors`
+- `Correct operation ordering with repeated keys`
+- `Basic operation with Symbol keys`
+- `Operation with non-enumerable Symbol keys`
+
+There is an additional ordinary-object distinction: Object.entries gathers
+all values before their later string conversion. A getter returning an object
+with a toString method can observe `get first, get second, convert first,
+convert second`; full Web IDL instead interleaves each read and conversion.
+An invalid ByteString key's getter is also read before key rejection. These
+observations do not require Proxy, so they are not mislabeled as Proxy-only.
+The selected algorithm is implemented as requested, with its behavior tested
+explicitly. Three original local controls remain named deferrals:
+
+- `Headers converts each record value before reading the next one` — full Web IDL read/coerce interleaving differs from the requested entry snapshot.
+- `Headers rejects an enumerable symbol record key before reading its value` — Object.entries includes only string keys.
+- `Headers rejects a non-ByteString record key before reading its value` — Object.entries gathers the value before subsequent key conversion.
+
+Three replacement profile controls verify own-string insertion order when
+names combine case-insensitively, gathering before coercion, and invalid-key
+rejection after the getter. The original-source baseline was rerun with this
+same 38-control file: 14 pass / 21 fail / 3 deferred, then 35 / 0 / 3.
+The two structuredClone-dependent Response cases remain compiler dependencies.
 
 ### Node comparisons and specification priority
 
 The repository's [recorded contract](https://github.com/AkisArou/nts/blob/35be6b184ebcdf61e70a93b0b223805e9ab35a7e/docs/records/notebooks/decisions-log.md#L368-L376)
 gives applicable specifications priority over Node quirks. Exact Node
 24.20.0/Undici 7.29.0 probes inform the review without becoming a blanket skip
-rule. Native Headers/Request replay is **32 pass / 3 fail** for the 35 controls:
-Node rereads an iterator's `.next`, includes a deleted later record key as
-`"undefined"`, and invokes an overridden callback `.call`. The corrected
-package follows the linked Web IDL algorithms and passes all 35.
+rule. The initial native Headers/Request comparison found Node rereading an
+iterator's `.next`, including a deleted later record key as `"undefined"`,
+and invoking an overridden callback `.call`. The corresponding source fixes
+remain. The later Object.entries profile is an explicit maintainer decision,
+with the ordinary-getter differences documented above; it is not presented as
+full Web IDL or Node agreement.
 
 Node also fails the two upstream multipart transport-padding cases. RFC 2046
 requires receivers to accept that padding, so both are fixed and remain
@@ -290,16 +330,16 @@ WPT fixture still receives its own VM context.
 
 | Check | Observed result |
 | --- | --- |
-| Fetch WPT leaf cases | 614 pass / 0 fail / 166 blocked |
-| Supplemental Fetch source controls | 90 pass / 0 fail |
+| Fetch WPT leaf cases | 604 pass / 0 fail / 176 blocked |
+| Supplemental Fetch source controls | 90 pass / 0 fail / 3 deferred |
 | New HTML adapter controls | 4 pass / 0 fail |
-| Full `check.sh` Node suite, including wrappers | 3,305 tests: 3,096 pass / 0 fail / 209 skipped |
+| Full `check.sh` Node suite, including wrappers | 3,308 tests: 3,086 pass / 0 fail / 222 skipped |
 | Existing broader upstream runner | 2,817 cases: 2,772 applicable and passed / 0 failed / 45 not applicable |
 | Compiled axis | Explicitly skipped: no nts compiler |
 
-The 209 host-suite skips are this selection's 166, the inherited 35 Streams
-blocks, seven events/abort capability blocks and one Event descriptor-only
-control. The broader upstream runner uses the Node v24.20.0 fixture checkout
+The 222 host-suite skips are this selection's 176, the inherited 35 Streams
+blocks, seven events/abort capability blocks, one Event descriptor-only
+control, and the three named record-conversion controls above. The broader upstream runner uses the Node v24.20.0 fixture checkout
 prescribed by the repository's bootstrap procedure. The new committed corpus
 needs no network or external fixture checkout. PR #2's maintainer-reported nts
 compilation is not transferred to this candidate. Native execution, nts
@@ -307,11 +347,12 @@ compilation and performance are **not verified** here.
 
 ## Deliberately left out and dependencies
 
-The manifest gives each of the 166 named registrations a reason; stale names
+The manifest gives each of the 176 named registrations a reason; stale names
 or changed registration totals fail the run.
 
 | Category | Cases | Reason |
 | --- | ---: | --- |
+| Language profile | 10 | Proxy-ordering, exotic own-key/descriptor observations and symbol-key rejection are excluded under the requested Object.entries record profile. |
 | Server security profile | 117 | Browser forbidden-header and no-CORS filtering expectations differ from the repository's standalone server profile. Positive operations and HTTP syntax validation remain runnable. |
 | Adapter realm | 9 | Three Headers iterator-prototype identity checks and six patched Object.prototype.then checks need the implementation and fixture to share an intrinsic realm. |
 | Network | 31 | Selected files contain explicit HTTP/remote-resource paths. Outbound access is prohibited for this item. |
