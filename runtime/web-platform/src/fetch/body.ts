@@ -233,14 +233,14 @@ export abstract class Body {
   }
 
   async arrayBuffer(): Promise<ArrayBuffer> {
-    const bytes = await this.bytes();
+    const bytes = await this.bodyState.consume();
     const output = new ArrayBuffer(bytes.length);
     new Uint8Array(output).set(bytes);
     return output;
   }
 
   async text(): Promise<string> {
-    return decodeUTF8(await this.bytes());
+    return decodeUTF8(await this.bodyState.consume());
   }
 
   async json(): Promise<unknown> {
@@ -257,15 +257,15 @@ export abstract class Body {
     // observable at a boundary that takes no reviver -- 23.681ms against 8.450ms on
     // a 1.67MB document. `parsePlainText` shares the scanner, so the grammar, the
     // error text and the number conversion are still spelled once.
-    return parsePlainText(await this.text());
+    return parsePlainText(decodeUTF8(await this.bodyState.consume()));
   }
 
   async blob(): Promise<Blob> {
-    return new Blob([await this.bytes()], { type: this[bodyContentType]() ?? "" });
+    return new Blob([await this.bodyState.consume()], { type: this[bodyContentType]() ?? "" });
   }
 
   async formData(): Promise<FormData> {
-    const bytes = await this.bytes();
+    const bytes = await this.bodyState.consume();
     const mime = parseMIMEType(this[bodyContentType]() ?? "");
 
     if (mime?.essence === "multipart/form-data") return decodeMultipart(bytes, mime);
