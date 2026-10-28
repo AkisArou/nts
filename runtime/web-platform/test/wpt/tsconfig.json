@@ -36,6 +36,9 @@
     "../file-forms-urlencoded-policy.test.ts",
     "../wpt-websocket.test.ts",
     "../websocket-handshake-policy.test.ts",
-    "../websocket-wpt-policy.test.ts"
+    "../websocket-wpt-policy.test.ts",
+    "../wpt-websocket-stream.test.ts",
+    "../wpt-websocket-stream-lifetime.test.ts",
+    "../websocket-stream-wpt-policy.test.ts"
   ]
 }

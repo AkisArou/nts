@@ -1714,9 +1714,45 @@
       "sha256": "0a60bcf569fbe4d61e50e85ac3559aa67815f3b28c9afd84d59dad5bd3155939",
       "gitBlob": "cbbcc6ebf64c24790e3819c3b588b64bae9aa313"
     },
+    "websockets/stream/tentative/abort.any.js": {
+      "sha256": "b0f46ed58466d6e43d5aeef985c95fb25dbb3b0bb87d06c14e910307bc99bc0f",
+      "gitBlob": "cbfc8dd038410dced109c5e6552a6ebbd3e78099"
+    },
+    "websockets/stream/tentative/backpressure-receive.any.js": {
+      "sha256": "7ad69b466c18b634a9c065e8b855ef3403771713af40206bcf7e171c79c434b2",
+      "gitBlob": "236bb2e40fac1a6db1506958e5828cf2dc29d79a"
+    },
+    "websockets/stream/tentative/backpressure-send.any.js": {
+      "sha256": "8766d5694c3140f7d6a8917ebcc3ecd1fbd837a732088e1754fa8cff391eecdf",
+      "gitBlob": "e4a80f6e1c071b33b032e699ba3e0de2c1c8572e"
+    },
+    "websockets/stream/tentative/close.any.js": {
+      "sha256": "bf465ae4cb8c92f169f06dc9f6ab31300bb7cdced3defb08857024f850c3281c",
+      "gitBlob": "ad41dc6e2e9fd3fcff4af10da30c548a60d8e880"
+    },
+    "websockets/stream/tentative/constructor.any.js": {
+      "sha256": "6dbb783fa89327503b440b89026a52ceab49c44f472a56ba5c5f302d2c1f0d3b",
+      "gitBlob": "66df97430355f174d2c334e138db8b5e73a391aa"
+    },
+    "websockets/stream/tentative/read.any.js": {
+      "sha256": "af6c23d4e44f48870f3222ca0902c5511b9e76150c76b7b8c04c945b983dd96d",
+      "gitBlob": "fb7546d30e95654020dd2c84e2ca4556e53ce1f5"
+    },
+    "websockets/stream/tentative/remote-close.any.js": {
+      "sha256": "27081159488655fb3a16d439a2cae669151b32062384a022c02df98929c11bd4",
+      "gitBlob": "c3e7ad5f9fbef1494ed7594dc7d497e9f867361a"
+    },
     "websockets/stream/tentative/resources/url-constants.js": {
       "sha256": "abecda63229dc39cf663aeaeee95120c3d1f3cfbdcffc46433e985b9b299526c",
       "gitBlob": "fe681af5c42a446944ce130d6cb2fcd2d11bde95"
+    },
+    "websockets/stream/tentative/websocket-error.any.js": {
+      "sha256": "57f4ac04cabff6824750e8a865fb1d256d5ec1e0d25157248e93438dd6acc8ff",
+      "gitBlob": "b114bbb3e3495d2ae4ce0c75454539d4b2fddea7"
+    },
+    "websockets/stream/tentative/write.any.js": {
+      "sha256": "b595793ccfeb055692b84eb9a3f76a32ef2d608bb61824cca35064e92529af84",
+      "gitBlob": "7f859e125790cb91bf71d1d9e47f93fceac33797"
     },
     "xhr/formdata/append.any.js": {
       "sha256": "0adedf9be59114773d698e6c2b90f87b33c15f633854e7b3a948bbcad03a7a41",
