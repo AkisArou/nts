@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-10-28",
+  "scope": "WebSocket duplicate-protocol interoperability and close-dictionary reason conversion",
+  "base": {
+    "pullRequest": 29,
+    "commit": "c96ec5b6b7a97dad2823f1dacf41f1bccf9c3492"
+  },
+  "tools": {
+    "node": "v24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "sourceCaptures": {
+    "before": {
+      "commit": "f8185b956686d2a1a04a646c1645c77497f14fa0",
+      "localCaptureCommit": "ce1d796db90e41a1445d9b97279f13b73a10fb6d",
+      "tree": "e01eab72f8382bd776001d66fa7765e441fdd656",
+      "sourceMatchesBase": true
+    },
+    "protocolFix": {
+      "commit": "ab1eb367bbad59167363c75c4861c5455957ca55",
+      "tree": "50d1f27dc02a8cd827420e8094f3200420cd4738"
+    },
+    "after": {
+      "commit": "3185e2b178e88f92f90f95441d4d37912ec5e1a5",
+      "localCaptureCommit": "2fe4715b72de99888b7ed5001657f763c65adec7",
+      "fullGateStartedAtLocalCommit": "af75e61f91306a9965780ffc6c8ddcdadd40e12f",
+      "tree": "b2c356c1092732d94ebda20da9c045e4014194ab",
+      "note": "The full-gate starting commit differs only in its message from the final local behavioral commit. Published commits preserve the exact tested trees."
+    },
+    "evidenceMerge": {
+      "commit": "7c78a374a47219347042e0e83bb8e9f761304930",
+      "tree": "b2c356c1092732d94ebda20da9c045e4014194ab"
+    }
+  },
+  "inputIdentity": {
+    "manifestSha256": "4d44c1e09ddba6fe25f9270374230de9dcedbe9bad30467e7cc3d3cd3f2d56d3",
+    "policyTestSha256": "d731c314105383a32aac30479608228cbbdbdd7d6354f9e366b4cb67713aa47b",
+    "sameFinalControlFileAndManifestUsedForBeforeAfter": true
+  },
+  "focused": {
+    "command": "node --expose-gc --test --test-reporter=tap runtime/web-platform/test/websocket-interop-policy.test.ts",
+    "before": {
+      "pass": 9,
+      "fail": 6,
+      "skip": 0
+    },
+    "after": {
+      "pass": 15,
+      "fail": 0,
+      "skip": 0
+    },
+    "tests": [
+      {
+        "test": "WebSocket rejects ASCII-case variants of a repeated protocol",
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocket still rejects exactly repeated protocols",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocket rejects invalid protocol tokens before duplicate comparison",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocket preserves distinct offered tokens and their original casing",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream rejects ASCII-case variants of a repeated protocol",
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream still rejects exactly repeated protocols",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream rejects invalid protocol tokens before duplicate comparison",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream preserves distinct offered tokens and their original casing",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream converts an explicit null close reason to USVString",
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream retains the empty reason default for omitted and undefined members",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketStream reads the null reason getter once after closeCode",
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketError converts an explicit null close reason to USVString",
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketError retains the empty reason default for omitted and undefined members",
+        "before": "pass",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocketError reads the null reason getter once after closeCode",
+        "before": "fail",
+        "after": "pass"
+      },
+      {
+        "test": "WebSocket.close also distinguishes explicit null from an undefined reason",
+        "before": "pass",
+        "after": "pass"
+      }
+    ]
+  },
+  "wpt": {
+    "revision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "fixtureFiles": 172,
+    "variantRuns": 330,
+    "registrations": 871,
+    "targetedCommand": "NTS_WPT_WEBSOCKET_FILTER=Create-protocols-repeated-case-insensitive node --expose-gc --test --test-reporter=tap runtime/web-platform/test/wpt-websocket.test.ts",
+    "targetedBefore": {
+      "pass": 0,
+      "fail": 2,
+      "blocked": 0
+    },
+    "targetedAfter": {
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    "reviewedHistoricalCapture": "../websockets-conformance/after-results.json",
+    "historicalSummary": {
+      "runs": 330,
+      "pass": 846,
+      "fail": 0,
+      "blocked": 25
+    },
+    "afterSummary": {
+      "runs": 330,
+      "pass": 848,
+      "fail": 0,
+      "blocked": 23
+    },
+    "changedFiles": [
+      {
+        "file": "websockets/Create-protocols-repeated-case-insensitive.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 2
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      }
+    ],
+    "changedRuns": [
+      {
+        "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+        "before": {
+          "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+          "pass": 0,
+          "fail": 0,
+          "blocked": 1
+        },
+        "after": {
+          "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+        "before": {
+          "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+          "pass": 0,
+          "fail": 0,
+          "blocked": 1
+        },
+        "after": {
+          "file": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      }
+    ],
+    "unchangedFiles": 171,
+    "unchangedRuns": 328,
+    "comparison": "Every unlisted file and variant has exactly the same pass/fail/blocked counts as the preserved historical capture. Historical report bytes are not changed."
+  },
+  "nodeInteropControl": {
+    "version": "v24.20.0",
+    "expression": "new WebSocket(\"ws://127.0.0.1/\", [\"echo\", \"eCho\"])",
+    "result": {
+      "name": "SyntaxError",
+      "message": "Invalid Sec-WebSocket-Protocol value"
+    },
+    "coverage": "One independent Node control; broader implementation agreement is maintainer-reported, not a new cross-browser measurement."
+  },
+  "validation": {
+    "sourceTypecheck": {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    "testTypecheck": {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    "fullGate": {
+      "command": "sh tooling/conformance/web-platform/check.sh",
+      "exitCode": 0,
+      "node": {
+        "entries": 2724,
+        "pass": 2680,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 44
+      },
+      "existingUpstream": {
+        "tests": 2817,
+        "pass": 2772,
+        "fail": 0,
+        "notApplicable": 45
+      },
+      "compiled": "Explicitly skipped: no nts compiler"
+    }
+  },
+  "sabotage": {
+    "schemaVersion": 1,
+    "capturedOn": "2026-10-28",
+    "experiment": "Post-commit duplicate-protocol negative control",
+    "checkout": "/workspace/scratch/05030c7d02e9/nts-interop-policy-sabotage",
+    "sourceCommit": "3185e2b178e88f92f90f95441d4d37912ec5e1a5",
+    "sourceTree": "b2c356c1092732d94ebda20da9c045e4014194ab",
+    "node": {
+      "version": "v24.20.0",
+      "execPath": "/workspace/scratch/05030c7d02e9/toolchain/node-24.20.0-verified/bin/node"
+    },
+    "mutation": {
+      "path": "runtime/web-platform/src/websocket/semantics.ts",
+      "before": "const key = protocol.toLowerCase();",
+      "during": "const key = protocol;",
+      "patch": "diff --git a/runtime/web-platform/src/websocket/semantics.ts b/runtime/web-platform/src/websocket/semantics.ts\nindex bb40ff3ad0..0e32a04c90 100644\n--- a/runtime/web-platform/src/websocket/semantics.ts\n+++ b/runtime/web-platform/src/websocket/semantics.ts\n@@ -56,7 +56,7 @@ export function normalizeWebSocketProtocols(input: string | Iterable<string>): s\n     }\n     // The token is ASCII. Match deployed duplicate detection without changing\n     // its spelling in the offer; WebSockets 3.1 step 9 does not specify folding.\n-    const key = protocol.toLowerCase();\n+    const key = protocol;\n     if (seen.has(key)) {\n       throw new DOMException(\"Invalid or duplicate WebSocket subprotocol\", \"SyntaxError\");\n     }"
+    },
+    "pristineSource": {
+      "path": "runtime/web-platform/src/websocket/semantics.ts",
+      "gitBlob": "bb40ff3ad013a79233d802a420cf67c8d3055b9b",
+      "sha256": "763c5a67670c7abe3c8c4eb09d967d5a3441d35e48207ba8a390256b0186bab9"
+    },
+    "manifest": {
+      "path": "runtime/web-platform/test/wpt/websockets-conformance/manifest.json",
+      "gitBlob": "ca93395eee54e2e63a7a2d82cce72109129c0567",
+      "sha256": "4d44c1e09ddba6fe25f9270374230de9dcedbe9bad30467e7cc3d3cd3f2d56d3"
+    },
+    "driver": {
+      "path": "runtime/web-platform/test/wpt-websocket.test.ts",
+      "gitBlob": "40094527d25a307f27d0e5f93c97e0dee7a77ee6",
+      "sha256": "012dbd52755c3162a462c5457d49ac07546d357df7f25209699b5458f35ec721"
+    },
+    "fixture": {
+      "path": "runtime/web-platform/test/wpt/websockets/Create-protocols-repeated-case-insensitive.any.js",
+      "gitBlob": "1a508e87d380331bdd6f6f7071dc3c34f91f38c2",
+      "sha256": "ef416b192b006a9dbc07c25b5eda352ff62b933668c1c5f78a884a6439ca47f2"
+    },
+    "targetedVariants": [
+      "?default",
+      "?wss"
+    ],
+    "command": "NTS_WPT_WEBSOCKET_FILTER=Create-protocols-repeated-case-insensitive node --expose-gc --test --test-reporter=tap runtime/web-platform/test/wpt-websocket.test.ts",
+    "outcomes": [
+      {
+        "phase": "sabotaged",
+        "exitCode": 1,
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0,
+        "registered": 2,
+        "log": {
+          "path": "/workspace/scratch/05030c7d02e9/interop-sabotage-fail.tap",
+          "sha256": "84fba891f611acf3f8d1245ba7689a3d9fd2f46dbba54d5e54cb5cc71b142daf"
+        },
+        "runs": [
+          {
+            "fixture": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+            "pass": 0,
+            "fail": 1,
+            "blocked": 0
+          },
+          {
+            "fixture": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+            "pass": 0,
+            "fail": 1,
+            "blocked": 0
+          }
+        ],
+        "command": "NTS_WPT_WEBSOCKET_FILTER=Create-protocols-repeated-case-insensitive node --expose-gc --test --test-reporter=tap runtime/web-platform/test/wpt-websocket.test.ts > /workspace/scratch/05030c7d02e9/interop-sabotage-fail.tap 2>&1"
+      },
+      {
+        "phase": "restored",
+        "exitCode": 0,
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0,
+        "registered": 2,
+        "log": {
+          "path": "/workspace/scratch/05030c7d02e9/interop-sabotage-restored.tap",
+          "sha256": "0aa6aacc7c0ec4fee2c23f88715656eb5c70e9442d84e48bf6c5e9a62ec4a256"
+        },
+        "runs": [
+          {
+            "fixture": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+            "pass": 1,
+            "fail": 0,
+            "blocked": 0
+          },
+          {
+            "fixture": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+            "pass": 1,
+            "fail": 0,
+            "blocked": 0
+          }
+        ],
+        "command": "NTS_WPT_WEBSOCKET_FILTER=Create-protocols-repeated-case-insensitive node --expose-gc --test --test-reporter=tap runtime/web-platform/test/wpt-websocket.test.ts > /workspace/scratch/05030c7d02e9/interop-sabotage-restored.tap 2>&1"
+      }
+    ],
+    "sabotagedSource": {
+      "path": "runtime/web-platform/src/websocket/semantics.ts",
+      "gitBlob": "0e32a04c90843dff05602d3552d923e684cff86d",
+      "sha256": "ed0062279e2f9f2469c801374e84b02d53a3112fb0fec672ca11ed4479dae1ec"
+    },
+    "restoredSource": {
+      "path": "runtime/web-platform/src/websocket/semantics.ts",
+      "gitBlob": "bb40ff3ad013a79233d802a420cf67c8d3055b9b",
+      "sha256": "763c5a67670c7abe3c8c4eb09d967d5a3441d35e48207ba8a390256b0186bab9"
+    },
+    "restoration": "Restored exact source bytes from the committed object; git status clean and source Git blob/SHA256 equal the pristine values. Manifest, driver and fixture remain unchanged.",
+    "environment": {
+      "PATHPrefix": [
+        "/workspace/scratch/05030c7d02e9/toolchain/node-24.20.0-verified/bin",
+        "/workspace/scratch/05030c7d02e9/toolchain/bin"
+      ]
+    },
+    "cleanup": {
+      "verifiedCleanBeforeRemoval": true,
+      "command": "git worktree remove /workspace/scratch/05030c7d02e9/nts-interop-policy-sabotage",
+      "removed": true,
+      "reviewSourceUnchanged": true
+    },
+    "localCaptureCommit": "2fe4715b72de99888b7ed5001657f763c65adec7"
+  },
+  "logs": [
+    {
+      "file": "interop-full-check.log",
+      "sha256": "ded409279e5a1ee4fe6ffc09d11aa689c0e5ccb2c950dfde7f42575e42fc9e53"
+    },
+    {
+      "file": "interop-policy-before.tap",
+      "sha256": "985ec240d3f414120c74d0cd1bab72940f7d534fbc7f48a32353629642442bf5"
+    },
+    {
+      "file": "interop-policy-after.tap",
+      "sha256": "cb205e308830f9070e38d3d7b27dd681f7c88283402d479c3484d0b290986f05"
+    },
+    {
+      "file": "interop-protocol-wpt-before.tap",
+      "sha256": "8359e4071c9f34f86232d57c770ed5d689b3c561e6261a08dd69bbc5512a67f6"
+    },
+    {
+      "file": "interop-protocol-wpt-after.tap",
+      "sha256": "8b0d89f1bcfe0d033378b18d047292cd09ebe59117a388c85bac2e6cb7354303"
+    },
+    {
+      "file": "interop-final-source-tsc.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "interop-final-test-tsc.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "interop-sabotage-fail.tap",
+      "sha256": "84fba891f611acf3f8d1245ba7689a3d9fd2f46dbba54d5e54cb5cc71b142daf"
+    },
+    {
+      "file": "interop-sabotage-restored.tap",
+      "sha256": "0aa6aacc7c0ec4fee2c23f88715656eb5c70e9442d84e48bf6c5e9a62ec4a256"
+    }
+  ],
+  "boundaries": [
+    "No reviewed head of PR #16, #26 or #29 changed.",
+    "No new npm dependencies or WPT fixture edits.",
+    "No masking, UTF-8, DEFLATE, provider-bootstrap or shared-adapter changes.",
+    "Descriptor, FileReader, cookie, mixed-content and separate bad-port integration gaps retain their existing classifications."
+  ]
+}
