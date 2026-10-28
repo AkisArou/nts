@@ -392,6 +392,15 @@ export interface EventListenerObject {
 
 export type EventListenerOrEventListenerObject = EventListener | EventListenerObject;
 
+// Web IDL performs Call without reading a user callback's `call` property.
+// Capture the intrinsic once, with no argument-array allocation during dispatch.
+// https://webidl.spec.whatwg.org/#call-a-user-objects-operation
+const callEventCallback: <Receiver, E extends Event>(
+  callback: (this: Receiver, event: E) => void,
+  receiver: Receiver,
+  event: E,
+) => void = Function.prototype.call.bind(Function.prototype.call);
+
 interface EventListenerCallbackObject {
   readonly handleEvent?: unknown;
 }
@@ -756,13 +765,13 @@ export class EventTarget {
       event[eventSetPassiveListener](item.passive);
       try {
         if (isEventListener(item.callback)) {
-          item.callback.call(this, event);
+          callEventCallback(item.callback, this, event);
         } else {
           const handleEvent = item.callback.handleEvent;
           if (typeof handleEvent !== "function") {
             throw new TypeError("EventListener.handleEvent must be callable");
           }
-          handleEvent.call(item.callback, event);
+          callEventCallback(handleEvent as (event: Event) => void, item.callback, event);
         }
       } catch (error) {
         this[eventTargetReportError](error);
@@ -786,7 +795,7 @@ export class EventTarget {
       slot.listener = null;
     } else if (slot.listener === null) {
       slot.listener = (event) => {
-        if (slot.callback !== null && accepts(event)) slot.callback.call(target, event);
+        if (slot.callback !== null && accepts(event)) callEventCallback(slot.callback, target, event);
       };
       target.addEventListener(type, slot.listener);
     }
