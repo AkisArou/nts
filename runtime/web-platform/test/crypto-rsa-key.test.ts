@@ -5,7 +5,7 @@ import test from "node:test";
 import { Crypto } from "../src/crypto/crypto.ts";
 import { getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
-import type { CryptoKeyPair } from "../src/crypto/rsa-key.ts";
+import type { CryptoKeyPair } from "../src/crypto/crypto-key.ts";
 import type { JsonWebKeyObject } from "../src/crypto/jwk.ts";
 import type { RsaAlgorithmName } from "../src/crypto/algorithms.ts";
 import { DOMException } from "../src/core/errors.ts";

@@ -36,6 +36,38 @@ export class JsonWebKey {
   y: string | undefined;
 }
 
+/**
+ * RFC 7517 §§4.2–4.3 and Web Cryptography's shared JWK usage/extractability
+ * checks. Algorithms call this at their specified step, between their own
+ * key-type, algorithm-identifier and component checks.
+ */
+export function checkJwkPolicy(jwk: JsonWebKey, expectedUse: "sig" | "enc", extractable: boolean, usages: readonly KeyUsage[]): void {
+  if (usages.length !== 0 && jwk.use !== undefined && jwk.use !== expectedUse) {
+    throw new DOMException("The JWK use does not permit this operation", "DataError");
+  }
+  const operations = jwk.key_ops;
+  if (operations !== undefined) {
+    for (let index = 0; index < operations.length; index++) {
+      const operation = operations[index]!;
+      for (let earlier = 0; earlier < index; earlier++) {
+        if (operations[earlier] === operation) throw new DOMException("The JWK key_ops contains duplicates", "DataError");
+      }
+      const signing = operation === "sign" || operation === "verify";
+      const encryption = operation === "encrypt" || operation === "decrypt" || operation === "wrapKey"
+        || operation === "unwrapKey" || operation === "deriveKey" || operation === "deriveBits";
+      if ((jwk.use === "sig" && encryption) || (jwk.use === "enc" && signing)) {
+        throw new DOMException("The JWK use and key_ops are inconsistent", "DataError");
+      }
+    }
+    for (let index = 0; index < usages.length; index++) {
+      let present = false;
+      for (let at = 0; at < operations.length; at++) if (operations[at] === usages[index]) present = true;
+      if (!present) throw new DOMException("The JWK does not permit every requested usage", "DataError");
+    }
+  }
+  if (jwk.ext === false && extractable) throw new DOMException("The JWK is not extractable", "DataError");
+}
+
 export interface RsaOtherPrimesInfoObject {
   d?: string;
   r?: string;
@@ -452,8 +484,9 @@ function stringJsonMember(text: string, name: string, value: string | undefined)
 /** Serialize a generated key dictionary without observable toJSON/prototype hooks. */
 export function serializeWrappedJwk(key: JsonWebKey, padToEight: boolean): Uint8Array {
   if ((key.kty !== "oct" || key.k === undefined) &&
-      (key.kty !== "RSA" || key.n === undefined || key.e === undefined)) {
-    throw new TypeError("Expected an exported octet or RSA JWK");
+      (key.kty !== "RSA" || key.n === undefined || key.e === undefined) &&
+      (key.kty !== "EC" || key.crv === undefined || key.x === undefined || key.y === undefined)) {
+    throw new TypeError("Expected an exported octet, RSA or EC JWK");
   }
   // Match dictionary-to-object's lexicographic member order. These are internal
   // typed dictionaries from export, so no caller-owned toJSON, replacer, prototype

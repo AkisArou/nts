@@ -1,12 +1,12 @@
 import { DOMException } from "../core/errors.ts";
 import type { CryptoDigestName, CryptoKeyRecord, CryptoProvider } from "../provider/crypto.ts";
 import type { RandomSource } from "../provider/primitives.ts";
-import { AesKeyGenParams, HmacImportParams, HmacKeyGenParams } from "./algorithms.ts";
+import { AesDerivedKeyParams, AesKeyGenParams, HmacImportParams, HmacKeyGenParams } from "./algorithms.ts";
 import type { NormalizedAlgorithm } from "./algorithms.ts";
 import { copyCryptoBytes, cryptoViewByteLength } from "./buffer-source.ts";
 import { createCryptoKey, KeyAlgorithm } from "./crypto-key.ts";
 import type { CryptoKey, CryptoKeySlots, KeyAlgorithmObject, KeyUsage } from "./crypto-key.ts";
-import { decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages } from "./jwk.ts";
+import { checkJwkPolicy, decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages } from "./jwk.ts";
 import type { KeyFormat } from "./jwk.ts";
 
 
@@ -75,6 +75,25 @@ function requireAesLength(length: number, error: "OperationError" | "DataError")
   }
 }
 
+function hmacDefaultLength(hash: CryptoDigestName): number {
+  return hash === "SHA-384" || hash === "SHA-512" ? 1024 : 512;
+}
+
+/** §§27–31 get-key-length operations, used before deriveKey derives any material. */
+export function getSecretKeyLength(algorithm: NormalizedAlgorithm): number {
+  if (algorithm instanceof AesDerivedKeyParams) {
+    requireAesLength(algorithm.length, "OperationError");
+    return algorithm.length;
+  }
+  if (algorithm instanceof HmacImportParams) {
+    // HMAC's get-key-length operation specifies TypeError for zero, unlike its
+    // generate/import operations. The default is the hash block size, not digest size.
+    if (algorithm.length === 0) throw new TypeError("An HMAC key cannot have zero length");
+    return algorithm.length ?? hmacDefaultLength(algorithm.hash.name);
+  }
+  throw new DOMException("This algorithm has no derived key length", "NotSupportedError");
+}
+
 function secretRecord(record: CryptoKeyRecord, byteLength: number): void {
   if (record.info.family !== "secret" || record.info.type !== "secret" || record.info.length !== byteLength * 8) {
     throw new DOMException("The primitive returned inconsistent secret-key metadata", "OperationError");
@@ -105,7 +124,7 @@ export function generateSecretKey(
   let length: number;
   let keyAlgorithm: KeyAlgorithm;
   if (algorithm instanceof HmacKeyGenParams) {
-    length = algorithm.length ?? (algorithm.hash.name === "SHA-384" || algorithm.hash.name === "SHA-512" ? 1024 : 512);
+    length = algorithm.length ?? hmacDefaultLength(algorithm.hash.name);
     if (length === 0) throw new DOMException("An HMAC key cannot have zero length", "OperationError");
     keyAlgorithm = new HmacKeyAlgorithm(algorithm.hash.name, length);
   } else if (algorithm instanceof AesKeyGenParams) {
@@ -149,34 +168,6 @@ function jwkAlgorithm(name: string, length: number, hash: CryptoDigestName | und
   }
 }
 
-/** RFC 7517 §4.3 permits unknown operations but forbids duplicate entries. */
-function checkJwkPolicy(jwk: JsonWebKey, name: string, extractable: boolean, usages: readonly KeyUsage[]): void {
-  if (usages.length !== 0 && jwk.use !== undefined && jwk.use !== (name === "HMAC" ? "sig" : "enc")) {
-    throw new DOMException("The JWK use does not permit this key", "DataError");
-  }
-  const operations = jwk.key_ops;
-  if (operations !== undefined) {
-    for (let index = 0; index < operations.length; index++) {
-      const operation = operations[index]!;
-      for (let earlier = 0; earlier < index; earlier++) {
-        if (operations[earlier] === operation) throw new DOMException("The JWK key_ops contains duplicates", "DataError");
-      }
-      const signing = operation === "sign" || operation === "verify";
-      const encryption = operation === "encrypt" || operation === "decrypt" || operation === "wrapKey"
-        || operation === "unwrapKey" || operation === "deriveKey" || operation === "deriveBits";
-      if ((jwk.use === "sig" && encryption) || (jwk.use === "enc" && signing)) {
-        throw new DOMException("The JWK use and key_ops are inconsistent", "DataError");
-      }
-    }
-    for (let index = 0; index < usages.length; index++) {
-      let present = false;
-      for (let at = 0; at < operations.length; at++) if (operations[at] === usages[index]) present = true;
-      if (!present) throw new DOMException("The JWK does not permit every requested usage", "DataError");
-    }
-  }
-  if (jwk.ext === false && extractable) throw new DOMException("The JWK is not extractable", "DataError");
-}
-
 /** §§27–31 raw/JWK imports. Policy checks precede the one native key import. */
 export function importSecretKey(
   provider: CryptoProvider,
@@ -203,7 +194,7 @@ export function importSecretKey(
     if (data.alg !== undefined && data.alg !== jwkAlgorithm(algorithm.name, bits, hmac?.hash.name)) {
       throw new DOMException("The JWK algorithm does not match the requested key", "DataError");
     }
-    checkJwkPolicy(data, algorithm.name, extractable, usages);
+    checkJwkPolicy(data, algorithm.name === "HMAC" ? "sig" : "enc", extractable, usages);
   } else {
     throw new DOMException("This secret-key format is not supported", "NotSupportedError");
   }

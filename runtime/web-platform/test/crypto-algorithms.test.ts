@@ -11,6 +11,8 @@ import {
   toAlgorithmIdentifier,
 } from "../src/crypto/algorithms.ts";
 import type { CryptoOperation } from "../src/crypto/algorithms.ts";
+import { createCryptoKey, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
+import type { CryptoKeyHandle } from "../src/provider/crypto.ts";
 
 const hashes = ["SHA-1", "SHA-256", "SHA-384", "SHA-512"];
 const otherOperations: readonly CryptoOperation[] = [
@@ -66,14 +68,16 @@ test("AlgorithmIdentifier preserves objects without consulting coercion hooks", 
 
 const allOperations: readonly CryptoOperation[] = ["digest", ...otherOperations];
 const keyRegistrations: readonly { name: string; operations: readonly CryptoOperation[] }[] = [
-  { name: "AES-CTR", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
-  { name: "AES-CBC", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
-  { name: "AES-GCM", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
-  { name: "AES-KW", operations: ["wrapKey", "unwrapKey", "generateKey", "importKey", "exportKey"] },
-  { name: "HMAC", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+  { name: "AES-CTR", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey", "get key length"] },
+  { name: "AES-CBC", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey", "get key length"] },
+  { name: "AES-GCM", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey", "get key length"] },
+  { name: "AES-KW", operations: ["wrapKey", "unwrapKey", "generateKey", "importKey", "exportKey", "get key length"] },
+  { name: "HMAC", operations: ["sign", "verify", "generateKey", "importKey", "exportKey", "get key length"] },
   { name: "RSASSA-PKCS1-v1_5", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
   { name: "RSA-PSS", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
   { name: "RSA-OAEP", operations: ["encrypt", "decrypt", "generateKey", "importKey", "exportKey"] },
+  { name: "ECDSA", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+  { name: "ECDH", operations: ["deriveBits", "generateKey", "importKey", "exportKey"] },
 ];
 
 for (const registration of keyRegistrations) {
@@ -89,6 +93,8 @@ for (const registration of keyRegistrations) {
         modulusLength: 2048,
         publicExponent: new Uint8Array([1, 0, 1]),
         saltLength: 32,
+        namedCurve: "P-256",
+        public: createCryptoKey("public", true, new KeyAlgorithm("ECDH"), [], {} as CryptoKeyHandle),
       };
       const supported = registration.operations.includes(operation);
       assert.equal(supportsCryptoOperation(registration.name.toLowerCase(), operation), supported);
@@ -107,7 +113,7 @@ for (const registration of keyRegistrations) {
 }
 
 test("future families and Modern Algorithms remain unregistered", () => {
-  for (const name of ["ECDSA", "Ed25519", "HKDF", "PBKDF2", "AES-OCB", "KMAC128"]) {
+  for (const name of ["Ed25519", "X25519", "HKDF", "PBKDF2", "AES-OCB", "KMAC128"]) {
     for (const operation of allOperations) {
       assert.equal(supportsCryptoOperation(name, operation), false);
     }

@@ -7,16 +7,10 @@ import { RsaHashedImportParams, RsaHashedKeyGenParams } from "./algorithms.ts";
 import type { NormalizedAlgorithm, RsaAlgorithmName } from "./algorithms.ts";
 import { copyCryptoBytes, cryptoByteSubarray, cryptoViewByteLength } from "./buffer-source.ts";
 import { createCryptoKey, KeyAlgorithm } from "./crypto-key.ts";
-import type { CryptoKey, CryptoKeySlots, KeyAlgorithmObject, KeyUsage } from "./crypto-key.ts";
+import type { CryptoKey, CryptoKeyPair, CryptoKeySlots, KeyAlgorithmObject, KeyUsage } from "./crypto-key.ts";
 import { parseRsaDer } from "./der.ts";
-import { decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages, RsaOtherPrimesInfo } from "./jwk.ts";
+import { checkJwkPolicy, decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages, RsaOtherPrimesInfo } from "./jwk.ts";
 import type { KeyFormat } from "./jwk.ts";
-
-/** Web Cryptography §17. The returned ordinary dictionary has two independent keys. */
-export interface CryptoKeyPair {
-  privateKey: CryptoKey;
-  publicKey: CryptoKey;
-}
 
 interface RsaHashedKeyAlgorithmObject extends KeyAlgorithmObject {
   modulusLength: number;
@@ -182,30 +176,7 @@ function jwkAlgorithm(name: string, hash: string): string {
 /** RFC 7517 §4.3: unknown key operations are allowed; duplicates are not. */
 function jwkPolicy(jwk: JsonWebKey, algorithm: RsaHashedImportParams, extractable: boolean, usages: readonly KeyUsage[]): void {
   if (jwk.kty !== "RSA") throw new DOMException("The JWK is not an RSA key", "DataError");
-  if (usages.length !== 0 && jwk.use !== undefined && jwk.use !== (algorithm.name === "RSA-OAEP" ? "enc" : "sig")) {
-    throw new DOMException("The JWK use does not permit this RSA operation", "DataError");
-  }
-  const operations = jwk.key_ops;
-  if (operations !== undefined) {
-    for (let index = 0; index < operations.length; index++) {
-      const operation = operations[index]!;
-      for (let earlier = 0; earlier < index; earlier++) {
-        if (operations[earlier] === operation) throw new DOMException("The JWK key_ops contains duplicates", "DataError");
-      }
-      const signing = operation === "sign" || operation === "verify";
-      const encryption = operation === "encrypt" || operation === "decrypt" || operation === "wrapKey"
-        || operation === "unwrapKey" || operation === "deriveKey" || operation === "deriveBits";
-      if ((jwk.use === "sig" && encryption) || (jwk.use === "enc" && signing)) {
-        throw new DOMException("The JWK use and key_ops are inconsistent", "DataError");
-      }
-    }
-    for (let index = 0; index < usages.length; index++) {
-      let present = false;
-      for (let at = 0; at < operations.length; at++) if (operations[at] === usages[index]) present = true;
-      if (!present) throw new DOMException("The JWK does not permit every requested usage", "DataError");
-    }
-  }
-  if (jwk.ext === false && extractable) throw new DOMException("The JWK is not extractable", "DataError");
+  checkJwkPolicy(jwk, algorithm.name === "RSA-OAEP" ? "enc" : "sig", extractable, usages);
   if (jwk.alg !== undefined && jwk.alg !== jwkAlgorithm(algorithm.name, algorithm.hash.name)) {
     throw new DOMException("The JWK algorithm does not match the requested hash", "DataError");
   }

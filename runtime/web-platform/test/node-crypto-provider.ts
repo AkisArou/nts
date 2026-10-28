@@ -3,11 +3,14 @@ import {
   constants,
   createCipheriv,
   createDecipheriv,
+  createECDH,
   createHash,
   createHmac,
   createPrivateKey,
   createPublicKey,
   createSecretKey,
+  diffieHellman,
+  ECDH,
   generateKeyPairSync,
   privateDecrypt,
   publicEncrypt,
@@ -22,6 +25,7 @@ import type {
   CryptoCiphertext,
   CryptoDerivationParameters,
   CryptoDigestName,
+  CryptoEcComponents,
   CryptoFailure,
   CryptoKeyComponents,
   CryptoKeyHandle,
@@ -29,6 +33,7 @@ import type {
   CryptoKeyPairGeneration,
   CryptoKeyPairRecord,
   CryptoKeyRecord,
+  CryptoNamedCurve,
   CryptoProvider,
   CryptoRsaComponents,
   CryptoRsaOtherPrime,
@@ -93,6 +98,11 @@ function keyRecord(key: KeyObject): CryptoKeyRecord {
   keyObjects.set(handle, key);
   if (key.type === "secret") {
     return { handle, info: { family: "secret", type: "secret", length: secretBits(key) } };
+  }
+  if (key.asymmetricKeyType === "ec") {
+    const nativeCurve = key.asymmetricKeyDetails?.namedCurve;
+    if (nativeCurve === undefined) throw new TypeError("Missing native EC metadata");
+    return { handle, info: { family: "EC", type: key.type, namedCurve: webCurveName(nativeCurve) } };
   }
   if (key.asymmetricKeyType !== "rsa") throw new TypeError("Expected an unrestricted native RSA key");
   const modulusLength = key.asymmetricKeyDetails?.modulusLength;
@@ -210,6 +220,110 @@ function rsaComponents(key: KeyObject): CryptoRsaComponents {
   return { family: "RSA", n, e, d, p, q, dp, dq, qi, oth };
 }
 
+function nativeCurveName(curve: CryptoNamedCurve): string {
+  switch (curve) {
+    case "P-256": return "prime256v1";
+    case "P-384": return "secp384r1";
+    case "P-521": return "secp521r1";
+  }
+}
+
+function webCurveName(curve: string): string {
+  switch (curve) {
+    case "prime256v1": return "P-256";
+    case "secp384r1": return "P-384";
+    case "secp521r1": return "P-521";
+    default: return curve;
+  }
+}
+
+function ecComponents(key: KeyObject): CryptoEcComponents {
+  const components = key.export({ format: "jwk" });
+  const { crv, x, y, d } = components;
+  if ((crv !== "P-256" && crv !== "P-384" && crv !== "P-521") || x === undefined || y === undefined) {
+    throw new TypeError("Unsupported native EC components");
+  }
+  const publicComponents: CryptoEcComponents = {
+    family: "EC", namedCurve: crv,
+    x: owned(Buffer.from(x, "base64url")), y: owned(Buffer.from(y, "base64url")),
+  };
+  return d === undefined ? publicComponents : { ...publicComponents, d: owned(Buffer.from(d, "base64url")) };
+}
+
+function ecPoint(components: CryptoEcComponents): Buffer {
+  return Buffer.concat([Buffer.from([4]), components.x, components.y]);
+}
+
+/**
+ * A private KeyObject can retain an unrelated supplied public point. Regenerate
+ * its actual point with native EC arithmetic, so the shared layer can compare
+ * exportComponents with the original PKCS8/JWK point. The native setter also
+ * validates 0 < d < order; there is no scalar or point arithmetic in this adapter.
+ */
+function ecPrivateKey(curve: string, d: Uint8Array): KeyObject {
+  const native = createECDH(curve);
+  native.setPrivateKey(d);
+  const point = native.getPublicKey();
+  const width = (point.byteLength - 1) / 2;
+  return createPrivateKey({
+    format: "jwk",
+    key: {
+      kty: "EC", crv: webCurveName(curve), d: Buffer.from(d).toString("base64url"),
+      x: point.subarray(1, 1 + width).toString("base64url"),
+      y: point.subarray(1 + width).toString("base64url"),
+    },
+  });
+}
+
+function validatedEcKey(key: KeyObject): KeyObject {
+  if (key.asymmetricKeyType !== "ec") return key;
+  const nativeCurve = key.asymmetricKeyDetails?.namedCurve;
+  if (nativeCurve === undefined) throw new TypeError("Missing native EC curve");
+  const components = key.export({ format: "jwk" });
+  if (key.type === "private") {
+    if (components.d === undefined) throw new TypeError("Missing native EC scalar");
+    return ecPrivateKey(nativeCurve, Buffer.from(components.d, "base64url"));
+  }
+  if (components.x === undefined || components.y === undefined) throw new TypeError("Missing native EC point");
+  const point = Buffer.concat([
+    Buffer.from([4]), Buffer.from(components.x, "base64url"), Buffer.from(components.y, "base64url"),
+  ]);
+  // Native conversion rejects points outside the curve. All supported curves
+  // have cofactor one, so a finite on-curve point has the required subgroup.
+  ECDH.convertKey(point, nativeCurve, undefined, undefined, "uncompressed");
+  return key;
+}
+
+function ecRawKey(curve: CryptoNamedCurve, point: Uint8Array): KeyObject {
+  const canonical = ECDH.convertKey(point, nativeCurveName(curve), undefined, undefined, "uncompressed") as Buffer;
+  const width = (canonical.byteLength - 1) / 2;
+  return createPublicKey({
+    format: "jwk",
+    key: {
+      kty: "EC", crv: curve,
+      x: canonical.subarray(1, 1 + width).toString("base64url"),
+      y: canonical.subarray(1 + width).toString("base64url"),
+    },
+  });
+}
+
+function ecPkcs8(key: KeyObject): Buffer {
+  // Node's PKCS8 export omits ECPrivateKey.parameters. Web Crypto requires both
+  // optional SEC1 fields on export. Its native SEC1 export contains both, so wrap
+  // those exact native bytes with the same AlgorithmIdentifier, without math.
+  const pkcs8 = new NativeDerReader(new NativeDerReader(key.export({ format: "der", type: "pkcs8" })).read(0x30));
+  const version = derValue(2, pkcs8.read(2));
+  const algorithm = derValue(0x30, pkcs8.read(0x30));
+  const privateKey = derValue(4, key.export({ format: "der", type: "sec1" }));
+  return derValue(0x30, Buffer.concat([version, algorithm, privateKey]));
+}
+
+function minimalInteger(bytes: Uint8Array): Uint8Array {
+  let start = 0;
+  while (start + 1 < byteLength(bytes) && bytes[start] === 0) start++;
+  return owned(byteSlice(bytes, start, byteLength(bytes) - start));
+}
+
 /**
  * How many input blocks fit before the requested low-order counter field wraps.
  * Compute the complement plus one, capped at the actual input's block count, so
@@ -282,11 +396,20 @@ export class NodeCryptoProvider implements CryptoProvider {
       if (input.format === "components" && input.components.family === "secret") {
         return keyRecord(createSecretKey(input.components.k));
       }
+      if (input.format === "raw" && input.family === "EC") {
+        return keyRecord(ecRawKey(input.namedCurve, input.bytes));
+      }
       if (input.format === "spki") {
-        return keyRecord(createPublicKey({ key: Buffer.from(input.bytes), format: "der", type: "spki" }));
+        return keyRecord(validatedEcKey(createPublicKey({ key: Buffer.from(input.bytes), format: "der", type: "spki" })));
       }
       if (input.format === "pkcs8") {
-        return keyRecord(createPrivateKey({ key: Buffer.from(input.bytes), format: "der", type: "pkcs8" }));
+        return keyRecord(validatedEcKey(createPrivateKey({ key: Buffer.from(input.bytes), format: "der", type: "pkcs8" })));
+      }
+      if (input.format === "components" && input.components.family === "EC") {
+        const components = input.components;
+        return keyRecord(components.d === undefined
+          ? ecRawKey(components.namedCurve, ecPoint(components))
+          : ecPrivateKey(nativeCurveName(components.namedCurve), components.d));
       }
       if (input.format === "components" && input.components.family === "RSA") {
         const components = input.components;
@@ -310,6 +433,13 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
+      if (nativeKey.asymmetricKeyType === "ec") {
+        if (format === "raw") {
+          if (nativeKey.type !== "public") return { failure: "operation" };
+          return owned(ecPoint(ecComponents(nativeKey)));
+        }
+        if (format === "pkcs8") return owned(ecPkcs8(nativeKey));
+      }
       if (format === "raw") return owned(nativeKey.export());
       return owned(nativeKey.export({ format: "der", type: format }));
     } catch {
@@ -322,6 +452,7 @@ export class NodeCryptoProvider implements CryptoProvider {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
       if (nativeKey.type === "secret") return { family: "secret", k: owned(nativeKey.export()) };
+      if (nativeKey.asymmetricKeyType === "ec") return ecComponents(nativeKey);
       return rsaComponents(nativeKey);
     } catch {
       return { failure: "operation" };
@@ -330,6 +461,10 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
     try {
+      if (parameters.family === "EC") {
+        const pair = generateKeyPairSync("ec", { namedCurve: nativeCurveName(parameters.namedCurve) });
+        return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
+      }
       if (parameters.family !== "RSA") return { failure: "operation" };
       let publicExponent = 0;
       for (let index = 0; index < byteLength(parameters.publicExponent); index++) {
@@ -446,6 +581,12 @@ export class NodeCryptoProvider implements CryptoProvider {
         const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return { kind: "bytes", bytes: owned(bytes) };
       }
+      if (parameters.name === "ECDSA") {
+        if (nativeKey.asymmetricKeyType !== "ec" || nativeKey.type !== "private") return { failure: "invalid-key" };
+        const signature = sign(hashName(parameters.hash), data, { key: nativeKey, dsaEncoding: "ieee-p1363" });
+        const width = signature.byteLength / 2;
+        return { kind: "ecdsa", r: minimalInteger(signature.subarray(0, width)), s: minimalInteger(signature.subarray(width)) };
+      }
       if (parameters.name === "RSASSA-PKCS1-v1_5" || parameters.name === "RSA-PSS") {
         const options = parameters.name === "RSA-PSS"
           ? { key: nativeKey, padding: rsaPssPadding, saltLength: parameters.saltLength }
@@ -466,7 +607,15 @@ export class NodeCryptoProvider implements CryptoProvider {
   ): boolean {
     try {
       const nativeKey = keyObjects.get(key);
-      if (nativeKey === undefined || signature.kind !== "bytes") return false;
+      if (nativeKey === undefined) return false;
+      if (parameters.name === "ECDSA") {
+        if (signature.kind !== "ecdsa" || nativeKey.asymmetricKeyType !== "ec" || nativeKey.type !== "public") return false;
+        const width = byteLength(ecComponents(nativeKey).x);
+        if (byteLength(signature.r) !== width || byteLength(signature.s) !== width) return false;
+        return verify(hashName(parameters.hash), data, { key: nativeKey, dsaEncoding: "ieee-p1363" },
+          Buffer.concat([signature.r, signature.s]));
+      }
+      if (signature.kind !== "bytes") return false;
       if (parameters.name === "HMAC") {
         const expected = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return expected.byteLength === byteLength(signature.bytes)
@@ -484,7 +633,19 @@ export class NodeCryptoProvider implements CryptoProvider {
     }
   }
 
-  derive(_parameters: CryptoDerivationParameters, _key: CryptoKeyHandle): Uint8Array | CryptoFailure {
-    return { failure: "operation" };
+  derive(parameters: CryptoDerivationParameters, key: CryptoKeyHandle): Uint8Array | CryptoFailure {
+    try {
+      if (parameters.name !== "ECDH") return { failure: "operation" };
+      const privateKey = keyObjects.get(key);
+      const publicKey = keyObjects.get(parameters.publicKey);
+      if (privateKey === undefined || publicKey === undefined
+        || privateKey.type !== "private" || publicKey.type !== "public"
+        || privateKey.asymmetricKeyType !== "ec" || publicKey.asymmetricKeyType !== "ec") {
+        return { failure: "invalid-key" };
+      }
+      return owned(diffieHellman({ privateKey, publicKey }));
+    } catch {
+      return { failure: "operation" };
+    }
   }
 }

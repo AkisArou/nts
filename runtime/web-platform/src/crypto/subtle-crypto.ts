@@ -7,7 +7,9 @@ import type { AlgorithmIdentifier, NormalizedAlgorithm } from "./algorithms.ts";
 import { decryptAes, encryptAes } from "./aes.ts";
 import { cryptoBytes, isCryptoBufferSource, toCryptoBufferSource } from "./buffer-source.ts";
 import { getCryptoKeySlots } from "./crypto-key.ts";
-import type { CryptoKey, CryptoKeySlots, KeyUsage } from "./crypto-key.ts";
+import type { CryptoKey, CryptoKeyPair, CryptoKeySlots, KeyUsage } from "./crypto-key.ts";
+import { deriveEcBits, signEc, verifyEc } from "./ec.ts";
+import { exportEcKey, generateEcKey, importEcKey } from "./ec-key.ts";
 import {
   JsonWebKey,
   parseWrappedJwk,
@@ -20,8 +22,8 @@ import {
 import type { JsonWebKeyObject, KeyFormat } from "./jwk.ts";
 import { decryptRsa, encryptRsa, signRsa, verifyRsa } from "./rsa.ts";
 import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
-import type { CryptoKeyPair } from "./rsa-key.ts";
-import { exportSecretKey, generateSecretKey, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
+import { exportSecretKey, generateSecretKey, getSecretKeyLength, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
+import { toCryptoUnsignedInteger } from "./webidl.ts";
 
 /**
  * Execute the specification's parallel steps synchronously over native primitives,
@@ -70,6 +72,10 @@ function isRsaAlgorithm(name: string): boolean {
   return name === "RSASSA-PKCS1-v1_5" || name === "RSA-PSS" || name === "RSA-OAEP";
 }
 
+function isEcAlgorithm(name: string): boolean {
+  return name === "ECDSA" || name === "ECDH";
+}
+
 function encryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
   return algorithm.name === "RSA-OAEP"
     ? encryptRsa(provider, algorithm, key, bytes)
@@ -90,20 +96,20 @@ function importKeyMaterial(
   extractable: boolean,
   usages: readonly KeyUsage[],
 ): CryptoKey {
-  return isRsaAlgorithm(algorithm.name)
-    ? importRsaKey(provider, format, data, algorithm, extractable, usages)
-    : importSecretKey(provider, format, data, algorithm, extractable, usages);
+  if (isEcAlgorithm(algorithm.name)) return importEcKey(provider, format, data, algorithm, extractable, usages);
+  if (isRsaAlgorithm(algorithm.name)) return importRsaKey(provider, format, data, algorithm, extractable, usages);
+  return importSecretKey(provider, format, data, algorithm, extractable, usages);
 }
 
 function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: CryptoKeySlots): Uint8Array | JsonWebKey {
-  return isRsaAlgorithm(key.algorithm.name)
-    ? exportRsaKey(provider, format, key)
-    : exportSecretKey(provider, format, key);
+  if (isEcAlgorithm(key.algorithm.name)) return exportEcKey(provider, format, key);
+  if (isRsaAlgorithm(key.algorithm.name)) return exportRsaKey(provider, format, key);
+  return exportSecretKey(provider, format, key);
 }
 
 /**
- * Web Cryptography §14. Digests, HMAC, AES and RSA operations.
- * Derivation and the remaining asymmetric algorithms are separate handoff items.
+ * Web Cryptography §14. Digests, HMAC, AES, RSA, ECDSA and ECDH operations.
+ * The remaining asymmetric algorithms and KDFs are separate handoff items.
  * Members are plain declarations; descriptor-only Web IDL shape is deferred.
  */
 export class SubtleCrypto {
@@ -178,7 +184,7 @@ export class SubtleCrypto {
     }
   }
 
-  /** §14.3.3 and the registered HMAC/RSA signing operation. */
+  /** §14.3.3 and the registered HMAC/RSA/ECDSA signing operation. */
   sign(algorithm: unknown, key: unknown, data: unknown): Promise<ArrayBuffer> {
     try {
       const provider = this.#provider;
@@ -191,8 +197,9 @@ export class SubtleCrypto {
       const bytes = cryptoBytes(source);
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "sign");
-        const signature = normalized.name === "HMAC"
-          ? signHmac(provider, slots, bytes) : signRsa(provider, normalized, slots, bytes);
+        const signature = normalized.name === "HMAC" ? signHmac(provider, slots, bytes)
+          : normalized.name === "ECDSA" ? signEc(provider, normalized, slots, bytes)
+          : signRsa(provider, normalized, slots, bytes);
         return signature.buffer as ArrayBuffer;
       });
     } catch (error) {
@@ -217,7 +224,8 @@ export class SubtleCrypto {
         requireKeyUsage(slots, normalized, "verify");
         return normalized.name === "HMAC"
           ? verifyHmac(provider, slots, signatureBytes, dataBytes)
-          : verifyRsa(provider, normalized, slots, signatureBytes, dataBytes);
+          : normalized.name === "ECDSA" ? verifyEc(provider, normalized, slots, signatureBytes, dataBytes)
+            : verifyRsa(provider, normalized, slots, signatureBytes, dataBytes);
       });
     } catch (error) {
       return Promise.reject(error);
@@ -235,9 +243,55 @@ export class SubtleCrypto {
       const canExport = coerceToBoolean(extractable);
       const usages = toKeyUsages(keyUsages);
       const normalized = normalizeAlgorithm(identifier, "generateKey");
-      return cryptoTask<CryptoKey | CryptoKeyPair>(scheduler, () => isRsaAlgorithm(normalized.name)
-        ? generateRsaKey(provider, normalized, canExport, usages)
-        : generateSecretKey(provider, random, normalized, canExport, usages));
+      return cryptoTask<CryptoKey | CryptoKeyPair>(scheduler, () => {
+        if (isEcAlgorithm(normalized.name)) return generateEcKey(provider, normalized, canExport, usages);
+        if (isRsaAlgorithm(normalized.name)) return generateRsaKey(provider, normalized, canExport, usages);
+        return generateSecretKey(provider, random, normalized, canExport, usages);
+      });
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** §14.3.7. Normalize import and key length separately, in the specified order. */
+  deriveKey(algorithm: unknown, baseKey: unknown, derivedKeyType: unknown, extractable: unknown, keyUsages: unknown): Promise<CryptoKey> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 5, "SubtleCrypto.deriveKey");
+      const identifier = toAlgorithmIdentifier(algorithm);
+      const slots = getCryptoKeySlots(baseKey);
+      const derivedIdentifier = toAlgorithmIdentifier(derivedKeyType);
+      const canExport = coerceToBoolean(extractable);
+      const usages = toKeyUsages(keyUsages);
+      const normalized = normalizeAlgorithm(identifier, "deriveBits", true);
+      const normalizedImport = normalizeAlgorithm(derivedIdentifier, "importKey", true);
+      const normalizedLength = normalizeAlgorithm(derivedIdentifier, "get key length");
+      return cryptoTask(scheduler, () => {
+        requireKeyUsage(slots, normalized, "deriveKey");
+        const length = getSecretKeyLength(normalizedLength);
+        const secret = deriveEcBits(provider, normalized, slots, length);
+        return importKeyMaterial(provider, "raw", secret, normalizedImport, canExport, usages);
+      });
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** §14.3.8. An omitted or null length requests the full encoded ECDH secret. */
+  deriveBits(algorithm: unknown, baseKey: unknown, length: unknown = null): Promise<ArrayBuffer> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 2, "SubtleCrypto.deriveBits");
+      const identifier = toAlgorithmIdentifier(algorithm);
+      const slots = getCryptoKeySlots(baseKey);
+      const bitLength = length === null || length === undefined ? null : toCryptoUnsignedInteger(length, 32);
+      const normalized = normalizeAlgorithm(identifier, "deriveBits");
+      return cryptoTask(scheduler, () => {
+        requireKeyUsage(slots, normalized, "deriveBits");
+        return deriveEcBits(provider, normalized, slots, bitLength).buffer as ArrayBuffer;
+      });
     } catch (error) {
       return Promise.reject(error);
     }
