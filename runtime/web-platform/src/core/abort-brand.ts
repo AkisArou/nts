@@ -1,4 +1,4 @@
-/** Internal nominal identity shared without introducing an EventTarget/AbortSignal import cycle. */
+/** Internal symbol marker for cancellation-aware modules; not a Web IDL brand check. */
 export const abortSignalBrand: unique symbol = Symbol("NTS AbortSignal");
 
 /**
@@ -16,4 +16,50 @@ export interface AbortSignalOperations {
   readonly [abortSignalBrand]: true;
   readonly aborted: boolean;
   [abortSignalSubscribe](callback: () => void): () => void;
+}
+
+type AbortSignalBrandCheck = (value: unknown) => value is AbortSignalOperations;
+
+let checkAbortSignalBrand: AbortSignalBrandCheck | undefined;
+let readAbortSignalState!: (signal: AbortSignalOperations) => boolean;
+let subscribeAbortSignalState!: (
+  signal: AbortSignalOperations,
+  callback: () => void,
+) => () => void;
+
+/**
+ * Installed once by AbortSignal's static initializer, with access to its private
+ * state. This module has no runtime imports, keeping EventTarget independent of
+ * its AbortSignal subclass. Neither this installer nor the operations are public
+ * Web APIs or re-exported from the package's barrels.
+ */
+export function installAbortSignalOperations(
+  brand: AbortSignalBrandCheck,
+  aborted: (signal: AbortSignalOperations) => boolean,
+  subscribe: (signal: AbortSignalOperations, callback: () => void) => () => void,
+): void {
+  if (checkAbortSignalBrand !== undefined) {
+    throw new TypeError("AbortSignal operations are already installed");
+  }
+  readAbortSignalState = aborted;
+  subscribeAbortSignalState = subscribe;
+  checkAbortSignalBrand = brand;
+}
+
+/** Web IDL interface conversion never consults script-visible properties. */
+export function isAbortSignal(value: unknown): value is AbortSignalOperations {
+  return checkAbortSignalBrand !== undefined && checkAbortSignalBrand(value);
+}
+
+/** Read the internal abort state of a signal that has passed interface conversion. */
+export function isAbortSignalAborted(signal: AbortSignalOperations): boolean {
+  return readAbortSignalState(signal);
+}
+
+/** Add an abort step without consulting an overridable method on the signal. */
+export function subscribeAbortSignal(
+  signal: AbortSignalOperations,
+  callback: () => void,
+): () => void {
+  return subscribeAbortSignalState(signal, callback);
 }

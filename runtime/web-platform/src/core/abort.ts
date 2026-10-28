@@ -1,4 +1,4 @@
-import { abortSignalBrand } from "./abort-brand.ts";
+import { abortSignalBrand, installAbortSignalOperations } from "./abort-brand.ts";
 import type { AbortSignalOperations } from "./abort-brand.ts";
 import { abortSignalSubscribe, abortSignalTrigger } from "./abort-brand.ts";
 export { abortSignalSubscribe, abortSignalTrigger } from "./abort-brand.ts";
@@ -55,6 +55,18 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     listener: null,
   };
 
+  static {
+    // Web IDL interface identity and DOM abort steps depend on private state,
+    // even if script replaces the signal's prototype or shadows its properties.
+    // https://webidl.spec.whatwg.org/#es-interface
+    // https://dom.spec.whatwg.org/#add-an-event-listener
+    installAbortSignalOperations(
+      (value): value is AbortSignalOperations => isObject(value) && #isAborted in value,
+      (signal) => (signal as AbortSignal).#isAborted,
+      (signal, callback) => (signal as AbortSignal).#subscribe(callback),
+    );
+  }
+
   constructor(key: typeof abortSignalConstructorKey, errorReporter?: (error: unknown) => void) {
     if (key !== abortSignalConstructorKey) {
       throw new TypeError("Illegal constructor");
@@ -87,6 +99,10 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
 
   /** Internal cancellation algorithms cannot be blocked by stopImmediatePropagation. */
   [abortSignalSubscribe](callback: () => void): () => void {
+    return this.#subscribe(callback);
+  }
+
+  #subscribe(callback: () => void): () => void {
     if (this.#isAborted) {
       try {
         callback();
