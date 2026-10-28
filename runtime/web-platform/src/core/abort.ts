@@ -18,6 +18,10 @@ interface AbortAlgorithm {
 
 function doNothing(): void {}
 
+function isObject(value: unknown): value is object {
+  return value !== null && (typeof value === "object" || typeof value === "function");
+}
+
 const abortSignalConstructorKey: unique symbol = Symbol("construct NTS AbortSignal");
 
 export class AbortSignal extends EventTarget implements AbortSignalOperations {
@@ -112,8 +116,23 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   }
 
   static any(signals: Iterable<AbortSignal>): AbortSignal {
+    requireArguments(arguments, 1, "AbortSignal.any");
+    // Web IDL sequence conversion requires an object, even when a primitive string
+    // would yield no elements. It does not IteratorClose on an element conversion
+    // failure, so a for-of loop has observably different behavior here.
+    // https://webidl.spec.whatwg.org/#es-sequence
+    // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+    if (!isObject(signals)) throw new TypeError("signals must be an iterable object");
+    const iterator = signals[Symbol.iterator]();
+    if (!isObject(iterator)) throw new TypeError("The signal iterator must be an object");
+    const next = iterator.next;
+    if (typeof next !== "function") throw new TypeError("The signal iterator must have a next method");
     const converted: AbortSignal[] = [];
-    for (const signal of signals) {
+    while (true) {
+      const result = next.call(iterator);
+      if (!isObject(result)) throw new TypeError("The signal iterator result must be an object");
+      if (result.done) break;
+      const signal = result.value;
       if (!(signal instanceof AbortSignal))
         throw new TypeError("signals must contain AbortSignal values");
       converted.push(signal);
