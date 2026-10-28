@@ -1,0 +1,349 @@
+{
+  "baseline": {
+    "sha": "d7c0cdd21c9c3ec6a0a2e19d1e36b8d4087d7ebd",
+    "subject": "docs: Unicode stage 0 is in; the plan names what the AWFY ports wait on",
+    "clean": true,
+    "applied": {
+      "source": "patch",
+      "sha256": "d606d3f47718abe452f78a8d6127b8f2ab8cb5c2371bc61ed108498fe006d94f",
+      "files": [
+        "compiler/core/src/hir/fold.rs"
+      ],
+      "insertions": 15,
+      "deletions": 16
+    },
+    "built_at": "2026-10-27T22:34:19.819Z",
+    "binary_sha256": "5822503f29826d76715448163093c685dc51673be40d82ebe6809d13e412fbd3"
+  },
+  "candidate": "85f137f88656a69d7ffa608eb9eff52ebed3cb5f",
+  "measurement": {
+    "state": "PASS",
+    "current": null,
+    "completed": 1144,
+    "utc": "2026-10-28T01:59:24.909Z"
+  },
+  "broad": {
+    "state": "PASS",
+    "steps": 5,
+    "failed": [],
+    "utc": "2026-10-28T03:15:03.784Z"
+  },
+  "steps": [
+    {
+      "name": "agree-c-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/d7c0cdd21c9c+d606d3f47718/nts",
+        "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "c",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "start": "2026-10-28T03:07:30.234Z",
+      "end": "2026-10-28T03:09:20.791Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-llvm-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/d7c0cdd21c9c+d606d3f47718/nts",
+        "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "llvm",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "start": "2026-10-28T03:09:20.792Z",
+      "end": "2026-10-28T03:10:59.257Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-jvm-0",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/d7c0cdd21c9c+d606d3f47718/nts",
+        "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "jvm",
+        "NTS_RC": "0",
+        "NTS_AGREE_JOBS": "4"
+      },
+      "start": "2026-10-28T03:10:59.258Z",
+      "end": "2026-10-28T03:11:45.769Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-c-1",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/d7c0cdd21c9c+d606d3f47718/nts",
+        "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "c",
+        "NTS_RC": "1",
+        "NTS_AGREE_JOBS": "4",
+        "NTS_POISON": "1"
+      },
+      "start": "2026-10-28T03:11:45.769Z",
+      "end": "2026-10-28T03:13:26.133Z",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "agree-llvm-1",
+      "argv": [
+        "node",
+        "tooling/differential/agree.mjs",
+        "/home/akisarou/.cache/nts-pins/d7c0cdd21c9c+d606d3f47718/nts",
+        "/home/akisarou/Projects/nts-lanes/runtime-content/target/release/nts"
+      ],
+      "extra": {
+        "NTS_BACKEND": "llvm",
+        "NTS_RC": "1",
+        "NTS_AGREE_JOBS": "4",
+        "NTS_POISON": "1"
+      },
+      "start": "2026-10-28T03:13:26.133Z",
+      "end": "2026-10-28T03:15:03.784Z",
+      "status": 0,
+      "signal": null
+    }
+  ],
+  "compileCost": {
+    "state": "PASS",
+    "current": null,
+    "workers": 4,
+    "planned": 174,
+    "completed": 174,
+    "counter_scope": "exec-inherited-user-instructions-v1"
+  },
+  "compileScope": "exec-inherited-user-instructions-v1",
+  "checks": {
+    "rust": "/home/akisarou/.cache/nts-scratch/runtime-content/tests1.log",
+    "nativeMutations": "/home/akisarou/.cache/nts-scratch/runtime-content/native2.log",
+    "test262": "/home/akisarou/.cache/nts-scratch/runtime-content/records1.log",
+    "oracle": "/home/akisarou/.cache/nts-scratch/runtime-content/oracle1.log",
+    "finalLintAndBench": "/home/akisarou/.cache/nts-scratch/runtime-content/finalchecks2.log"
+  },
+  "consolidatedChecks": [
+    {
+      "commit": "020147ecf",
+      "state": "PASS",
+      "phases": [
+        {
+          "argv": [
+            "cargo",
+            "fmt",
+            "--check"
+          ],
+          "started": "2026-10-28T03:50:13.241Z",
+          "end": "2026-10-28T03:50:18.793Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "started": "2026-10-28T03:50:18.793Z",
+          "end": "2026-10-28T03:50:19.466Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-core",
+            "-p",
+            "nts-cli",
+            "-p",
+            "nts-codegen-common",
+            "-p",
+            "nts-codegen-c",
+            "-p",
+            "nts-codegen-llvm",
+            "-p",
+            "nts-codegen-jvm",
+            "-p",
+            "nts-frontend-ts",
+            "-p",
+            "nts-frontend-tsrs"
+          ],
+          "started": "2026-10-28T03:50:19.467Z",
+          "end": "2026-10-28T04:07:36.850Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--profile",
+            "nts-dev"
+          ],
+          "started": "2026-10-28T04:07:36.850Z",
+          "end": "2026-10-28T04:07:40.366Z",
+          "status": 0,
+          "signal": null
+        }
+      ],
+      "utc": "2026-10-28T04:07:40.366Z"
+    },
+    {
+      "commit": "efe857dbf",
+      "state": "PASS",
+      "phases": [
+        {
+          "argv": [
+            "cargo",
+            "fmt",
+            "--check"
+          ],
+          "started": "2026-10-28T04:08:25.808Z",
+          "end": "2026-10-28T04:09:02.238Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "started": "2026-10-28T04:09:02.238Z",
+          "end": "2026-10-28T04:09:06.983Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-codegen-llvm",
+            "--test",
+            "container_contents"
+          ],
+          "started": "2026-10-28T04:09:06.983Z",
+          "end": "2026-10-28T04:10:32.909Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--profile",
+            "nts-dev"
+          ],
+          "started": "2026-10-28T04:10:32.909Z",
+          "end": "2026-10-28T04:10:33.080Z",
+          "status": 0,
+          "signal": null
+        }
+      ],
+      "utc": "2026-10-28T04:10:33.080Z"
+    },
+    {
+      "commit": "1fdee0c6a",
+      "state": "PASS",
+      "phases": [
+        {
+          "argv": [
+            "cargo",
+            "fmt",
+            "--check"
+          ],
+          "started": "2026-10-28T04:10:59.900Z",
+          "end": "2026-10-28T04:11:04.284Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "started": "2026-10-28T04:11:04.285Z",
+          "end": "2026-10-28T04:11:04.735Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-bench"
+          ],
+          "started": "2026-10-28T04:11:04.736Z",
+          "end": "2026-10-28T04:11:07.944Z",
+          "status": 0,
+          "signal": null
+        },
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--profile",
+            "nts-dev"
+          ],
+          "started": "2026-10-28T04:11:07.944Z",
+          "end": "2026-10-28T04:11:08.041Z",
+          "status": 0,
+          "signal": null
+        }
+      ],
+      "utc": "2026-10-28T04:11:08.041Z"
+    }
+  ],
+  "layoutEvidence": "../layout-ranges/container-content/ranges.md",
+  "layoutReference": {
+    "path": "../layout-ranges/reference/ranges.md",
+    "state": "pending"
+  },
+  "limitations": [
+    "Original paired matrix uses one layout; the five selected rows are decided with the separate layout-aware experiment.",
+    "The loaded layout sittings are change evidence, not future reference calibration.",
+    "NoGC bypasses the provider; RC measures it. Each module has one serial A/B/A bracket; four module workers shared one bounded scope."
+  ]
+}
