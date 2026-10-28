@@ -1,0 +1,52 @@
+# fixture	controls	subjects	state	diagnostic_codes
+builtin-study-dom-document	control	subject	refuses	NTS1100
+builtin-study-dom-window-alert	control	subject	refuses	NTS1100
+builtin-study-es-array-from	control	subject	refuses	NTS1001
+builtin-study-es-atomics	controlShared,controlAtomic	subjectShared,subjectAtomic	refuses	NTS1001,NTS1100
+builtin-study-es-date-iso	control	subject	refuses	NTS1001
+builtin-study-es-date-now	control	subject	refuses	NTS1100
+builtin-study-es-date-parts	control	subject	refuses	NTS1001
+builtin-study-es-date-string	control	subject	refuses	NTS1001
+builtin-study-es-error	control	subject	lowers	
+builtin-study-es-eval	control	subject	refuses	NTS1101
+builtin-study-es-globalthis	control	subject	refuses	NTS1100
+builtin-study-es-intl-datetime	control	subject	refuses	NTS1001
+builtin-study-es-intl-number	control	subject	refuses	NTS1001
+builtin-study-es-json-parse	control	subject	refuses	NTS1100
+builtin-study-es-json-stringify	control	subject	lowers	
+builtin-study-es-localecompare	control	subject	refuses	NTS1001
+builtin-study-es-math-misc	control	subject	refuses	NTS1100
+builtin-study-es-math-random	control	subject	refuses	NTS1100
+builtin-study-es-normalize	control	subject	refuses	NTS1001
+builtin-study-es-object-keys	control	subject	refuses	NTS1001
+builtin-study-es-proxy	control	subject	refuses	NTS1001
+builtin-study-es-reflect	control	subject	refuses	NTS1001
+builtin-study-es-regexp-ctor	control	subject	refuses	NTS1001
+builtin-study-es-regexp-replace	control	subject	refuses	NTS1001
+builtin-study-es-regexp-test	control	subject	refuses	NTS1001
+builtin-study-es-temporal	control	subject	refuses	NTS1100
+builtin-study-es-tofixed	control	subject	lowers	
+builtin-study-es-tolocalestring	control	subject	refuses	NTS1001
+builtin-study-es-uri	control	subject	lowers	
+builtin-study-es-weakmap	control	subject	refuses	NTS1001
+builtin-study-es-weakref	control	subject	refuses	NTS1001
+builtin-study-web-abort	control	subject	refuses	NTS1001
+builtin-study-web-atob	controlBtoa,controlAtob	subjectBtoa,subjectAtob	refuses	NTS1100
+builtin-study-web-blob	control	subject	refuses	NTS1001
+builtin-study-web-console-error	control	subject	lowers	
+builtin-study-web-crypto-random	control	subject	refuses	NTS1100
+builtin-study-web-crypto-subtle	control	subject	refuses	NTS1100
+builtin-study-web-domexception	control	subject	refuses	NTS1001
+builtin-study-web-event	controlTarget,controlEvent	subjectTarget,subjectEvent	refuses	NTS1001
+builtin-study-web-fetch	control	subject	refuses	NTS1100
+builtin-study-web-headers	control	subject	refuses	NTS1001
+builtin-study-web-performance	control	subject	refuses	NTS1100
+builtin-study-web-queuemicrotask	control	subject	refuses	NTS1100
+builtin-study-web-settimeout	control	subject	lowers	
+builtin-study-web-streams	control	subject	refuses	NTS1001
+builtin-study-web-structuredclone	control	subject	refuses	NTS1100
+builtin-study-web-textdecoder	control	subject	refuses	NTS1001
+builtin-study-web-textencoder	control	subject	refuses	NTS1001
+builtin-study-web-url	control	subject	refuses	NTS1001
+builtin-study-web-urlsearchparams	control	subject	refuses	NTS1001
+builtin-study-web-websocket	control	subject	refuses	NTS1001
