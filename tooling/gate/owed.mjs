@@ -404,7 +404,8 @@ export const RULES = [
     // `.ts` since the lanes' tools became TypeScript (2026-09-29): until then
     // this matched none of them, and no instrument change owed a self-test.
     // The fixture trees are programs, not instruments, and have rules below.
-    when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|ts|sh)$/.test(p),
+    when: (p) => /^tooling\/(conformance|census|differential|gate)\/.*\.(mjs|ts|sh)$/.test(p)
+      && p !== "tooling/census/fixtures/resident-worker.ts",
     // Owes what runs it, from the derived map of what each step runs (see
     // `stepInputs`); an instrument that map cannot place owes the full gate.
     placedBy: "stepInputs",
@@ -583,6 +584,14 @@ export const RULES = [
     name: "documentation",
     when: (p) => /\.md$/.test(p) && !/^(tests|benchmarks|tooling\/(conformance|memory)|runtime)\//.test(p),
     steps: ["records", "primitives"],
+    arms: [],
+  },
+  {
+    // Only worker-memory.test.ts executes this synthetic compiler. The
+    // production census uses attempt262-worker.ts, not this allocation control.
+    name: "the resident worker control fixture",
+    when: (p) => p === "tooling/census/fixtures/resident-worker.ts",
+    steps: ["tooling"],
     arms: [],
   },
   {

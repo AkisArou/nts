@@ -49,6 +49,22 @@ test("the native counter control owes tooling without an unmatched-path full gat
   assert.ok(!gateSteps(rules).includes("interop"));
 });
 
+test("the resident worker fixture owes its kernel controls without an unplaced instrument full gate", () => {
+  const rules = owed([{ path: "tooling/census/fixtures/resident-worker.ts", added: false }]);
+  assert.ok(!rules.some(rule => rule.full));
+  assert.ok(rules.some(rule => rule.name === "the resident worker control fixture"));
+  superset(gateSteps(rules), ["tooling"], "the resident allocation control");
+  for (const step of ["interop", "test262", "test262-cases", "test262-jvm", "test262-llvm"]) {
+    assert.ok(!gateSteps(rules).includes(step), `the synthetic fixture does not run in ${step}`);
+  }
+  // Naming the one control does not narrow production workers or unknown tools.
+  for (const path of ["tooling/census/worker-memory.ts", "tooling/census/worker-pool.ts"]) {
+    superset(stepsFor(path), ["tooling", "test262-cases", "test262-jvm", "test262-llvm"], path);
+  }
+  superset(stepsFor("tooling/census/attempt262-worker.ts"), ["test262-cases", "test262-jvm", "test262-llvm"], "the production compiler worker");
+  assert.ok(owed([{ path: "tooling/census/fixtures/unknown-worker.ts", added: true }]).some(rule => rule.full));
+});
+
 test("the standalone ICU driver has an explicit validation obligation", () => {
   const rules = owed([{path:"runtime/ecmascript/tools/icu.ts",added:false}]);
   assert.ok(!rules.some(r => r.full));
