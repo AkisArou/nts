@@ -389,14 +389,17 @@ test("a tree-only landing refuses an ancestor holding the landing lock", () => {
 // Check the state itself; the common guard reports a hung fixture by name.
 const until = waitFor;
 
-function observeDisk(s:Scratch,availableBytes:number):void {
+function observeDisk(s:Scratch,availableBytes:number):string {
+  const observation=join(s.home,"disk-available-bytes");
+  writeFileSync(observation,String(availableBytes));
   const preload=join(s.home,"disk-observation.ts");
   writeFileSync(preload,`import fs from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
 const actual=fs.statfsSync;
-fs.statfsSync=(...args)=>{const observed=actual(...args);return {...observed,bavail:typeof observed.bsize==="bigint"?BigInt(${availableBytes})/observed.bsize:Math.floor(${availableBytes}/observed.bsize)};};
+fs.statfsSync=(...args)=>{const observed=actual(...args),available=Number(fs.readFileSync(${JSON.stringify(observation)},"utf8"));return {...observed,bavail:typeof observed.bsize==="bigint"?BigInt(available)/observed.bsize:Math.floor(available/observed.bsize)};};
 syncBuiltinESMExports();\n`);
   s.env.NODE_OPTIONS=`--import=${preload}`;
+  return observation;
 }
 
 test("a landing keeps its warm cache and uses one optimized line-table variant", async () => {
@@ -445,23 +448,38 @@ test("an oversized Cargo cache is cleaned whole and the train proceeds", async (
   assert.equal(gates(s), 1, "the train runs after cleaning the obsolete profile");
 });
 
-test("low disk still refuses a train and keeps a warm profile", () => {
+test("low disk holds every queued submission until admission recovers", async () => {
   const s = scratch();
   writeFileSync(join(s.root, "Cargo.toml"), "[workspace]\n");
   run(s, s.root, ["add", "Cargo.toml"]);
   run(s, s.root, ["commit", "-q", "-m", "Cargo workspace"]);
-  const tree = lane(s, "disk-floor", { "change": "one\n" });
+  const trees = ["one","two","three"].map(name=>lane(s,`disk-floor-${name}`,{[name]:name+"\n"}));
   const cache = join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-target/debug/keep");
   mkdirSync(dirname(cache), { recursive: true });
   writeFileSync(cache, "keep the warm profile\n");
   // Replace the free-space observation without filling the shared disk. The
   // preload must survive the lander's re-entry under its own flock.
-  observeDisk(s,1);
-  const result = spawnTest(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8" });
-  assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /working space above the 40 GiB disk floor/);
-  assert.equal(readFileSync(cache, "utf8"), "keep the warm profile\n");
-  assert.equal(gates(s), 0);
+  const observation=observeDisk(s,1);
+  const results=landTogether(s,trees);
+  try {
+    const state=join(s.home,".cache/nts-land/status.json");
+    await until("the queued train's disk-admission hold",()=>existsSync(state)&&JSON.parse(readFileSync(state,"utf8")).resource==="disk");
+    const held=JSON.parse(readFileSync(state,"utf8"));
+    assert.equal(held.state,"held");
+    assert.match(held.reason,/working space above the 40 GiB disk floor/);
+    assert.equal(held.train.length,3);
+    assert.ok(Number.isFinite(Date.parse(held.since)));
+    assert.ok(held.age_s>=0);
+    assert.equal(readdirSync(join(s.home,".cache/nts-land/queue")).filter(n=>n.endsWith(".json")).length,3);
+    assert.equal(readFileSync(cache,"utf8"),"keep the warm profile\n");
+    assert.equal(gates(s),0,"a resource hold starts no gate");
+  } finally {
+    writeFileSync(observation,String(80*2**30));
+  }
+  for (const result of await results) assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),1,"all three queued submissions share the admitted train");
+  for (const name of ["one","two","three"]) assert.equal(run(s,s.root,["show",`main:${name}`]),name);
+  assert.equal(readFileSync(cache,"utf8"),"keep the warm profile\n");
 });
 
 test("missing gate environment refuses before queueing or waiting for a held lock", async () => {

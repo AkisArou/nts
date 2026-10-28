@@ -567,7 +567,7 @@ type Gated = { ok: true; run: string; note: string; checks: Owed } | { ok: false
  * The optimized line-table profile measures 34.07 GiB. Past a larger safety bound,
  * Cargo cleans the whole regenerable profile, including its build state.
  */
-function checkGateTarget(root: string): void {
+function checkGateTarget(root: string, context: {commit:string;base:string;train:string[];shadow:boolean}): void {
   // A stand-in/non-Cargo gate has no Rust build cache to admit.
   if (!existsSync(join(root, "Cargo.toml"))) return;
   const debug = join(GATE_TARGET, "debug");
@@ -585,17 +585,30 @@ function checkGateTarget(root: string): void {
   }
   let diskPath = GATE_TARGET;
   while (!existsSync(diskPath)) diskPath = dirname(diskPath);
-  pruneRunTemporaries(process.env.HOME ?? homedir(),{minimumFreeBytes:TEST_DISK_FLOOR_BYTES+Math.max(TEST_BUILD_WORKING_BYTES,cacheBytes)});
-  const disk = statfsSync(diskPath);
-  const problem = testBuildAdmissionProblem(cacheBytes, disk.bavail * disk.bsize);
-  if (problem) fail(problem);
+  let heldSince: number | null = null;
+  for (;;) {
+    pruneRunTemporaries(process.env.HOME ?? homedir(),{minimumFreeBytes:TEST_DISK_FLOOR_BYTES+Math.max(TEST_BUILD_WORKING_BYTES,cacheBytes)});
+    const disk = statfsSync(diskPath);
+    const problem = testBuildAdmissionProblem(cacheBytes, disk.bavail * disk.bsize);
+    if (!problem) {
+      if (heldSince !== null) say(`disk admission recovered after ${Math.floor((Date.now()-heldSince)/1000)} s; continuing the queued train`);
+      return;
+    }
+    heldSince ??= Date.now();
+    const age_s = Math.floor((Date.now()-heldSince)/1000);
+    status({state:"held",resource:"disk",reason:problem,since:new Date(heldSince).toISOString(),age_s,pid:process.pid,...context});
+    say(`disk admission held ${age_s} s: ${problem}; queued submissions are kept`);
+    // The landing and gate-resource locks remain held. Resource availability
+    // is an admission event, never a candidate verdict or a wait deadline.
+    execFileSync("sleep", ["5"]);
+  }
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
 function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed, shadow = false): Gated {
   const short = landing.slice(0, 12);
   const resource=GateResource.inherited(`${GATE_TREE}.lock`);
-  checkGateTarget(root);
+  checkGateTarget(root,{commit:landing,base,train:members,shadow});
   const setupRun=join(STATE,"setup",`${short}-${process.pid}`);
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
