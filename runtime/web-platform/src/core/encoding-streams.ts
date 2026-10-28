@@ -12,7 +12,7 @@
 // of the next. Encoding each chunk independently would turn one astral character split
 // across a boundary into two replacement characters, and every value would still round-trip
 // for input that happened not to straddle one.
-import { coerceToDOMString, requireDictionary } from "./webidl.ts";
+import { coerceToDOMString } from "./webidl.ts";
 import { TextDecoder, TextEncoder } from "./encoding.ts";
 import type {
   AllowSharedBufferSource,
@@ -43,10 +43,9 @@ export class TextDecoderStream {
   readonly #transform: TransformStream<AllowSharedBufferSource, string>;
 
   constructor(label = "utf-8", options?: TextDecoderOptions) {
-    requireDictionary(options, "TextDecoderOptions");
-    // Constructed first, so an unsupported label throws before any stream exists. A
-    // half-built stream whose constructor threw is observable through nothing here, and
-    // the standard orders it this way.
+    // TextDecoder performs the same Web IDL conversions: label first, then options,
+    // before looking up the encoding. Encoding #dom-textdecoderstream initializes
+    // its decoder before constructing the transform stream.
     const decoder = new TextDecoder(label, options);
     this.#decoder = decoder;
     this.#transform = new TransformStream<AllowSharedBufferSource, string>({
