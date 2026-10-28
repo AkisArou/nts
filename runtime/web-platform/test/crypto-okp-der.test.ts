@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import type { OkpAlgorithmName } from "../src/crypto/algorithms.ts";
 import { parseOkpDer } from "../src/crypto/der.ts";
 import { okpPkcs8, okpPrivateJwk, okpRawPublic, okpSpki } from "./okp-fixtures.ts";
+import type { OkpFixtureName } from "./okp-fixtures.ts";
 
 function bytes(...values: number[]): Uint8Array { return new Uint8Array(values); }
 function concat(...parts: readonly Uint8Array[]): Uint8Array { return new Uint8Array(Buffer.concat(parts)); }
@@ -15,18 +15,18 @@ function der(tag: number, ...parts: readonly Uint8Array[]): Uint8Array {
   return concat(bytes(tag), length < 128 ? bytes(length) : length < 256 ? bytes(0x81, length) : bytes(0x82, length >>> 8, length & 255), value);
 }
 function integer(...value: number[]): Uint8Array { return der(2, bytes(...value)); }
-function algorithm(name: OkpAlgorithmName, parameters = bytes()): Uint8Array {
+function algorithm(name: OkpFixtureName, parameters = bytes()): Uint8Array {
   return der(0x30, der(6, bytes(0x2b, 0x65, name === "Ed25519" ? 0x70 : 0x6e)), parameters);
 }
-function privateBytes(name: OkpAlgorithmName): Uint8Array { return new Uint8Array(Buffer.from(okpPrivateJwk(name).d, "base64url")); }
-function spki(name: OkpAlgorithmName, point = okpRawPublic(name), parameters = bytes(), unused = 0): Uint8Array {
+function privateBytes(name: OkpFixtureName): Uint8Array { return new Uint8Array(Buffer.from(okpPrivateJwk(name).d, "base64url")); }
+function spki(name: OkpFixtureName, point = okpRawPublic(name), parameters = bytes(), unused = 0): Uint8Array {
   return der(0x30, algorithm(name, parameters), der(3, bytes(unused), point));
 }
-function pkcs8(name: OkpAlgorithmName, inner = der(4, privateBytes(name)), parameters = bytes(), version = integer(0), tail = bytes()): Uint8Array {
+function pkcs8(name: OkpFixtureName, inner = der(4, privateBytes(name)), parameters = bytes(), version = integer(0), tail = bytes()): Uint8Array {
   return der(0x30, version, algorithm(name, parameters), der(4, inner), tail);
 }
 function dataError(error: unknown): boolean { return error instanceof DOMException && error.name === "DataError"; }
-const names: readonly OkpAlgorithmName[] = ["Ed25519", "X25519"];
+const names: readonly OkpFixtureName[] = ["Ed25519", "X25519"];
 
 for (const name of names) {
   for (const format of ["spki", "pkcs8"] as const) {

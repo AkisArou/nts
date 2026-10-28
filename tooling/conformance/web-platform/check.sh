@@ -35,6 +35,12 @@ node --expose-gc \
   runtime/web-platform/test/crypto.test.ts \
   runtime/web-platform/test/crypto-key.test.ts \
   runtime/web-platform/test/crypto-algorithms.test.ts \
+  runtime/web-platform/test/crypto-448-der.test.ts \
+  runtime/web-platform/test/crypto-448-integration.test.ts \
+  runtime/web-platform/test/crypto-448-key.test.ts \
+  runtime/web-platform/test/crypto-448-normalization.test.ts \
+  runtime/web-platform/test/crypto-448-provider.test.ts \
+  runtime/web-platform/test/crypto-448.test.ts \
   runtime/web-platform/test/crypto-ec-der.test.ts \
   runtime/web-platform/test/crypto-ec-derive.test.ts \
   runtime/web-platform/test/crypto-ec-key.test.ts \

@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import type { OkpAlgorithmName } from "../src/crypto/algorithms.ts";
 import { Crypto } from "../src/crypto/crypto.ts";
 import { getCryptoKeySlots } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, CryptoKeyPair, KeyUsage } from "../src/crypto/crypto-key.ts";
@@ -16,6 +15,7 @@ import type {
 import { VirtualScheduler } from "../src/provider/virtual-time.ts";
 import { NodeCryptoProvider } from "./node-crypto-provider.ts";
 import { okpPkcs8, okpPrivateJwk, okpPublicJwk, okpRawPublic, okpSpki } from "./okp-fixtures.ts";
+import type { OkpFixtureName } from "./okp-fixtures.ts";
 
 class RecordingProvider extends NodeCryptoProvider {
   imports = 0;
@@ -51,7 +51,7 @@ class RecordingProvider extends NodeCryptoProvider {
   }
 }
 
-function usagesFor(name: OkpAlgorithmName, type: "public" | "private"): KeyUsage[] {
+function usagesFor(name: OkpFixtureName, type: "public" | "private"): KeyUsage[] {
   return name === "Ed25519" ? [type === "public" ? "verify" : "sign"] : type === "private" ? ["deriveKey", "deriveBits"] : [];
 }
 function fixture() {
@@ -60,7 +60,7 @@ function fixture() {
   let fills = 0;
   const subtle = new Crypto({ fill(bytes) { fills++; bytes.fill(0x37); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
-  async function imported(type: "public" | "private", name: OkpAlgorithmName = "Ed25519", extractable = true): Promise<CryptoKey> {
+  async function imported(type: "public" | "private", name: OkpFixtureName = "Ed25519", extractable = true): Promise<CryptoKey> {
     return settle(subtle.importKey(type === "public" ? "spki" : "pkcs8", type === "public" ? okpSpki(name) : okpPkcs8(name), name, extractable, usagesFor(name, type)));
   }
   return { provider, scheduler, subtle, settle, imported, fills: () => fills };
@@ -69,7 +69,7 @@ function dom(name: string): (error: unknown) => boolean { return error => error 
 function pair(result: CryptoKey | CryptoKeyPair): CryptoKeyPair { assert.ok("privateKey" in result && "publicKey" in result); return result; }
 function jwk(result: ArrayBuffer | JsonWebKeyObject): JsonWebKeyObject { assert.ok(!(result instanceof ArrayBuffer)); return result; }
 function buffer(result: ArrayBuffer | JsonWebKeyObject): Uint8Array { assert.ok(result instanceof ArrayBuffer); return new Uint8Array(result); }
-function parts(name: OkpAlgorithmName, value: JsonWebKeyObject): CryptoOkpComponents {
+function parts(name: OkpFixtureName, value: JsonWebKeyObject): CryptoOkpComponents {
   const x = new Uint8Array(Buffer.from(value.x!, "base64url"));
   return value.d === undefined ? { family: "OKP", namedCurve: name, x }
     : { family: "OKP", namedCurve: name, x, d: new Uint8Array(Buffer.from(value.d, "base64url")) };
@@ -79,13 +79,13 @@ function der(tag: number, ...parts: readonly Uint8Array[]): Uint8Array {
   assert.ok(value.length < 128);
   return new Uint8Array(Buffer.concat([Buffer.from([tag, value.length]), value]));
 }
-function publicDer(name: OkpAlgorithmName, x: Uint8Array): Uint8Array {
+function publicDer(name: OkpFixtureName, x: Uint8Array): Uint8Array {
   return der(0x30, der(0x30, der(6, new Uint8Array([0x2b, 0x65, name === "Ed25519" ? 0x70 : 0x6e]))), der(3, new Uint8Array([0]), x));
 }
-function privateDer(name: OkpAlgorithmName, d: Uint8Array): Uint8Array {
+function privateDer(name: OkpFixtureName, d: Uint8Array): Uint8Array {
   return der(0x30, der(2, new Uint8Array([0])), der(0x30, der(6, new Uint8Array([0x2b, 0x65, name === "Ed25519" ? 0x70 : 0x6e]))), der(4, der(4, d)));
 }
-const names: readonly OkpAlgorithmName[] = ["Ed25519", "X25519"];
+const names: readonly OkpFixtureName[] = ["Ed25519", "X25519"];
 
 for (const name of names) {
   test(name + " imports and exports all allowed formats with name-only metadata", async () => {

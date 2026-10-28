@@ -6,14 +6,15 @@ import type { CryptoKey, CryptoKeyPair, CryptoKeySlots, KeyUsage } from "./crypt
 import { parseOkpDer } from "./der.ts";
 import { checkJwkPolicy, decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages } from "./jwk.ts";
 import type { KeyFormat } from "./jwk.ts";
+import { isEdwardsCurve, okpCurveByteLength } from "./okp-curve.ts";
 
 function okpName(name: string): OkpAlgorithmName {
-  if (name === "Ed25519" || name === "X25519") return name;
+  if (name === "Ed25519" || name === "X25519" || name === "Ed448" || name === "X448") return name;
   throw new DOMException("This octet key-pair algorithm is not supported", "NotSupportedError");
 }
 
 function usageAllowed(name: OkpAlgorithmName, type: "public" | "private" | "pair", usage: KeyUsage): boolean {
-  if (name === "X25519") return type !== "public" && (usage === "deriveKey" || usage === "deriveBits");
+  if (!isEdwardsCurve(name)) return type !== "public" && (usage === "deriveKey" || usage === "deriveBits");
   return (type !== "private" && usage === "verify") || (type !== "public" && usage === "sign");
 }
 
@@ -41,7 +42,7 @@ function okpRecord(record: CryptoKeyRecord, type: "public" | "private", name: Ok
   }
 }
 
-/** §§25.3.3, 26.3.2: a key's visible algorithm is the name-only KeyAlgorithm. */
+/** Web Cryptography §§25–26 / Secure Curves §§4, 6: name-only KeyAlgorithm. */
 export function generateOkpKey(
   provider: CryptoProvider,
   algorithm: NormalizedAlgorithm,
@@ -65,24 +66,25 @@ export function generateOkpKey(
 function jwkPolicy(jwk: JsonWebKey, name: OkpAlgorithmName, extractable: boolean, usages: readonly KeyUsage[]): void {
   if (jwk.kty !== "OKP") throw new DOMException("The JWK is not an octet key pair", "DataError");
   if (jwk.crv !== name) throw new DOMException("The JWK curve does not match the algorithm", "DataError");
-  // §25.3.4 accepts the fully specified name and its earlier JOSE family name.
-  // X25519 has no algorithm-member check in its import operation.
-  if (name === "Ed25519" && jwk.alg !== undefined && jwk.alg !== "Ed25519" && jwk.alg !== "EdDSA") {
-    throw new DOMException("The JWK algorithm is not Ed25519", "DataError");
+  // The Edwards imports accept the fully specified name and its earlier JOSE
+  // family name. X25519 and X448 have no algorithm-member check on import.
+  if (isEdwardsCurve(name) && jwk.alg !== undefined && jwk.alg !== name && jwk.alg !== "EdDSA") {
+    throw new DOMException("The JWK algorithm does not match the Edwards key", "DataError");
   }
-  checkJwkPolicy(jwk, name === "Ed25519" ? "sig" : "enc", extractable, usages);
+  checkJwkPolicy(jwk, isEdwardsCurve(name) ? "sig" : "enc", extractable, usages);
 }
 
-function jwkOctets(value: string | undefined): Uint8Array {
+function jwkOctets(value: string | undefined, name: OkpAlgorithmName): Uint8Array {
   if (value === undefined) throw new DOMException("An octet key-pair component is missing", "DataError");
   const bytes = decodeBase64Url(value);
-  if (bytes.byteLength !== 32) throw new DOMException("An octet key-pair component has the wrong width", "DataError");
+  if (bytes.byteLength !== okpCurveByteLength(name)) throw new DOMException("An octet key-pair component has the wrong width", "DataError");
   return bytes;
 }
 
 function componentShape(components: CryptoOkpComponents, name: OkpAlgorithmName, privateKey: boolean): void {
-  if (components.namedCurve !== name || components.x.byteLength !== 32
-      || (privateKey && (components.d === undefined || components.d.byteLength !== 32))) {
+  const width = okpCurveByteLength(name);
+  if (components.namedCurve !== name || components.x.byteLength !== width
+      || (privateKey && (components.d === undefined || components.d.byteLength !== width))) {
     throw new DOMException("The native octet key-pair components do not match their key", "OperationError");
   }
 }
@@ -107,8 +109,10 @@ function privatePublicMatches(provider: CryptoProvider, record: CryptoKeyRecord,
 }
 
 /**
- * §§25.3.4 and 26.3.3. Every public 32-octet value is retained as supplied;
+ * Web Cryptography §§25.3.4, 26.3.3 and Secure Curves §§4.3, 6.4.
+ * Every public value of the algorithm's encoded width is retained as supplied;
  * canonical, on-curve and small-order checks belong to the operation that uses it.
+ * https://wicg.github.io/webcrypto-secure-curves/#ed448-operations
  */
 export function importOkpKey(
   provider: CryptoProvider,
@@ -126,15 +130,15 @@ export function importOkpKey(
     type = data.d === undefined ? "public" : "private";
     validateUsages(name, type, usages);
     jwkPolicy(data, name, extractable, usages);
-    const x = jwkOctets(data.x);
+    const x = jwkOctets(data.x, name);
     components = data.d === undefined ? { family: "OKP", namedCurve: name, x }
-      : { family: "OKP", namedCurve: name, x, d: jwkOctets(data.d) };
+      : { family: "OKP", namedCurve: name, x, d: jwkOctets(data.d, name) };
   } else {
     type = format === "pkcs8" ? "private" : "public";
     validateUsages(name, type, usages);
     if (data instanceof JsonWebKey) throw new DOMException("Expected octet key-pair bytes", "DataError");
     if (format === "raw") {
-      if (data.byteLength !== 32) throw new DOMException("A raw public key must contain 256 bits", "DataError");
+      if (data.byteLength !== okpCurveByteLength(name)) throw new DOMException("The raw public key has the wrong encoded width", "DataError");
     } else if (parseOkpDer(format, data).namedCurve !== name) {
       throw new DOMException("The encoded algorithm does not match the requested key", "DataError");
     }
@@ -151,7 +155,7 @@ export function importOkpKey(
   return createCryptoKey(type, extractable, new KeyAlgorithm(name), normalizeKeyUsages(usages), record.handle);
 }
 
-/** §§25.3.5 and 26.3.4: material-access errors precede export-format type errors. */
+/** OKP exports: material-access errors precede export-format type errors. */
 export function exportOkpKey(provider: CryptoProvider, format: KeyFormat, key: CryptoKeySlots): Uint8Array | JsonWebKey {
   const name = okpName(key.algorithm.name);
   if (format === "jwk") {
@@ -161,7 +165,7 @@ export function exportOkpKey(provider: CryptoProvider, format: KeyFormat, key: C
     const jwk = new JsonWebKey();
     jwk.kty = "OKP";
     jwk.crv = name;
-    if (name === "Ed25519") jwk.alg = "Ed25519";
+    if (isEdwardsCurve(name)) jwk.alg = name;
     jwk.x = encodeBase64Url(components.x);
     if (key.type === "private") jwk.d = encodeBase64Url(components.d!);
     jwk.key_ops = [];
@@ -175,7 +179,7 @@ export function exportOkpKey(provider: CryptoProvider, format: KeyFormat, key: C
   if (format !== nativeFormat) throw new DOMException("The key type does not match the export format", "InvalidAccessError");
   try {
     if (format === "raw") {
-      if (result.byteLength !== 32) throw new DOMException("The native public key has the wrong width", "OperationError");
+      if (result.byteLength !== okpCurveByteLength(name)) throw new DOMException("The native public key has the wrong width", "OperationError");
     } else if (parseOkpDer(format, result).namedCurve !== name) {
       throw new DOMException("The native key encoding has the wrong algorithm", "OperationError");
     }

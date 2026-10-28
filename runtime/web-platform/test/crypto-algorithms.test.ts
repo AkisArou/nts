@@ -80,6 +80,8 @@ const keyRegistrations: readonly { name: string; operations: readonly CryptoOper
   { name: "ECDH", operations: ["deriveBits", "generateKey", "importKey", "exportKey"] },
   { name: "Ed25519", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
   { name: "X25519", operations: ["deriveBits", "generateKey", "importKey", "exportKey"] },
+  { name: "Ed448", operations: ["sign", "verify", "generateKey", "importKey", "exportKey"] },
+  { name: "X448", operations: ["deriveBits", "generateKey", "importKey", "exportKey"] },
   { name: "HKDF", operations: ["deriveBits", "importKey", "get key length"] },
   { name: "PBKDF2", operations: ["deriveBits", "importKey", "get key length"] },
 ];
@@ -120,7 +122,7 @@ for (const registration of keyRegistrations) {
 }
 
 test("future families and Modern Algorithms remain unregistered", () => {
-  for (const name of ["Ed448", "X448", "AES-OCB", "KMAC128"]) {
+  for (const name of ["AES-OCB", "KMAC128"]) {
     for (const operation of allOperations) {
       assert.equal(supportsCryptoOperation(name, operation), false);
     }

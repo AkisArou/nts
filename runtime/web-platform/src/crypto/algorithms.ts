@@ -54,7 +54,7 @@ export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW";
 export type SecretAlgorithmName = AesAlgorithmName | "HMAC";
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
 export type EcAlgorithmName = "ECDSA" | "ECDH";
-export type OkpAlgorithmName = "Ed25519" | "X25519";
+export type OkpAlgorithmName = "Ed25519" | "X25519" | "Ed448" | "X448";
 export type KdfAlgorithmName = "HKDF" | "PBKDF2";
 type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
 
@@ -217,13 +217,23 @@ export class EcKeyImportParams extends Algorithm<EcAlgorithmName> {
   }
 }
 
-/** Web Cryptography §§24.3, 26.2. ECDH and X25519 use the same dictionary. */
-export class EcdhKeyDeriveParams extends Algorithm<"ECDH" | "X25519"> {
+/** Web Cryptography §§24.3, 26.2 / Secure Curves §4.2 share one dictionary. */
+export class EcdhKeyDeriveParams extends Algorithm<"ECDH" | "X25519" | "X448"> {
   readonly public: CryptoKey;
 
-  constructor(name: "ECDH" | "X25519", publicKey: CryptoKey) {
+  constructor(name: "ECDH" | "X25519" | "X448", publicKey: CryptoKey) {
     super(name);
     this.public = publicKey;
+  }
+}
+
+/** Secure Curves §6.3. Context length and its empty default are operation policy. */
+export class Ed448Params extends Algorithm<"Ed448"> {
+  readonly context: Uint8Array | undefined;
+
+  constructor(name: "Ed448", context: Uint8Array | undefined) {
+    super(name);
+    this.context = context;
   }
 }
 
@@ -273,6 +283,7 @@ export type NormalizedAlgorithm =
   | EcKeyGenParams
   | EcKeyImportParams
   | EcdhKeyDeriveParams
+  | Ed448Params
   | HkdfParams
   | Pbkdf2Params;
 
@@ -356,6 +367,15 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("X25519", "generateKey"),
   new AlgorithmRegistration("X25519", "importKey"),
   new AlgorithmRegistration("X25519", "exportKey"),
+  new AlgorithmRegistration("Ed448", "sign"),
+  new AlgorithmRegistration("Ed448", "verify"),
+  new AlgorithmRegistration("Ed448", "generateKey"),
+  new AlgorithmRegistration("Ed448", "importKey"),
+  new AlgorithmRegistration("Ed448", "exportKey"),
+  new AlgorithmRegistration("X448", "deriveBits"),
+  new AlgorithmRegistration("X448", "generateKey"),
+  new AlgorithmRegistration("X448", "importKey"),
+  new AlgorithmRegistration("X448", "exportKey"),
   new AlgorithmRegistration("HKDF", "deriveBits"),
   new AlgorithmRegistration("HKDF", "importKey"),
   new AlgorithmRegistration("HKDF", "get key length"),
@@ -416,7 +436,7 @@ function normalizedBytes(source: CryptoBufferSource, copyBuffers: boolean): Uint
   return copyBuffers ? copyCryptoBytes(source) : cryptoBytes(source);
 }
 
-function agreementParameters(algorithm: object, name: "ECDH" | "X25519"): EcdhKeyDeriveParams {
+function agreementParameters(algorithm: object, name: "ECDH" | "X25519" | "X448"): EcdhKeyDeriveParams {
   const input = algorithm as { readonly public?: unknown };
   const publicKey = requiredMember(input.public, name + ".public");
   // Web IDL validates the interface brand here. Algorithm, kind and permission
@@ -440,8 +460,15 @@ function normalizeRegisteredAlgorithm(
   }
 
   if (name === "Ed25519") return new Algorithm(name);
-  if (name === "X25519") {
+  if (name === "X25519" || name === "X448") {
     return operation === "deriveBits" ? agreementParameters(algorithm, name) : new Algorithm(name);
+  }
+  if (name === "Ed448") {
+    if (operation !== "sign" && operation !== "verify") return new Algorithm(name);
+    const input = algorithm as { readonly context?: unknown };
+    const contextValue = input.context;
+    const context = contextValue === undefined ? undefined : toCryptoBufferSource(contextValue);
+    return new Ed448Params(name, context === undefined ? undefined : normalizedBytes(context, copyBuffers));
   }
 
   if (name === "HKDF") {

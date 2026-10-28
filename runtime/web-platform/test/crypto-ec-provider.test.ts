@@ -268,6 +268,6 @@ test("native EC foreign handles and incompatible agreements return failure value
   }
   assert.deepEqual(provider.derive({ name: "ECDH", publicKey: differentCurve.handle }, privateKey.handle), { failure: "operation" });
   assert.deepEqual(provider.derive({ name: "X25519", publicKey: publicKey.handle }, privateKey.handle), { failure: "invalid-key" });
-  assert.deepEqual(provider.derive({ name: "X448", publicKey: publicKey.handle }, privateKey.handle), { failure: "operation" });
+  assert.deepEqual(provider.derive({ name: "X448", publicKey: publicKey.handle }, privateKey.handle), { failure: "invalid-key" });
   assert.deepEqual(provider.generateKeyPair({ family: "EC", namedCurve: "unsupported" as CryptoNamedCurve }), { failure: "operation" });
 });
