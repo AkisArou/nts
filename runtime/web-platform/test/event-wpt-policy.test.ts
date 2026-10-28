@@ -91,3 +91,24 @@ test("internal resisting listeners remain reachable after a capture listener sto
   target.dispatchEvent(new Event("x"));
   assert.deepEqual(order, ["capture", "internal"]);
 });
+
+// DOM removeEventListener searches the current listener list, not records that
+// were already removed from it: https://dom.spec.whatwg.org/#dom-eventtarget-removeeventlistener
+for (const removeAgain of [false, true]) {
+  test(`a listener removed and re-added during dispatch is ${removeAgain ? "removable" : "retained"}`, () => {
+    const target = new EventTarget();
+    let calls = 0;
+    const listener = (): void => { calls++; };
+    target.addEventListener("x", () => {
+      target.removeEventListener("x", listener);
+      target.addEventListener("x", listener);
+      if (removeAgain) target.removeEventListener("x", listener);
+    }, { once: true });
+    target.addEventListener("x", listener);
+
+    target.dispatchEvent(new Event("x"));
+    assert.equal(calls, 0, "the new listener is outside the current invocation's snapshot");
+    target.dispatchEvent(new Event("x"));
+    assert.equal(calls, removeAgain ? 0 : 1);
+  });
+}
