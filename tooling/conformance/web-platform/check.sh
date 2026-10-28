@@ -83,6 +83,8 @@ node --expose-gc \
   runtime/web-platform/test/cache.test.ts \
   runtime/web-platform/test/capability-confinement.test.ts \
   runtime/web-platform/test/coalescing.test.ts \
+  runtime/web-platform/test/compression-provider.test.ts \
+  runtime/web-platform/test/compression.test.ts \
   runtime/web-platform/test/cookies.test.ts \
   runtime/web-platform/test/deduplicate.test.ts \
   runtime/web-platform/test/dispatched-websocket.test.ts \
