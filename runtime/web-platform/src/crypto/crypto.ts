@@ -9,6 +9,7 @@ import {
   cryptoViewByteLength,
   toCryptoArrayBufferView,
 } from "./buffer-source.ts";
+import { associateCryptoCapability } from "./capability.ts";
 import { createSubtleCrypto } from "./subtle-crypto.ts";
 import type { SubtleCrypto } from "./subtle-crypto.ts";
 
@@ -38,6 +39,7 @@ export class Crypto {
     this.#subtle = createSubtleCrypto(provider, scheduler, random);
     this.#uuidPool = undefined;
     this.#uuidOffset = uuidPoolBytes;
+    associateCryptoCapability(this, provider);
   }
 
   get subtle(): SubtleCrypto {

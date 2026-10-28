@@ -26,7 +26,9 @@ repeated get-key-length normalization required by `deriveKey` remains observable
 an exception in the final normalization propagates.
 
 The static method obtains the capability from the current installed runtime
-through private instance state. It reports false when that runtime or its crypto
+through a private identity association populated during Crypto construction. The
+lookup never invokes the public `crypto.subtle` getter or exposes a provider
+member. It reports false when that runtime or its crypto
 capability is absent. It uses the same canonical class in WPT; the adapter adds
 no substitute method. No scheduler task is enqueued.
 
@@ -82,19 +84,20 @@ registration counts and accepted 302 specification discrepancies are unchanged.
 pnpm install --offline --frozen-lockfile
 pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false
 pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false
-node --expose-gc --test runtime/web-platform/test/crypto-supports.test.ts runtime/web-platform/test/crypto-sha3-kmac.test.ts
+node --expose-gc --test runtime/web-platform/test/crypto-supports.test.ts runtime/web-platform/test/crypto-sha3-kmac.test.ts runtime/web-platform/test/crypto-runtime.test.ts
 NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts
 NTS_WPT_CRYPTO_RAW=1 NTS_WPT_CRYPTO_FIXTURE=WebCryptoAPI/supports node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts
 ```
 
 The install reuses eight cached packages without a dependency or lockfile change.
 Both project typechecks and the strict standalone new-test typecheck exit 0.
-The combined test command reports **41 tests, 41 pass, 0 fail, 0 skip**, including
-24 supports controls. The recording capability refuses every cryptographic
+The combined test command reports **50 tests, 50 pass, 0 fail, 0 skip**, including
+25 supports controls. The recording capability refuses every cryptographic
 operation, and its random source refuses entropy requests. Positive queries
 still pass, with zero primitive calls, entropy calls or pending scheduler tasks.
-A separate native-vector control verifies the worker's metadata/operation reply
-protocol. The new test file is registered in `check.sh`.
+A class-body getter control verifies that internal capability lookup does not
+read a public `subtle` property. A separate native-vector control verifies the
+worker's metadata/operation reply protocol. The new test file is registered in `check.sh`.
 
 The parent integration records the complete ordered-stack package gate in the
 PR. nts compilation remains the maintainer's gate.

@@ -37,11 +37,11 @@ import { exportSecretKey, generateSecretKey, getSecretKeyLength, importSecretKey
 import { exportKmacKey, generateKmacKey, getKmacKeyLength, importKmacKey, signKmac, verifyKmac } from "./kmac.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
 import { cryptoSupports } from "./supports.ts";
+import { cryptoCapability } from "./capability.ts";
 
 const createPromiseResolvers = Promise.withResolvers.bind(Promise) as typeof Promise.withResolvers;
 const rejectedPromise = Promise.reject.bind(Promise) as typeof Promise.reject;
 const constructorToken = Symbol("SubtleCrypto construction");
-const subtleProviders = new WeakMap<SubtleCrypto, CryptoProvider>();
 
 /**
  * Execute the specification's parallel steps synchronously over native primitives,
@@ -192,7 +192,6 @@ export class SubtleCrypto {
     this.#provider = provider;
     this.#scheduler = scheduler;
     this.#random = random;
-    subtleProviders.set(this, provider);
   }
 
   /** Modern Algorithms §3.2.6; Web IDL §§3.6 and 3.7.7 static operation binding. */
@@ -209,7 +208,7 @@ export class SubtleCrypto {
       else additional = toAlgorithmIdentifier(lengthOrAdditionalAlgorithm);
     }
     const crypto = hasWebPlatformRuntime() ? currentWebPlatformRuntime().crypto : undefined;
-    const provider = crypto === undefined ? undefined : subtleProviders.get(crypto.subtle);
+    const provider = crypto === undefined ? undefined : cryptoCapability(crypto);
     return cryptoSupports(provider, operationName, identifier, length, additional);
   }
 
