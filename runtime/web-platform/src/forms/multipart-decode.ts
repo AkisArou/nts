@@ -51,6 +51,12 @@ function hasPair(bytes: Uint8Array, position: number, a: number, b: number): boo
   return bytes[position] === a && bytes[position + 1] === b;
 }
 
+function skipTransportPadding(bytes: Uint8Array, position: number): number {
+  // RFC 2046 section 5.1.1: receivers must accept SP/HTAB after delimiters.
+  while (bytes[position] === 32 || bytes[position] === 9) position++;
+  return position;
+}
+
 function startsWith(bytes: Uint8Array, prefix: Uint8Array): boolean {
   if (bytes.length < prefix.length) {
     return false;
@@ -103,11 +109,13 @@ export function decodeMultipart(
 
   while (true) {
     if (hasPair(bytes, offset, 45, 45)) {
-      if (offset + 2 !== bytes.length && !hasPair(bytes, offset + 2, 13, 10)) {
+      const end = skipTransportPadding(bytes, offset + 2);
+      if (end !== bytes.length && !hasPair(bytes, end, 13, 10)) {
         throw new TypeError("Malformed multipart closing boundary");
       }
       return result; // An optional CRLF and arbitrary MIME epilogue are ignored.
     }
+    offset = skipTransportPadding(bytes, offset);
     if (!hasPair(bytes, offset, 13, 10)) {
       throw new TypeError("Malformed multipart boundary separator");
     }
@@ -155,10 +163,11 @@ export function decodeMultipart(
     let next = search.find(bytes, bodyStart);
     while (next >= 0) {
       const suffix = next + marker.length;
+      const closing = hasPair(bytes, suffix, 45, 45);
+      const end = skipTransportPadding(bytes, suffix + (closing ? 2 : 0));
       if (
-        hasPair(bytes, suffix, 13, 10) ||
-        (hasPair(bytes, suffix, 45, 45) &&
-          (suffix + 2 === bytes.length || hasPair(bytes, suffix + 2, 13, 10)))
+        hasPair(bytes, end, 13, 10) ||
+        (closing && end === bytes.length)
       ) {
         break;
       }
