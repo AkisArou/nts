@@ -1,4 +1,5 @@
 export { DOMException } from "./core/errors.ts";
+export { Navigator } from "./navigator/navigator.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
 export type {
