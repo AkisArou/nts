@@ -48,17 +48,24 @@ export function isToken(value: string): boolean {
 }
 
 export function normalizeName(name: string): string {
-  const converted = coerceToByteString(name);
-  if (!isToken(converted)) {
+  return normalizeConvertedName(coerceToByteString(name));
+}
+
+function normalizeConvertedName(name: string): string {
+  if (!isToken(name)) {
     throw new TypeError("Invalid HTTP header name");
   }
-  return converted.toLowerCase();
+  return name.toLowerCase();
 }
 
 export function normalizeValue(value: string): string {
+  return normalizeConvertedValue(coerceToByteString(value));
+}
+
+function normalizeConvertedValue(value: string): string {
   // Fetch trims HTTP whitespace (HTAB, LF, CR, SP) before validating embedded
   // newline bytes. String.trim() is wrong: it would also strip NBSP and FF.
-  const normalized = trimHTTPWhitespace(coerceToByteString(value));
+  const normalized = trimHTTPWhitespace(value);
 
   for (let i = 0; i < normalized.length; ++i) {
     const c = normalized.charCodeAt(i);
@@ -230,12 +237,16 @@ export class Headers {
 
   append(name: string, value: string): void {
     requireArguments(arguments, 2, "Headers.append");
-    this.#appendConverted(name, value);
+    // All Web IDL arguments are converted before Fetch validates HTTP syntax.
+    // https://webidl.spec.whatwg.org/#es-operations
+    const convertedName = coerceToByteString(name);
+    const convertedValue = coerceToByteString(value);
+    this.#appendConverted(convertedName, convertedValue);
   }
 
   #appendConverted(name: string, value: string): void {
-    const key = normalizeName(name);
-    const normalized = normalizeValue(value);
+    const key = normalizeConvertedName(name);
+    const normalized = normalizeConvertedValue(value);
     this.#writable();
     this.#sortedCache = null;
     this.#list.push([key, normalized]);
@@ -243,8 +254,10 @@ export class Headers {
 
   set(name: string, value: string): void {
     requireArguments(arguments, 2, "Headers.set");
-    const key = normalizeName(name);
-    const normalized = normalizeValue(value);
+    const convertedName = coerceToByteString(name);
+    const convertedValue = coerceToByteString(value);
+    const key = normalizeConvertedName(convertedName);
+    const normalized = normalizeConvertedValue(convertedValue);
     this.#writable();
     this.#sortedCache = null;
     let found = false;
