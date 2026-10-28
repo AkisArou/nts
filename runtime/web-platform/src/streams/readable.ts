@@ -2342,9 +2342,9 @@ Object.defineProperty(ReadableStreamDefaultReader.prototype, Symbol.toStringTag,
 
 
 /** @internal ReadableStreamPipeTo; shared by the public methods and Fetch. */
-export function readableStreamPipeTo<T>(
-  source: ReadableStream<T>,
-  destination: WritableStream<T>,
+export function readableStreamPipeTo<Destination, Source extends Destination>(
+  source: ReadableStream<Source>,
+  destination: WritableStream<Destination>,
   options: ConvertedPipeOptions,
 ): Promise<void> {
   const reader = acquireReadableStreamDefaultReader(source);
@@ -2357,12 +2357,12 @@ export function readableStreamPipeTo<T>(
 
 type PipeAction = () => Promise<void>;
 
-class PipeState<T> {
+class PipeState<Destination, Source extends Destination> {
   readonly #result = Promise.withResolvers<void>();
-  readonly #source: ReadableStream<T>;
-  readonly #destination: WritableStream<T>;
-  readonly #reader: ReadableStreamDefaultReader<T>;
-  readonly #writer: WritableStreamDefaultWriter<T>;
+  readonly #source: ReadableStream<Source>;
+  readonly #destination: WritableStream<Destination>;
+  readonly #reader: ReadableStreamDefaultReader<Source>;
+  readonly #writer: WritableStreamDefaultWriter<Destination>;
   readonly #options: ConvertedPipeOptions;
   #shuttingDown = false;
   #pendingWrites = 0;
@@ -2374,10 +2374,10 @@ class PipeState<T> {
   #sourceClosePending = false;
 
   constructor(
-    source: ReadableStream<T>,
-    destination: WritableStream<T>,
-    reader: ReadableStreamDefaultReader<T>,
-    writer: WritableStreamDefaultWriter<T>,
+    source: ReadableStream<Source>,
+    destination: WritableStream<Destination>,
+    reader: ReadableStreamDefaultReader<Source>,
+    writer: WritableStreamDefaultWriter<Destination>,
     options: ConvertedPipeOptions,
   ) {
     this.#source = source;
@@ -2436,7 +2436,7 @@ class PipeState<T> {
       // A read request, not `read()`. This is the loop `then-interception.any.js` means by
       // "piping should not be observable": resolving a promise with the `{ done, value }` chunk
       // performs a `Get` for `then` on it, and a page can replace `Object.prototype.then`.
-      const slot = new ChunkSlot<T>();
+      const slot = new ChunkSlot<Source>();
       this.#reading = true;
       try {
         await readChunk(this.#reader, slot);
@@ -2452,7 +2452,7 @@ class PipeState<T> {
         this.#sourceClosed();
         return;
       }
-      this.#trackWrite(writableStreamDefaultWriterWrite(this.#writer, slot.value as T));
+      this.#trackWrite(writableStreamDefaultWriterWrite(this.#writer, slot.value as Source));
       if (this.#sourceClosePending) {
         this.#sourceClosePending = false;
         this.#sourceClosed();
