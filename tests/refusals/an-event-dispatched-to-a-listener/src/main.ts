@@ -5,9 +5,10 @@
 // `CookieJarStore#saveAll` with `CookieJar#save`. Importing `core/events`
 // pulls those in through `abort.ts` and `provider/environment.ts`, so no
 // program using `EventTarget` emits at all today. Two exports are refused
-// nearer home as well: `dispatched` for the `weakResource` union property
-// on listener records, and `constants` because `Event`'s constructor calls
-// `Object.defineProperty` for `isTrusted`. `domException` already compiles.
+// nearer home as well; nts names those function-level findings separately.
+// `isTrusted` now reads the private trust slot through a class-body getter;
+// its former constructor descriptor is not the cause of the remaining declines.
+// `domException` already compiles.
 // When this reports FIXED, move the fixture to `tests/programs`, where it
 // was written to live: it then pins the split described below.
 //
