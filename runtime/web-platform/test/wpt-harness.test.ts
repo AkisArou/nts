@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DOMException } from "../src/core/errors.ts";
 import { WptHarness } from "./wpt/harness.ts";
 
 test("WPT callback assertions cannot disappear inside an exception-catching API", async () => {
@@ -104,4 +105,170 @@ test("WPT steps distinguish an omitted receiver from explicit undefined", async 
     }, "done receiver");
   `, "receiver-controls.js");
   assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "pass"]);
+});
+
+// Promise tests and cleanup semantics follow resources/testharness.js at
+// 6a2f32237615d7ea9c1eb1e30453066b5555c603, not a fabricated Web platform.
+test("WPT promise tests run serially after FIFO cleanup invocation and settlement", async () => {
+  const order: string[] = [];
+  const harness = new WptHarness({ record: (value: string) => { order.push(value); } });
+  harness.run(`
+    promise_test(async function(t) {
+      assert_equals(this, t);
+      record("first");
+      t.add_cleanup(async () => {
+        record("cleanup start");
+        await Promise.resolve();
+        record("cleanup settled");
+      });
+      t.add_cleanup(() => record("second cleanup"));
+      await Promise.resolve();
+      record("body settled");
+    }, "first promise");
+    promise_test(() => {
+      record("second test");
+      return { then(resolve) { resolve(); } };
+    }, "thenable");
+  `, "promise-order.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "pass"]);
+  assert.deepEqual(order, [
+    "first", "body settled", "cleanup start", "second cleanup", "cleanup settled", "second test",
+  ]);
+});
+
+test("WPT rejected, throwing, invalid and failed-step promise tests cannot pass or block the queue", async () => {
+  const harness = new WptHarness({}, {}, 100);
+  harness.run(`
+    promise_test(() => Promise.reject(undefined), "undefined rejection");
+    promise_test(() => { throw new Error("body failure"); }, "throwing body");
+    promise_test(() => 1, "not thenable");
+    promise_test(t => {
+      t.step(() => assert_unreached("step failure"));
+      return new Promise(() => {});
+    }, "failed step with pending promise");
+    promise_test(() => Promise.resolve(), "following promise");
+  `, "promise-failures.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status),
+    ["fail", "fail", "fail", "fail", "pass"]);
+});
+
+test("WPT promise cleanup failures abort later tests and never disappear", async () => {
+  for (const [cleanup, expected] of [
+    ['() => Promise.reject(new Error("cleanup rejection"))', /cleanup rejection/],
+    ['() => 123', /cleanup must return/],
+    ['() => new Promise(() => {})', /cleanup timed out/],
+  ] as const) {
+    let laterCalls = 0;
+    const harness = new WptHarness({ later: () => { laterCalls++; } }, {}, 20);
+    harness.run(`
+      promise_test(t => { t.add_cleanup(${cleanup}); return Promise.resolve(); }, "cleanup");
+      promise_test(() => { later(); return Promise.resolve(); }, "later");
+    `, "promise-cleanup.js");
+    await assert.rejects(harness.finish(), (error: unknown) =>
+      error instanceof AggregateError && error.errors.some((entry: unknown) => expected.test(String(entry))));
+    assert.equal(laterCalls, 0);
+  }
+});
+
+test("WPT provider errors retain promise-test ownership across await", async () => {
+  const failure = new Error("provider failure after await");
+  const harness = new WptHarness({
+    report: () => harness.reportError(failure),
+  });
+  harness.run(`
+    promise_test(async () => { await Promise.resolve(); report(); }, "provider error");
+    promise_test(() => Promise.resolve(), "following test");
+  `, "async-provider-error.js");
+  const results = await harness.finish();
+  assert.deepEqual(results.map((result) => result.status), ["fail", "pass"]);
+  assert.equal(results[0]?.error, failure);
+
+  const unowned = new WptHarness({});
+  unowned.reportError(failure);
+  await assert.rejects(unowned.finish(), (error: unknown) =>
+    error instanceof AggregateError && error.errors.includes(failure));
+});
+
+test("WPT explicit_done permits asynchronous registration and setup runs immediately", async () => {
+  const order: string[] = [];
+  const harness = new WptHarness({ record: (value: string) => { order.push(value); } });
+  harness.run(`
+    setup(() => { record("setup"); }, { explicit_done: true });
+    const registering = Promise.resolve().then(() => {
+      promise_test(() => { record("test"); return Promise.resolve(); }, "registered asynchronously");
+    });
+    promise_test(() => registering.finally(done), "registration promise");
+  `, "async-registration.js");
+  assert.deepEqual(order, ["setup"]);
+  assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "pass"]);
+  assert.deepEqual(order, ["setup", "test"]);
+});
+
+test("WPT unsupported setup options and missing explicit done fail loudly", async () => {
+  for (const options of ['{allow_uncaught_exception: true}', '{unknown_option: false}', '{explicit_done: 1}']) {
+    const harness = new WptHarness({});
+    harness.run(`setup(${options});`, "unsupported-setup.js");
+    await assert.rejects(harness.finish(), AggregateError);
+  }
+  const pending = new WptHarness({}, {}, 20);
+  pending.run('setup({explicit_done:true});', "missing-done.js");
+  await assert.rejects(pending.finish(), (error: unknown) =>
+    error instanceof AggregateError && error.errors.some((entry: unknown) => /requires a call to done/.test(String(entry))));
+});
+
+test("WPT DOM and promise rejection assertions use injected constructors and exact values", async () => {
+  const harness = new WptHarness({ DOMException, OtherDOMException: globalThis.DOMException });
+  harness.run(`
+    test(() => assert_throws_dom("AbortError", () => { throw new DOMException("", "AbortError"); }), "DOM name");
+    test(() => assert_throws_dom(20, () => { throw new DOMException("", "AbortError"); }), "DOM code");
+    test(() => assert_throws_dom("ABORT_ERR", () => { throw new DOMException("", "AbortError"); }), "DOM alias");
+    test(() => assert_throws_dom("AbortError", OtherDOMException, () => { throw new OtherDOMException("", "AbortError"); }), "explicit constructor");
+    promise_test(t => promise_rejects_js(t, TypeError, Promise.reject(new TypeError())), "JS rejection");
+    promise_test(t => promise_rejects_dom(t, "OperationError", Promise.reject(new DOMException("", "OperationError"))), "DOM rejection");
+    promise_test(t => promise_rejects_dom(t, "AbortError", OtherDOMException, Promise.reject(new OtherDOMException("", "AbortError"))), "explicit rejection constructor");
+    promise_test(t => promise_rejects_exactly(t, undefined, Promise.reject(undefined)), "exact rejection");
+    promise_test(t => promise_rejects_js(t, TypeError, Promise.resolve()), "fulfilled unexpectedly");
+    promise_test(t => promise_rejects_js(t, TypeError, Promise.reject(new RangeError())), "wrong JS class");
+    promise_test(t => promise_rejects_exactly(t, 0, Promise.reject(-0)), "wrong exact value");
+    test(() => assert_throws_dom("AbortError", () => { throw {name:"AbortError", code:20}; }), "forged DOM exception");
+    test(() => assert_throws_dom("AbortError", () => { throw new OtherDOMException("", "AbortError"); }), "wrong DOM constructor");
+  `, "rejection-assertions.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status),
+    ["pass", "pass", "pass", "pass", "pass", "pass", "pass", "pass", "fail", "fail", "fail", "fail", "fail"]);
+  const absent = new WptHarness({});
+  absent.run('test(() => assert_throws_dom("AbortError", () => {}), "no injected constructor");', "missing-DOMException.js");
+  assert.equal((await absent.finish())[0]?.status, "fail");
+  const unawaited = new WptHarness({});
+  unawaited.run(`
+    promise_test(t => {
+      promise_rejects_js(t, TypeError, Promise.resolve());
+      return Promise.resolve();
+    }, "forgotten await");
+  `, "unawaited-rejection-assertion.js");
+  await assert.rejects(unawaited.finish(), (error: unknown) =>
+    error instanceof AggregateError && error.errors.some((entry: unknown) => /expected promise to reject/.test(String(entry))));
+});
+
+test("WPT structural object assertions compare enumerable contents across realms", async () => {
+  const harness = new WptHarness({ hostValue: { name: "AES-GCM", nested: { length: 128 } } });
+  harness.run(`
+    test(() => assert_object_equals(hostValue, {name:"AES-GCM", nested:{length:128}}), "matching object");
+    test(() => assert_object_equals(hostValue, {name:"AES-GCM", nested:{length:256}}), "nested mismatch");
+    test(() => assert_object_equals({a:1}, {a:1,b:2}), "missing property");
+    test(() => assert_object_equals({a:1,b:2}, {a:1}), "extra property");
+    test(() => assert_object_equals({a:0}, {a:-0}), "signed zero mismatch");
+    test(() => { const a = {value:1}; a.self = a; const b = {value:1}; b.self = b; assert_object_equals(a,b); }, "cycles");
+  `, "object-assertions.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "fail", "fail", "fail", "fail", "pass"]);
+});
+
+test("WPT observes rejected promises returned from invalid synchronous callbacks", async () => {
+  for (const source of [
+    'test(() => Promise.reject(new Error("invalid body promise")), "invalid body");',
+    'test(t => { t.add_cleanup(() => Promise.reject(new Error("invalid cleanup promise"))); }, "invalid cleanup");',
+  ]) {
+    const harness = new WptHarness({});
+    harness.run(source, "invalid-rejected-promises.js");
+    await assert.rejects(harness.finish(), AggregateError);
+  }
 });
