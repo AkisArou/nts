@@ -1,7 +1,7 @@
 //! Intern owned identities, including declarations outside the captured AST.
 
 use nts_frontend_tsrs::{File, Node};
-use nts_semantic_schema::{DeclarationSite, DeclarationSourceId, SnapshotError};
+use nts_semantic_schema::{DeclarationSite, DeclarationSourceId, NodeKind, SnapshotError};
 
 use super::{Capture, arena_index};
 
@@ -24,6 +24,21 @@ impl<'p> Capture<'p, '_> {
         &mut self,
         node: Node<'p>,
     ) -> Result<Option<DeclarationSite>, SnapshotError> {
+        if let Some(&id) = self.nodes.get(&node) {
+            let captured = &self.snapshot.nodes[id.0 as usize];
+            if captured.origin.generated.is_some() {
+                return Ok(None);
+            }
+            if let NodeKind::Syntax(kind) = captured.kind {
+                // The syntax pass already normalized token-start coordinates.
+                // Querying native syntax again repeats that work per supplier.
+                return Ok(Some(DeclarationSite {
+                    source: self.snapshot.source_contexts[&captured.origin.location.file],
+                    span: captured.origin.location.span,
+                    kind,
+                }));
+            }
+        }
         let Some((span, kind)) = crate::declaration::coordinates(node)? else {
             return Ok(None);
         };

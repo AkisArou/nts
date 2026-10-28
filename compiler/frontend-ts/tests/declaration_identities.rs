@@ -381,3 +381,27 @@ fn swapped_symbol_declarations_do_not_validate() {
         "two individually valid declarations were swapped at the symbol"
     );
 }
+
+#[test]
+fn large_merged_declarations_validate_independently_of_site_order() {
+    let mut source = String::new();
+    for i in 0..512 {
+        source.push_str(&format!("export interface Shared {{ field{i}: number }}\n"));
+    }
+    let project = Project::new("large-merge", &source);
+    let mut snapshot = project.snapshot("tsconfig.json");
+    let id = snapshot
+        .symbols
+        .iter()
+        .position(|symbol| symbol.name.is_name("Shared"))
+        .unwrap();
+    assert_eq!(snapshot.symbols[id].declarations.len(), 512);
+    assert_eq!(snapshot.symbols[id].declaration_sites.len(), 512);
+    snapshot.symbols[id].declaration_sites.reverse();
+    snapshot.validate().unwrap();
+    snapshot.symbols[id].declaration_sites.pop();
+    assert!(
+        snapshot.validate().is_err(),
+        "every captured member of the merge needs its real site"
+    );
+}

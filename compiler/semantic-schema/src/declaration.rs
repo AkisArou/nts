@@ -93,6 +93,18 @@ impl SemanticSnapshot {
             for &site in &symbol.declaration_sites {
                 check(site)?;
             }
+            // Merged declarations can be large. Build membership once rather
+            // than scanning every owned site for every captured declaration.
+            // Keep the common singleton case allocation-free and accept any
+            // order in untrusted snapshots.
+            let sites =
+                (symbol.declarations.len() > 1 && symbol.declaration_sites.len() > 1).then(|| {
+                    symbol
+                        .declaration_sites
+                        .iter()
+                        .copied()
+                        .collect::<rustc_hash::FxHashSet<_>>()
+                });
             for &node in &symbol.declarations {
                 let site = self.node_site(node).ok_or_else(|| {
                     SnapshotError::Project(
@@ -100,7 +112,11 @@ impl SemanticSnapshot {
                     )
                 })?;
                 check(site)?;
-                if !symbol.declaration_sites.contains(&site) {
+                let contains = sites.as_ref().map_or_else(
+                    || symbol.declaration_sites.contains(&site),
+                    |sites| sites.contains(&site),
+                );
+                if !contains {
                     return Err(SnapshotError::Project(
                         "captured symbol declaration and its owned site disagree".into(),
                     ));
