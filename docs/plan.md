@@ -114,7 +114,7 @@ Benchmarks run through every phase.
     - the web-platform classes keep their functional setup out of the
       reflective setup that nts defers;
     - any refusal fails `nts build`, with `--partial` for experiments (L20),
-      so a refused program never runs with parts cut;
+      so a refused program never runs with parts cut (*done*);
     - reads that JavaScript answers with `undefined` give `undefined`:
       holes, uninitialized fields, a `var` read before its assignment, reads
       past the end (L4, X1).

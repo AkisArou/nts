@@ -40,11 +40,11 @@ nts <command> [project] [options]
 A **refusal** is a construct the compiler does not compile, named with its
 reason. The commands treat refusals differently, by design: the inspection
 commands compile what they can, and `nts build` refuses to ship a program that
-does less than its source says for a missing builtin.
+does less than its source says.
 
 | command | a lowering refusal (`NTS1001`, ...) | a builtin nothing provides (`NTS1100`, `NTS1101`) | a backend decline |
 |---|---|---|---|
-| `build` | the artifact is built without the refused function; each is named on stderr and the count is printed | **stops before anything is written** | C: fatal where it leaves the C inconsistent; LLVM: fatal; JVM: printed |
+| `build` | **fails**, naming each refusal; with `--partial`, the artifact is built without it and recorded as partial | **stops before anything is written**, with or without `--partial` | **fails**, as a lowering refusal does; with `--partial`, recorded as partial |
 | `emit-c` | printed on stderr; exit 0 | printed on stderr; exit 0 | fatal where it leaves the C inconsistent |
 | `emit-llvm` | printed on stderr; exit 0 | printed on stderr; exit 0 | printed on stderr; with `--out`, fatal |
 | `emit-jvm` | printed on stderr; exit 0 | printed on stderr; exit 0 | printed as `declined:` on stderr; exit 0 |
@@ -52,11 +52,13 @@ does less than its source says for a missing builtin.
 | `check` | printed on stderr as `refused:`; the rest is compared | the same | the same |
 | `hir`, `refusals`, `stats` | listed in the output | listed | not reached |
 
-A lowering refusal does not stop `nts build` yet: it writes the program
-without the refused functions, and cuts refused top-level statements. Decided,
-not built: any refusal fails `nts build`, and `--partial` writes the cut
-program for experiments, saying so (L20 in
-[open questions](../open-questions.md)).
+Any refusal fails `nts build`: a refused function, a cut top-level statement,
+a backend's own refusal, or a Node-API surface the bridge cannot publish. An
+entry that only explains a declaration nothing calls is not a refusal.
+`--partial` builds the program without the refused parts instead, for
+experiments: a `build-manifest.json` beside each target's artifacts records
+the build as partial and lists its refusals, and the summary line says
+`PARTIAL`. A clean build's artifacts are unchanged by it.
 
 ## Shared flags
 

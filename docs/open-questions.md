@@ -21,10 +21,9 @@ Ranked by how much each blocks or how much harm it does today.
 | 2 | **What happens when a type's claim is false at run time:** holes read 0, out-of-range reads abort, and on C and LLVM an object stored through a covariant array is called as the wrong class (L4, L5, L6) | One policy: represent `undefined` where JavaScript produces it (X1 generalized), check widening stores, throw `TypeError` on a failed erased cast. **user** (10-27): an erased value asserted to a type it does not have throws a catchable `TypeError`; every other false claim behaves as node does |
 | 3 | **Exceptions escape `try`** through closures in fields and overrides; stack exhaustion aborts (L14, L15) | A raising flag for every indirect call; everything JavaScript throws is catchable |
 | 4 | **The clock and randomness** are refused although decision 2 provides them (G12) | Implement decision 2 as [builtins](foundations/builtins.md#the-clock-and-randomness) designs it |
-| 5 | **`nts build` still writes a partial program** when a function is refused for a lowering gap; only a missing builtin stops it (L20) | Any refusal fails `nts build`; partial builds only behind a flag. **user** (10-27): as recommended, with `--partial` for experiments |
-| 6 | **Decorators are silently dropped** (L10) | Refuse them until implemented |
-| 7 | **No dependency policy, and system packages in the build** (libuv, OpenSSL, clang) against the decisions (D-1, T-1) | Write the policy; bundle the toolchain (zig) |
-| 8 | **Compiled programs cannot be debugged or give stack traces** (X-1, X-2) | Line tables and `#line` by default; `Error.stack` from them |
+| 5 | **Decorators are silently dropped** (L10) | Refuse them until implemented |
+| 6 | **No dependency policy, and system packages in the build** (libuv, OpenSSL, clang) against the decisions (D-1, T-1) | Write the policy; bundle the toolchain (zig) |
+| 7 | **Compiled programs cannot be debugged or give stack traces** (X-1, X-2) | Line tables and `#line` by default; `Error.stack` from them |
 
 ## 1. Language and compiler
 
@@ -49,7 +48,7 @@ Ranked by how much each blocks or how much harm it does today.
 | L17 | Top-level `await`, `import.meta`, JSON and text modules | refused or not lowered | Implement them; `import.meta.url` as `bun build --compile` defines it. **research** |
 | L18 | CommonJS and sloppy-mode JavaScript | `.js` compiles with inferred types; sloppy mode excluded only for test262 | **user** (with D-4): strict ESM for sources, CommonJS dependencies through an interop layer |
 | L19 | The TypeScript version policy | tsrs 0.19.0, TypeScript 7.1.0-beta | Follow tsrs releases of stable TypeScript; upgrades gated by the four suites |
-| L20 | Partial builds | `nts build` stops for a builtin nothing provides (NTS1100, NTS1101); any other refusal still writes a program without the refused functions, and refused top-level statements are cut | Any refusal fails `nts build`. **user** (10-27): as recommended; `--partial` writes the cut program for experiments, and says so |
+| L20 | Partial builds | `nts build` stops for a builtin nothing provides (NTS1100, NTS1101); any other refusal still writes a program without the refused functions, and refused top-level statements are cut. **Built:** any refusal fails `nts build`; `--partial` writes the cut program with a manifest saying so | Any refusal fails `nts build`. **user** (10-27): as recommended; `--partial` writes the cut program for experiments, and says so |
 | L21 | Diagnostics: marking permanence, and early errors | inconsistent wording, no code registry (NTS5001 means two things: the scalar check and an LLVM internal error); 1,315 negative test262 cases accepted | A diagnostic registry (code, permanent or not, message); complete the early errors (phase 3) |
 | L22 | Separate and incremental compilation | whole program only; no cache | Closed world for executables; libraries declare an export surface with L9's fallback; a validated cache later. **research:** Kotlin/Native, Swift |
 | L23 | Which oracle wins when test262 and node disagree | unstated | Node: the promise is "behaves like node"; the boundary set is written down |
