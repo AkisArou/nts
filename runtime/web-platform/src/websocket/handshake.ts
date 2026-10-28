@@ -132,6 +132,9 @@ export function validateHandshake(
   const selected = headers.get("sec-websocket-protocol");
 
   if (selected === null) {
+    // WHATWG WebSockets 2.2, response processing step 11.2: a requested
+    // subprotocol must be acknowledged, beyond RFC 6455's unsolicited-value check.
+    if (protocols.length !== 0) throw new ProtocolError("Server omitted the requested subprotocol");
     return {
       protocol: "",
       extensions: extensionHeader ?? "",

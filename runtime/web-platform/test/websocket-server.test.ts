@@ -108,20 +108,19 @@ suite("negotiated compression is what both ends actually use", async (t) => {
   socket.close();
 });
 
-suite("a refused upgrade is refused by the client too", async (t) => {
+suite("the client rejects an upgrade that omits a requested subprotocol", async (t) => {
   const { port } = await websocketServer(t, {});
   const api = clientOf(t);
-  // The server only speaks version 13; a client asking for a subprotocol the server
-  // does not offer still connects, so refusal is provoked at the HTTP layer instead.
+  // WebSockets 2.2 response processing step 11.2 strengthens RFC 6455: an
+  // offered subprotocol must be acknowledged, even when the HTTP upgrade is valid.
   const socket = api.createWebSocket(`ws://127.0.0.1:${port}/`, ["chat"]);
   const settled = new Promise((resolve) => {
     socket.addEventListener("open", () => resolve("open"));
     socket.addEventListener("error", () => resolve("error"));
   });
-  // A server that selects no subprotocol is a successful handshake, so this opens.
-  assert.equal(await settled, "open");
-  assert.equal(socket.protocol, "", "no subprotocol was selected");
-  socket.close();
+  assert.equal(await settled, "error");
+  assert.equal(socket.readyState, socket.CLOSED);
+  assert.equal(socket.protocol, "", "a failed upgrade exposes no selected subprotocol");
 });
 
 suite("the server loop ends on a close frame instead of echoing it", async (t) => {
