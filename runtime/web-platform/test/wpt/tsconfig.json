@@ -31,6 +31,8 @@
     "../file-reader-wpt-policy.test.ts",
     "../file-forms-urlencoded-policy.test.ts",
     "../wpt-domexception.test.ts",
-    "../domexception-policy.test.ts"
+    "../domexception-policy.test.ts",
+    "../wpt-promise-rejection-event.test.ts",
+    "../promise-rejection-event-policy.test.ts"
   ]
 }

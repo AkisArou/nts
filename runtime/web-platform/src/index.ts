@@ -19,6 +19,8 @@ export {
 
 export { ProgressEvent } from "./core/progress-event.ts";
 export type { ProgressEventInit } from "./core/progress-event.ts";
+export { PromiseRejectionEvent } from "./core/promise-rejection-event.ts";
+export type { PromiseRejectionEventInit } from "./core/promise-rejection-event.ts";
 export type {
   CloseEventInit,
   CustomEventInit,
