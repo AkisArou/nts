@@ -13,7 +13,7 @@ import type {
 } from "../src/websocket/transport.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
-  test(name, { timeout: 60_000 }, fn);
+  test(name, fn);
 };
 
 type SocketKind = "WebSocket" | "WebSocketStream";
