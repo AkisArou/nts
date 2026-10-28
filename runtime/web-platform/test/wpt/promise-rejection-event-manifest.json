@@ -1,0 +1,41 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "revisions": {
+    "html/webappapis": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
+  },
+  "scope": "PromiseRejectionEvent constructor; engine rejection tracking belongs to B10.",
+  "fixtures": [
+    {
+      "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+      "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+      "sha256": "c0fb97b890aeb587d92cc632a418e8e4e7a92f447981f335571083dacf86b4f8",
+      "gitBlob": "4319deee7b50163a68e556ee7f401373fab7495b",
+      "format": "html",
+      "support": [],
+      "harnessScripts": [
+        "/resources/testharness.js",
+        "/resources/testharnessreport.js"
+      ],
+      "expectedTests": 1,
+      "blockedTests": {},
+      "registrations": [
+        "This tests the constructor for the PromiseRejectionEvent DOM class."
+      ]
+    }
+  ],
+  "support": [],
+  "license": {
+    "path": "LICENSE.md",
+    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "notes": [
+    "Node v24.20.0 does not vendor this html/webappapis constructor fixture; use the recent WPT revision already pinned for A3/A4.",
+    "Upstream bytes and existing headers are unchanged and covered by the inherited BSD-3-Clause licence.",
+    "The fixed-layout profile does not claim Web IDL property descriptor flags.",
+    "Automatic unhandled/rejectionhandled notifications need the separate B10 engine hooks; this constructor adds no rejection observer."
+  ]
+}
