@@ -1,45 +1,4 @@
 {
   "fixture": "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
-  "blockedTests": [
-    {
-      "name": "importKey/exportKey with raw-public: ECDSA",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "wrapKey/unwrapKey with raw-public: ECDSA",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importKey/exportKey with raw-public: ECDH",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "wrapKey/unwrapKey with raw-public: ECDH",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importKey/exportKey with raw-public: Ed25519",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "wrapKey/unwrapKey with raw-public: Ed25519",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importKey/exportKey with raw-public: X25519",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "wrapKey/unwrapKey with raw-public: X25519",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    }
-  ]
+  "blockedTests": []
 }

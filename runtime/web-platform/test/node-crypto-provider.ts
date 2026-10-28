@@ -37,6 +37,8 @@ import type {
   CryptoKeyPairGeneration,
   CryptoKeyPairRecord,
   CryptoKeyRecord,
+  CryptoMlAlgorithmName,
+  CryptoMlComponents,
   CryptoNamedCurve,
   CryptoOkpComponents,
   CryptoOkpCurve,
@@ -110,6 +112,8 @@ function keyRecord(key: KeyObject): CryptoKeyRecord {
   if (key.type === "secret") {
     return { handle, info: { family: "secret", type: "secret", length: secretBits(key) } };
   }
+  const ml = mlKeyName(key);
+  if (ml !== undefined) return { handle, info: { family: "ML", type: key.type, name: ml } };
   const okpCurve = okpCurveName(key);
   if (okpCurve !== undefined) {
     return { handle, info: { family: "OKP", type: key.type, namedCurve: okpCurve } };
@@ -207,6 +211,56 @@ class NativeDerReader {
     const bytes = this.read(2);
     return owned(bytes[0] === 0 && byteLength(bytes) > 1 ? byteSlice(bytes, 1, byteLength(bytes) - 1) : bytes);
   }
+}
+
+function mlKeyName(key: KeyObject): CryptoMlAlgorithmName | undefined {
+  if (key.asymmetricKeyType === "ml-dsa-44") return "ML-DSA-44";
+  if (key.asymmetricKeyType === "ml-dsa-65") return "ML-DSA-65";
+  if (key.asymmetricKeyType === "ml-dsa-87") return "ML-DSA-87";
+  return undefined;
+}
+
+function mlOid(name: CryptoMlAlgorithmName): Uint8Array {
+  return new ByteArray([0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03,
+    name === "ML-DSA-44" ? 17 : name === "ML-DSA-65" ? 18 : 19]);
+}
+
+function mlSeedDer(name: CryptoMlAlgorithmName, seed: Uint8Array): Buffer {
+  return derValue(0x30, Buffer.concat([
+    derInteger(new ByteArray([0])), derValue(0x30, derValue(0x06, mlOid(name))),
+    derValue(0x04, derValue(0x80, seed)),
+  ]));
+}
+
+function mlPublicDer(name: CryptoMlAlgorithmName, bytes: Uint8Array): Buffer {
+  return derValue(0x30, Buffer.concat([
+    derValue(0x30, derValue(0x06, mlOid(name))),
+    derValue(0x03, Buffer.concat([Buffer.from([0]), bytes])),
+  ]));
+}
+
+function mlComponents(key: KeyObject): CryptoMlComponents {
+  const name = mlKeyName(key);
+  if (name === undefined) throw new TypeError("Expected a native module-lattice key");
+  const jwk = key.export({ format: "jwk" }) as { pub?: string; priv?: string };
+  if (jwk.pub === undefined || (key.type === "private" && jwk.priv === undefined)) {
+    throw new TypeError("Missing native module-lattice components");
+  }
+  const pub = owned(Buffer.from(jwk.pub, "base64url"));
+  return jwk.priv === undefined ? { family: "ML", name, pub }
+    : { family: "ML", name, pub, seed: owned(Buffer.from(jwk.priv, "base64url")) };
+}
+
+// Node exports the native expanded representation inside its PKCS8 `both` form.
+// Decode only that native container to compare imported `both` material with a
+// fresh native seed expansion. All expansion and constant-time comparison remain native.
+function mlExpanded(key: KeyObject): Uint8Array {
+  const envelope = new NativeDerReader(new NativeDerReader(key.export({ format: "der", type: "pkcs8" })).read(0x30));
+  envelope.read(0x02);
+  envelope.read(0x30);
+  const both = new NativeDerReader(new NativeDerReader(envelope.read(0x04)).read(0x30));
+  both.read(0x04);
+  return both.read(0x04);
 }
 
 function rsaComponents(key: KeyObject): CryptoRsaComponents {
@@ -464,6 +518,17 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   importKey(input: CryptoKeyImport): CryptoKeyRecord | CryptoFailure {
     try {
+      if (input.format === "raw-public" || input.format === "raw-seed") {
+        const key = input.format === "raw-public"
+          ? createPublicKey({ key: mlPublicDer(input.name, input.bytes), format: "der", type: "spki" })
+          : createPrivateKey({ key: mlSeedDer(input.name, input.bytes), format: "der", type: "pkcs8" });
+        if (input.expanded !== undefined) {
+          if (input.format !== "raw-seed") return { failure: "invalid-key" };
+          const expanded = mlExpanded(key);
+          if (expanded.byteLength !== input.expanded.byteLength || !timingSafeEqual(expanded, input.expanded)) return { failure: "invalid-key" };
+        }
+        return keyRecord(key);
+      }
       if (input.format === "raw" && input.family === "secret") {
         return keyRecord(createSecretKey(input.bytes));
       }
@@ -481,6 +546,17 @@ export class NodeCryptoProvider implements CryptoProvider {
       }
       if (input.format === "pkcs8") {
         return keyRecord(validatedEcKey(createPrivateKey({ key: Buffer.from(input.bytes), format: "der", type: "pkcs8" })));
+      }
+      if (input.format === "components" && input.components.family === "ML") {
+        const components = input.components;
+        const key = components.seed === undefined
+          ? createPublicKey({ key: mlPublicDer(components.name, components.pub), format: "der", type: "spki" })
+          : createPrivateKey({ key: mlSeedDer(components.name, components.seed), format: "der", type: "pkcs8" });
+        if (components.seed !== undefined) {
+          const actual = mlComponents(key).pub;
+          if (actual.byteLength !== components.pub.byteLength || !timingSafeEqual(actual, components.pub)) return { failure: "invalid-key" };
+        }
+        return keyRecord(key);
       }
       if (input.format === "components" && input.components.family === "EC") {
         const components = input.components;
@@ -512,10 +588,21 @@ export class NodeCryptoProvider implements CryptoProvider {
     }
   }
 
-  exportKey(key: CryptoKeyHandle, format: "raw" | "spki" | "pkcs8"): Uint8Array | CryptoFailure {
+  exportKey(key: CryptoKeyHandle, format: "raw" | "raw-seed" | "spki" | "pkcs8"): Uint8Array | CryptoFailure {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
+      const ml = mlKeyName(nativeKey);
+      if (ml !== undefined) {
+        if (format === "raw" || format === "raw-seed" || format === "pkcs8") {
+          const components = mlComponents(nativeKey);
+          if (format === "raw") return nativeKey.type === "public" ? components.pub : { failure: "operation" };
+          if (components.seed === undefined) return { failure: "operation" };
+          return format === "raw-seed" ? components.seed : owned(mlSeedDer(ml, components.seed));
+        }
+        return owned(nativeKey.export({ format: "der", type: "spki" }));
+      }
+      if (format === "raw-seed") return { failure: "operation" };
       if (format === "raw" && okpCurveName(nativeKey) !== undefined) {
         if (nativeKey.type !== "public") return { failure: "operation" };
         return okpComponents(nativeKey).x;
@@ -539,6 +626,7 @@ export class NodeCryptoProvider implements CryptoProvider {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
       if (nativeKey.type === "secret") return { family: "secret", k: owned(nativeKey.export()) };
+      if (mlKeyName(nativeKey) !== undefined) return mlComponents(nativeKey);
       if (okpCurveName(nativeKey) !== undefined) return okpComponents(nativeKey);
       if (nativeKey.asymmetricKeyType === "ec") return ecComponents(nativeKey);
       return rsaComponents(nativeKey);
@@ -547,8 +635,23 @@ export class NodeCryptoProvider implements CryptoProvider {
     }
   }
 
+  getPublicKey(key: CryptoKeyHandle): CryptoKeyRecord | CryptoFailure {
+    try {
+      const nativeKey = keyObjects.get(key);
+      if (nativeKey === undefined || nativeKey.type !== "private") return { failure: "invalid-key" };
+      return keyRecord(createPublicKey(nativeKey));
+    } catch {
+      return { failure: "operation" };
+    }
+  }
+
   generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
     try {
+      if (parameters.family === "ML") {
+        const name = parameters.name === "ML-DSA-44" ? "ml-dsa-44" : parameters.name === "ML-DSA-65" ? "ml-dsa-65" : "ml-dsa-87";
+        const pair = generateKeyPairSync(name, {});
+        return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
+      }
       if (parameters.family === "OKP") {
         const curve = parameters.namedCurve;
         if (curve !== "Ed25519" && curve !== "X25519" && curve !== "Ed448" && curve !== "X448") return { failure: "operation" };
@@ -704,6 +807,10 @@ export class NodeCryptoProvider implements CryptoProvider {
         const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return { kind: "bytes", bytes: owned(bytes) };
       }
+      if (parameters.name === "ML-DSA-44" || parameters.name === "ML-DSA-65" || parameters.name === "ML-DSA-87") {
+        if (mlKeyName(nativeKey) !== parameters.name || nativeKey.type !== "private") return { failure: "invalid-key" };
+        return { kind: "bytes", bytes: owned(sign(null, data, { key: nativeKey, context: parameters.context })) };
+      }
       if (parameters.name === "Ed25519" || parameters.name === "Ed448") {
         if (okpCurveName(nativeKey) !== parameters.name || nativeKey.type !== "private") return { failure: "invalid-key" };
         const options = parameters.name === "Ed448" ? { key: nativeKey, context: parameters.context } : nativeKey;
@@ -735,7 +842,7 @@ export class NodeCryptoProvider implements CryptoProvider {
   ): boolean | CryptoFailure {
     try {
       const nativeKey = keyObjects.get(key);
-      if (nativeKey === undefined) return parameters.name === "KMAC128" || parameters.name === "KMAC256" ? { failure: "invalid-key" } : false;
+      if (nativeKey === undefined) return parameters.name === "KMAC128" || parameters.name === "KMAC256" || parameters.name === "ML-DSA-44" || parameters.name === "ML-DSA-65" || parameters.name === "ML-DSA-87" ? { failure: "invalid-key" } : false;
       if (parameters.name === "ECDSA") {
         if (signature.kind !== "ecdsa" || nativeKey.asymmetricKeyType !== "ec" || nativeKey.type !== "public") return false;
         const width = byteLength(ecComponents(nativeKey).x);
@@ -748,6 +855,10 @@ export class NodeCryptoProvider implements CryptoProvider {
         if (nativeKey.type !== "secret") return { failure: "invalid-key" };
         const result = runNativeModernCrypto({ parameters, key: nativeKey, data, signature: signature.bytes });
         return typeof result === "boolean" ? result : { failure: "operation" };
+      }
+      if (parameters.name === "ML-DSA-44" || parameters.name === "ML-DSA-65" || parameters.name === "ML-DSA-87") {
+        if (mlKeyName(nativeKey) !== parameters.name || nativeKey.type !== "public") return { failure: "invalid-key" };
+        return verify(null, data, { key: nativeKey, context: parameters.context }, signature.bytes);
       }
       if (parameters.name === "Ed25519" || parameters.name === "Ed448") {
         if (okpCurveName(nativeKey) !== parameters.name || nativeKey.type !== "public") return false;
@@ -767,8 +878,8 @@ export class NodeCryptoProvider implements CryptoProvider {
       }
       return false;
     } catch {
-      // Modern Algorithms §16.7.2: a native error is distinct from an invalid MAC.
-      return parameters.name === "KMAC128" || parameters.name === "KMAC256" ? { failure: "operation" } : false;
+      // Modern Algorithms §§8.4.2 and 16.7.2 distinguish native errors from invalid signatures.
+      return parameters.name === "KMAC128" || parameters.name === "KMAC256" || parameters.name === "ML-DSA-44" || parameters.name === "ML-DSA-65" || parameters.name === "ML-DSA-87" ? { failure: "operation" } : false;
     }
   }
 

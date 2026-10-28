@@ -24,6 +24,10 @@ import type { JsonWebKeyObject, KeyFormat } from "./jwk.ts";
 import { deriveKdfBits, getKdfKeyLength, importKdfKey } from "./kdf.ts";
 import { deriveOkpBits, signOkp, verifyOkp } from "./okp.ts";
 import { exportOkpKey, generateOkpKey, importOkpKey } from "./okp-key.ts";
+import { exportMlKey, generateMlKey, importMlKey } from "./ml-key.ts";
+import { signMlDsa, verifyMlDsa } from "./ml-dsa.ts";
+import { isMlAlgorithm } from "./ml-parameters.ts";
+import { derivePublicKey, supportsPublicKey } from "./public-key.ts";
 import { decryptRsa, encryptRsa, signRsa, verifyRsa } from "./rsa.ts";
 import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
 import { exportSecretKey, generateSecretKey, getSecretKeyLength, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
@@ -108,6 +112,7 @@ function decryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, 
 }
 
 function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
+  if (isMlAlgorithm(algorithm.name)) return signMlDsa(provider, algorithm, key, bytes);
   if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return signOkp(provider, algorithm, key, bytes);
   if (algorithm.name === "ECDSA") return signEc(provider, algorithm, key, bytes);
   if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return signKmac(provider, algorithm, key, bytes);
@@ -116,6 +121,7 @@ function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key
 }
 
 function verifyBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, signature: Uint8Array, bytes: Uint8Array): boolean {
+  if (isMlAlgorithm(algorithm.name)) return verifyMlDsa(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return verifyOkp(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "ECDSA") return verifyEc(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return verifyKmac(provider, algorithm, key, signature, bytes);
@@ -138,6 +144,8 @@ function importKeyMaterial(
   usages: readonly KeyUsage[],
 ): CryptoKey {
   if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return importKmacKey(provider, format, data, algorithm, extractable, usages);
+  if (isMlAlgorithm(algorithm.name)) return importMlKey(provider, format, data, algorithm, extractable, usages);
+  if (format === "raw-public" && (isOkpAlgorithm(algorithm.name) || isEcAlgorithm(algorithm.name) || isRsaAlgorithm(algorithm.name))) format = "raw";
   if (isKdfAlgorithm(algorithm.name)) return importKdfKey(provider, format, data, algorithm, extractable, usages);
   if (isOkpAlgorithm(algorithm.name)) return importOkpKey(provider, format, data, algorithm, extractable, usages);
   if (isEcAlgorithm(algorithm.name)) return importEcKey(provider, format, data, algorithm, extractable, usages);
@@ -147,6 +155,8 @@ function importKeyMaterial(
 
 function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: CryptoKeySlots): Uint8Array | JsonWebKey {
   if (key.algorithm.name === "KMAC128" || key.algorithm.name === "KMAC256") return exportKmacKey(provider, format, key);
+  if (isMlAlgorithm(key.algorithm.name)) return exportMlKey(provider, format, key);
+  if (format === "raw-public" && (isOkpAlgorithm(key.algorithm.name) || isEcAlgorithm(key.algorithm.name) || isRsaAlgorithm(key.algorithm.name))) format = "raw";
   if (isOkpAlgorithm(key.algorithm.name)) return exportOkpKey(provider, format, key);
   if (isEcAlgorithm(key.algorithm.name)) return exportEcKey(provider, format, key);
   if (isRsaAlgorithm(key.algorithm.name)) return exportRsaKey(provider, format, key);
@@ -299,6 +309,7 @@ export class SubtleCrypto {
       const normalized = normalizeAlgorithm(identifier, "generateKey");
       return cryptoTask<CryptoKey | CryptoKeyPair>(scheduler, () => {
         if (normalized.name === "KMAC128" || normalized.name === "KMAC256") return generateKmacKey(provider, random, normalized, canExport, usages);
+        if (isMlAlgorithm(normalized.name)) return generateMlKey(provider, normalized, canExport, usages);
         if (isOkpAlgorithm(normalized.name)) return generateOkpKey(provider, normalized, canExport, usages);
         if (isEcAlgorithm(normalized.name)) return generateEcKey(provider, normalized, canExport, usages);
         if (isRsaAlgorithm(normalized.name)) return generateRsaKey(provider, normalized, canExport, usages);
@@ -371,6 +382,21 @@ export class SubtleCrypto {
       if ((keyFormat === "jwk") !== dictionary) throw new TypeError("The key data does not match its format");
       const data = dictionary ? source : cryptoBytes(source);
       return cryptoTask(scheduler, () => importKeyMaterial(provider, keyFormat, data, normalized, canExport, usages));
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** Modern Algorithms §3.2.5; algorithm support precedes private-key type checks. */
+  getPublicKey(key: unknown, keyUsages: unknown): Promise<CryptoKey> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 2, "SubtleCrypto.getPublicKey");
+      const slots = getCryptoKeySlots(key);
+      const usages = toKeyUsages(keyUsages);
+      if (!supportsPublicKey(slots.algorithm.name)) throw new DOMException("The algorithm has no public key", "NotSupportedError");
+      return cryptoTask(scheduler, () => derivePublicKey(provider, slots, usages));
     } catch (error) {
       return rejectedPromise(error);
     }

@@ -55,6 +55,15 @@ export interface CryptoKeyHandle {
 export type CryptoKeyType = "secret" | "public" | "private";
 export type CryptoNamedCurve = "P-256" | "P-384" | "P-521";
 export type CryptoOkpCurve = "Ed25519" | "X25519" | "Ed448" | "X448";
+export type CryptoMlDsaName = "ML-DSA-44" | "ML-DSA-65" | "ML-DSA-87";
+export type CryptoMlAlgorithmName = CryptoMlDsaName;
+
+/** FIPS 204 keys retain their original seed as well as native expanded material. */
+export interface CryptoMlKeyInfo {
+  readonly family: "ML";
+  readonly type: "public" | "private";
+  readonly name: CryptoMlAlgorithmName;
+}
 
 export interface CryptoSecretKeyInfo {
   readonly family: "secret";
@@ -88,7 +97,8 @@ export type CryptoKeyInfo =
   | CryptoSecretKeyInfo
   | CryptoRsaKeyInfo
   | CryptoEcKeyInfo
-  | CryptoOkpKeyInfo;
+  | CryptoOkpKeyInfo
+  | CryptoMlKeyInfo;
 
 /** Metadata describes actual imported/generated material, never requested policy. */
 export interface CryptoKeyRecord {
@@ -143,11 +153,20 @@ export interface CryptoOkpComponents {
   readonly d?: Uint8Array;
 }
 
+/** Encoded public key and, for private keys, the original key-generation seed. */
+export interface CryptoMlComponents {
+  readonly family: "ML";
+  readonly name: CryptoMlAlgorithmName;
+  readonly pub: Uint8Array;
+  readonly seed?: Uint8Array;
+}
+
 export type CryptoKeyComponents =
   | CryptoSecretComponents
   | CryptoRsaComponents
   | CryptoEcComponents
-  | CryptoOkpComponents;
+  | CryptoOkpComponents
+  | CryptoMlComponents;
 
 export interface CryptoRawSecretImport {
   readonly format: "raw";
@@ -175,6 +194,20 @@ export interface CryptoDerImport {
   readonly bytes: Uint8Array;
 }
 
+export interface CryptoRawMlImport {
+  readonly format: "raw-public" | "raw-seed";
+  readonly family: "ML";
+  readonly name: CryptoMlAlgorithmName;
+  readonly bytes: Uint8Array;
+  /**
+   * A decoded PKCS8 `both` value also supplies its expanded private encoding.
+   * With raw-seed, the primitive must validate that these bytes correspond to
+   * native expansion of the seed, or return invalid-key. Never trust two unrelated
+   * encodings merely because a permissive decoder accepts their container.
+   */
+  readonly expanded?: Uint8Array;
+}
+
 export interface CryptoComponentsImport {
   readonly format: "components";
   readonly components: CryptoKeyComponents;
@@ -184,6 +217,7 @@ export type CryptoKeyImport =
   | CryptoRawSecretImport
   | CryptoRawEcImport
   | CryptoRawOkpImport
+  | CryptoRawMlImport
   | CryptoDerImport
   | CryptoComponentsImport;
 
@@ -203,10 +237,17 @@ export interface CryptoOkpGeneration {
   readonly namedCurve: CryptoOkpCurve;
 }
 
+/** FIPS 204 key generation and seed expansion are entirely native. */
+export interface CryptoMlGeneration {
+  readonly family: "ML";
+  readonly name: CryptoMlAlgorithmName;
+}
+
 export type CryptoKeyPairGeneration =
   | CryptoRsaGeneration
   | CryptoEcGeneration
-  | CryptoOkpGeneration;
+  | CryptoOkpGeneration
+  | CryptoMlGeneration;
 
 export interface CryptoAesCtrParameters {
   readonly name: "AES-CTR";
@@ -302,12 +343,19 @@ export interface CryptoEd448Parameters {
   readonly context: Uint8Array;
 }
 
+/** Pure ML-DSA with its FIPS 204 context, never HashML-DSA or a prehashed input. */
+export interface CryptoMlDsaParameters {
+  readonly name: CryptoMlDsaName;
+  readonly context: Uint8Array;
+}
+
 export type CryptoSignatureParameters =
   | CryptoHashSignatureParameters
   | CryptoRsaPssParameters
   | CryptoEd25519Parameters
   | CryptoEd448Parameters
-  | CryptoKmacParameters;
+  | CryptoKmacParameters
+  | CryptoMlDsaParameters;
 
 export interface CryptoByteSignature {
   readonly kind: "bytes";
@@ -413,7 +461,14 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * DER output uses the standard key's SPKI/PKCS #8 structures, never encrypted
    * PKCS #8, PEM, native structs or a provider-specific algorithm identifier.
    */
-  exportKey(key: CryptoKeyHandle, format: "raw" | "spki" | "pkcs8"): Uint8Array | CryptoFailure;
+  exportKey(key: CryptoKeyHandle, format: "raw" | "raw-seed" | "spki" | "pkcs8"): Uint8Array | CryptoFailure;
+
+  /**
+   * Derive a public handle from a private handle without exporting secret bytes.
+   * The returned record has actual public metadata and an independently owned
+   * handle. No Web Crypto usage or extractability policy crosses this boundary.
+   */
+  getPublicKey(key: CryptoKeyHandle): CryptoKeyRecord | CryptoFailure;
 
   /** Return decoded components; the shared layer constructs and validates JWK. */
   exportComponents(key: CryptoKeyHandle): CryptoKeyComponents | CryptoFailure;

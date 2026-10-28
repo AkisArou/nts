@@ -2,289 +2,34 @@
   "fixture": "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
   "blockedTests": [
     {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "name": "ML-DSA-44 basic test verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
     },
     {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "name": "ML-DSA-65 basic test verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
     },
     {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "name": "ML-DSA-87 basic test verification with transferred signature during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
     },
     {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification with altered signature during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "name": "ML-DSA-44 basic test with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
     },
     {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification with altered signature during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "name": "ML-DSA-65 basic test with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
     },
     {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification with altered signature during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification with altered signature after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification with altered signature after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification with altered signature after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification with transferred signature during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification with transferred signature during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification with transferred signature during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification with transferred signature after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification with transferred signature after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification with transferred signature after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test with altered plaintext during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test with altered plaintext during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test with altered plaintext during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test with altered plaintext after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test with altered plaintext after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test with altered plaintext after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test with transferred plaintext during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test with transferred plaintext during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test with transferred plaintext during call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test with transferred plaintext after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test with transferred plaintext after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test with transferred plaintext after call",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test using privateKey to verify",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test using privateKey to verify",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test using privateKey to verify",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test using publicKey to sign",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test using publicKey to sign",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test using publicKey to sign",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test no verify usage",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test no verify usage",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test no verify usage",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test round trip",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test round trip",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test round trip",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification failure due to altered signature",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification failure due to altered signature",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification failure due to altered signature",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification failure due to shortened signature",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification failure due to shortened signature",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification failure due to shortened signature",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verification failure due to altered plaintext",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verification failure due to altered plaintext",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verification failure due to altered plaintext",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 invalid signature verification",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 invalid signature verification",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 invalid signature verification",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test signing with wrong algorithm name",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test signing with wrong algorithm name",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test signing with wrong algorithm name",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-44 basic test verifying with wrong algorithm name",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-65 basic test verifying with wrong algorithm name",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
-    },
-    {
-      "name": "importVectorKeys step: ML-DSA-87 basic test verifying with wrong algorithm name",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "name": "ML-DSA-87 basic test with transferred plaintext during call",
+      "category": "upstream-normalization-spec",
+      "reason": "The getter transfers its buffer on both name reads. WebCrypto §18.4.4 steps 2 and 6 plus WebIDL §3.2.17 require both conversions, so the second transfer throws. Upstream confirms this specification/test disagreement in w3c/webcrypto#563; original case retained unchanged."
     }
   ]
 }

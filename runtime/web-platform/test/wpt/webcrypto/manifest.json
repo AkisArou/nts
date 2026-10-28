@@ -443,9 +443,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 516,
-      "blockedTestFiles": [
-        "exclusions/generateKey/failures_ML-DSA.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
@@ -674,9 +672,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 108,
-      "blockedTestFiles": [
-        "exclusions/generateKey/successes_ML-DSA.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
@@ -868,10 +864,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 180,
-      "blockedTestFiles": [
-        "exclusions/import_export/ML-DSA_importKey.tentative.https.any.js.part-001.json",
-        "exclusions/import_export/ML-DSA_importKey.tentative.https.any.js.part-002.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",

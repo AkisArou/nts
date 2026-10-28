@@ -1,6 +1,6 @@
 import { DOMException } from "../core/errors.ts";
 import { coerceToDOMString } from "../core/webidl.ts";
-import type { CryptoDigestName } from "../provider/crypto.ts";
+import type { CryptoDigestName, CryptoMlDsaName } from "../provider/crypto.ts";
 import {
   copyCryptoBytes,
   cryptoBytes,
@@ -59,7 +59,7 @@ export type EcAlgorithmName = "ECDSA" | "ECDH";
 export type OkpAlgorithmName = "Ed25519" | "X25519" | "Ed448" | "X448";
 export type Argon2AlgorithmName = "Argon2d" | "Argon2i" | "Argon2id";
 export type KdfAlgorithmName = "HKDF" | "PBKDF2" | Argon2AlgorithmName;
-type RegisteredAlgorithmName = CryptoDigestName | CshakeAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
+type RegisteredAlgorithmName = CryptoMlDsaName | CryptoDigestName | CshakeAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
 
 /** Modern Algorithms §13.3. Dictionary conversion precedes BufferSource snapshots. */
 export class CShakeParams extends Algorithm<CshakeAlgorithmName> {
@@ -300,6 +300,16 @@ export class Ed448Params extends Algorithm<"Ed448"> {
   }
 }
 
+/** Modern Algorithms §8.3; the optional context defaults at the operation step. */
+export class ContextParams extends Algorithm<CryptoMlDsaName> {
+  readonly context: Uint8Array | undefined;
+
+  constructor(name: CryptoMlDsaName, context: Uint8Array | undefined) {
+    super(name);
+    this.context = context;
+  }
+}
+
 /** Web Cryptography §33.3. Hash normalization precedes the salt and info snapshots. */
 export class HkdfParams extends Algorithm<"HKDF"> {
   readonly hash: DigestAlgorithm;
@@ -365,7 +375,7 @@ export type NormalizedAlgorithm =
   | KmacKeyGenParams
   | KmacImportParams
   | KmacParams
-  | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName>
+  | Algorithm<CryptoMlDsaName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName>
   | AesKeyGenParams
   | AesDerivedKeyParams
   | AesCtrParams
@@ -383,6 +393,7 @@ export type NormalizedAlgorithm =
   | EcKeyImportParams
   | EcdhKeyDeriveParams
   | Ed448Params
+  | ContextParams
   | HkdfParams
   | Pbkdf2Params
   | Argon2Params;
@@ -400,6 +411,22 @@ class AlgorithmRegistration {
 // §18.4.2's supportedAlgorithms. Register only operations implemented by this
 // increment: a future primitive contract is not an implemented Web algorithm.
 const registeredAlgorithms: readonly AlgorithmRegistration[] = [
+  new AlgorithmRegistration("ML-DSA-44", "sign"),
+  new AlgorithmRegistration("ML-DSA-44", "verify"),
+  new AlgorithmRegistration("ML-DSA-44", "generateKey"),
+  new AlgorithmRegistration("ML-DSA-44", "importKey"),
+  new AlgorithmRegistration("ML-DSA-44", "exportKey"),
+  new AlgorithmRegistration("ML-DSA-65", "sign"),
+  new AlgorithmRegistration("ML-DSA-65", "verify"),
+  new AlgorithmRegistration("ML-DSA-65", "generateKey"),
+  new AlgorithmRegistration("ML-DSA-65", "importKey"),
+  new AlgorithmRegistration("ML-DSA-65", "exportKey"),
+  new AlgorithmRegistration("ML-DSA-87", "sign"),
+  new AlgorithmRegistration("ML-DSA-87", "verify"),
+  new AlgorithmRegistration("ML-DSA-87", "generateKey"),
+  new AlgorithmRegistration("ML-DSA-87", "importKey"),
+  new AlgorithmRegistration("ML-DSA-87", "exportKey"),
+
   new AlgorithmRegistration("SHA-1", "digest"),
   new AlgorithmRegistration("SHA-256", "digest"),
   new AlgorithmRegistration("SHA-384", "digest"),
@@ -643,6 +670,15 @@ function normalizeRegisteredAlgorithm(
     return operation === "encrypt" || operation === "decrypt"
       ? aeadParameters(algorithm, name, copyBuffers) : new Algorithm(name);
   }
+
+  if (name === "ML-DSA-44" || name === "ML-DSA-65" || name === "ML-DSA-87") {
+    if (operation !== "sign" && operation !== "verify") return new Algorithm(name);
+    const input = algorithm as { readonly context?: unknown };
+    const value = input.context;
+    const context = value === undefined ? undefined : toCryptoBufferSource(value);
+    return new ContextParams(name, context === undefined ? undefined : normalizedBytes(context, copyBuffers));
+  }
+
   if (name === "Ed25519") return new Algorithm(name);
   if (name === "X25519" || name === "X448") {
     return operation === "deriveBits" ? agreementParameters(algorithm, name) : new Algorithm(name);
