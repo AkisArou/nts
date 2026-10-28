@@ -2,7 +2,12 @@ import { AbortController, AbortSignal } from "../core/abort.ts";
 import { DOMException } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import { ignoreRejection } from "../core/promise.ts";
-import { coerceToDOMString, requireArguments, requireDictionary } from "../core/webidl.ts";
+import {
+  coerceToDOMString,
+  coerceToUSVString,
+  requireArguments,
+  requireDictionary,
+} from "../core/webidl.ts";
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { URLRecord } from "../provider/primitives.ts";
 import { ReadableStream, type ReadableStreamDefaultController } from "../streams/readable.ts";
@@ -505,7 +510,7 @@ function snapshotMessage(value: unknown): SocketMessage {
       data: new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice(),
     };
   }
-  return { kind: "text", data: coerceToDOMString(value) };
+  return { kind: "text", data: coerceToUSVString(value) };
 }
 
 function closeFromError(error: WebSocketError): NormalizedWebSocketClose {
