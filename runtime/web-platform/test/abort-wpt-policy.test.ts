@@ -78,3 +78,81 @@ test("AbortSignal.any rejects primitive iterator objects and iterator results", 
     TypeError,
   );
 });
+
+// https://dom.spec.whatwg.org/#create-a-dependent-abort-signal
+// https://webidl.spec.whatwg.org/#es-interface
+// https://webidl.spec.whatwg.org/#es-attributes
+// https://webidl.spec.whatwg.org/#es-operations
+test("AbortSignal.any reads internal state without invoking public getters", () => {
+  const controller = new AbortController();
+  const prototype = {
+    get aborted(): boolean {
+      throw new Error("public aborted getter was invoked");
+    },
+    get reason(): unknown {
+      throw new Error("public reason getter was invoked");
+    },
+  };
+  Object.setPrototypeOf(prototype, AbortSignal.prototype);
+  Object.setPrototypeOf(controller.signal, prototype);
+  const combined = AbortSignal.any([controller.signal]);
+  assert.equal(combined.aborted, false);
+  controller.abort("actual reason");
+  assert.equal(combined.aborted, true);
+  assert.equal(combined.reason, "actual reason");
+});
+
+test("AbortSignal.any uses an already-aborted source's internal reason", () => {
+  const reason = {};
+  const signal = AbortSignal.abort(reason);
+  const prototype = {
+    get aborted(): boolean { return false; },
+    get reason(): unknown { return "forged reason"; },
+  };
+  Object.setPrototypeOf(prototype, AbortSignal.prototype);
+  Object.setPrototypeOf(signal, prototype);
+  const combined = AbortSignal.any([signal]);
+  assert.equal(combined.aborted, true);
+  assert.equal(combined.reason, reason);
+});
+
+test("AbortSignal.any rejects an object that only inherits the interface prototype", () => {
+  const forged = Object.create(AbortSignal.prototype) as object;
+  Object.assign(forged, { isAborted: true, abortReason: "forged reason" });
+  assert.throws(() => anySignal([forged]), TypeError);
+});
+
+test("Abort state and the controller's signal cannot be replaced by expandos", () => {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const other = new AbortController();
+  Object.assign(signal, { isAborted: true, abortReason: "forged reason" });
+  Object.assign(controller, { controllerSignal: other.signal });
+  assert.equal(controller.signal, signal);
+  assert.equal(signal.aborted, false);
+  assert.equal(signal.reason, undefined);
+  controller.abort("actual reason");
+  assert.equal(signal.reason, "actual reason");
+  assert.equal(other.signal.aborted, false);
+});
+
+test("Abort interface getters and operations reject an unbranded receiver", () => {
+  for (const member of ["aborted", "reason", "onabort"]) {
+    const getter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, member)?.get;
+    assert.equal(typeof getter, "function");
+    assert.throws(() => getter?.call({}), TypeError);
+  }
+  const signalGetter = Object.getOwnPropertyDescriptor(AbortController.prototype, "signal")?.get;
+  assert.throws(() => signalGetter?.call({}), TypeError);
+  assert.throws(() => AbortSignal.prototype.throwIfAborted.call({} as AbortSignal), TypeError);
+  assert.throws(() => AbortController.prototype.abort.call({} as AbortController), TypeError);
+});
+
+test("AbortSignal.any accepts a branded signal even after its prototype changes", () => {
+  const reason = {};
+  const signal = AbortSignal.abort(reason);
+  Object.setPrototypeOf(signal, null);
+  const combined = AbortSignal.any([signal]);
+  assert.equal(combined.aborted, true);
+  assert.equal(combined.reason, reason);
+});
