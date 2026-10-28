@@ -52,6 +52,11 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
         .snapshot(&config)
         .unwrap();
     let program = common::prepare(&snapshot).expect("valid HIR").program;
+    assert!(
+        program.refused_bodies().next().is_none(),
+        "{:?}",
+        program.uncompiled
+    );
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(
         emitted.diagnostics.is_empty(),
@@ -93,7 +98,15 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
         )
     };
 
-    for kept in ["linear", "perRound", "argument", "returned"] {
+    for kept in [
+        "linear",
+        "perRound",
+        "argument",
+        "returned",
+        "unitsUnchecked",
+        "unitsChecked",
+        "unitsDuringAppend",
+    ] {
         let held = body(kept);
         assert!(held.contains("java/lang/StringBuilder"), "{kept}:\n{held}");
         assert!(!held.contains("java/lang/String.concat"), "{kept}:\n{held}");
@@ -109,6 +122,23 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
         materialised.contains("java/lang/StringBuilder.toString:()Ljava/lang/String;"),
         "argument:\n{materialised}"
     );
+    let unchecked = body("unitsUnchecked");
+    assert!(
+        unchecked.contains("java/lang/StringBuilder.charAt:(I)C"),
+        "{unchecked}"
+    );
+    let checked = body("unitsChecked");
+    assert!(
+        checked.contains("charCodeAt:(Ljava/lang/CharSequence;D)D"),
+        "{checked}"
+    );
+    for name in ["unitsUnchecked", "unitsChecked", "unitsDuringAppend"] {
+        assert!(
+            !body(name).contains("java/lang/StringBuilder.toString"),
+            "{name}:\n{}",
+            body(name)
+        );
+    }
     for refused in [
         "straight",
         "twice",
@@ -117,6 +147,7 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
         "measuredAfter",
         "perIteration",
         "prepended",
+        "unitAfterAppend",
     ] {
         let listing = body(refused);
         assert!(
@@ -128,5 +159,54 @@ fn an_accumulator_is_held_only_where_the_three_rules_allow() {
             "{refused}:\n{listing}"
         );
     }
+    compare_unit_reads_with_node(&dir);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn compare_unit_reads_with_node(dir: &std::path::Path) {
+    let javac = common::tool("javac").expect("the JDK used for javap has javac");
+    let java = common::tool("java").expect("the JDK used for javap has java");
+    let fixture = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/accumulators");
+    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
+    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).unwrap();
+    let classpath = format!("{}:{}", dir.display(), jar.display());
+    let compiled = nts_codegen_jvm::toolchain::command(javac)
+        .args(["-cp", &classpath, "-d"])
+        .arg(dir)
+        .arg(fixture.join("Drive.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = nts_codegen_jvm::toolchain::command(java)
+        .args(["-Xverify:all", "-cp", &classpath, "Drive"])
+        .output()
+        .unwrap();
+    assert!(
+        ran.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(
+        ran.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let node = std::process::Command::new("node")
+        .arg(fixture.join("drive.mjs"))
+        .arg(fixture.join("src/main.ts"))
+        .output()
+        .unwrap();
+    assert!(
+        node.status.success(),
+        "{}",
+        String::from_utf8_lossy(&node.stderr)
+    );
+    assert_eq!(
+        ran.stdout, node.stdout,
+        "UTF-16 reads, checked indices and old-string aliases"
+    );
 }

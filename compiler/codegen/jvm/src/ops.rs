@@ -5241,7 +5241,14 @@ impl Emitter<'_> {
                 index,
                 checked,
             } => {
-                self.load(code, pool, *string)?;
+                // A unit read observes the held accumulator directly. Materialising
+                // it here would copy the whole string for every read in a loop.
+                let accumulated = self.accumulated.contains(string);
+                if accumulated {
+                    self.load_held(code, pool, *string)?;
+                } else {
+                    self.load(code, pool, *string)?;
+                }
                 if *checked {
                     self.push_as(code, pool, *index, Kind::Double, origin)?;
                     code.invoke_static(
@@ -5249,12 +5256,21 @@ impl Emitter<'_> {
                         pool,
                         RUNTIME,
                         "charCodeAt",
-                        "(Ljava/lang/String;D)D",
+                        if accumulated {
+                            "(Ljava/lang/CharSequence;D)D"
+                        } else {
+                            "(Ljava/lang/String;D)D"
+                        },
                     );
                     self.adapt(code, Kind::Double, ty, origin)?;
                 } else {
                     self.push_as(code, pool, *index, Kind::Int, origin)?;
-                    code.invoke_virtual(origin, pool, types::STRING, "charAt", "(I)C");
+                    let owner = if accumulated {
+                        crate::builder::BUILDER
+                    } else {
+                        types::STRING
+                    };
+                    code.invoke_virtual(origin, pool, owner, "charAt", "(I)C");
                     self.adapt(code, Kind::Int, ty, origin)?;
                 }
                 Ok(Placed::OnStack)

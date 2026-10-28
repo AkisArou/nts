@@ -52,8 +52,8 @@
 //! - it **consumes** the builder: appends to it (the left operand of a
 //!   concatenation in the class), returns it, or hands it across an edge to a
 //!   parameter in the class;
-//! - it **measures** it: `.length`, which `StringBuilder.length()` answers in
-//!   UTF-16 units, as JavaScript does;
+//! - it **measures** it: `.length` or a UTF-16 unit read, which the builder
+//!   answers directly without copying or changing its contents;
 //! - or it **materialises** it: any other read -- an argument, a field store,
 //!   an erase, a comparison, the right operand of another concatenation --
 //!   sees the `String` a `toString` makes there (`Emitter::load`), so a
@@ -295,7 +295,7 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
 enum Use {
     /// Appended to, returned, or handed across an edge: the builder moves on.
     Consumes,
-    /// `.length`, which the builder answers and leaves as it was.
+    /// Length or a UTF-16 unit, answered directly without changing the builder.
     Measures,
     /// Anything else, which sees the `String` a `toString` makes there.
     Materialises,
@@ -337,7 +337,9 @@ fn uses(func: &Func, string: &impl Fn(ValueId) -> bool) -> FxHashMap<ValueId, Ve
                     note(*lhs, at, Use::Consumes, Vec::new());
                     note(*rhs, at, Use::Materialises, Vec::new());
                 }
-                OpKind::Length(of) => note(*of, at, Use::Measures, Vec::new()),
+                OpKind::Length(of) | OpKind::StringUnitAt { string: of, .. } => {
+                    note(*of, at, Use::Measures, Vec::new());
+                }
                 other => {
                     for operand in operands_of(other) {
                         note(operand, at, Use::Materialises, Vec::new());

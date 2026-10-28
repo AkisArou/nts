@@ -804,7 +804,7 @@ impl<'a> Emitter<'a> {
     /// A value as the program means it.
     ///
     /// A string accumulator is held as a `StringBuilder` (`builder`), and every
-    /// read that is not the builder's own -- an append, an edge, `.length`,
+    /// read that is not the builder's own -- an append, an edge, length or a unit,
     /// which call [`Self::load_held`] -- sees the `String` it stands for, made
     /// here. So a builder never escapes its function, whatever reads it, and a
     /// new kind of read cannot forget to materialise one.

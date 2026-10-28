@@ -179,6 +179,11 @@ public final class NtsRuntime {
         int at = (int) index;
         return at < 0 || at >= text.length() ? Double.NaN : text.charAt(at);
     }
+    /** A held string accumulator can be read without a String copy. */
+    public static double charCodeAt(CharSequence text, double index) {
+        int at = (int) index;
+        return at < 0 || at >= text.length() ? Double.NaN : text.charAt(at);
+    }
     public static boolean stringEq(String left, String right) { return java.util.Objects.equals(left, right); }
     public static boolean stringTruthy(String text) { return text != null && !text.isEmpty(); }
     public static Error unreachable() { return new NtsRefusal("control reached a block the compiler proved unreachable"); }

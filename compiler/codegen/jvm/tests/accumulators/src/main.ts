@@ -103,3 +103,38 @@ export function straight(n: number): number {
 export function returned(n: number): string {
   return "<" + String(n) + "|" + String(n + 1) + "|" + String(n + 2) + ">";
 }
+
+// Held: repeated scalar reads do not materialise the accumulated string.
+export function unitsUnchecked(n: number): number {
+  let out = "";
+  for (let at = 0; at < n; at++) out += "A🚀\u0000";
+  let total = 0;
+  for (let at = 0; at < out.length; at++) total += out.charCodeAt(at);
+  return total;
+}
+
+// Held: an arbitrary index retains charCodeAt's checked double contract.
+export function unitsChecked(n: number, index: number): number {
+  let out = "";
+  for (let at = 0; at < n; at++) out += "A🚀\u0000";
+  return out.charCodeAt(index);
+}
+
+// Held: a unit read between appends does not expose the mutable builder.
+export function unitsDuringAppend(n: number): number {
+  let out = "";
+  let total = 0;
+  for (let at = 0; at < n; at++) {
+    out += "A";
+    total += out.charCodeAt(0);
+  }
+  return total + out.length;
+}
+
+// Refused: observing the old string after an append still requires a snapshot.
+export function unitAfterAppend(n: number): number {
+  let out = "";
+  for (let at = 0; at < n; at++) out += "a";
+  const more = out + "!";
+  return out.charCodeAt(n) + more.charCodeAt(n);
+}
