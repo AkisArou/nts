@@ -371,6 +371,38 @@ test("Headers.forEach preserves a callback error and stops traversal", () => {
   assert.deepEqual(visited, ["a"]);
 });
 
+// https://fetch.spec.whatwg.org/#concept-body-mime-type
+test("Request body MIME extraction ignores an overridden Headers.get", async (t) => {
+  useRuntime(t);
+  const request = new Request("https://example.test/", { method: "POST", body: "body" });
+  const headers = request.headers;
+  headers.set("content-type", "text/custom");
+  let reads = 0;
+  headers.get = (): never => { reads++; throw new Error("public get must not be called"); };
+  const blob = await request.blob();
+  assert.equal(reads, 0);
+  assert.equal(blob.type, "text/custom");
+  assert.equal(await blob.text(), "body");
+});
+
+test("Request body MIME extraction ignores an overridden headers getter", async (t) => {
+  useRuntime(t);
+  let reads = 0;
+  class DerivedRequest extends Request {
+    override get headers(): Headers {
+      reads++;
+      throw new Error("public headers must not be read");
+    }
+  }
+  const request = new DerivedRequest("https://example.test/", {
+    method: "POST", body: "body", headers: [["content-type", "text/custom"]],
+  });
+  const blob = await request.blob();
+  assert.equal(reads, 0);
+  assert.equal(blob.type, "text/custom");
+  assert.equal(await blob.text(), "body");
+});
+
 // https://webidl.spec.whatwg.org/#es-operations
 // https://fetch.spec.whatwg.org/#concept-headers-append
 for (const operation of ["append", "set"] as const) {
