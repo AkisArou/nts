@@ -64,6 +64,14 @@ does. In particular:
   like already are the internal slot reads Web IDL asks for. Read them
   plainly, and list a case that spoofs one by patching a prototype as left
   out.
+- **Call methods plainly,** as `callback.call(thisArg, event)` or
+  `next.call(iterator)`, never through a captured uncurried form such as
+  `Function.prototype.call.bind(...)`: a program cannot patch an intrinsic,
+  so there is nothing to guard against, and the captured form loses the
+  method's type. Where a specification performs one of its own operations on
+  an object a subclass could override (firing an event at a target,
+  cancelling a stream), call the module-private function that implements the
+  operation, never the public method.
 - **A native capability reports failure as a value,** never by throwing: a
   native binding cannot throw into TypeScript yet. A primitive returns a
   result that the shared code turns into the specification's exception.

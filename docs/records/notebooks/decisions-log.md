@@ -342,6 +342,10 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   required Node/server extension"; this replaces that line. The client
   (`WebSocket`, `WebSocketStream`) stays; its conformance tests need a peer to
   talk to, and that is decided with the tests, not provided by the runtime.
+- **The WebSocket client's test peer is the `ws` package,** a dev dependency
+  of the test tree that no compiled program links. It replaces the removed
+  server code as the WebSocket peer of the WPT resource server. Asked, the
+  user answered "Yes I am ok with the ws dev dependency".
 
 ## Contributors and packages (10-28)
 

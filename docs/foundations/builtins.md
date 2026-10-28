@@ -310,7 +310,9 @@ providers, and an app's `nts.config.ts` may override a choice. With it, also
 - **WebSocket is the client only:** `WebSocket` and `WebSocketStream`, as the
   WHATWG standard defines them and node ships them. No specification nts
   follows defines a WebSocket server, so nts provides none: a program that
-  serves WebSockets uses a library for it.
+  serves WebSockets uses a library for it. The client's conformance tests talk
+  to the `ws` package, a dev dependency of the test tree that no compiled
+  program links.
 
 From the open-questions audit, also 10-28
 ([log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)):
