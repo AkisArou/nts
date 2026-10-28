@@ -1,0 +1,159 @@
+{
+  "suite": "JetStream 3.0",
+  "releaseRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "workload": {
+    "name": "raytrace-private-class-fields",
+    "seed": 1,
+    "originalRendersPerIteration": 15,
+    "pixelsPerRender": 400,
+    "outputGrid": "20 by 20 from original 100 by 100 dimensions and 5 by 5 pixel size",
+    "scene": "Original camera, background, two spheres, plane, two lights, all material/lighting/reflection options and ray depth 2",
+    "rng": "None",
+    "originalValidation": "Engine.renderScene requires checkNumber === 2321 after each render",
+    "lifecycle": "One stateless Benchmark instance outside work; each runIteration creates all 15 original scenes and Engines inside work"
+  },
+  "source": {
+    "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "sourcePath": "class-fields/raytrace-private-class-fields.js",
+    "sourceBytes": 17712,
+    "sourceSha256": "9b9871835860f514f3a532d16a527f4de38852cadadf2ea04cf39b1067e32da4",
+    "sourceGitBlob": "e536a57b4cc2c40115da3f8657d36538429d5e15",
+    "variant": "private",
+    "originalRendersPerIteration": 15,
+    "originalPixelsPerRender": 400,
+    "originalExpectedCheckNumber": 2321,
+    "sourceClasses": 16,
+    "sourceFields": 48,
+    "sourceMethods": 76,
+    "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/class-fields/raytrace-private-class-fields.js"
+  },
+  "license": {
+    "spdx": "BSD-3-Clause AND BSD-2-Clause",
+    "noticesRetainedInCase": true,
+    "companion": "../LICENSE-jetstream",
+    "originalAuthor": "Adam Burmister",
+    "standaloneAdaptation": "Google / V8 project authors",
+    "jetstreamChanges": "Apple Inc. and JetStream contributors",
+    "evidence": [
+      {
+        "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/class-fields/raytrace-private-class-fields.js",
+        "lines": "1-11",
+        "scope": "Original author, Google standalone adaptation, JetStream class-field rewrite attribution"
+      },
+      {
+        "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/Octane/LICENSE.txt",
+        "lines": "1-29",
+        "scope": "V8 project authors 2010 BSD-3-Clause notice"
+      },
+      {
+        "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/LICENSE",
+        "lines": "1-23",
+        "scope": "Apple 2007-2024 BSD-2-Clause notice for JetStream modifications"
+      },
+      {
+        "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/Octane/raytrace.js",
+        "lines": "1-11",
+        "scope": "Original Octane-derived computational program attribution"
+      }
+    ]
+  },
+  "adaptations": [
+    {
+      "kind": "erasable-types-and-exports",
+      "detail": "Every original class/member is retained. Existing initializers, including null and empty object/array literals, remain runtime initializers. An erased Material.getColor overload permits the original two-argument virtual calls while retaining the original zero-parameter implementation and function length."
+    },
+    {
+      "kind": "checked-nullable-narrowing",
+      "sites": 51,
+      "detail": "Nullable fields retain null unions. requireValue returns the exact same non-null object or throws TypeError before the original dereference/vector use. No fallback vector, material, scene, or algorithm is introduced. Guards before vector calls can move the invalid-input failure to the call site; ordinary benchmark calls never trigger them."
+    },
+    {
+      "kind": "numeric-null-coercion",
+      "sites": 4,
+      "detail": "The four comparisons of nullable IntersectionInfo.distance use ?? 0, preserving JavaScript numeric null coercion."
+    },
+    {
+      "kind": "truthful-empty-options-initializer",
+      "numericFallbackSites": 9,
+      "compoundAssignmentsExpanded": 2,
+      "detail": "Engine retains its original {} initializer and uses Partial<EngineOptions>. Optional numeric reads use ?? NaN to preserve undefined arithmetic. The two constructor compound divisions are expanded to assignments over the same original object, operands and order. Supplied benchmark options/defaults are unchanged."
+    },
+    {
+      "kind": "observable-results",
+      "detail": "After each original 2321 assertion, three scalar observations record the check number, mix it with unsigned multiply-by-31, and increment the completed-render count. work resets only these adapter counters and repeats complete original Benchmark iterations. No pixel collection or added pixel traversal occurs in production."
+    }
+  ],
+  "retainedSurface": {
+    "classes": 16,
+    "fields": 48,
+    "methodsAndAccessors": 76,
+    "privateFields": 41,
+    "privateMethods": 7,
+    "fieldInitializersAndOrderIdentical": true,
+    "methodBodiesIdenticalAfterErasure": 68,
+    "otherMethodBodiesMatchAfterDocumentedTypeAdaptations": true,
+    "completeOriginalSceneFunctionAndBenchmarkLoopIdentical": true
+  },
+  "validation": {
+    "variant": "private",
+    "node": "v24.20.0",
+    "sourceModifiedForBaseline": false,
+    "originalCompleteIterationValidationPassed": true,
+    "originalRendersPerIteration": 15,
+    "originalPixelsPerRender": 400,
+    "comparedPixels": 6000,
+    "pixelChannelsComparedAsFloat64": true,
+    "originalExpectedCheckNumber": 2321,
+    "allPixelValuesAndOrderEqual": true,
+    "pixelTraceSha256": "f4dfbaa99c35485feb340fa4c25ca7faf78e2b6d59f71d42a64ae24ee5420b86",
+    "fieldInitializationEvents": 99,
+    "fieldTraceSha256": "84eae1a10af89d584b288fbea2f4709e4000a895e46840e97626fc56857947b4",
+    "fieldInitializationOrderAndPublicOwnKeysEqual": true,
+    "edgeBehaviorsEqual": true,
+    "checksums": {
+      "work0": 0,
+      "work1": 301702705,
+      "work2": 2658908128
+    },
+    "timingPerformed": false,
+    "instrumentation": "Untouched source executes first. Separate test-only contexts add pixel capture and Color component access; another context wraps field initializers to record their original values/order. Production ports contain none of these hooks.",
+    "strictTypeScript": true,
+    "strictCheckerExitCode": 0,
+    "caseSha256": "945734462306e6cea684d5fb99e65456b20a0c699d3c57edc950cb4531440289"
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 12.45585625,
+    "processes": [
+      {
+        "nsPerOp": 16499605.2,
+        "bits": "41b1fb9e31000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 13418203.1667,
+        "bits": "41b1fb9e31000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 18147177.25,
+        "bits": "41b1fb9e31000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 14662878.8333,
+        "bits": "41b1fb9e31000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 12455856.25,
+        "bits": "41b1fb9e31000000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "945734462306e6cea684d5fb99e65456b20a0c699d3c57edc950cb4531440289",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": true
+  }
+}
