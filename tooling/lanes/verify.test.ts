@@ -7,6 +7,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {waitFor} from "../gate/test-wait.ts";
 import {VerificationLedger,readLedger,type Checks} from "./verification-ledger.ts";
+import {selectorFixture} from "./selector-fixture.ts";
 
 const verifier=new URL("./verify.ts",import.meta.url).pathname;
 function fixture(t:{after(fn:()=>void):void}) {
@@ -16,10 +17,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith("NTS_") && !k.startsWith("GIT_") && !launcherPolicyNames({[k]:process.env[k]}).length));
   Object.assign(env,{HOME:home,CARGO_HOME:hostEnvironment(process.env).CARGO_HOME,RUSTUP_HOME:hostEnvironment(process.env).RUSTUP_HOME,NTS_LAND_HOME:home,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"});
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8"}).trim();
-  writeFileSync(join(repo,"tooling/gate/owed.mjs"),`import {execFileSync} from "node:child_process";
-const range=process.argv[process.argv.indexOf("--range")+1];
-const paths=execFileSync("git",["diff","--name-only",range],{encoding:"utf8"}).trim().split("\\n");
-process.stdout.write('NTS_GATE_STEPS="'+(paths.every(p=>p.startsWith("docs/")||p==="README.md"||p==="AGENTS.md")?"format":"fake")+'" sh tooling/gate/all.sh\\n');\n`);
+  writeFileSync(join(repo,"tooling/gate/owed.mjs"),selectorFixture({body:"const paths=changes.map(c=>c.path);",steps:'paths.every(p=>p.startsWith("docs/")||p==="README.md"||p==="AGENTS.md")?["format"]:["fake"]',projects:"null"}));
   writeFileSync(join(repo,"tooling/gate/run.mjs"),'process.stdout.write(process.argv.includes("--tree-only")?"format\\n":JSON.stringify({fake:[],other:[],format:[]}));\n');
   writeFileSync(join(repo,"tooling/gate/pinned.sh"),`set -eu
 . "${join(directory,"controls.sh")}"

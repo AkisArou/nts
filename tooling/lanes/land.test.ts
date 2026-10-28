@@ -20,6 +20,7 @@ import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { readLedger, VerificationLedger } from "./verification-ledger.ts";
 import {GateResource} from "./gate-resource.ts";
 import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
+import {selectorFixture} from "./selector-fixture.ts";
 
 // Fake gates read their own fixture controls from a private file. The real
 // gate environment deliberately does not forward these launcher variables.
@@ -66,6 +67,12 @@ echo "  windows-hello    skipped: SKIP windows-x86_64 (hello): not run" > "$NTS_
 echo "  apple-hello      skipped: SKIP macos (hello): not run" >> "$NTS_GATE_RUN_DIR/interop.log"
 printf '{"verdict":"%s","started":"t","wall_s":1,"steps":[{"name":"fake","verdict":"%s","log":"%s"}],"identities":{"commit":"%s"}}' \\
   "$verdict" "$step" "$NTS_GATE_RUN_DIR/interop.log" "$sha" > "$NTS_GATE_RUN_DIR/summary.json"
+node - "$NTS_GATE_RUN_DIR/summary.json" <<'REQUESTED_STEPS'
+const fs=require("node:fs"),file=process.argv[2],summary=JSON.parse(fs.readFileSync(file));
+const requested=(process.env.NTS_GATE_STEPS||"fake").split(/\\s+/).filter(Boolean),row=summary.steps[0];
+summary.requested=requested;summary.steps=requested.map(name=>({...row,name}));
+fs.writeFileSync(file,JSON.stringify(summary));
+REQUESTED_STEPS
 `;
 
 type Scratch = { root: string; home: string; gates: string; env: NodeJS.ProcessEnv };
@@ -82,12 +89,16 @@ function scratch(): Scratch {
   const home = join(dir, "home");
   mkdirSync(join(home, ".cache/nts-parallel-20261004/mainctl"), { recursive: true });
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
+  for (const project of ["java-from-ts", "ts-from-java"]) {
+    mkdirSync(join(root, "tests/interop", project), { recursive: true });
+    writeFileSync(join(root, "tests/interop", project, "build.sh"), "#!/bin/sh\nexit 0\n");
+  }
   writeFileSync(join(root, "tooling/gate/pinned.sh"), `. '${join(dir,"controls.sh")}'\n`+STAND_IN_GATE+reportContext);
-  writeFileSync(join(root, "tooling/gate/run.mjs"), 'process.stdout.write(JSON.stringify({fake: []}));\n');
+  writeFileSync(join(root, "tooling/gate/run.mjs"), 'process.stdout.write(JSON.stringify({fake: [],interop: []}));\n');
   // Narrows interop to what a commit's INTEROP file names, as owed.mjs does.
   writeFileSync(
     join(root, "tooling/gate/owed.mjs"),
-    `import { existsSync, readFileSync } from "node:fs";\nconst p = existsSync("INTEROP") ? \` NTS_INTEROP_PROJECTS="\${readFileSync("INTEROP", "utf8").trim()}"\` : "";\nconsole.log(\`NTS_GATE_STEPS="fake"\${p} sh tooling/gate/all.sh\`);\n`,
+    selectorFixture(),
   );
   writeFileSync(join(root, "shared.txt"), "one\n");
   const env: NodeJS.ProcessEnv = {};
@@ -149,7 +160,7 @@ function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; d
 
 function fastGate(s: Scratch): void {
   writeFileSync(join(s.root, "tooling/gate/run.mjs"), 'process.stdout.write(process.argv.includes("--tree-only") ? "tree-check\\n" : JSON.stringify({"tree-check":[],fake:[]}));\n');
-  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), 'process.stdout.write(\'NTS_GATE_STEPS="tree-check" sh tooling/gate/all.sh\\n\');\n');
+  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), selectorFixture({steps:'["tree-check"]',projects:"null"}));
   writeFileSync(join(s.root, "tooling/gate/all.sh"), controls(s,`#!/bin/sh
 set -eu
 mkdir -p "$NTS_GATE_RUN_DIR"
@@ -211,7 +222,7 @@ for(const scenario of [
 ]) test(`the real post-gate decision handles ${scenario.name}`,async()=>{
   const s=scratch(),base=run(s,s.root,["rev-parse","main"]);
   writeFileSync(join(s.root,"tooling/gate/run.mjs"),'process.stdout.write(JSON.stringify({fake:[],"on-device":[]}));\n');
-  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),`process.stdout.write('NTS_GATE_STEPS="${scenario.step}" sh tooling/gate/all.sh\\n');\n`);
+  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),selectorFixture({steps:JSON.stringify([scenario.step]),projects:"null"}));
   writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
 node - "$NTS_GATE_RUN_DIR/summary.json" <<'VERDICT'
 const fs=require("node:fs"),path=process.argv[2],summary=JSON.parse(fs.readFileSync(path));
@@ -368,7 +379,7 @@ test("changed owed rules on main route a previously fast change through the gate
   const wait = join(s.home, "checking"); s.env.LAND_TEST_FAST_WAIT = wait;
   const pending = land(s, tree);
   await until("private tree checks", () => existsSync(wait));
-  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), 'process.stdout.write(\'NTS_GATE_STEPS="fake" sh tooling/gate/all.sh\\n\');\n');
+  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), selectorFixture());
   run(s, s.root, ["add", "tooling/gate/owed.mjs"]);
   run(s, s.root, ["commit", "-q", "-m", "new strict obligation"]);
   writeFileSync(wait + ".done", "continue");
@@ -485,8 +496,8 @@ test("low disk holds every queued submission until admission recovers", async ()
 test("missing gate environment refuses before queueing or waiting for a held lock", async () => {
   const s = scratch();
   const tree = lane(s, "android-env", {
-    "tooling/gate/owed.mjs": 'console.log(\'NTS_GATE_STEPS="dex"\');\n',
-    "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({dex: ["android"]}));\n',
+    "tooling/gate/owed.mjs": selectorFixture({steps:'["dex"]',projects:"null"}),
+    "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({fake: [],dex: ["android"]}));\n',
   });
   s.env.ANDROID_HOME = "";
   const lock = join(s.home, ".cache/nts-land.lock");
@@ -508,8 +519,8 @@ test("missing gate environment refuses before queueing or waiting for a held loc
 test("the locked train rechecks capabilities before starting its gate", async () => {
   const s = scratch();
   const tree = lane(s, "train-env", {
-    "tooling/gate/owed.mjs": 'console.log(\'NTS_GATE_STEPS="dex"\');\n',
-    "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({dex: ["android"]}));\n',
+    "tooling/gate/owed.mjs": selectorFixture({steps:'["dex"]',projects:"null"}),
+    "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({fake: [],dex: ["android"]}));\n',
   });
   s.env.ANDROID_HOME = "";
   // Enter at the train half, bypassing the pre-queue check as its flock child does.
@@ -643,12 +654,7 @@ test("a red train is halved until the red landing is alone, and only it is refus
 
 function memoryGate(s: Scratch, mainRed = false): void {
   writeFileSync(join(s.root, "tooling/gate/run.mjs"), 'process.stdout.write(JSON.stringify({fake: [], memory: []}));\n');
-  writeFileSync(join(s.root, "tooling/gate/owed.mjs"), `
-import { execFileSync } from "node:child_process";
-const changed = execFileSync("git", ["diff", "--name-only", process.argv.at(-1)], {encoding: "utf8"}).split("\\n");
-const steps = changed.includes("SELECT_MEMORY") ? "fake memory" : "fake";
-console.log('NTS_GATE_STEPS="' + steps + '" sh tooling/gate/all.sh');
-`);
+  writeFileSync(join(s.root, "tooling/gate/owed.mjs"),selectorFixture({steps:'changes.some(c=>c.path==="SELECT_MEMORY")?["fake","memory"]:["fake"]',projects:"null"}));
   writeFileSync(join(s.root, "tooling/gate/pinned.sh"), controls(s,STAND_IN_GATE.slice(0, STAND_IN_GATE.indexOf("verdict=green step=PASS")) + `
 node - "$sha" <<'JS'
 const {appendFileSync, existsSync, writeFileSync} = require("node:fs");
@@ -756,7 +762,7 @@ test("the interop projects owed.mjs names reach the gate", async () => {
   const a = lane(s, "a", { INTEROP: "java-from-ts ts-from-java\n" });
   const [ra] = await landTogether(s, [a]);
   assert.equal(ra.status, 0, ra.out);
-  assert.match(ra.out, /owes: fake \(interop: java-from-ts ts-from-java\)/);
+  assert.match(ra.out, /owes: fake interop \(interop: java-from-ts ts-from-java\)/);
   assert.match(readFileSync(s.gates, "utf8"), / java-from-ts ts-from-java$/m);
 });
 

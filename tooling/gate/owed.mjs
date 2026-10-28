@@ -71,11 +71,14 @@
 // what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, globSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
+import { selectRange } from "./owed-range.ts";
+import {parseNameStatus,contentChanges} from "./change-paths.ts";
+export {parseNameStatus} from "./change-paths.ts";
 
 /**
  * The tree whose change is asked about: the one the command is run from, not
@@ -713,25 +716,11 @@ const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "test
  * still owes blockers) and the new one added (moving one into tests/programs/ is a
  * new example).
  */
-export function parseNameStatus(text) {
-  const out = [];
-  for (const l of text.split("\n").filter(Boolean)) {
-    const [status, ...rest] = l.split("\t");
-    if (/^[RC]/.test(status) && rest.length >= 2) {
-      if (status.startsWith("R")) out.push({ path: rest[0], added: false, deleted: true });
-      out.push({ path: rest[1], added: true, deleted: false });
-    } else {
-      out.push({ path: rest[rest.length - 1], added: status.startsWith("A"), deleted: status.startsWith("D") });
-    }
-  }
-  return out;
-}
-
 export function changedPaths(argv) {
   const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8" });
   const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
   const commit = at("--commit");
-  if (commit) return contentChanges(parseNameStatus(git("diff", "--name-status", "-M", `${commit}^`, commit)), `${commit}^`, commit);
+  if (commit) return contentChanges(TREE, parseNameStatus(git("diff", "--name-status", "-z", "-M", `${commit}^`, commit)), `${commit}^`, commit);
   // Two commits and nothing else: no working tree and no untracked files. What
   // a landing gates is a commit, and a tree's uncommitted or linked files (a
   // symlinked submodule, a node_modules link) are not part of it -- read from
@@ -740,28 +729,12 @@ export function changedPaths(argv) {
   if (range) {
     const [from, to] = range.split("..");
     if (!from || !to) throw new Error(`--range wants A..B, got ${range}`);
-    return contentChanges(parseNameStatus(git("diff", "--name-status", "-M", from, to)), from, to);
+    return contentChanges(TREE, parseNameStatus(git("diff", "--name-status", "-z", "-M", from, to)), from, to);
   }
   const since = at("--since");
-  const tracked = parseNameStatus(git("diff", "--name-status", "-M", since ?? "HEAD"));
-  const untracked = git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean).map((path) => ({ path, added: true, deleted: false }));
-  return [...contentChanges(tracked, since ?? "HEAD", null), ...untracked];
-}
-
-/** Compare the requested Git blobs, never today's bytes for a historical range. */
-function contentChanges(changes, from, to) {
-  const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 8 << 20 });
-  return changes.map(change => {
-    if (change.added || change.deleted) return change;
-    try {
-      const mode = rev => git("ls-tree", rev, "--", change.path).split(" ")[0];
-      const oldMode = mode(from);
-      const file = to ? null : lstatSync(join(TREE, change.path));
-      const newMode = to ? mode(to) : file.isFile() ? file.mode & 0o111 ? "100755" : "100644" : "other";
-      if (!["100644", "100755"].includes(oldMode) || oldMode !== newMode) return change;
-      return { ...change, sameMode: true, before: git("show", `${from}:${change.path}`), after: to ? git("show", `${to}:${change.path}`) : readFileSync(join(TREE, change.path), "utf8") };
-    } catch { return change; }
-  });
+  const tracked = parseNameStatus(git("diff", "--name-status", "-z", "-M", since ?? "HEAD"));
+  const untracked = git("ls-files", "-z", "--others", "--exclude-standard").split("\0").filter(Boolean).map((path) => ({ path, added: true, deleted: false }));
+  return [...contentChanges(TREE, tracked, since ?? "HEAD", null), ...untracked];
 }
 
 // ---------------------------------------------------------------------------
@@ -1350,7 +1323,7 @@ export function gateSteps(rules) {
 }
 
 // **Seen to select before it is trusted**, on the three changes that motivated it.
-function selfTest() {
+export function selfTest() {
   const names = (changes) => owed(changes).map((r) => r.name).join(", ");
   const example = names([{ path: "tests/programs/is-array-of-object/tsconfig.json", added: true }, { path: "tests/programs/is-array-of-object/src/main.ts", added: true }]);
   if (!example.includes("a new example") || example.includes("an example changed")) return `a new example: ${example}`;
@@ -1408,22 +1381,25 @@ function main() {
     console.log(`  no change in ${TREE}: nothing owed`);
     process.exit(0);
   }
-  const rules = owed(changes);
-  const steps = gateSteps(rules);
-  const projects = interopOwed(rules);
+  const rangeAt = argv.indexOf("--range");
+  const selection = rangeAt < 0 ? null : selectRange(TREE, argv[rangeAt + 1]);
+  const rules = selection ? [...new Map(selection.views.flatMap(v => v.rules).map(r => [JSON.stringify(r), r])).values()] : owed(changes);
+  const steps = selection ? selection.checks.steps === "all" ? selection.views[1].catalogue : selection.checks.steps : gateSteps(rules);
+  const projects = selection ? selection.checks.interop?.split(/\s+/) ?? null : interopOwed(rules);
   const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";
-  const docCrates = [...new Set(rules.flatMap(r => r.doctests ?? []))];
+  const docCrates = selection ? selection.checks.doctests?.split(/\s+/) ?? [] : [...new Set(rules.flatMap(r => r.doctests ?? []))];
   const docEnv = docCrates.length ? ` NTS_DOCTEST_CRATES="${docCrates.join(" ")}"` : "";
   // A bare all.sh is every step there is, which only the runner and the gate
   // trees' inputs owe; the full gate is every core step, so it is a list, and
   // `land.ts` runs exactly that list (`WIDE` is the full run's).
-  const every = rules.some((r) => r.full && r.wide);
+  const every = selection ? selection.checks.steps === "all" : rules.some((r) => r.full && r.wide);
   const gate = every
     ? "sh tooling/gate/all.sh   # the full gate"
     : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed}${docEnv} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
   const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
-  if (changes.some(c => isStrictPath(c.path))) console.log("  landing policy: strict gate-before-land (verdict machinery)");
+  if (selection) console.log(`  rules: union of base ${selection.base.slice(0,12)} and candidate ${selection.tip.slice(0,12)}`);
+  if (selection?.strict ?? changes.some(c => isStrictPath(c.path))) console.log("  landing policy: strict gate-before-land");
   for (const r of rules) {
     console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
     for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);

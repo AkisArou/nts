@@ -1,4 +1,5 @@
 import {pruneRunTemporaries} from "../gate/run-temporary.ts";
+import {selectRange} from "../gate/owed-range.ts";
 import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Land a commit on main: the owed gate steps, one gate at a time, then a
 // fast-forward. What every lane did by hand, which is how main went red.
@@ -26,8 +27,8 @@ import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "
 //    of it is refused -- rebase by hand and land again -- and the train goes
 //    on without it.
 // 3. Asks `owed.mjs --range main..<tip>` which steps the train owes, from the
-//    gate tree checked out at its tip: the rules as that commit has them, and
-//    the commits, never a working tree's state.
+//    union of the base and candidate rules and derived inputs, using the
+//    commits, never a working tree's state.
 // 4. Gates exactly those, with `pinned.sh`, in the one shared gate tree.
 // 5. Reads the run's summary: green, every owed step PASS (a skip only where
 //    the gate accepts one), and the summary names the tip.
@@ -156,11 +157,7 @@ function environmentProblem(tree: string, owed: Owed): string | null {
 }
 
 function owedSteps(tree: string, range: string): Owed {
-  const out = execFileSync("node", ["tooling/gate/owed.mjs", "--range", range], { cwd: tree, encoding: "utf8" });
-  const line = out.match(/NTS_GATE_STEPS="([^"]*)"(?: NTS_INTEROP_PROJECTS="([^"]*)")?/);
-  if (line) return { steps: line[1].split(/\s+/).filter(Boolean), interop: line[2] ?? null, doctests: /NTS_DOCTEST_CRATES="([^"]*)"/.exec(out)?.[1] ?? null };
-  if (/^\s*sh tooling\/gate\/all\.sh\s+# the full gate/m.test(out)) return { steps: "all", interop: null };
-  fail(`owed.mjs named no steps for ${range}:\n${out}`);
+  return selectRange(tree, range).checks;
 }
 
 /**

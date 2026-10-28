@@ -4,8 +4,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { unionChecks, type Checks } from "../gate/checks.ts";
+export { unionChecks, type Checks } from "../gate/checks.ts";
 
-export type Checks = { steps: "all" | string[]; interop: string | null; doctests?: string | null };
 export type Author = { lane: string | null; address: string | null };
 export type LandingRecord = {
   id: string; submitted: string; base: string; tip: string; commits: string[];
@@ -98,14 +99,6 @@ function validate(value: Ledger): Ledger {
     }
   }
   return value;
-}
-
-export function unionChecks(a: Checks, b: Checks): Checks {
-  const uses = (c: Checks, s: string) => c.steps === "all" || c.steps.includes(s);
-  const scope = (s: string, x: string|null|undefined, y: string|null|undefined) => !uses(b,s) ? x : !uses(a,s) ? y
-    : !x || !y ? null : [...new Set([...x.split(/\s+/),...y.split(/\s+/)])].join(" ");
-  return {steps:a.steps === "all" || b.steps === "all" ? "all" : [...new Set([...a.steps,...b.steps])],
-    interop:scope("interop",a.interop,b.interop)??null,doctests:scope("doctests",a.doctests,b.doctests)};
 }
 
 /** Null is uninitialised, never a claim that current main is verified. */

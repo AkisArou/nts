@@ -1,0 +1,104 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { selectRange, unionViews, type RuleView } from "./owed-range.ts";
+import {committedChanges} from "./change-paths.ts";
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+test("committed paths preserve spaces, Unicode, tabs and line breaks across a rename",t=>{
+  const repo=mkdtempSync(join(tmpdir(),"owed-paths-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
+  const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  const before="before space Ɤ\tline\nbreak.ts",after="after space Ɤ\tline\nbreak.ts";
+  git("init","-qb","main");writeFileSync(join(repo,before),"export const n=1;\n");git("add","--",before);git("commit","-qm","before");
+  const base=git("rev-parse","HEAD");git("mv","--",before,after);git("commit","-qm","rename");
+  assert.deepEqual(committedChanges(repo,base,"HEAD"),[{path:before,added:false,deleted:true},{path:after,added:true,deleted:false}]);
+});
+const view = (steps: string[] | "all", interop: string | null, doctests: string | null, catalogue = ["build", "interop", "doctests"]): RuleView =>
+  ({ revision: "0".repeat(40), checks: { steps, interop, doctests }, catalogue, strict: false, rules: [] });
+
+test("scope union keeps both project/crate subsets and either whole-step obligation", () => {
+  const a = view(["interop", "doctests"], "alpha", "nts-core");
+  const b = view(["interop", "doctests"], "beta", "nts-cli");
+  for (const pair of [[a, b], [b, a]]) {
+    const got = unionViews(pair);
+    assert.deepEqual(new Set(got.interop!.split(" ")), new Set(["alpha", "beta"]));
+    assert.deepEqual(new Set(got.doctests!.split(" ")), new Set(["nts-core", "nts-cli"]));
+  }
+  for (const pair of [[a, view(["interop", "doctests"], null, null)], [view(["interop", "doctests"], null, null), a]]) {
+    assert.equal(unionViews(pair).interop, null);
+    assert.equal(unionViews(pair).doctests, null);
+  }
+});
+
+test("a removed step remains explicit instead of disappearing behind candidate all", () => {
+  const got = unionViews([view("all", null, null, ["build", "retired"]), view("all", null, null, ["build"])]);
+  assert.deepEqual(got.steps, ["build", "retired"]);
+});
+
+test("historical rules receive the same committed changes without modern metadata exports", t => {
+  const repo=mkdtempSync(join(tmpdir(),"owed-legacy-"));
+  t.after(()=>rmSync(repo,{recursive:true,force:true}));
+  mkdirSync(join(repo,"tooling/gate"),{recursive:true});
+  const env={...process.env,GIT_AUTHOR_NAME:"test",GIT_AUTHOR_EMAIL:"test@example.invalid",GIT_COMMITTER_NAME:"test",GIT_COMMITTER_EMAIL:"test@example.invalid"};
+  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  const code=`export const owed=changes=>[{name:"legacy",paths:changes.map(c=>c.path),steps:changes.length?["tests"]:[],arms:[]}];
+export const gateSteps=rules=>rules.flatMap(r=>r.steps);
+export const allSteps=()=>["tests","tooling"];
+if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\n`;
+  const file=join(repo,"tooling/gate/owed.mjs");
+  writeFileSync(file,code);git("init","-qb","main");git("add",".");git("commit","-qm","legacy base");
+  const base=git("rev-parse","HEAD");
+  writeFileSync(file,code.replace('?["tests"]','?["tooling"]'));
+  git("add",".");git("commit","-qm","legacy candidate");
+  const got=selectRange(repo,`${base}..HEAD`);
+  assert.deepEqual(got.checks.steps,["tests","tooling"]);
+  assert.equal(got.strict,true,"unknown historical routing stays strict");
+});
+
+test("a rule cannot narrow its own committed range and dirty policy cannot alter it", t => {
+  const directory = mkdtempSync(join(tmpdir(), "owed-range-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const repo = join(directory, "repo");
+  const env = { ...process.env, GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
+  for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !/GIT_(AUTHOR|COMMITTER)_/.test(key)) delete env[key];
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  execFileSync("git", ["clone", "--quiet", "--shared", ROOT, repo], { env, stdio: ["ignore", "pipe", "pipe"] });
+  execFileSync("sh", [join(ROOT, "tooling/lanes/inputs.sh"), "lane", ROOT, repo], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const base = git("rev-parse", "HEAD");
+  const policy = join(repo, "tooling/gate/owed.mjs");
+  const original = readFileSync(policy, "utf8");
+  assert.ok(original.includes("export const RULES = ["));
+  writeFileSync(policy, original.replace("export const RULES = [", `export const RULES = [
+    {name:"the newly classified path",when:p=>p==="new-area/control.dat",steps:["tooling"],arms:[]},`)
+    .replace(/export const isStrictPath = [^\n]+/, "export const isStrictPath = () => false;"));
+  mkdirSync(join(repo, "new-area"));
+  writeFileSync(join(repo, "new-area/control.dat"), "new compiled input\n");
+  git("add", "tooling/gate/owed.mjs", "new-area/control.dat");
+  git("commit", "-qm", "classify a previously unmatched path");
+  const tip = git("rev-parse", "HEAD");
+  const selected = selectRange(repo, `${base}..${tip}`);
+  const expanded = (v: RuleView) => v.checks.steps === "all" ? v.catalogue : v.checks.steps;
+  const oldOnly = expanded(selected.views[0]).filter(s => !expanded(selected.views[1]).includes(s));
+  assert.ok(oldOnly.length > 0, "the candidate-only control must really narrow the old obligations");
+  const joined = selected.checks.steps === "all" ? selected.views[1].catalogue : selected.checks.steps;
+  for (const step of oldOnly) assert.ok(joined.includes(step), `base rule still owes ${step}`);
+  assert.equal(selected.views[1].strict, false);
+  assert.equal(selected.strict, true, "removing the strict classifier cannot make its own edit optimistic");
+  // A later working-tree edit is outside both selected commits.
+  writeFileSync(policy, "throw new Error('dirty policy must not run');\n");
+  assert.deepEqual(selectRange(repo, `${base}..${tip}`).checks, selected.checks);
+  assert.equal(git("rev-parse", "HEAD"), tip);
+  const worktrees = git("worktree", "list", "--porcelain");
+  assert.equal(worktrees.split("\n").filter(l => l.startsWith("worktree ")).length, 1, "endpoint trees are collected");
+  const committed = git("show", `${tip}:tooling/gate/owed.mjs`);
+  assert.ok(committed.includes("export function selfTest() {"));
+  writeFileSync(policy, committed.replace("export function selfTest() {", 'export function selfTest() { return "broken rule control"; }\nfunction unusedOriginalSelfTest() {'));
+  git("add", "tooling/gate/owed.mjs");
+  git("commit", "-qm", "break the rule self-check");
+  assert.throws(() => selectRange(repo, `${tip}..HEAD`), /broken rule control/);
+});

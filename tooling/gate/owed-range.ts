@@ -1,0 +1,123 @@
+// Evaluate each endpoint's own rules and derived inputs in immutable trees.
+// The caller's working files and the other endpoint cannot narrow that view.
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { unionChecks, type Checks } from "./checks.ts";
+import {committedChanges,type PathChange} from "./change-paths.ts";
+
+type Arm = { kind: string; asks: string; run: string; if?: string };
+type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
+export type RuleView = { revision: string; checks: Checks; catalogue: string[]; strict: boolean; rules: Rule[] };
+export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[] };
+const SELF = fileURLToPath(import.meta.url);
+const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
+
+function git(repo: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim();
+}
+
+function endpoints(repo: string, range: string): [string, string] {
+  const parts = range.split("..");
+  if (parts.length !== 2 || parts.some(p => !p || p.startsWith("."))) throw new Error(`--range wants A..B, got ${range}`);
+  return parts.map(ref => git(repo, "rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`)) as [string, string];
+}
+
+function readView(text: string, revision: string): RuleView {
+  const view = JSON.parse(text) as RuleView;
+  const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(s => typeof s === "string");
+  if (view.revision !== revision || !view.checks || !strings(view.catalogue) || typeof view.strict !== "boolean"
+      || (view.checks.steps !== "all" && !strings(view.checks.steps))
+      || (view.checks.interop !== null && typeof view.checks.interop !== "string")
+      || (view.checks.doctests != null && typeof view.checks.doctests !== "string")
+      || !Array.isArray(view.rules) || view.rules.some(r => !r || typeof r.name !== "string" || !strings(r.paths) || !strings(r.steps) || !Array.isArray(r.arms))) {
+    throw new Error(`invalid owed selection at ${revision}`);
+  }
+  return view;
+}
+
+export function unionViews(views: RuleView[]): Checks {
+  if (views.length !== 2) throw new Error("range selection needs both endpoint views");
+  // Expand before union so a step removed by the candidate stays an obligation.
+  const expanded = views.map(v => ({ ...v.checks, steps: v.checks.steps === "all" ? v.catalogue : v.checks.steps }));
+  const joined = unionChecks(expanded[0], expanded[1]);
+  const every = views.some(v => v.checks.steps === "all");
+  if (every && joined.steps !== "all" && joined.steps.every(s => views[1].catalogue.includes(s))) joined.steps = "all";
+  return joined;
+}
+
+export function selectRange(repo: string, range: string): RangeSelection {
+  const [base, tip] = endpoints(repo, range);
+  const changes=committedChanges(repo,base,tip);
+  const parent = join(homedir(), ".cache/nts-owed-range");
+  mkdirSync(parent, { recursive: true });
+  const directory = mkdtempSync(join(parent, "range-"));
+  const added: string[] = [];
+  const views: RuleView[] = [];
+  let result: RangeSelection | undefined;
+  const errors: unknown[] = [];
+  let cleanupFailed = false;
+  try {
+    const shared = dirname(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"));
+    for (const [index, revision] of [base, tip].entries()) {
+      const tree = join(directory, String(index));
+      git(repo, "worktree", "add", "--quiet", "--detach", tree, revision);
+      added.push(tree);
+      if (existsSync(join(tree, "pnpm-lock.yaml"))) {
+        execFileSync("sh", [INPUTS, "lane", shared, tree], { cwd: tree, stdio: ["ignore", "pipe", "pipe"] });
+      }
+      try {
+        const text = execFileSync(process.execPath, [SELF, "--endpoint", tree, revision],
+          { cwd: tree, input:JSON.stringify(changes),encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], maxBuffer: 64 << 20 });
+        views.push(readView(text, revision));
+      } catch (error) {
+        throw new Error(`cannot evaluate owed rules at ${revision}: ${String(error)}`, { cause: error });
+      }
+    }
+    result = { base, tip, checks: unionViews(views), strict: views.some(v => v.strict), views };
+  } catch (error) { errors.push(error); }
+  finally {
+    for (const tree of added.reverse()) {
+      try { git(repo, "worktree", "remove", "--force", tree); }
+      catch (error) { cleanupFailed = true; errors.push(error); }
+    }
+    if (!cleanupFailed) rmSync(directory, { recursive: true, force: true });
+  }
+  if (errors.length) throw new AggregateError(errors, `range selection failed; no owed scope was granted: ${errors.map(String).join("; ")}`);
+  return result!;
+}
+
+async function endpoint(tree: string, revision: string, changes:PathChange[]): Promise<RuleView> {
+  const m = await import(pathToFileURL(join(tree, "tooling/gate/owed.mjs")).href);
+  for (const name of ["owed", "gateSteps", "allSteps"]) {
+    if (typeof m[name] !== "function") throw new Error(`owed.mjs lacks ${name} at ${revision}`);
+  }
+  if (typeof m.selfTest === "function") {
+    const broken = m.selfTest();
+    if (broken) throw new Error(`rule self-test failed at ${revision}: ${broken}`);
+  } else {
+    // Historical rule modules exposed their checks only through this command.
+    execFileSync(process.execPath, [join(tree, "tooling/gate/owed.mjs"), "--self-test"],
+      { cwd: tree, stdio: ["ignore", "pipe", "pipe"] });
+  }
+  if (existsSync(join(tree, "Cargo.toml")) && typeof m.crates === "function" && m.crates() === null) {
+    throw new Error(`Cargo metadata is unavailable at ${revision}; dependency reach is unknown`);
+  }
+  const rules: Rule[] = m.owed(changes);
+  const projects = typeof m.interopOwed==="function"?m.interopOwed(rules):null;
+  const doctests = [...new Set(rules.flatMap(r => r.doctests ?? []))];
+  return { revision, checks: { steps: rules.some(r => r.full && r.wide) ? "all" : m.gateSteps(rules),
+    interop: Array.isArray(projects) && projects.length ? projects.join(" ") : null,
+    doctests: doctests.length ? doctests.join(" ") : null },
+    catalogue: m.allSteps(), strict: typeof m.isStrictPath!=="function" || changes.some(c => m.isStrictPath(c.path)), rules };
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  try {
+    const [operation, tree, revision, ...rest] = process.argv.slice(2);
+    if (operation !== "--endpoint" || !tree || !revision || rest.length) throw new Error("invalid owed endpoint invocation");
+    process.stdout.write(JSON.stringify(await endpoint(tree, revision, JSON.parse(readFileSync(0,"utf8")))));
+  } catch (error) { console.error(String(error)); process.exitCode = 1; }
+}
