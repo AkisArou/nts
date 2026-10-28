@@ -178,8 +178,9 @@ mod tests {
             let prepared = raw
                 .into_prepared(&hir::PreparationOptions::from(&options))
                 .unwrap_or_else(|error| panic!("{}", error.render(&snapshot.sources)));
-            let (_, cases, _) =
-                super::super::case_population(&snapshot, &prepared.program).unwrap();
+            let cases = super::super::case_population(&snapshot, &prepared.program)
+                .unwrap()
+                .testable;
             for rule in rules {
                 let matched = cases.iter().any(|case| {
                     case.name == rule.function

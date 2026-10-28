@@ -24,6 +24,7 @@ fn case(name: &str, asynchronous: bool) -> Testable {
         },
         result_absent: hir::Absent::Impossible,
         params: Vec::new(),
+        input_pools: None,
         excluded_tuples: Vec::new(),
     }
 }

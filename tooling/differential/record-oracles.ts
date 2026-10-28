@@ -9,11 +9,17 @@ import { promisify } from "node:util";
 const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+type NumericDomain = { min?: number; max?: number; integer?: boolean; allowNaN?: boolean; reason: string };
+type RecordedDomain = { identity: string; declaration: { version: number; functions: Record<string, Record<string, NumericDomain>> } };
+type Populations = Record<string, { count: number; cases_sha256: string }>;
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
+  input_domain?: RecordedDomain;
   repository_root?: string;
   generator_version: number; generator_digest: string; case_key: string; case_count: number;
   cases: string[]; signature: unknown[]; driver: string; resolver: string };
 type Row = { kind: "measured" | "no-oracle"; source: string; signature: string;
+  input_domain?: RecordedDomain;
+  populations?: Populations;
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
   count?: number; complete?: true; node_cpu_s?: number[]; source_digest?: string; reason?: string };
 type Table = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: Row[] };
@@ -49,6 +55,25 @@ function identity(plan: Plan) {
     keys: { [plan.backend]: plan.case_key }, cases_sha256: digest(JSON.stringify(plan.cases)),
     driver_sha256: digest(canonicalDriver(plan)) };
 }
+function populations(cases: string[]): Populations {
+  const grouped = new Map<string, string[]>();
+  for (const one of cases) {
+    const name = /^(\S+) \d+ /.exec(one)?.[1];
+    if (!name) throw new Error("invalid generated case identity");
+    const group = grouped.get(name) ?? [];
+    group.push(one);
+    grouped.set(name, group);
+  }
+  return Object.fromEntries([...grouped].sort(([a], [b]) => a.localeCompare(b, "en"))
+    .map(([name, values]) => [name, { count: values.length, cases_sha256: digest(JSON.stringify(values)) }]));
+}
+function constraints(domain: RecordedDomain | undefined, name: string): string | undefined {
+  const parameters = domain?.declaration.functions[name];
+  if (!parameters) return undefined;
+  return JSON.stringify(Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b, "en"))
+    .map(([parameter, value]) => [parameter, { min: value.min ?? null, max: value.max ?? null,
+      integer: value.integer ?? false, allowNaN: value.allowNaN ?? false }]));
+}
 export function completeRows(text: string, expected: number): string[] {
   const lines = text.trimEnd().split("\n");
   if (lines.pop() !== `done ${expected}` || lines.length !== expected) {
@@ -60,15 +85,40 @@ export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: nu
   if (table.version !== 1 || plan.cases.length !== plan.case_count || plan.seed !== null || delivered !== plan.case_count) throw new Error("invalid recording schema");
   if (cpu.length !== 2 || cpu.some(n => !Number.isFinite(n) || n < 0 || n * 2 > 15)) throw new Error("CPU budget needs at least twice both measured runs");
   const previous = table.rows.filter(row => row.source === plan.source && row.keys[plan.backend]);
-  if (previous.some(row => (row.count ?? 0) > plan.case_count)) throw new Error("refusing to lower recorded coverage; review the population change explicitly");
+  const domain = plan.input_domain;
+  if (domain !== undefined && (!/^[0-9a-f]{32}$/.test(domain.identity) || domain.declaration?.version !== 1 ||
+    !domain.declaration.functions || Object.keys(domain.declaration.functions).length === 0 ||
+    Object.values(domain.declaration.functions).some(parameters => Object.keys(parameters).length === 0 ||
+      Object.values(parameters).some(parameter => typeof parameter.reason !== "string" || !parameter.reason.trim())))) {
+    throw new Error("invalid recorded domain schema");
+  }
+  const population = populations(plan.cases);
+  for (const row of previous) {
+    if (row.populations === undefined) {
+      if ((row.count ?? 0) > plan.case_count || ((row.count ?? 0) > 0 && domain !== undefined &&
+        row.cases_sha256 !== digest(JSON.stringify(plan.cases)))) {
+        throw new Error("refusing to lower legacy recorded coverage; first re-record its unchanged population to establish function coverage");
+      }
+      continue;
+    }
+    for (const [name, old] of Object.entries(row.populations)) {
+      if (old.count > (population[name]?.count ?? 0) &&
+        (population[name] === undefined || constraints(domain, name) === undefined ||
+          constraints(domain, name) === constraints(row.input_domain, name))) {
+        throw new Error(`refusing to lower recorded coverage for ${name} without a change to its workload domain`);
+      }
+    }
+  }
   const id = identity(plan), old = table.rows.find(row => row.source === id.source && row.signature === id.signature);
   const row: Row = { kind: "measured", ...id, keys: { ...old?.keys, ...id.keys },
-    count: delivered, complete: true };
+    count: delivered, complete: true, populations: population,
+    ...(domain === undefined ? {} : { input_domain: domain }) };
   return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(old => !(old.source === row.source && old.signature === row.signature)), row] };
 }
 export function noOracleRecord(plan: Plan, reason: string): Row {
   if (plan.case_count !== 0 || plan.cases.length !== 0 || !plan.source_digest || !reason) throw new Error("no-oracle requires an explicit empty source identity and reason");
-  return { kind: "no-oracle", ...identity(plan), source_digest: plan.source_digest, reason };
+  return { kind: "no-oracle", ...identity(plan), source_digest: plan.source_digest, reason,
+    ...(plan.input_domain === undefined ? {} : { input_domain: plan.input_domain }) };
 }
 function addNoOracle(table: Table, plan: Plan, reason: string): Table {
   const row = noOracleRecord(plan, reason), old = table.rows.find(r => r.source === row.source && r.signature === row.signature);

@@ -19,7 +19,7 @@ test("recording merges backend signatures and refuses reduced coverage or inadeq
   assert.equal(table.rows[0].count, 2);
   assert.throws(() => addRecord(table, plan, [1, 2], 1), /schema/);
   assert.equal(table.rows[0].cases_sha256, createHash("sha256").update(JSON.stringify(plan.cases)).digest("hex"));
-  assert.throws(() => addRecord(table, { ...plan, case_key: "new", case_count: 1, cases: ["one"] }, [1, 2], 1), /lower/);
+  assert.throws(() => addRecord(table, { ...plan, case_key: "new", case_count: 1, cases: [plan.cases[0]] }, [1, 2], 1), /lower/);
   assert.throws(() => addRecord(table, plan, [7.6, 1], 2), /twice/);
   const next = addRecord(table, { ...plan, case_key: "new" }, [1, 2], 2);
   assert.equal(next.rows.length, 1);
@@ -64,6 +64,42 @@ test("checked-in promises use compact sorted rows with complete measured identit
       assert.ok(row.node_cpu_s.every((n: number) => Number.isFinite(n) && n >= 0 && n * 2 <= 15));
     }
   }
+});
+
+test("a changed declared domain permits complete narrowing, not an unchanged domain's coverage loss", () => {
+  const original = addRecord({ version: 1, rows: [] }, plan, [1, 2], 2);
+  const domain = { identity: "a".repeat(32), declaration: { version: 1,
+    functions: { f: { n: { max: 0, reason: "zero-sized workload" } } } } };
+  const narrower = { ...plan, input_domain: domain, case_key: "bounded", case_count: 1, cases: ["f 0 [0.0]"] };
+  assert.throws(() => addRecord(original, narrower, [1, 2], 0), /schema/);
+  const measured = addRecord(original, narrower, [1, 2], 1);
+  const row = measured.rows.find(row => row.count === 1)!;
+  assert.deepEqual(row.input_domain, domain);
+  assert.equal(row.complete, true);
+  const baseline = addRecord({ version: 1, rows: [] }, { ...plan, input_domain: domain }, [1, 2], 2);
+  assert.throws(() => addRecord(baseline, narrower, [1, 2], 1), /lower/);
+  const reworded = { ...domain, declaration: { ...domain.declaration,
+    functions: { f: { n: { max: 0, reason: "a clearer explanation of the same workload" } } } } };
+  assert.throws(() => addRecord(baseline, { ...narrower, input_domain: reworded }, [1, 2], 1), /lower/);
+  assert.throws(() => addRecord(original, { ...narrower, input_domain: { ...domain, declaration: { version: 1, functions: {} } } }, [1, 2], 1), /domain schema/);
+});
+
+test("a function's domain change cannot authorize another function's lost coverage", () => {
+  const both = { ...plan, case_count: 4,
+    cases: ["f 0 [0.0]", "f 1 [1.0]", "g 0 [0.0]", "g 1 [1.0]"] };
+  const original = addRecord({ version: 1, rows: [] }, both, [1, 2], 4);
+  const domain = { identity: "a".repeat(32), declaration: { version: 1,
+    functions: { f: { n: { max: 0, reason: "zero-sized workload" } } } } };
+  const changed = { ...both, input_domain: domain, case_key: "bounded" };
+  assert.throws(() => addRecord(original,
+    { ...changed, case_count: 1, cases: [both.cases[0]] }, [1, 2], 1), /coverage for g/);
+  assert.throws(() => addRecord(original,
+    { ...changed, case_count: 4, cases: ["f 0 [0.0]", "f 1 [0.5]", "f 2 [1.0]", "g 0 [0.0]"] }, [1, 2], 4), /coverage for g/);
+  assert.doesNotThrow(() => addRecord(original,
+    { ...changed, case_count: 3, cases: [both.cases[0], ...both.cases.slice(2)] }, [1, 2], 3));
+  const legacy = { ...original, rows: original.rows.map(({ populations: _ignored, ...row }) => row) };
+  assert.throws(() => addRecord(legacy,
+    { ...changed, case_count: 3, cases: [both.cases[0], ...both.cases.slice(2)] }, [1, 2], 3), /lower legacy/);
 });
 
 test("author paths and CPU observations do not change a published promise", () => {

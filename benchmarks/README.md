@@ -170,6 +170,25 @@ provably local, and allocating anyway is a real gap rather than an artifact.
 
 ## Rules the harness enforces
 
+**Workload domains narrow generated inputs only, never what nts compiles.**
+Beside an entry such as `case.ts` or `main.ts`, an optional `case.domains.json`
+or `main.domains.json` declares `{"version":1,"functions":{"work":{"n":{"max":32768,"allowNaN":true,"reason":"bounded generated output"}}}}`.
+Each exported function names its numeric parameters; every declaration requires
+a nonempty `reason`, with optional finite `min`/`max`, `integer` and `allowNaN`
+(both flags default to false). The differential clips boundary inputs to the
+domain, preserves signed zero, retains NaN only when explicitly allowed, and
+removes duplicate clipped values. Every backend and the Node oracle use that
+same complete population. Unknown names, nonnumeric parameters and contradictory
+bounds are errors. Subjects without a sidecar keep their existing inputs and
+oracle identities.
+Plans and records carry each declared domain and its constraint identity;
+rewording a reason leaves that identity unchanged. The recorder tracks each
+function's population separately: a smaller nonempty population requires a
+change to that function's constraints, and a declaration for one function
+cannot authorize lost coverage in another. Before migrating a legacy record
+without function coverage metadata, re-record that subject's unchanged
+population; only subjects acquiring or changing domains need re-recording.
+
 **Every variant returns a checksum and the runner compares them.** A benchmark
 that measured only time would reward a backend for computing the wrong answer
 quickly. A case whose variants disagree fails instead of reporting.

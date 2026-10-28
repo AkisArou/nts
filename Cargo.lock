@@ -485,6 +485,7 @@ dependencies = [
  "nts-diagnostics",
  "nts-frontend-ts",
  "nts-semantic-schema",
+ "serde",
  "serde_json",
  "xxhash-rust",
 ]

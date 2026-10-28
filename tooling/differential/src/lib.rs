@@ -43,6 +43,7 @@ use nts_frontend_ts::Frontend;
 
 mod artifact_shadow;
 mod case_costs;
+mod domains;
 mod objects;
 mod oracle_coverage;
 mod oracle_exclusions;
@@ -269,7 +270,16 @@ struct Testable {
     /// otherwise, where it printed `undefined` for both.
     result_absent: nts_core::hir::Absent,
     params: Vec<(HirType, Facts)>,
+    input_pools: Option<Vec<Vec<f64>>>,
     excluded_tuples: Vec<Vec<u64>>,
+}
+
+impl Testable {
+    fn tuples(&self) -> Vec<Vec<f64>> {
+        self.input_pools
+            .as_ref()
+            .map_or_else(|| tuples(&self.params), |pools| tuples_from_pools(pools))
+    }
 }
 
 /// The values one parameter may be given.
@@ -429,6 +439,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         prepared,
         entry,
         testable,
+        ..
     } = prepare_check(tsconfig, source, backend)?;
     let coverage = oracle_coverage::resolve(&entry, backend, &testable)?;
     if testable.is_empty() {
@@ -495,6 +506,14 @@ struct PreparedCheck {
     prepared: hir::Prepared,
     entry: Utf8PathBuf,
     testable: Vec<Testable>,
+    input_domain: Option<domains::RecordedDomain>,
+}
+
+struct CasePopulation {
+    entry: Utf8PathBuf,
+    testable: Vec<Testable>,
+    exclusions: oracle_exclusions::Policy,
+    input_domain: Option<domains::RecordedDomain>,
 }
 
 fn prepare_check(
@@ -563,11 +582,16 @@ fn prepare_check(
     }
 
     let selection = case_costs::span("select_exports");
-    let (entry, testable, exclusions) = case_population(&snapshot, &prepared.program)?;
+    let CasePopulation {
+        entry,
+        testable,
+        exclusions,
+        input_domain,
+    } = case_population(&snapshot, &prepared.program)?;
     let excluded = testable
         .iter()
         .map(|one| {
-            tuples(&one.params)
+            one.tuples()
                 .iter()
                 .filter(|tuple| oracle_exclusions::matches(tuple, &one.excluded_tuples))
                 .count()
@@ -589,6 +613,7 @@ fn prepare_check(
         prepared,
         entry,
         testable,
+        input_domain,
     })
 }
 
@@ -609,13 +634,17 @@ pub fn oracle_plan(
     let (cases, signature) = oracle_population(&checked.testable);
     let key = oracle_case_key(backend, &cases, &signature)?;
     let absolute = checked.entry.canonicalize_utf8()?;
-    Ok(serde_json::json!({"version":1,"backend":backend.name(),
+    let mut plan = serde_json::json!({"version":1,"backend":backend.name(),
         "source":corpus_source(&absolute),"source_digest":oracle_coverage::source_digest(&absolute)?,
         "entry":absolute,"seed":null,
         "generator_version":1,"generator_digest":oracle_generator_digest(),
         "case_key":key,"case_count":cases.len(),"cases":cases,"signature":signature,
         "driver":driver(&format!("file://{absolute}"), &checked.testable, Engine::Node),
-        "resolver":RESOLVE_TS}))
+        "resolver":RESOLVE_TS});
+    if let Some(domain) = checked.input_domain {
+        plan["input_domain"] = serde_json::to_value(domain)?;
+    }
+    Ok(plan)
 }
 
 fn oracle_population(testable: &[Testable]) -> (Vec<String>, Vec<serde_json::Value>) {
@@ -679,7 +708,7 @@ fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static
 fn case_population(
     snapshot: &nts_semantic_schema::SemanticSnapshot,
     program: &hir::Program,
-) -> Result<(Utf8PathBuf, Vec<Testable>, oracle_exclusions::Policy)> {
+) -> Result<CasePopulation> {
     let entry = entry_module(snapshot)?;
     let importable = exports_of(snapshot, &entry);
     // A module that exports `then` *is a thenable*. `await import(m)` sees the
@@ -699,6 +728,7 @@ fn case_population(
         );
     }
     let exclusions = oracle_exclusions::for_entry(&entry)?;
+    let domains = domains::Domains::load(&entry, snapshot)?;
     let testable: Vec<Testable> = program
         .funcs
         .iter()
@@ -712,20 +742,28 @@ fn case_population(
         .filter(|func| {
             drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
         })
-        .map(|func| Testable {
-            name: func.name.clone(),
-            excluded_tuples: exclusions.tuples_for(&func.name),
-            returns: func.return_type.clone(),
-            result_absent: func.result_absent,
-            params: func
-                .params
-                .iter()
-                .map(|param| (param.ty.clone(), param.known))
-                .collect(),
+        .map(|func| {
+            Ok(Testable {
+                name: func.name.clone(),
+                excluded_tuples: exclusions.tuples_for(&func.name),
+                input_pools: domains.pools_for(func)?,
+                returns: func.return_type.clone(),
+                result_absent: func.result_absent,
+                params: func
+                    .params
+                    .iter()
+                    .map(|param| (param.ty.clone(), param.known))
+                    .collect(),
+            })
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
-    Ok((entry, testable, exclusions))
+    Ok(CasePopulation {
+        entry,
+        testable,
+        exclusions,
+        input_domain: domains.recorded(),
+    })
 }
 
 /// How far apart two doubles may be and still be the same answer.
@@ -959,7 +997,7 @@ fn results(testable: &[Testable]) -> Vec<String> {
 }
 
 fn interleaved(testable: &[Testable]) -> Vec<(&Testable, usize, Vec<f64>)> {
-    let per: Vec<Vec<Vec<f64>>> = testable.iter().map(|one| tuples(&one.params)).collect();
+    let per: Vec<Vec<Vec<f64>>> = testable.iter().map(Testable::tuples).collect();
     let deepest = per.iter().map(Vec::len).max().unwrap_or(0);
 
     let mut out = Vec::new();
@@ -992,6 +1030,7 @@ mod workload_exclusion_guards {
                 returns: HirType::NUMBER,
                 result_absent: nts_core::hir::Absent::Impossible,
                 params: vec![(HirType::NUMBER, Facts::TOP)],
+                input_pools: None,
                 excluded_tuples: policy.tuples_for(name),
             })
             .collect();
@@ -1029,13 +1068,17 @@ mod workload_exclusion_guards {
 /// the arity rather than exponential — and finds more, because a disagreement
 /// almost always turns on one argument's value rather than on a combination.
 fn tuples(params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
-    if params.is_empty() {
-        return vec![Vec::new()];
-    }
     let pools: Vec<Vec<f64>> = params
         .iter()
         .map(|(ty, known)| inputs(ty, *known))
         .collect();
+    tuples_from_pools(&pools)
+}
+
+fn tuples_from_pools(pools: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    if pools.is_empty() {
+        return vec![Vec::new()];
+    }
     // What a parameter holds while a different one is under test: the quiet
     // value if its type admits it, and otherwise something from the middle of
     // its pool. Not the first -- for a string that is the empty one, and every
@@ -1052,7 +1095,7 @@ fn tuples(params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
         .collect();
 
     let mut out = Vec::new();
-    for slot in 0..params.len() {
+    for slot in 0..pools.len() {
         for value in &pools[slot] {
             let mut tuple = resting.clone();
             tuple[slot] = *value;
@@ -2886,7 +2929,7 @@ fn report(
     Report {
         functions: testable.len(),
         checked: checked + answered_where_we_threw,
-        expected: testable.iter().map(|one| tuples(&one.params).len()).sum(),
+        expected: results.len(),
         refused: refused.len() - answered_where_we_threw,
         approximated,
         disagreements,
@@ -3383,6 +3426,7 @@ mod pairing {
             returns: HirType::Void,
             result_absent: nts_core::hir::Absent::Impossible,
             params: Vec::new(),
+            input_pools: None,
             excluded_tuples: Vec::new(),
         }]
     }
@@ -3396,6 +3440,23 @@ mod pairing {
                 .map(|(at, line)| (*at, (*line).to_owned()))
                 .collect(),
         }
+    }
+
+    #[test]
+    fn expected_count_uses_the_shared_bounded_and_excluded_population() {
+        let mut testable = one();
+        testable[0].params = vec![(HirType::NUMBER, nts_core::hir::facts::Facts::TOP)];
+        testable[0].input_pools = Some(vec![vec![0.0, -0.0, 2.0]]);
+        testable[0].excluded_tuples = vec![vec![2.0_f64.to_bits()]];
+        let got = report(
+            &run(&[], &[]),
+            &run(&[], &[]),
+            &testable,
+            &[],
+            &HashSet::new(),
+        );
+        assert_eq!(got.expected, 2);
+        assert_eq!(got.expected, super::oracle_population(&testable).0.len());
     }
 
     /// The hole this closes: the compiled program threw where node answered,
