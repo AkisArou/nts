@@ -21,6 +21,8 @@ Plain TypeScript, and the tests that hold it to its specification:
   Only permissively licensed code enters the repository (MIT, BSD, Apache,
   zlib, Boost, ISC, Unicode). A part under the GPL or LGPL is left out, or
   replaced with original code written without reference to it.
+- in `tests/typescript/`, a family of self-checking cases that node judges
+  (with its row and tags in `FEATURES.md`), where a handoff assigns one.
 
 Never the work the compiler or native code does: whatever depends on the
 layout of the values it is given (`structuredClone`, string conversions) and
