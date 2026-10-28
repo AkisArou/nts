@@ -108,13 +108,13 @@ function mediaType(input: string): string {
   return input.toLowerCase();
 }
 
-function hasIterator(value: unknown): value is Iterable<unknown> {
-  return (
-    value !== null &&
-    (typeof value === "object" || typeof value === "function") &&
-    Symbol.iterator in value
-  );
+function isObject(value: unknown): value is object {
+  return value !== null && (typeof value === "object" || typeof value === "function");
 }
+
+// Capture abstract Call without reading an iterator function's public .call.
+const callIteratorMethod: (method: () => unknown, receiver: object) => unknown =
+  Function.prototype.call.bind(Function.prototype.call);
 
 function isBufferSource(value: unknown): value is AllowSharedBufferSource {
   return (
@@ -133,15 +133,27 @@ function convertBlobParts(input: unknown): BlobPart[] {
   if (input === undefined) {
     return [];
   }
-  if (!hasIterator(input)) {
+  if (!isObject(input)) {
     throw new TypeError("Blob parts must be a sequence");
   }
+  const method = (input as { readonly [Symbol.iterator]?: unknown })[Symbol.iterator];
+  if (typeof method !== "function") throw new TypeError("Blob parts must be iterable");
+  const iterator = callIteratorMethod(method as () => unknown, input);
+  if (!isObject(iterator)) throw new TypeError("Blob parts iterator must return an object");
+  const next = (iterator as Iterator<unknown>).next;
 
   const converted: BlobPart[] = [];
-  for (const part of input) {
-    converted.push(convertBlobPart(part));
+  // Web IDL creates a sequence with IteratorStepValue and does not close its
+  // iterator when an element conversion fails. Cache next once as required by
+  // GetIteratorFromMethod, then finish conversion before processing options.
+  // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+  while (true) {
+    const result = callIteratorMethod(next, iterator);
+    if (!isObject(result)) throw new TypeError("Blob parts iterator result must be an object");
+    const item = result as IteratorResult<unknown>;
+    if (item.done) return converted;
+    converted.push(convertBlobPart(item.value));
   }
-  return converted;
 }
 
 function convertBlobOptions(
