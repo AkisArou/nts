@@ -71,9 +71,11 @@ scope classification. No descriptor behavior or native cloning is fabricated.
 The `supports` cases stay with the final Modern Algorithms PR.
 
 Successful AEAD key setup also adds 115 registrations to the shared wrapping
-fixture on the isolated #110 base: **472 pass / 0 fail / 0 blocked**. The final
-stack records its combined registration expectation after its prerequisite
-families are present. [Machine-readable family evidence](modern-aead-results.json)
+fixture on the isolated #110 base: **472 pass / 0 fail / 0 blocked**. The ordered
+stack retains that 472-case expectation after SHA-3, cSHAKE and KMAC. Its
+complete census reports **33,197 pass / 0 fail / 3,248 excluded**, with
+36,445 registrations across 122 executed files and the same three file-level
+limitations. [Machine-readable family evidence](modern-aead-results.json)
 retains the exact raw failures, per-file counts and evidence-log hashes.
 
 ## Validation
@@ -111,7 +113,31 @@ The ordinary scoped report runs with:
 node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts
 ```
 
-The first complete census exposed the shared wrapping count change; its focused
-follow-up verifies the updated expectation. The PR's final full package gate
-records the combined stack results. Maintainers compile with nts and run the
-native gate; ordinary Node evidence does not establish compiled support.
+The first isolated census exposed the shared wrapping count change; its focused
+follow-up verified the updated expectation. The final ordered census exits 0.
+The machine-readable report records all 125 file outcomes, the isolated family
+counts, exact raw discrepancies and the cumulative package gate.
+
+## Complete package gate
+
+```sh
+sh tooling/conformance/web-platform/check.sh
+```
+
+The command exits 0 on the ordered SHA-3/cSHAKE/KMAC plus AEAD stack:
+
+```text
+WPT directory pins: 355 original files verified
+tests 40283
+pass 36967
+fail 0
+skipped 3316
+{"upstreamTests":2817,"applicableTests":2771,"passed":2771,"failed":0,"notApplicable":46}
+check.sh: SKIPPING the compiled axis -- no compiler at .../target/release/nts.
+  Host evidence alone does not show that any of this compiles.
+```
+
+The complete log SHA-256 is `e90e836432423de59aab46bc4ad442fba788de4757681b20b0db9793d12917b1`.
+Install and both project typechecks pass with no dependency or lockfile changes.
+Only report documentation was added after this gate. Maintainers supply the
+native half, compile with nts and run the landing gate.
