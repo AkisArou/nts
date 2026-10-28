@@ -57,3 +57,14 @@ The JVM and Wasm columns, which the flag cannot reach, moved by up to 11% on
    number is the mean over placements rather than one sample of them. Not built
    yet; when an A/B decision ever turns on a row inside this band, that is the
    instrument to build first.
+
+## Since
+
+Decision 3's instrument is built: `tooling/bench/layouts-run.ts` measures each
+arm over seeded link layouts and decides on the mean
+([`tooling/bench/README.md`](../../tooling/bench/README.md)). The first A/B
+that needed it showed decision 2's band is per row, not one number: on some
+rows one layout alone moves the result by several times 5%, in either
+direction, with no code changed. Each measured row's range is in
+[`results/layout-ranges/`](../../results/layout-ranges), and the rule for
+using it is in the [measurement lessons](../contributing/lessons/measurement.md).
