@@ -409,12 +409,48 @@ class ExternalBlobStreamSource implements UnderlyingByteSource {
   }
 }
 
+let checkBlobIdentity: (value: unknown) => value is Blob;
+let readBlobSize: (blob: Blob) => number;
+let readBlobType: (blob: Blob) => string;
+let createBlobStream: (blob: Blob) => ReadableStream<Uint8Array>;
+
+/** @internal Web IDL Blob identity for consumers such as FileReader. */
+export function isBlob(value: unknown): value is Blob {
+  return checkBlobIdentity(value);
+}
+
+/** @internal The Blob's stored size, independent of public accessors. */
+export function getBlobSize(blob: Blob): number {
+  return readBlobSize(blob);
+}
+
+/** @internal The Blob's stored MIME type, independent of public accessors. */
+export function getBlobType(blob: Blob): string {
+  return readBlobType(blob);
+}
+
+/** @internal File API's get-stream operation over the Blob's own storage. */
+export function getBlobStream(blob: Blob): ReadableStream<Uint8Array> {
+  return createBlobStream(blob);
+}
+
 /** An immutable byte sequence with a media type. */
 export class Blob {
   #parts: readonly StoredBlobPart[] = [];
   #byteLength = 0;
   #mediaType = "";
   #hasExternal = false;
+
+  static {
+    // FileReader's read operation uses interface identity and internal Blob
+    // state. Install access once, without per-Blob wrappers or reflection.
+    // https://w3c.github.io/FileAPI/#readOperation
+    checkBlobIdentity = (value): value is Blob => value !== null &&
+      (typeof value === "object" || typeof value === "function") && #parts in value;
+    readBlobSize = (blob) => blob.#byteLength;
+    readBlobType = (blob) => blob.#mediaType;
+    createBlobStream = (blob) => blob.#getStream();
+  }
 
   constructor();
   constructor(parts: Iterable<BlobPart> | undefined, options?: BlobOptions);
@@ -595,6 +631,10 @@ export class Blob {
   }
 
   stream(): ReadableStream<Uint8Array> {
+    return this.#getStream();
+  }
+
+  #getStream(): ReadableStream<Uint8Array> {
     const source: UnderlyingByteSource = this.#hasExternal
       ? new ExternalBlobStreamSource(this.#parts)
       : new MemoryBlobStreamSource(this.#parts);
