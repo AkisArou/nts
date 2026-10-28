@@ -206,14 +206,35 @@ policy need the appropriate provider/Fetch integration described by the
 [WebSocket opening handshake](https://websockets.spec.whatwg.org/#opening-handshake).
 An HTTPS base URL alone does not represent all browser environment settings.
 
-The protocol assertion expects a `SyntaxError` for `"echo"` and `"eCho"`.
-[WebSockets section 3.1, constructor step 9](https://websockets.spec.whatwg.org/#dom-websocket-websocket)
-rejects repeated values, and
-[RFC 6455 section 4.1](https://datatracker.ietf.org/doc/html/rfc6455#section-4.1)
-requires unique protocol strings. These strings have distinct values. The
-implementation preserves their case and compares duplicates case-sensitively;
-the unchanged WPT assertion is recorded as a specification mismatch requiring
-upstream review, rather than a browser-capability exclusion.
+### Review of the duplicate-protocol disagreement
+
+The two selected variants of `Create-protocols-repeated-case-insensitive.any.js`
+expect a synchronous `SyntaxError` for `"echo"` and `"eCho"`. The current
+[WebSockets snapshot `7f25d7dc8c2598ebca795ce4af68909d913a3888`, section 3.1,
+constructor step 9](https://websockets.spec.whatwg.org/commit-snapshots/7f25d7dc8c2598ebca795ce4af68909d913a3888/#dom-websocket-websocket)
+states the duplicate condition exactly as:
+
+> If any of the values in protocols occur more than once
+
+That step also rejects invalid protocol tokens and specifies `SyntaxError`; it
+does not introduce case folding. [Infra section 4.7](https://infra.spec.whatwg.org/#string-is)
+states the default explicitly:
+
+> Except where otherwise stated, all string comparisons use is.
+
+Infra defines that comparison using identical code-unit sequences.
+[RFC 6455 section 4.1, request requirement 10](https://www.rfc-editor.org/rfc/rfc6455#section-4.1)
+requires unique strings and supplies token syntax, with no separate
+case-insensitive equality rule. Applying these rules, the two offered strings
+are distinct. `normalizeWebSocketProtocols()` therefore retains its
+case-sensitive `Set<string>` check and continues rejecting exact duplicates.
+
+[WHATWG issue 47](https://github.com/whatwg/websockets/issues/47) identifies this
+exact fixture and remains open at this review. Its browser observations are
+historical, not a current compatibility measurement. Both unchanged WPT
+variants remain explicit blocks for the unresolved WPT/specification
+disagreement, and neither is counted as a pass. No implementation change is
+justified by the published comparison rules.
 
 ## Directory and environment exclusions
 
