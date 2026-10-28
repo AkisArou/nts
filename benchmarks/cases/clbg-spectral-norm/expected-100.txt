@@ -1,0 +1,11 @@
+/*
+ * The Computer Language Benchmarks Game — BSD-3-Clause.
+ * Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+ * All rights reserved. See ../LICENSE-benchmarks-game for the licence.
+ *
+ * The Game's published spectral-norm output.
+ * Contributed by Ian Osgood; modified for Node.js by Isaac Gouy.
+ * https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/spectralnorm-node-1.html
+ * https://benchmarksgame-team.pages.debian.net/benchmarksgame/download/spectralnorm-output.txt
+ */
+1.274219991
