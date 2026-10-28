@@ -2748,10 +2748,11 @@ fn prepare_as(
     };
     // An invalid program is exactly the one worth reading, so the
     // complaints are returned beside the program rather than in its place.
-    let invalid = hir::prepare_with(snapshot, &options)
+    let prepared = hir::prepare_unverified(snapshot, &options);
+    let invalid = prepared
+        .check()
         .err()
         .map(|unprepared| unprepared.render(&snapshot.sources));
-    let prepared = hir::prepare_unverified(snapshot, &options);
     Ok((header, prepared, invalid))
 }
 

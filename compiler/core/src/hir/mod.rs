@@ -5846,11 +5846,22 @@ pub fn prepare_with(
         .into_prepared(&PreparationOptions::from(options))
 }
 
-fn finish_preparation(mut prepared: Prepared) -> Result<Prepared, Unprepared> {
-    if !prepared.rejected.is_empty() {
-        return Err(Unprepared::Rejected(std::mem::take(&mut prepared.rejected)));
+impl Prepared {
+    /// Check the finished program without consuming the program a listing shows.
+    ///
+    /// # Errors
+    /// Returns the same governed rejection or verifier complaints as
+    /// [`prepare_with`], with rejections taking precedence over invalid HIR.
+    pub fn check(&self) -> Result<(), Unprepared> {
+        if !self.rejected.is_empty() {
+            return Err(Unprepared::Rejected(self.rejected.clone()));
+        }
+        verify::verify(&self.program).map_err(Unprepared::Invalid)
     }
-    verify::verify(&prepared.program).map_err(Unprepared::Invalid)?;
+}
+
+fn finish_preparation(prepared: Prepared) -> Result<Prepared, Unprepared> {
+    prepared.check()?;
     Ok(prepared)
 }
 
@@ -8538,6 +8549,41 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn preparation_check_keeps_the_program_and_rejection_precedence() {
+        let mut prepared = prepare_unverified(&SemanticSnapshot::default(), &Options::default());
+        prepared.check().unwrap();
+        prepared
+            .program
+            .identity_projections
+            .insert("missing-adapter".to_owned(), "missing-target".to_owned());
+        assert!(matches!(prepared.check(), Err(Unprepared::Invalid(_))));
+        let diagnostic = nts_diagnostics::Diagnostic::error(
+            "NTS1001",
+            "a governed rejection takes precedence over invalid HIR",
+            nts_diagnostics::Location {
+                file: nts_diagnostics::SourceId(0),
+                span: nts_diagnostics::Span { start: 0, end: 0 },
+            },
+        );
+        prepared.rejected.push(diagnostic.clone());
+        let Err(Unprepared::Rejected(rejected)) = prepared.check() else {
+            panic!("the same check used by emission must keep rejection precedence");
+        };
+        assert_eq!(rejected, [diagnostic]);
+        assert_eq!(
+            prepared.rejected, rejected,
+            "checking retains listing diagnostics"
+        );
+        assert!(
+            prepared
+                .program
+                .identity_projections
+                .contains_key("missing-adapter")
+        );
+    }
 
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used)]
