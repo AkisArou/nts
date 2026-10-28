@@ -72,7 +72,8 @@ export function normalizeWebSocketCloseInfo(
 ): NormalizedWebSocketClose {
   requireDictionary(input, "WebSocket close options");
   const closeCode = input?.closeCode;
-  const reason = coerceToUSVString(input?.reason ?? "");
+  const reasonValue = input?.reason;
+  const reason = coerceToUSVString(reasonValue === undefined ? "" : reasonValue);
   return validateWebSocketClose(
     closeCode === undefined ? null : toClampedUnsignedShort(closeCode),
     reason,

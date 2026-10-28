@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
-import { DOMException, WebSocket, WebSocketStream } from "../src/index.ts";
+import { DOMException, WebSocket, WebSocketError, WebSocketStream } from "../src/index.ts";
+import type { NormalizedWebSocketClose } from "../src/websocket/semantics.ts";
 import type {
   SocketIncoming,
   SocketMessage,
@@ -130,3 +131,97 @@ for (const kind of ["WebSocket", "WebSocketStream"] as const) {
     assert.deepEqual(protocols, expected, "the caller's array is unchanged");
   });
 }
+
+// JavaScript callers may provide values outside the convenient TypeScript type.
+interface JavaScriptCloseInfo {
+  closeCode?: number;
+  reason?: unknown;
+}
+
+type CloseConsumer = "WebSocketStream" | "WebSocketError";
+
+function closeStream(stream: WebSocketStream, options?: JavaScriptCloseInfo | null): void {
+  const close = stream.close as (this: WebSocketStream, options?: JavaScriptCloseInfo | null) => void;
+  close.call(stream, options);
+}
+
+async function convertCloseInfo(
+  t: TestContext,
+  consumer: CloseConsumer,
+  options?: JavaScriptCloseInfo | null,
+): Promise<NormalizedWebSocketClose> {
+  if (consumer === "WebSocketError") {
+    const ErrorConstructor = WebSocketError as new (
+      message?: string,
+      options?: JavaScriptCloseInfo | null,
+    ) => WebSocketError;
+    const error = new ErrorConstructor("control", options);
+    return { closeCode: error.closeCode, reason: error.reason };
+  }
+  const { sessions } = controlledRuntime(t);
+  const stream = new WebSocketStream("ws://example.test/socket");
+  await stream.opened;
+  closeStream(stream, options);
+  const closed = await stream.closed;
+  const session = sessions[0];
+  assert.ok(session);
+  assert.equal(session.closes.length, 1);
+  const sent = session.closes[0];
+  assert.ok(sent);
+  assert.deepEqual(closed, { closeCode: sent.code ?? 1005, reason: sent.reason });
+  return { closeCode: sent.code, reason: sent.reason };
+}
+
+// Web IDL 3.2.17 steps 4.1.3–4.1.5: only undefined selects a dictionary default.
+// USVString follows 3.2.10/3.2.12. Draft PR 48 sections 4, 4.3 and 5 validate
+// the converted reason and choose close code 1000 for a reason without a code.
+for (const consumer of ["WebSocketStream", "WebSocketError"] as const) {
+  suite(`${consumer} converts an explicit null close reason to USVString`, async (t) => {
+    assert.deepEqual(await convertCloseInfo(t, consumer, { reason: null }), {
+      closeCode: 1000, reason: "null",
+    });
+    assert.deepEqual(await convertCloseInfo(t, consumer, { closeCode: 3001, reason: null }), {
+      closeCode: 3001, reason: "null",
+    });
+  });
+
+  suite(`${consumer} retains the empty reason default for omitted and undefined members`, async (t) => {
+    for (const options of [undefined, null, {}, { reason: undefined }, { reason: "" }]) {
+      assert.deepEqual(await convertCloseInfo(t, consumer, options), {
+        closeCode: null, reason: "",
+      });
+    }
+  });
+
+  suite(`${consumer} reads the null reason getter once after closeCode`, async (t) => {
+    const reads: string[] = [];
+    const result = await convertCloseInfo(t, consumer, {
+      get closeCode(): undefined {
+        reads.push("closeCode");
+        return undefined;
+      },
+      get reason(): null {
+        reads.push("reason");
+        return null;
+      },
+    });
+    assert.deepEqual(reads, ["closeCode", "reason"]);
+    assert.deepEqual(result, { closeCode: 1000, reason: "null" });
+  });
+}
+
+suite("WebSocket.close also distinguishes explicit null from an undefined reason", async (t) => {
+  const { sessions } = controlledRuntime(t);
+  for (const reason of [null, undefined]) {
+    const socket = new WebSocket("ws://example.test/socket");
+    const closed = new Promise<void>((resolve) => socket.addEventListener("close", () => resolve(), { once: true }));
+    await new Promise<void>((resolve) => socket.addEventListener("open", () => resolve(), { once: true }));
+    const close = socket.close as (this: WebSocket, code?: number, reason?: unknown) => void;
+    close.call(socket, undefined, reason);
+    await closed;
+  }
+  assert.deepEqual(sessions.map((session) => session.closes), [
+    [{ code: 1000, reason: "null" }],
+    [{ code: null, reason: "" }],
+  ]);
+});
