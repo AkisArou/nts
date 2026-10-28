@@ -744,7 +744,8 @@ export class NodeCryptoProvider implements CryptoProvider {
       }
       return false;
     } catch {
-      return false;
+      // Modern Algorithms §16.7.2: a native error is distinct from an invalid MAC.
+      return parameters.name === "KMAC128" || parameters.name === "KMAC256" ? { failure: "operation" } : false;
     }
   }
 
