@@ -1,0 +1,760 @@
+{
+  "date": "2026-10-28",
+  "environment": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "execution": "ordinary-node host provider with canonical package Web API classes in fresh node:vm contexts",
+    "compiledNts": "not verified; compiler absent"
+  },
+  "base": {
+    "pullRequest": 18,
+    "branch": "chatgpt/wpt-fetch-data",
+    "commit": "8f23f225c90e7d461dd0f3d0d157edf2b2b64d27"
+  },
+  "reviewedTreeBeforeEvidence": "d57123d1a9f844061bfa88cbd8843811ce5b7ba4",
+  "sourceGitBlobs": {
+    "src/file/blob.ts": "73cb8a5e981c116987a66b3e88d8f5d6abb68748",
+    "src/file/file-reader.ts": "0b3498c9c8b3d411416e43be39b46d90b33a0f33",
+    "src/core/progress-event.ts": "14fc2f455a6ec690c01d8209e7783afe6eeb8565",
+    "src/forms/urlencoded-decode.ts": "bd3cc9af997acb639dc5c0747a877ca9f5ccba24",
+    "src/fetch/body.ts": "0a3d24c02cc96025a7db2c6768c2ea2fe2dcdba1",
+    "src/forms/form-data.ts": "704b1644ae0002d77196896390777083c6e935f3"
+  },
+  "manifestSHA256": "7d22e460f99ff28218a7f3a95608fcfd8dd6a9f0db0428232ffd1f0d747162d1",
+  "wpt": {
+    "fixtureFiles": 34,
+    "registered": 502,
+    "before": {
+      "pass": 441,
+      "fail": 44,
+      "blocked": 17
+    },
+    "after": {
+      "pass": 485,
+      "fail": 0,
+      "blocked": 17
+    },
+    "perFile": [
+      {
+        "path": "FileAPI/FileReader/progress_event_bubbles_cancelable.html",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-array-buffer.any.js",
+        "before": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-bytes.any.js",
+        "before": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "before": {
+          "pass": 67,
+          "fail": 0,
+          "blocked": 6
+        },
+        "after": {
+          "pass": 67,
+          "fail": 0,
+          "blocked": 6
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-newobject.any.js",
+        "before": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-slice-overflow.any.js",
+        "before": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-slice.any.js",
+        "before": {
+          "pass": 150,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 150,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-stream.any.js",
+        "before": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/blob/Blob-text.any.js",
+        "before": {
+          "pass": 8,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 8,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/file/File-constructor.any.js",
+        "before": {
+          "pass": 49,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 49,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/fileReader.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 4,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/Determining-Encoding.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 6,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 6,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 5,
+          "blocked": 1
+        },
+        "after": {
+          "pass": 5,
+          "fail": 0,
+          "blocked": 1
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_abort.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_error.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_events.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 2
+        },
+        "after": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 2
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 4
+        },
+        "after": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 4
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsText.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 2,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 1
+        },
+        "after": {
+          "pass": 0,
+          "fail": 0,
+          "blocked": 1
+        }
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_result.any.js",
+        "before": {
+          "pass": 0,
+          "fail": 9,
+          "blocked": 3
+        },
+        "after": {
+          "pass": 9,
+          "fail": 0,
+          "blocked": 3
+        }
+      },
+      {
+        "path": "FileAPI/unicode.html",
+        "before": {
+          "pass": 0,
+          "fail": 4,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "url/urlencoded-parser.any.js",
+        "before": {
+          "pass": 103,
+          "fail": 2,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 105,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/append.any.js",
+        "before": {
+          "pass": 7,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 7,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/constructor.any.js",
+        "before": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/delete.any.js",
+        "before": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/foreach.any.js",
+        "before": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 4,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/get.any.js",
+        "before": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/has.any.js",
+        "before": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/iteration.any.js",
+        "before": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 3,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/set-blob.any.js",
+        "before": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 6,
+          "fail": 0,
+          "blocked": 0
+        }
+      },
+      {
+        "path": "xhr/formdata/set.any.js",
+        "before": {
+          "pass": 7,
+          "fail": 0,
+          "blocked": 0
+        },
+        "after": {
+          "pass": 7,
+          "fail": 0,
+          "blocked": 0
+        }
+      }
+    ],
+    "baselineNote": "Same fixture bytes, adapter and exclusions; source at #18. The baseline driver omits unavailable FileReader/ProgressEvent imports and globals rather than installing a host substitute.",
+    "exactNamesAndOrderVerified": true,
+    "changedCases": 44,
+    "changedFiles": 13,
+    "blocks": [
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "name": "blobParts not an object: boolean with Boolean.prototype[Symbol.iterator]",
+        "category": "excluded-language-feature",
+        "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "name": "blobParts not an object: string with String.prototype[Symbol.iterator]",
+        "category": "excluded-language-feature",
+        "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "name": "blobParts not an object: number with Number.prototype[Symbol.iterator]",
+        "category": "excluded-language-feature",
+        "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "name": "blobParts not an object: BigInt with BigInt.prototype[Symbol.iterator]",
+        "category": "excluded-language-feature",
+        "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "name": "blobParts not an object: Symbol with Symbol.prototype[Symbol.iterator]",
+        "category": "excluded-language-feature",
+        "reason": "Excluded language feature under docs/contributing/cloud-agents.md: this case patches an intrinsic prototype iterator. nts currently uses fixed layouts and does not implement runtime intrinsic prototype mutation. The unchanged case is registered and explicitly blocked; ordinary iterable and non-object argument cases remain runnable."
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "name": "Passing a FrozenArray as the blobParts array should work (FrozenArray<MessagePort>).",
+        "category": "compiler-capability",
+        "reason": "Requires compiler-owned MessageChannel/MessagePort transfer to obtain an actual FrozenArray<MessagePort>. No available canonical provider exposes that capability, and Node message classes or a fabricated event.ports array are not substituted."
+      },
+      {
+        "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+        "name": "test FileReader InvalidStateError exception for readAsDataURL",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_events.any.js",
+        "name": "events are dispatched in the correct order for an empty blob",
+        "category": "provider-capability",
+        "reason": "Temporary shared provider/event-execution dependency: the ordinary-node source provider does not perform the HTML cleanup-after-running-a-callback microtask checkpoint when a FileReader event listener returns. The unchanged test awaits load before registering its loadend wait; the required same-task loadend dispatch therefore arrives before that continuation in this host. Both exact cases were executed and failed with an unexpected loadend event. Neither EventWatcher nor FileReader adds an artificial yield/task; this is not a permanent FileReader feature exclusion and needs the shared event/provider boundary fixed."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_events.any.js",
+        "name": "events are dispatched in the correct order for a non-empty blob",
+        "category": "provider-capability",
+        "reason": "Temporary shared provider/event-execution dependency: the ordinary-node source provider does not perform the HTML cleanup-after-running-a-callback microtask checkpoint when a FileReader event listener returns. The unchanged test awaits load before registering its loadend wait; the required same-task loadend dispatch therefore arrives before that continuation in this host. Both exact cases were executed and failed with an unexpected loadend event. Neither EventWatcher nor FileReader adds an artificial yield/task; this is not a permanent FileReader feature exclusion and needs the shared event/provider boundary fixed."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+        "name": "FileReader readyState during readAsDataURL",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+        "name": "readAsDataURL result for Blob with specified MIME type",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+        "name": "readAsDataURL result for Blob with unspecified MIME type",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+        "name": "readAsDataURL result for empty Blob",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+        "name": "FileAPI Test: filereader_readystate",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_result.any.js",
+        "name": "readAsDataURL",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_result.any.js",
+        "name": "result is null during \"loadstart\" event for readAsDataURL",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_result.any.js",
+        "name": "result is null during \"progress\" event for readAsDataURL",
+        "category": "provider-capability",
+        "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
+      }
+    ]
+  },
+  "supplemental": {
+    "file-forms-wpt-policy.test.ts": {
+      "before": {
+        "pass": 2,
+        "fail": 10
+      },
+      "after": {
+        "pass": 12,
+        "fail": 0
+      },
+      "baselineCommit": "e2fbd9dfe36ea2ec9bca746c023e99cae1dc12a3",
+      "note": "Blob/FormData source is byte-identical between this initial #18 head and the final #18 base; three before failures identify absent new helpers and seven identify existing policy defects."
+    },
+    "file-forms-urlencoded-policy.test.ts": {
+      "before": {
+        "pass": 10,
+        "fail": 6
+      },
+      "after": {
+        "pass": 16,
+        "fail": 0
+      }
+    },
+    "file-reader-wpt-policy.test.ts": {
+      "after": {
+        "pass": 29,
+        "fail": 0
+      },
+      "handlerOverrideControlBeforeFix": {
+        "pass": 28,
+        "fail": 1
+      }
+    },
+    "wpt-file-harness.test.ts": {
+      "after": {
+        "pass": 10,
+        "fail": 0
+      }
+    },
+    "webidl-surface.test.ts": {
+      "after": {
+        "tests": 78,
+        "pass": 68,
+        "fail": 0,
+        "skipped": 10
+      },
+      "note": "Five plain-member interfaces each name two descriptor-only exclusions. Functional tags and arity remain tested."
+    }
+  },
+  "gate": {
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "firstRun": {
+      "exitCode": 1,
+      "host": {
+        "tests": 3978,
+        "pass": 3728,
+        "fail": 1,
+        "skipped": 249
+      },
+      "failure": "Existing WPT exposes self only on request control: Script execution timed out after 100ms; A4 passed."
+    },
+    "isolatedUnchangedControl": {
+      "exitCode": 0,
+      "pass": 1,
+      "fail": 0
+    },
+    "rerunUnchanged": {
+      "exitCode": 0,
+      "host": {
+        "tests": 3978,
+        "pass": 3729,
+        "fail": 0,
+        "skipped": 249
+      },
+      "upstream": {
+        "tests": 2817,
+        "applicable": 2772,
+        "pass": 2772,
+        "fail": 0,
+        "notApplicable": 45
+      },
+      "compiledNts": "skipped explicitly: compiler absent"
+    },
+    "strictTypeScriptProjects": [
+      "tooling/conformance/web-platform/tsconfig.json",
+      "runtime/web-platform/test/wpt/tsconfig.json"
+    ],
+    "strictTypeScriptExitCode": 0
+  },
+  "sabotage": {
+    "fixture": "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+    "mutation": "case \"ArrayBuffer\": this.#result = new ArrayBuffer(0); break;",
+    "original_sha256": "7f101d36263ba73304a0fdc2c855897fef6e462bd227b78645c27368a8aa76d1",
+    "mutated_sha256": "729abee880901baa3c07d367c89b289fb18a733b481eb7f04cad0e2a0d8bd082",
+    "exit_code": 1,
+    "counts": [
+      [
+        "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+        "0",
+        "1",
+        "0"
+      ]
+    ],
+    "restored_sha256": "7f101d36263ba73304a0fdc2c855897fef6e462bd227b78645c27368a8aa76d1",
+    "restored_exactly": true
+  },
+  "websocketIntegration": {
+    "baseCommit": "c6b53121a054cef8207e7f321e94ac12702c58ee",
+    "nodeVersion": "v24.20.0",
+    "sourceGitBlobs": {
+      "runtime/web-platform/src/core/progress-event.ts": "14fc2f455a6ec690c01d8209e7783afe6eeb8565",
+      "runtime/web-platform/src/file/blob.ts": "73cb8a5e981c116987a66b3e88d8f5d6abb68748",
+      "runtime/web-platform/src/file/file-reader.ts": "0b3498c9c8b3d411416e43be39b46d90b33a0f33"
+    },
+    "fixture": {
+      "path": "runtime/web-platform/test/wpt/websockets/send-data-isolation.sub.html",
+      "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+      "sha256": "4cd32475f7f68360c6fa0e80c0ea8fbfaa2fa450ffb595c4ee7bffdfb761abe5",
+      "gitBlob": "24f9559d8f15e4346cc0a8a3d288ae83a99d7644",
+      "unchanged": true
+    },
+    "adapterAndServerUnchanged": true,
+    "driverChanges": [
+      "Import canonical FileReader from src/file/file-reader.ts",
+      "Expose that FileReader as the fixture FileReader global"
+    ],
+    "manifestChanges": "Remove only the three missing-file-reader blocks for send-data-isolation.sub.html; expectedRunnableTests 0 -> 3",
+    "command": [
+      "/workspace/scratch/4bc7e6fdd635/wpt-tools/node",
+      "--expose-gc",
+      "--test",
+      "runtime/web-platform/test/wpt-websocket.test.ts"
+    ],
+    "environment": {
+      "NTS_WPT_WEBSOCKET_FILTER": "send-data-isolation.sub.html",
+      "NODE_DEBUG": "net"
+    },
+    "exitCode": 0,
+    "wptCounts": {
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    "nodeCountsIncludingContainers": {
+      "tests": 5,
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0
+    },
+    "observedOutboundEndpoints": [
+      "127.0.0.1:34583"
+    ],
+    "observedOutboundConnections": 3,
+    "networkPolicySource": "test/wpt/server/runtime.ts resolves only allowed WPT names on the server own ports to 127.0.0.1; server.ts binds its listeners to 127.0.0.1"
+  },
+  "rawLogSHA256": {
+    "files-final-before.log": "dcb4164c2d70f018c6142be10b0ba06108890bd6617d41abf955bffe60420bf8",
+    "files-final-after.log": "1bc8737bc08e0c89da3a6ff65a1b32c6c5024e58c67958ecb310c80cc6394621",
+    "files-initial-after.log": "b75ff43ff919bcb416ff5d4abeb54710ae152de2725323fc27661a8a88c6720b",
+    "files-sabotage.log": "21c2792f5fb456db8fc25283730105a6aed64cd65a7f504d66bfb5ee012e0aca",
+    "files-final-full.log": "8e7ceea04badfa4d3861b1809759783d14533fdd42c4b3b2083c2334f68b62a0",
+    "files-final-full-retry.log": "d2795e83975cfac2cfb00cb12d5065adcf4b3453d57e514e4e6f9cd5b9471150",
+    "files-vm-timeout-isolated.log": "b555e3c495452e85d94696bc8841d5efd4c80c50945f3c2fc6c1002d3ecc7aea",
+    "files-urlencoded-policy-before.log": "730e421f4a6645a326e3ced4853428213f31ef51a21e066520fc24be42c049b7",
+    "files-urlencoded-policy-after.log": "93aefadfa89df6d5bb40f08fcdefc715a020e670d90c118c7dcbaf4d579e492b",
+    "a4-file-forms-base-e2fbd9df.tap": "e504a97f9e4561adf09576a73c84481791471527d0758a1df882e886b35e591b",
+    "a4-file-forms-final.tap": "9c31bd1cda4aad3620e8d204607b38e39f6aa99a2ae221840f0320077d558dbd",
+    "files-surface-policy-after.log": "349ba1471a3cbcb746784b4e6f093e469db6a22e61f06e533a393f0bef4d8b09",
+    "files-harness-controls-detailed.log": "c519828c79f8392caca1a2791ff77a2c95f2840710698de493cc582e68e11188"
+  }
+}
