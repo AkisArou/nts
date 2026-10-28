@@ -1,6 +1,6 @@
 //! Source coordinates. Native parser offsets are bytes; snapshot spans are
-//! UTF-16 code units. ASCII needs no table. Mixed text stores only non-ASCII
-//! scalar checkpoints; dense Unicode uses a per-byte table when that is smaller.
+//! UTF-16 code units. ASCII needs no table. Other files use fixed 64-byte blocks
+//! with scalar-end masks: constant-time lookup without retaining source text.
 
 /// A native parser position in UTF-8 source bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -26,16 +26,25 @@ pub(crate) struct Utf16Index {
 #[derive(Debug)]
 enum Positions {
     Ascii,
-    Sparse(Box<[NonAscii]>),
-    Dense(Box<[u32]>),
+    Blocks(Box<[Block]>),
 }
 
-#[derive(Debug)]
-struct NonAscii {
-    byte_start: u32,
-    utf16_start: u32,
-    byte_len: u8,
-    utf16_len: u8,
+/// Each bit names a byte boundary at which a scalar ends. Astral scalars add
+/// two UTF-16 units there. Interior UTF-8 bytes therefore add no units.
+#[derive(Debug, Clone, Copy)]
+struct Block {
+    offset: u32,
+    ends: u64,
+    astral_ends: u64,
+}
+
+impl Block {
+    fn position(self, within: u32) -> Utf16Pos {
+        let mask = u64::MAX >> (63 - within);
+        Utf16Pos(
+            self.offset + (self.ends & mask).count_ones() + (self.astral_ends & mask).count_ones(),
+        )
+    }
 }
 
 impl Utf16Index {
@@ -43,35 +52,31 @@ impl Utf16Index {
         let positions = if text.is_ascii() {
             Positions::Ascii
         } else {
-            let non_ascii = text.chars().filter(|ch| !ch.is_ascii()).count();
-            if non_ascii * std::mem::size_of::<NonAscii>()
-                < (text.len() + 1) * std::mem::size_of::<u32>()
-            {
-                let mut positions = Vec::with_capacity(non_ascii);
-                let mut utf16 = 0;
-                for (byte, ch) in text.char_indices() {
-                    if !ch.is_ascii() {
-                        positions.push(NonAscii {
-                            byte_start: u32::try_from(byte).expect("source offsets fit u32"),
-                            utf16_start: utf16,
-                            byte_len: u8::try_from(ch.len_utf8()).expect("at most four bytes"),
-                            utf16_len: u8::try_from(ch.len_utf16())
-                                .expect("at most two code units"),
-                        });
-                    }
-                    utf16 += u32::try_from(ch.len_utf16()).expect("at most two code units");
+            let mut blocks = vec![
+                Block {
+                    offset: 0,
+                    ends: u64::MAX,
+                    astral_ends: 0
+                };
+                (text.len() >> 6) + 1
+            ];
+            // ASCII has one scalar end at every boundary except byte zero.
+            blocks[0].ends &= !1;
+            for (start, ch) in text.char_indices().filter(|(_, ch)| !ch.is_ascii()) {
+                let end = start + ch.len_utf8();
+                for interior in start + 1..end {
+                    blocks[interior >> 6].ends &= !(1 << (interior & 63));
                 }
-                Positions::Sparse(positions.into_boxed_slice())
-            } else {
-                let mut positions = Vec::with_capacity(text.len() + 1);
-                let mut offset = 0;
-                for ch in text.chars() {
-                    positions.extend(std::iter::repeat_n(offset, ch.len_utf8()));
-                    offset += u32::try_from(ch.len_utf16()).expect("at most two code units");
+                if ch.len_utf16() == 2 {
+                    blocks[end >> 6].astral_ends |= 1 << (end & 63);
                 }
-                positions.push(offset);
-                Positions::Dense(positions.into_boxed_slice())
             }
+            let mut offset = 0;
+            for block in &mut blocks {
+                block.offset = offset;
+                offset += block.ends.count_ones() + block.astral_ends.count_ones();
+            }
+            Positions::Blocks(blocks.into_boxed_slice())
         };
         Self {
             bytes: text.len(),
@@ -84,26 +89,10 @@ impl Utf16Index {
             (byte.0 as usize) <= self.bytes,
             "source byte position out of bounds"
         );
-        Utf16Pos(match &self.positions {
-            Positions::Ascii => byte.0,
-            Positions::Dense(positions) => positions[byte.0 as usize],
-            Positions::Sparse(positions) => {
-                let end = positions.partition_point(|entry| entry.byte_start <= byte.0);
-                if end == 0 {
-                    return Utf16Pos(byte.0);
-                }
-                let entry = &positions[end - 1];
-                let byte_end = entry.byte_start + u32::from(entry.byte_len);
-                // Interior UTF-8 bytes map to the scalar's first code unit,
-                // exactly as the dense table does; EOF maps after the scalar.
-                entry.utf16_start
-                    + if byte.0 < byte_end {
-                        0
-                    } else {
-                        u32::from(entry.utf16_len) + (byte.0 - byte_end)
-                    }
-            }
-        })
+        match &self.positions {
+            Positions::Ascii => Utf16Pos(byte.0),
+            Positions::Blocks(blocks) => blocks[(byte.0 >> 6) as usize].position(byte.0 & 63),
+        }
     }
 
     pub(crate) fn span(&self, start: BytePos, end: BytePos) -> Utf16Span {
@@ -158,29 +147,32 @@ mod tests {
         ));
         assert!(matches!(
             Utf16Index::new("😀ascii😀").positions,
-            Positions::Sparse(_)
+            Positions::Blocks(_)
         ));
         assert!(matches!(
             Utf16Index::new("ééé").positions,
-            Positions::Dense(_)
+            Positions::Blocks(_)
         ));
     }
 
     #[test]
-    fn sparse_eof_does_not_overflow_an_intermediate_sum() {
-        let index = Utf16Index {
-            bytes: u32::MAX as usize,
-            positions: Positions::Sparse(
-                vec![NonAscii {
-                    byte_start: 0,
-                    utf16_start: 0,
-                    byte_len: 2,
-                    utf16_len: 1,
-                }]
-                .into_boxed_slice(),
-            ),
+    fn block_eof_at_the_maximum_source_offset_fits() {
+        let block = Block {
+            offset: u32::MAX - 65,
+            ends: u64::MAX,
+            astral_ends: 0,
         };
-        assert_eq!(index.position(BytePos(u32::MAX)), Utf16Pos(u32::MAX - 1));
+        assert_eq!(block.position(u32::MAX & 63), Utf16Pos(u32::MAX - 1));
+    }
+
+    #[test]
+    fn scalars_crossing_each_block_boundary_match_the_dense_reference() {
+        for prefix in 0..=128 {
+            for scalar in ["é", "中", "😀"] {
+                let text = format!("{}{scalar}{}", "a".repeat(prefix), "z".repeat(70));
+                assert_dense_equivalence(&text);
+            }
+        }
     }
 
     #[test]
