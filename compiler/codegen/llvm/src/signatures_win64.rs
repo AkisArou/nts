@@ -2299,6 +2299,18 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_stderr_is_tty",
+        returns: "zeroext i1",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_stdout_is_tty",
+        returns: "zeroext i1",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_str_alloc",
         returns: "ptr",
         params: &["ptr", "i32"],
@@ -3166,6 +3178,18 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         name: "nts_winrt_unlisten",
         returns: "i32",
         params: &["ptr", "i64", "i64", "i32", "i32", "ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_write_stderr",
+        returns: "double",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_write_stdout",
+        returns: "double",
+        params: &["ptr"],
         attributes: &[],
     },
 ];

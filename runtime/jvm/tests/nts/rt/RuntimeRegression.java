@@ -1400,7 +1400,52 @@ public final class RuntimeRegression {
         check(!holes.contains("RangeError"), "and it must not claim the language refused it");
     }
 
+    private static final class StreamSink extends java.io.OutputStream {
+        final java.io.ByteArrayOutputStream bytes;
+        int flushes;
+        StreamSink(java.io.ByteArrayOutputStream bytes) { this.bytes = bytes; }
+        @Override public void write(int value) { bytes.write(value); }
+        @Override public void flush() { flushes++; }
+    }
+
+    private static void testStandardStreams() throws Exception {
+        java.io.PrintStream originalOut = System.out;
+        java.io.PrintStream originalErr = System.err;
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        StreamSink out = new StreamSink(bytes);
+        StreamSink err = new StreamSink(bytes);
+        try {
+            System.setOut(new java.io.PrintStream(out, false, "UTF-8"));
+            System.setErr(new java.io.PrintStream(err, false, "UTF-8"));
+            NtsRuntime.consoleWrite("a", false);
+            number(NtsRuntime.writeStdout("b\u0000é\ud800\n"), 0, "raw stdout success");
+            NtsRuntime.consoleWrite("c", false);
+            NtsRuntime.consoleWrite("d", true);
+            number(NtsRuntime.writeStderr("e\n"), 0, "raw stderr success");
+            NtsRuntime.consoleWrite("f", true);
+            equal(new String(bytes.toByteArray(), java.nio.charset.StandardCharsets.UTF_8),
+                "a\nb\u0000é\ufffd\nc\nd\ne\nf\n", "shared stream byte order and encoding");
+            check(out.flushes == 3 && err.flushes == 3, "one flush per write");
+            java.io.OutputStream failed = new java.io.OutputStream() {
+                @Override public void write(int value) throws java.io.IOException {
+                    throw new java.io.IOException("forced write failure");
+                }
+            };
+            System.setOut(new java.io.PrintStream(failed));
+            check(refusalFrom(() -> NtsRuntime.writeStdout("x")).contains("standard output failed"),
+                "a JVM output failure cannot invent success or errno");
+            System.setOut(originalOut);
+            System.setErr(new java.io.PrintStream(failed));
+            check(refusalFrom(() -> NtsRuntime.writeStderr("x")).contains("standard error failed"),
+                "a JVM error-stream failure cannot invent success or errno");
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
+        testStandardStreams(); System.out.println("shared standard streams passed");
         testBigInt();
         testBigIntPastBits(); System.out.println("bigint past 128 bits stops passed");
         testBigIntCompareString();

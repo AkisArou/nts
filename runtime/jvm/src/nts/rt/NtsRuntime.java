@@ -781,12 +781,28 @@ public final class NtsRuntime {
      * Java's own encoder would write {@code ?}.
      */
     public static void consoleWrite(String line, boolean toStderr) {
+        standardWrite(line, toStderr, true);
+    }
+    /** One encoder, stream and flush point for console and raw stream writes. */
+    private static boolean standardWrite(String line, boolean toStderr, boolean newline) {
         java.io.PrintStream stream = toStderr ? System.err : System.out;
-        if (toStderr) { System.out.flush(); }
         byte[] bytes = strToWellFormed(line).getBytes(java.nio.charset.StandardCharsets.UTF_8);
         stream.write(bytes, 0, bytes.length);
-        stream.write('\n');
-        stream.flush();
+        if (newline) { stream.write('\n'); }
+        // checkError flushes the PrintStream, including an empty raw write.
+        return !stream.checkError();
+    }
+    public static double writeStdout(String text) {
+        if (!standardWrite(text, false, false)) {
+            refused("writing standard output failed; the JVM does not expose its errno");
+        }
+        return 0;
+    }
+    public static double writeStderr(String text) {
+        if (!standardWrite(text, true, false)) {
+            refused("writing standard error failed; the JVM does not expose its errno");
+        }
+        return 0;
     }
     public static String strRepeat(String s, double times) {
         int count = (int) toInteger(times);

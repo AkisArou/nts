@@ -28,6 +28,7 @@
 #include <unistd.h>
 #endif
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7004,6 +7005,7 @@ NtsString *nts_value_inspect(NtsValue value) {
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#include <windows.h>
 
 /* Windows opens stdout and stderr in text mode, which writes each `\n` as
  * `\r\n`; node writes `\n` on every platform, so a line must be the same
@@ -7021,8 +7023,72 @@ __attribute__((constructor)) static void nts_stdio_binary(void) {
 }
 #endif
 
-void nts_console_write(const NtsString *line, bool to_stderr) {
+/* The node facade reports libuv's negative error numbers. On POSIX these
+ * are -errno; Windows gives them a stable numbering independent of the CRT.
+ * Numbers: libuv 1.52.1 include/uv/errno.h, bundled by node 24.20.0
+ * (third_party/node/deps/uv/include/uv/errno.h).
+ * Keep this cold translation here so every standard-stream caller uses the
+ * same FILE, encoder and flush rather than linking a second writer. */
+static double nts_stdio_error(int error) {
+  if (error == 0)
+    error = EIO;
+#ifdef _WIN32
+  switch (error) {
+  case EACCES:
+    return -4092;
+  case EAGAIN:
+    return -4088;
+  case EBADF:
+    return -4083;
+  case EFAULT:
+    return -4074;
+  case EFBIG:
+    return -4036;
+  case EINTR:
+    return -4072;
+  case EINVAL:
+    return -4071;
+  case EIO:
+    return -4070;
+  case ENOMEM:
+    return -4057;
+  case ENOSPC:
+    return -4055;
+  case ENXIO:
+    return -4033;
+  case EPIPE:
+    return -4047;
+  default:
+    return -4094; /* UV_UNKNOWN */
+  }
+#else
+  return -(double)(error != 0 ? error : EIO);
+#endif
+}
+
+static double nts_stdio_bytes(FILE *stream, const void *bytes, size_t length) {
+  const unsigned char *at = bytes;
+  while (length != 0) {
+    errno = 0;
+    size_t written = fwrite(at, 1, length, stream);
+    at += written;
+    length -= written;
+    if (length != 0) {
+      if (errno == EINTR) {
+        clearerr(stream);
+        continue;
+      }
+      return nts_stdio_error(errno);
+    }
+  }
+  return 0;
+}
+
+static double nts_stdio_write(const NtsString *line, bool to_stderr,
+                              bool newline) {
   FILE *stream = to_stderr ? stderr : stdout;
+  /* Every call flushes its own stream before returning. */
+  double result;
   /* ASCII as it is stored, U+0000 included: the common line costs a scan and
    * one write. Anything else is transcoded, on the stack when it is short. */
   if ((line->flags & NTS_TWO_BYTE) == 0) {
@@ -7032,13 +7098,13 @@ void nts_console_write(const NtsString *line, bool to_stderr) {
       high |= bytes[at];
     }
     if ((high & 0x80u) == 0) {
-      fwrite(bytes, 1, line->length, stream);
-      fputc('\n', stream);
-      fflush(stream);
-      return;
+      result = nts_stdio_bytes(stream, bytes, line->length);
+      goto finish;
     }
   }
   if ((size_t)line->length > SIZE_MAX / 3u) {
+    if (!newline)
+      return nts_stdio_error(ENOMEM);
     fprintf(stderr, "nts: out of memory\n");
     abort();
   }
@@ -7046,16 +7112,54 @@ void nts_console_write(const NtsString *line, bool to_stderr) {
   size_t most = (size_t)line->length * 3u;
   char *out = most <= sizeof small ? small : (char *)malloc(most);
   if (!out) {
+    if (!newline)
+      return nts_stdio_error(ENOMEM);
     fprintf(stderr, "nts: out of memory\n");
     abort();
   }
-  fwrite(out, 1, nts_write_utf8(line, out, false), stream);
+  result = nts_stdio_bytes(stream, out, nts_write_utf8(line, out, false));
   if (out != small) {
     free(out);
   }
-  fputc('\n', stream);
-  fflush(stream);
+finish:
+  if (result == 0 && newline && fputc('\n', stream) == EOF) {
+    result = nts_stdio_error(errno);
+  }
+  if (fflush(stream) != 0 && result == 0) {
+    result = nts_stdio_error(errno);
+  }
+  return result;
 }
+
+void nts_console_write(const NtsString *line, bool to_stderr) {
+  (void)nts_stdio_write(line, to_stderr, true);
+}
+
+double nts_write_stdout(const NtsString *text) {
+  return nts_stdio_write(text, false, false);
+}
+
+double nts_write_stderr(const NtsString *text) {
+  return nts_stdio_write(text, true, false);
+}
+
+static bool nts_stdio_is_tty(int descriptor) {
+#ifdef _WIN32
+  /* A character device can be NUL rather than a console. Match the native
+   * descriptor check, rather than treating every CRT character device as a
+   * terminal. */
+  HANDLE handle = (HANDLE)_get_osfhandle(descriptor);
+  DWORD mode;
+  return handle != INVALID_HANDLE_VALUE &&
+         GetFileType(handle) == FILE_TYPE_CHAR && GetConsoleMode(handle, &mode);
+#else
+  return isatty(descriptor) != 0;
+#endif
+}
+
+bool nts_stdout_is_tty(void) { return nts_stdio_is_tty(1); }
+
+bool nts_stderr_is_tty(void) { return nts_stdio_is_tty(2); }
 
 /* Whether a one-byte string's storage is already its C string: every byte
  * ASCII, and none of them zero. Branch-free over the bytes, so the compiler

@@ -12,13 +12,13 @@ import { EventEmitter, type Listener } from "../events/src/main.ts";
 import { getColorDepth } from "./color-depth.ts";
 import { uvException } from "./uv.ts";
 
-/** @ntsAbi managed */
+/** @ntsAbi intrinsic */
 declare function nts_write_stdout(text: string): number;
-/** @ntsAbi managed */
+/** @ntsAbi intrinsic */
 declare function nts_write_stderr(text: string): number;
-/** @ntsAbi managed */
+/** @ntsAbi intrinsic */
 declare function nts_stdout_is_tty(): boolean;
-/** @ntsAbi managed */
+/** @ntsAbi intrinsic */
 declare function nts_stderr_is_tty(): boolean;
 
 /** The structural write operation shared by console and readline. */

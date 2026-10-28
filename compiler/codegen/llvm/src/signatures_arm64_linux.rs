@@ -2055,6 +2055,18 @@ pub const SIGNATURES_ARM64_LINUX: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_stderr_is_tty",
+        returns: "i1",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_stdout_is_tty",
+        returns: "i1",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_str_alloc",
         returns: "ptr",
         params: &["ptr", "i32"],
@@ -2801,6 +2813,18 @@ pub const SIGNATURES_ARM64_LINUX: &[Signature] = &[
     Signature {
         name: "nts_view_unlend",
         returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_write_stderr",
+        returns: "double",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_write_stdout",
+        returns: "double",
         params: &["ptr"],
         attributes: &[],
     },

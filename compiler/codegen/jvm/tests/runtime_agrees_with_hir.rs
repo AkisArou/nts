@@ -431,4 +431,7 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 139 for `nts_json_first_escape`, the C runtime's JSON escape scan. This lane
 /// does not provide it (`nts_codegen_jvm::provides`), so `text.ts`'s guard
 /// folds false here and its TypeScript scan runs: no call to it ever arrives.
-const REFUSED_FLOOR: usize = 139;
+/// 141 with stdout/stderr's per-descriptor isTTY queries. This runtime targets
+/// Java 8 and Android; System.console cannot answer either descriptor's state,
+/// and the native FFM route requires Java 22. Keep both calls refused by name.
+const REFUSED_FLOOR: usize = 141;

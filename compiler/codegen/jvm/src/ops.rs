@@ -1027,6 +1027,8 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_string_from_char_code" => (RUNTIME, "stringFromCharCode", "(D)Ljava/lang/String;"),
         "nts_string_from_code_point" => (RUNTIME, "stringFromCodePoint", "(D)Ljava/lang/String;"),
         "nts_console_write" => (RUNTIME, "consoleWrite", "(Ljava/lang/String;Z)V"),
+        "nts_write_stdout" => (RUNTIME, "writeStdout", "(Ljava/lang/String;)D"),
+        "nts_write_stderr" => (RUNTIME, "writeStderr", "(Ljava/lang/String;)D"),
         _ => return None,
     })
 }

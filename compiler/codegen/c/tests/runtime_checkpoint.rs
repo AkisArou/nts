@@ -785,3 +785,15 @@ fn an_open_records_membership_has_three_distinct_results() {
         "{report}"
     );
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn standard_stream_failures_and_terminal_state_follow_each_descriptor() {
+    for provider in [&[][..], &["-DNTS_PROVIDER_RC"][..]] {
+        let report = run_suite("standard_streams", provider);
+        assert!(
+            report.contains("standard stream failure and descriptor checks passed"),
+            "{report}"
+        );
+    }
+}

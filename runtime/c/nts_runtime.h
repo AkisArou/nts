@@ -2952,6 +2952,14 @@ NtsString *nts_value_inspect(NtsValue value);
  * U+0000 is written, as node writes it; a lone surrogate becomes U+FFFD, as
  * node's UTF-8 stream makes it. */
 void nts_console_write(const NtsString *line, bool to_stderr);
+/* Raw standard-stream writes share console_write's UTF-8 encoder, FILE and
+ * immediate flush, with no appended newline. Zero means success; a negative
+ * libuv error number reports a write/flush failure to the node facade. */
+double nts_write_stdout(const NtsString *text);
+double nts_write_stderr(const NtsString *text);
+/* Per descriptor, never a claim about whether stdin has a console. */
+bool nts_stdout_is_tty(void);
+bool nts_stderr_is_tty(void);
 
 /* The `Number` predicates. Exactly specified, unlike most of `Math` below.
  * `Number.isNaN` is absent because it is `x != x`, which the lowering emits

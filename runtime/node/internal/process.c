@@ -158,57 +158,10 @@ NtsString *nts_os_release(void) {
 
 __int128 nts_hrtime_ns(void) { return (__int128)uv_hrtime(); }
 
-/* A synchronous standard-stream write. The TypeScript stream reports a
- * negative libuv result through its callback and `error` event. Loop because a
- * pipe or file is allowed to accept only part of a buffer, and preserve the
- * byte length so an embedded NUL in a JavaScript string is not a terminator. */
-static double write_to_descriptor(uv_file descriptor, NtsString *value) {
-    size_t length = 0;
-    char *bytes = nts_node_to_utf8_alloc(value, &length);
-    if (bytes == NULL) return (double)UV_ENOMEM;
-
-    size_t offset = 0;
-    int error = 0;
-    while (offset < length) {
-        size_t remaining = length - offset;
-        unsigned int size = remaining > UINT_MAX
-                                ? UINT_MAX
-                                : (unsigned int)remaining;
-        uv_buf_t buffer = uv_buf_init(bytes + offset, size);
-        uv_fs_t request;
-        int written = uv_fs_write(NULL, &request, descriptor, &buffer, 1, -1,
-                                  NULL);
-        uv_fs_req_cleanup(&request);
-        if (written < 0) {
-            error = written;
-            break;
-        }
-        if (written == 0) {
-            error = UV_EIO;
-            break;
-        }
-        offset += (size_t)written;
-    }
-
-    free(bytes);
-    return (double)error;
-}
-
-double nts_write_stdout(NtsString *text) {
-    return write_to_descriptor(1, text);
-}
-
-double nts_write_stderr(NtsString *text) {
-    return write_to_descriptor(2, text);
-}
-
+/* Standard streams share the runtime's encoder, FILE and flush path. */
 double nts_debug_write(NtsString *text) {
-    return write_to_descriptor(2, text);
+    return nts_write_stderr(text);
 }
-
-bool nts_stdout_is_tty(void) { return uv_guess_handle(1) == UV_TTY; }
-
-bool nts_stderr_is_tty(void) { return uv_guess_handle(2) == UV_TTY; }
 
 void nts_process_really_exit(double code) { _Exit((int)code); }
 

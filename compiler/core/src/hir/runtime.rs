@@ -1194,6 +1194,8 @@ static SIGNATURES: &[Declared] = &[
             signed: true,
         }),
     ),
+    ("nts_stderr_is_tty", &[], Some(HirType::Bool)),
+    ("nts_stdout_is_tty", &[], Some(HirType::Bool)),
     ("nts_str_append", &[None, None], None),
     (
         "nts_str_append_at",
@@ -1855,6 +1857,16 @@ static SIGNATURES: &[Declared] = &[
             bits: 32,
             signed: true,
         }),
+    ),
+    (
+        "nts_write_stderr",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_write_stdout",
+        &[None],
+        Some(HirType::Float { bits: 64 }),
     ),
 ];
 
