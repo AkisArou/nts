@@ -11,6 +11,7 @@ import { installWebPlatformRuntime, VirtualScheduler, WebPlatformRuntime } from 
 import type { CryptoFailure, CryptoKeyHandle, CryptoSupportQuery, RandomSource } from "../src/provider.ts";
 import { hasWebPlatformRuntime } from "../src/provider/environment.ts";
 import { createCryptoKey, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
+import { cryptoCapability } from "../src/crypto/capability.ts";
 import { EcKeyAlgorithm } from "../src/crypto/ec-key.ts";
 import { NodeCryptoProvider } from "./node-crypto-provider.ts";
 
@@ -106,6 +107,21 @@ test("static supports uses the currently installed runtime and accepts detached 
   assert.equal(second.provider.queries.length, 1);
   installWebPlatformRuntime(first.runtime);
   assert.equal(supports("digest", "SHA-256"), true);
+});
+
+test("capability lookup uses internal identity without reading a public subtle getter", (t) => {
+  const { runtime, provider } = fixture(t);
+  assert.ok(runtime.crypto);
+  assert.equal(cryptoCapability(runtime.crypto), provider);
+  class PublicGetter {
+    reads = 0;
+    get subtle(): never { this.reads++; throw new Error("public subtle getter must remain unread"); }
+  }
+  const unregistered = new PublicGetter();
+  assert.equal(cryptoCapability(unregistered), undefined);
+  assert.equal(unregistered.reads, 0);
+  assert.equal(SubtleCrypto.supports("digest", "SHA-256"), true);
+  assert.equal(provider.queries.length, 1);
 });
 
 test("native false and failure values become false after one metadata query", (t) => {

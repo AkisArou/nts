@@ -16,8 +16,8 @@
   "newSpecificationDiscrepancies": 0,
   "registrationCountChanges": [],
   "focusedControls": {
-    "total": 24,
-    "pass": 24,
+    "total": 25,
+    "pass": 25,
     "fail": 0,
     "skip": 0
   },
@@ -128,5 +128,28 @@
       }
     ]
   },
-  "packageGate": "The parent integration records the complete ordered-stack package gate in the PR; the committed evidence here covers affected files and focused controls."
+  "packageGate": "The parent integration records the complete ordered-stack package gate in the PR; the committed evidence here covers affected files and focused controls.",
+  "currentCombinedRegression": {
+    "total": 50,
+    "pass": 50,
+    "fail": 0,
+    "skip": 0
+  },
+  "corrections": [
+    {
+      "issue": "Read the installed Crypto capability by private identity without invoking the public subtle getter",
+      "sections": [
+        "3.2.6",
+        "3.3"
+      ],
+      "control": "A class-body poison subtle getter remains unread by the internal identity lookup; canonical runtime instances still select their own provider",
+      "command": "node --expose-gc --test runtime/web-platform/test/crypto-supports.test.ts runtime/web-platform/test/crypto-sha3-kmac.test.ts runtime/web-platform/test/crypto-runtime.test.ts",
+      "exitCode": 0,
+      "pass": 50,
+      "fail": 0,
+      "skip": 0,
+      "logSha256": "3955342f285d3215f2c2e774522aa6741c7f2ac3b9025df51c906bc68a94994e",
+      "affectedWptJsonlSha256": "5ef2876f05a354c4a6582dca84d96e1ab3df195fc912fb3dd69c037d8ae1e3c3"
+    }
+  ]
 }
