@@ -176,7 +176,11 @@ function supportParameters(
   }
   if (name === "ML-DSA-44" || name === "ML-DSA-65" || name === "ML-DSA-87"
     || name === "ML-KEM-512" || name === "ML-KEM-768" || name === "ML-KEM-1024") {
-    return { kind: "ml", name, contextBytes: algorithm instanceof ContextParams ? optionalBytes(algorithm.context) : undefined };
+    const contextBytes = algorithm instanceof ContextParams ? optionalBytes(algorithm.context) : undefined;
+    // §§8.4.1–2 check the context before the unavailable key. Section 3.3
+    // therefore rejects this bound in shared policy, before native availability.
+    if (contextBytes !== undefined && contextBytes > 255) return undefined;
+    return { kind: "ml", name, contextBytes };
   }
   return undefined;
 }

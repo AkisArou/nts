@@ -16,8 +16,8 @@
   "newSpecificationDiscrepancies": 0,
   "registrationCountChanges": [],
   "focusedControls": {
-    "total": 25,
-    "pass": 25,
+    "total": 26,
+    "pass": 26,
     "fail": 0,
     "skip": 0
   },
@@ -130,8 +130,8 @@
   },
   "packageGate": "The parent integration records the complete ordered-stack package gate in the PR; the committed evidence here covers affected files and focused controls.",
   "currentCombinedRegression": {
-    "total": 50,
-    "pass": 50,
+    "total": 51,
+    "pass": 51,
     "fail": 0,
     "skip": 0
   },
@@ -150,6 +150,26 @@
       "skip": 0,
       "logSha256": "3955342f285d3215f2c2e774522aa6741c7f2ac3b9025df51c906bc68a94994e",
       "affectedWptJsonlSha256": "5ef2876f05a354c4a6582dca84d96e1ab3df195fc912fb3dd69c037d8ae1e3c3"
+    },
+    {
+      "issue": "Reject ML-DSA contexts over 255 bytes in shared support policy before the unavailable key and native capability query",
+      "sections": [
+        "3.3",
+        "8.4.1",
+        "8.4.2"
+      ],
+      "control": "All three ML-DSA names and sign/verify reject 256 bytes with zero native queries; 255 bytes reaches an accepting capability",
+      "before": {
+        "exitCode": 1,
+        "logSha256": "4598461d20f6015d5f0eb2a6a5f1fa2d2bfa9012d4d6a575fb0d12b4fdfd43d2"
+      },
+      "after": {
+        "exitCode": 0,
+        "pass": 51,
+        "fail": 0,
+        "skip": 0,
+        "logSha256": "1ee6e41e324997db838b3baa44da52235c1e7a2cd368fb60f1609ff6b0cf7bde"
+      }
     }
   ]
 }
