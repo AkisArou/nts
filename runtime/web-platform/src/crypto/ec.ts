@@ -52,12 +52,14 @@ export function verifyEc(
   requireKeyType(key, "public");
   const width = ecCurveByteLength((key.algorithm as EcKeyAlgorithm).namedCurve);
   if (signature.byteLength !== width * 2) return false;
-  return provider.verify(
+  const result = provider.verify(
     { name: "ECDSA", hash: (algorithm as EcdsaParams).hash.name },
     key.handle,
     { kind: "ecdsa", r: cryptoByteSubarray(signature, 0, width), s: cryptoByteSubarray(signature, width, width * 2) },
     bytes,
   );
+  if (typeof result !== "boolean") throw new DOMException("The verification operation failed", "OperationError");
+  return result;
 }
 
 /**

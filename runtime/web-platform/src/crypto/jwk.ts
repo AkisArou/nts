@@ -6,7 +6,7 @@ import type { JsonValue } from "../json/value.ts";
 import { cryptoViewByteLength } from "./buffer-source.ts";
 import type { KeyUsage } from "./crypto-key.ts";
 
-export type KeyFormat = "raw" | "spki" | "pkcs8" | "jwk";
+export type KeyFormat = "raw" | "raw-secret" | "spki" | "pkcs8" | "jwk";
 
 /** Web Cryptography §15. Fields are optional; algorithms check required members. */
 export class RsaOtherPrimesInfo {
@@ -255,7 +255,7 @@ export function toJsonWebKeyObject(key: JsonWebKey): JsonWebKeyObject {
 
 export function toKeyFormat(value: unknown): KeyFormat {
   const format = coerceToDOMString(value);
-  if (format === "raw" || format === "spki" || format === "pkcs8" || format === "jwk") return format;
+  if (format === "raw" || format === "raw-secret" || format === "spki" || format === "pkcs8" || format === "jwk") return format;
   throw new TypeError("Unknown key format");
 }
 

@@ -60,7 +60,9 @@ export function verifyOkp(
   requireKeyType(key, "public");
   const parameters = signatureParameters(algorithm);
   if (signature.byteLength !== 2 * okpCurveByteLength(parameters.name)) return false;
-  return provider.verify(parameters, key.handle, { kind: "bytes", bytes: signature }, bytes);
+  const result = provider.verify(parameters, key.handle, { kind: "bytes", bytes: signature }, bytes);
+  if (typeof result !== "boolean") throw new DOMException("The verification operation failed", "OperationError");
+  return result;
 }
 
 /**

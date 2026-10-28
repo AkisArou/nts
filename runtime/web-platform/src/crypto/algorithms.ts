@@ -48,12 +48,59 @@ export class DigestAlgorithm extends Algorithm<CryptoDigestName> {
 }
 
 export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW";
-export type SecretAlgorithmName = AesAlgorithmName | "HMAC";
+export type KmacAlgorithmName = "KMAC128" | "KMAC256";
+export type CshakeAlgorithmName = "cSHAKE128" | "cSHAKE256";
+export type SecretAlgorithmName = AesAlgorithmName | "HMAC" | KmacAlgorithmName;
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
 export type EcAlgorithmName = "ECDSA" | "ECDH";
 export type OkpAlgorithmName = "Ed25519" | "X25519" | "Ed448" | "X448";
 export type KdfAlgorithmName = "HKDF" | "PBKDF2";
-type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
+type RegisteredAlgorithmName = CryptoDigestName | CshakeAlgorithmName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName;
+
+/** Modern Algorithms §13.3. Dictionary conversion precedes BufferSource snapshots. */
+export class CShakeParams extends Algorithm<CshakeAlgorithmName> {
+  readonly outputLength: number;
+  readonly functionName: Uint8Array | undefined;
+  readonly customization: Uint8Array | undefined;
+
+  constructor(name: CshakeAlgorithmName, outputLength: number, functionName: Uint8Array | undefined, customization: Uint8Array | undefined) {
+    super(name);
+    this.outputLength = outputLength;
+    this.functionName = functionName;
+    this.customization = customization;
+  }
+}
+
+/** Modern Algorithms §§16.3–16.4: generation and import share optional bit length. */
+export class KmacKeyGenParams extends Algorithm<KmacAlgorithmName> {
+  readonly length: number | undefined;
+
+  constructor(name: KmacAlgorithmName, length: number | undefined) {
+    super(name);
+    this.length = length;
+  }
+}
+
+export class KmacImportParams extends Algorithm<KmacAlgorithmName> {
+  readonly length: number | undefined;
+
+  constructor(name: KmacAlgorithmName, length: number | undefined) {
+    super(name);
+    this.length = length;
+  }
+}
+
+/** Modern Algorithms §16.6. Output length is in bits, not the key's length. */
+export class KmacParams extends Algorithm<KmacAlgorithmName> {
+  readonly outputLength: number;
+  readonly customization: Uint8Array | undefined;
+
+  constructor(name: KmacAlgorithmName, outputLength: number, customization: Uint8Array | undefined) {
+    super(name);
+    this.outputLength = outputLength;
+    this.customization = customization;
+  }
+}
 
 /** Web Cryptography §27.5. Validation of AES key sizes is an operation step. */
 export class AesKeyGenParams extends Algorithm<AesAlgorithmName> {
@@ -264,6 +311,10 @@ export class Pbkdf2Params extends Algorithm<"PBKDF2"> {
 
 export type NormalizedAlgorithm =
   | DigestAlgorithm
+  | CShakeParams
+  | KmacKeyGenParams
+  | KmacImportParams
+  | KmacParams
   | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName | OkpAlgorithmName | KdfAlgorithmName>
   | AesKeyGenParams
   | AesDerivedKeyParams
@@ -301,6 +352,23 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("SHA-256", "digest"),
   new AlgorithmRegistration("SHA-384", "digest"),
   new AlgorithmRegistration("SHA-512", "digest"),
+  new AlgorithmRegistration("SHA3-256", "digest"),
+  new AlgorithmRegistration("SHA3-384", "digest"),
+  new AlgorithmRegistration("SHA3-512", "digest"),
+  new AlgorithmRegistration("cSHAKE128", "digest"),
+  new AlgorithmRegistration("cSHAKE256", "digest"),
+  new AlgorithmRegistration("KMAC128", "sign"),
+  new AlgorithmRegistration("KMAC128", "verify"),
+  new AlgorithmRegistration("KMAC128", "generateKey"),
+  new AlgorithmRegistration("KMAC128", "importKey"),
+  new AlgorithmRegistration("KMAC128", "exportKey"),
+  new AlgorithmRegistration("KMAC128", "get key length"),
+  new AlgorithmRegistration("KMAC256", "sign"),
+  new AlgorithmRegistration("KMAC256", "verify"),
+  new AlgorithmRegistration("KMAC256", "generateKey"),
+  new AlgorithmRegistration("KMAC256", "importKey"),
+  new AlgorithmRegistration("KMAC256", "exportKey"),
+  new AlgorithmRegistration("KMAC256", "get key length"),
   new AlgorithmRegistration("AES-CTR", "encrypt"),
   new AlgorithmRegistration("AES-CTR", "decrypt"),
   new AlgorithmRegistration("AES-CTR", "generateKey"),
@@ -452,8 +520,37 @@ function normalizeRegisteredAlgorithm(
   // first, even though normalization subsequently restores the initial match.
   algorithmName(algorithm);
 
-  if (name === "SHA-1" || name === "SHA-256" || name === "SHA-384" || name === "SHA-512") {
+  if (name === "SHA-1" || name === "SHA-256" || name === "SHA-384" || name === "SHA-512"
+    || name === "SHA3-256" || name === "SHA3-384" || name === "SHA3-512") {
     return new DigestAlgorithm(name);
+  }
+
+  if (name === "cSHAKE128" || name === "cSHAKE256") {
+    const input = algorithm as { readonly customization?: unknown; readonly functionName?: unknown; readonly outputLength?: unknown };
+    const customizationValue = input.customization;
+    const customization = customizationValue === undefined ? undefined : toCryptoBufferSource(customizationValue);
+    const functionNameValue = input.functionName;
+    const functionName = functionNameValue === undefined ? undefined : toCryptoBufferSource(functionNameValue);
+    const outputLength = toCryptoUnsignedInteger(requiredMember(input.outputLength, "cSHAKE.outputLength"), 32);
+    // The declared BufferSource order is functionName then customization.
+    const functionBytes = functionName === undefined ? undefined : normalizedBytes(functionName, copyBuffers);
+    const customizationBytes = customization === undefined ? undefined : normalizedBytes(customization, copyBuffers);
+    return new CShakeParams(name, outputLength, functionBytes, customizationBytes);
+  }
+
+  if (name === "KMAC128" || name === "KMAC256") {
+    if (operation === "generateKey" || operation === "importKey" || operation === "get key length") {
+      const input = algorithm as { readonly length?: unknown };
+      const lengthValue = input.length;
+      const length = lengthValue === undefined ? undefined : toCryptoUnsignedInteger(lengthValue, 32);
+      return operation === "generateKey" ? new KmacKeyGenParams(name, length) : new KmacImportParams(name, length);
+    }
+    if (operation === "exportKey") return new Algorithm(name);
+    const input = algorithm as { readonly customization?: unknown; readonly outputLength?: unknown };
+    const customizationValue = input.customization;
+    const customization = customizationValue === undefined ? undefined : toCryptoBufferSource(customizationValue);
+    const outputLength = toCryptoUnsignedInteger(requiredMember(input.outputLength, "KMAC.outputLength"), 32);
+    return new KmacParams(name, outputLength, customization === undefined ? undefined : normalizedBytes(customization, copyBuffers));
   }
 
   if (name === "Ed25519") return new Algorithm(name);
@@ -476,7 +573,7 @@ function normalizeRegisteredAlgorithm(
     const hash = toAlgorithmIdentifier(requiredMember(input.hash, "HKDF.hash"));
     const info = toCryptoBufferSource(requiredMember(input.info, "HKDF.info"));
     const salt = toCryptoBufferSource(requiredMember(input.salt, "HKDF.salt"));
-    const normalizedHash = normalizeAlgorithm(hash, "digest");
+    const normalizedHash = normalizeHashAlgorithm(hash);
     const saltBytes = normalizedBytes(salt, copyBuffers);
     const infoBytes = normalizedBytes(info, copyBuffers);
     return new HkdfParams(name, normalizedHash, saltBytes, infoBytes);
@@ -491,7 +588,7 @@ function normalizeRegisteredAlgorithm(
     // PBKDF2 declares salt before hash. An object hash may execute script during
     // recursive normalization, so its salt must be copied even for immediate use.
     const saltBytes = normalizedBytes(salt, copyBuffers || typeof hash !== "string");
-    const normalizedHash = normalizeAlgorithm(hash, "digest");
+    const normalizedHash = normalizeHashAlgorithm(hash);
     return new Pbkdf2Params(name, normalizedHash, saltBytes, iterations);
   }
 
@@ -503,7 +600,7 @@ function normalizeRegisteredAlgorithm(
     const length = lengthValue === undefined ? undefined : toCryptoUnsignedInteger(lengthValue, 32);
     // Dictionary conversion is complete before §18.4.4 recursively normalizes
     // HashAlgorithmIdentifier. In particular, length's coercion precedes hash.name.
-    const normalizedHash = normalizeAlgorithm(hash, "digest");
+    const normalizedHash = normalizeHashAlgorithm(hash);
     return operation === "generateKey"
       ? new HmacKeyGenParams(name, normalizedHash, length)
       : new HmacImportParams(name, normalizedHash, length);
@@ -521,7 +618,7 @@ function normalizeRegisteredAlgorithm(
       const publicExponent = toCryptoArrayBufferView(requiredMember(input.publicExponent, "RSA.publicExponent"));
       if (cryptoTypedArrayName(publicExponent) !== "Uint8Array") throw new TypeError("RSA.publicExponent must be a Uint8Array");
       const hash = toAlgorithmIdentifier(requiredMember(input.hash, "RSA.hash"));
-      const normalizedHash = normalizeAlgorithm(hash, "digest");
+      const normalizedHash = normalizeHashAlgorithm(hash);
       // BigInteger is a Uint8Array typedef, not BufferSource. §18.4.4 does not
       // snapshot it: recursive hash normalization can still change its bytes.
       return new RsaHashedKeyGenParams(name, modulusLength, cryptoBytes(publicExponent), normalizedHash);
@@ -529,7 +626,7 @@ function normalizeRegisteredAlgorithm(
     if (operation === "importKey") {
       const input = algorithm as { readonly hash?: unknown };
       const hash = toAlgorithmIdentifier(requiredMember(input.hash, "RSA.hash"));
-      return new RsaHashedImportParams(name, normalizeAlgorithm(hash, "digest"));
+      return new RsaHashedImportParams(name, normalizeHashAlgorithm(hash));
     }
     if (operation === "exportKey" || name === "RSASSA-PKCS1-v1_5") return new Algorithm(name);
     if (name === "RSA-PSS") {
@@ -553,7 +650,7 @@ function normalizeRegisteredAlgorithm(
     if (name === "ECDSA") {
       const input = algorithm as { readonly hash?: unknown };
       const hash = toAlgorithmIdentifier(requiredMember(input.hash, "ECDSA.hash"));
-      return new EcdsaParams(name, normalizeAlgorithm(hash, "digest"));
+      return new EcdsaParams(name, normalizeHashAlgorithm(hash));
     }
     return agreementParameters(algorithm, name);
   }
@@ -608,7 +705,7 @@ export function normalizeAlgorithm(
   value: AlgorithmIdentifier,
   operation: "digest",
   copyBuffers?: boolean,
-): DigestAlgorithm;
+): DigestAlgorithm | CShakeParams;
 export function normalizeAlgorithm(
   value: AlgorithmIdentifier,
   operation: CryptoOperation,
@@ -626,4 +723,13 @@ export function normalizeAlgorithm(
     return normalizeRegisteredAlgorithm(algorithm, registration.name, operation, copyBuffers);
   }
   throw new DOMException("The algorithm is not supported for " + operation, "NotSupportedError");
+}
+
+/** Fixed-size hash choices supported by the native RSA/HMAC/EC/KDF operations. */
+export function normalizeHashAlgorithm(value: AlgorithmIdentifier): DigestAlgorithm {
+  const algorithm = normalizeAlgorithm(value, "digest");
+  if (!(algorithm instanceof DigestAlgorithm)) {
+    throw new DOMException("An extensible-output digest is not supported as a hash parameter", "NotSupportedError");
+  }
+  return algorithm;
 }

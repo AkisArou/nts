@@ -57,7 +57,7 @@ interface EcHexKey {
 
 interface EcFixture extends EcHexKey {
   readonly order: string;
-  readonly signatures: Readonly<Record<CryptoDigestName, string>>;
+  readonly signatures: Readonly<Partial<Record<CryptoDigestName, string>>>;
   readonly initiator: EcHexKey;
   readonly responder: EcHexKey;
   readonly secret: string;
@@ -182,7 +182,9 @@ export function ecdsaMessage(): Uint8Array {
 }
 
 export function ecdsaSignature(curve: CryptoNamedCurve = "P-256", hash: CryptoDigestName = "SHA-256"): Uint8Array {
-  return new Uint8Array(Buffer.from(fixtures[curve].signatures[hash], "hex"));
+  const signature = fixtures[curve].signatures[hash];
+  if (signature === undefined) throw new TypeError("RFC 6979 does not contain this hash fixture");
+  return new Uint8Array(Buffer.from(signature, "hex"));
 }
 
 export function ecdhPrivateJwk(curve: CryptoNamedCurve, side: "initiator" | "responder"): EcFixturePrivateJwk {

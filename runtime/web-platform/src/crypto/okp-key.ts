@@ -123,6 +123,7 @@ export function importOkpKey(
   usages: readonly KeyUsage[],
 ): CryptoKey {
   const name = okpName(algorithm.name);
+  if (format === "raw-secret") throw new DOMException("This asymmetric key format is not supported", "NotSupportedError");
   let type: "public" | "private";
   let components: CryptoOkpComponents | undefined;
   if (format === "jwk") {

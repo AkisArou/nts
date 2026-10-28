@@ -34,7 +34,7 @@
  * may be enabled for AES-CBC. The shared layer supplies and checks CBC padding.
  */
 
-export type CryptoDigestName = "SHA-1" | "SHA-256" | "SHA-384" | "SHA-512";
+export type CryptoDigestName = "SHA-1" | "SHA-256" | "SHA-384" | "SHA-512" | "SHA3-256" | "SHA3-384" | "SHA3-512";
 
 /**
  * The digest portion of CryptoProvider can be bound and tested independently.
@@ -252,6 +252,24 @@ export interface CryptoCiphertext {
   readonly tag: Uint8Array | null;
 }
 
+/** Modern Algorithms §13: native cSHAKE includes N/S domain separation and squeezing. */
+export interface CryptoCshakeParameters {
+  readonly name: "cSHAKE128" | "cSHAKE256";
+  readonly functionName: Uint8Array;
+  readonly customization: Uint8Array;
+  /** Requested bits, encoded least-significant-bit first as in Modern Algorithms §2.1. */
+  readonly outputLength: number;
+}
+
+/** Modern Algorithms §16: the primitive owns KMAC and constant-time verification. */
+export interface CryptoKmacParameters {
+  readonly name: "KMAC128" | "KMAC256";
+  /** Logical bits in the secret handle; unused high bits of the last byte are zero. */
+  readonly keyLength: number;
+  readonly outputLength: number;
+  readonly customization: Uint8Array;
+}
+
 export interface CryptoHashSignatureParameters {
   readonly name: "HMAC" | "RSASSA-PKCS1-v1_5" | "ECDSA";
   readonly hash: CryptoDigestName;
@@ -277,7 +295,8 @@ export type CryptoSignatureParameters =
   | CryptoHashSignatureParameters
   | CryptoRsaPssParameters
   | CryptoEd25519Parameters
-  | CryptoEd448Parameters;
+  | CryptoEd448Parameters
+  | CryptoKmacParameters;
 
 export interface CryptoByteSignature {
   readonly kind: "bytes";
@@ -334,10 +353,13 @@ export interface CryptoFailure {
  * extractability or format-policy checks. Invalid mathematical key material may
  * return { failure: "invalid-key" }; other native failures return
  * { failure: "operation" }. Native code does not throw across this interface.
- * Verification returns a boolean. The shared caller alone selects observable
+ * Verification returns a boolean or a failure value. The shared caller alone selects observable
  * errors and their order.
  */
 export interface CryptoProvider extends CryptoDigestProvider {
+  /** One whole-message cSHAKE call; SHAKE-equivalent empty N/S stays native too. */
+  digestXof(parameters: CryptoCshakeParameters, bytes: Uint8Array): Uint8Array | CryptoFailure;
+
   /**
    * Shared code validates the original DER's structure, exact consumption, OIDs,
    * versions and parameter presence before calling this method. Native parsers can
@@ -379,7 +401,7 @@ export interface CryptoProvider extends CryptoDigestProvider {
     key: CryptoKeyHandle,
     signature: CryptoSignature,
     data: Uint8Array,
-  ): boolean;
+  ): boolean | CryptoFailure;
 
   /**
    * Agreement returns the complete fixed-width secret; shared code applies the

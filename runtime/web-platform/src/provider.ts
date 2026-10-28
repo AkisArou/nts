@@ -310,7 +310,7 @@ export type {
 } from "./provider/web-platform-runtime.ts";
 
 export type {
-  CryptoDigestName, CryptoDigestProvider, CryptoKeyHandle, CryptoKeyType,
+  CryptoDigestName, CryptoDigestProvider, CryptoCshakeParameters, CryptoKmacParameters, CryptoKeyHandle, CryptoKeyType,
   CryptoNamedCurve, CryptoOkpCurve, CryptoSecretKeyInfo, CryptoRsaKeyInfo,
   CryptoEcKeyInfo, CryptoOkpKeyInfo, CryptoKeyInfo, CryptoKeyRecord, CryptoKeyPairRecord,
   CryptoSecretComponents, CryptoRsaOtherPrime, CryptoRsaComponents, CryptoEcComponents,

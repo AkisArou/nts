@@ -76,6 +76,11 @@ function requireAesLength(length: number, error: "OperationError" | "DataError")
 }
 
 function hmacDefaultLength(hash: CryptoDigestName): number {
+  // This increment follows Node 24.20's public profile: SHA-3 HMAC is
+  // supported with an explicit length, but has no supported omitted default.
+  if (hash === "SHA3-256" || hash === "SHA3-384" || hash === "SHA3-512") {
+    throw new DOMException("SHA-3 HMAC requires an explicit key length", "NotSupportedError");
+  }
   return hash === "SHA-384" || hash === "SHA-512" ? 1024 : 512;
 }
 
@@ -181,7 +186,7 @@ export function importSecretKey(
   if (hmac?.length === 0) throw new DOMException("An HMAC key cannot have zero length", "DataError");
   validateUsages(algorithm.name, usages);
   let bytes: Uint8Array;
-  if (format === "raw") {
+  if (format === "raw" || format === "raw-secret") {
     if (data instanceof JsonWebKey) throw new DOMException("Expected raw key bytes", "DataError");
     bytes = data;
   } else if (format === "jwk") {
@@ -239,7 +244,7 @@ export function exportSecretKey(provider: CryptoProvider, format: KeyFormat, key
     if ("failure" in result) throw new DOMException("The secret key cannot be exported", "OperationError");
     bytes = result;
   }
-  if (format === "raw") return bytes;
+  if (format === "raw" || format === "raw-secret") return bytes;
   if (format !== "jwk") throw new DOMException("This secret-key format is not supported", "NotSupportedError");
   const algorithm = key.algorithm;
   const hmac = algorithm instanceof HmacKeyAlgorithm ? algorithm : undefined;
@@ -263,5 +268,7 @@ export function signHmac(provider: CryptoProvider, key: CryptoKeySlots, bytes: U
 
 export function verifyHmac(provider: CryptoProvider, key: CryptoKeySlots, signature: Uint8Array, bytes: Uint8Array): boolean {
   const hash = (key.algorithm as HmacKeyAlgorithm).hash.name as CryptoDigestName;
-  return provider.verify({ name: "HMAC", hash }, key.handle, { kind: "bytes", bytes: signature }, bytes);
+  const result = provider.verify({ name: "HMAC", hash }, key.handle, { kind: "bytes", bytes: signature }, bytes);
+  if (typeof result !== "boolean") throw new DOMException("The verification operation failed", "OperationError");
+  return result;
 }

@@ -3,33 +3,33 @@
   "blockedTests": [
     {
       "name": "serialization test {length: 128, name: KMAC128}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native-key-clone",
+      "reason": "CryptoKey structured cloning needs native handle serialization; this Node VM adapter supplies package CryptoKey objects, not a native structured-clone binding."
     },
     {
       "name": "serialization test {length: 160, name: KMAC128}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native-key-clone",
+      "reason": "CryptoKey structured cloning needs native handle serialization; this Node VM adapter supplies package CryptoKey objects, not a native structured-clone binding."
     },
     {
       "name": "serialization test {length: 256, name: KMAC128}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native-key-clone",
+      "reason": "CryptoKey structured cloning needs native handle serialization; this Node VM adapter supplies package CryptoKey objects, not a native structured-clone binding."
     },
     {
       "name": "serialization test {length: 128, name: KMAC256}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native-key-clone",
+      "reason": "CryptoKey structured cloning needs native handle serialization; this Node VM adapter supplies package CryptoKey objects, not a native structured-clone binding."
     },
     {
       "name": "serialization test {length: 160, name: KMAC256}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native-key-clone",
+      "reason": "CryptoKey structured cloning needs native handle serialization; this Node VM adapter supplies package CryptoKey objects, not a native structured-clone binding."
     },
     {
       "name": "serialization test {length: 256, name: KMAC256}",
-      "category": "outside-assigned-algorithms",
-      "reason": "Tentative WICG algorithm, key format, or operation outside the assigned scope; see README. The raw failure is retained in baseline.json."
+      "category": "native-key-clone",
+      "reason": "CryptoKey structured cloning needs native handle serialization; this Node VM adapter supplies package CryptoKey objects, not a native structured-clone binding."
     }
   ]
 }

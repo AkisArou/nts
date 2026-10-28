@@ -24,6 +24,7 @@ import type { CipherGCMTypes, KeyObject } from "node:crypto";
 import type {
   CryptoAesCtrParameters,
   CryptoCipherParameters,
+  CryptoCshakeParameters,
   CryptoCiphertext,
   CryptoDerivationParameters,
   CryptoDigestName,
@@ -44,6 +45,8 @@ import type {
   CryptoSignature,
   CryptoSignatureParameters,
 } from "../src/provider/crypto.ts";
+
+import { runNativeModernCrypto } from "./node-crypto-modern-jobs.ts";
 
 const ByteArray = Uint8Array;
 // Test adapters need the same native-slot behavior as OpenSSL/JCA bindings even
@@ -69,6 +72,9 @@ function hashName(name: CryptoDigestName): string {
     case "SHA-256": return "sha256";
     case "SHA-384": return "sha384";
     case "SHA-512": return "sha512";
+    case "SHA3-256": return "sha3-256";
+    case "SHA3-384": return "sha3-384";
+    case "SHA3-512": return "sha3-512";
     default: return name;
   }
 }
@@ -439,6 +445,22 @@ export class NodeCryptoProvider implements CryptoProvider {
     }
   }
 
+  digestXof(parameters: CryptoCshakeParameters, bytes: Uint8Array): Uint8Array | CryptoFailure {
+    try {
+      if (parameters.name !== "cSHAKE128" && parameters.name !== "cSHAKE256") return { failure: "operation" };
+      if (parameters.functionName.byteLength === 0 && parameters.customization.byteLength === 0) {
+        const result = owned(createHash(parameters.name === "cSHAKE128" ? "shake128" : "shake256",
+          { outputLength: Math.ceil(parameters.outputLength / 8) }).update(bytes).digest());
+        if (parameters.outputLength % 8 !== 0) result[result.length - 1]! &= (1 << (parameters.outputLength % 8)) - 1;
+        return result;
+      }
+      const result = runNativeModernCrypto({ parameters, data: bytes });
+      return result instanceof ArrayBuffer ? new ByteArray(result) : { failure: "operation" };
+    } catch {
+      return { failure: "operation" };
+    }
+  }
+
   importKey(input: CryptoKeyImport): CryptoKeyRecord | CryptoFailure {
     try {
       if (input.format === "raw" && input.family === "secret") {
@@ -650,6 +672,11 @@ export class NodeCryptoProvider implements CryptoProvider {
     try {
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
+      if (parameters.name === "KMAC128" || parameters.name === "KMAC256") {
+        if (nativeKey.type !== "secret") return { failure: "invalid-key" };
+        const result = runNativeModernCrypto({ parameters, key: nativeKey, data });
+        return result instanceof ArrayBuffer ? { kind: "bytes", bytes: new ByteArray(result) } : { failure: "operation" };
+      }
       if (parameters.name === "HMAC") {
         const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return { kind: "bytes", bytes: owned(bytes) };
@@ -682,10 +709,10 @@ export class NodeCryptoProvider implements CryptoProvider {
     key: CryptoKeyHandle,
     signature: CryptoSignature,
     data: Uint8Array,
-  ): boolean {
+  ): boolean | CryptoFailure {
     try {
       const nativeKey = keyObjects.get(key);
-      if (nativeKey === undefined) return false;
+      if (nativeKey === undefined) return parameters.name === "KMAC128" || parameters.name === "KMAC256" ? { failure: "invalid-key" } : false;
       if (parameters.name === "ECDSA") {
         if (signature.kind !== "ecdsa" || nativeKey.asymmetricKeyType !== "ec" || nativeKey.type !== "public") return false;
         const width = byteLength(ecComponents(nativeKey).x);
@@ -694,6 +721,11 @@ export class NodeCryptoProvider implements CryptoProvider {
           Buffer.concat([signature.r, signature.s]));
       }
       if (signature.kind !== "bytes") return false;
+      if (parameters.name === "KMAC128" || parameters.name === "KMAC256") {
+        if (nativeKey.type !== "secret") return { failure: "invalid-key" };
+        const result = runNativeModernCrypto({ parameters, key: nativeKey, data, signature: signature.bytes });
+        return typeof result === "boolean" ? result : { failure: "operation" };
+      }
       if (parameters.name === "Ed25519" || parameters.name === "Ed448") {
         if (okpCurveName(nativeKey) !== parameters.name || nativeKey.type !== "public") return false;
         const options = parameters.name === "Ed448" ? { key: nativeKey, context: parameters.context } : nativeKey;

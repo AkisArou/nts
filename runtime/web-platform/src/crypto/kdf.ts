@@ -26,7 +26,7 @@ export function importKdfKey(
   extractable: boolean,
   usages: readonly KeyUsage[],
 ): CryptoKey {
-  if (format !== "raw") throw new DOMException("KDF keys require the raw format", "NotSupportedError");
+  if (format !== "raw" && format !== "raw-secret") throw new DOMException("KDF keys require the raw format", "NotSupportedError");
   for (let index = 0; index < usages.length; index++) {
     if (usages[index] !== "deriveKey" && usages[index] !== "deriveBits") {
       throw new DOMException("A KDF key can only derive keys or bits", "SyntaxError");
@@ -70,7 +70,7 @@ export function deriveKdfBits(
   let parameters: CryptoHkdfParameters | CryptoPbkdf2Parameters;
   if (algorithm instanceof HkdfParams) {
     const hash = algorithm.hash.name;
-    const hashLength = hash === "SHA-1" ? 160 : hash === "SHA-256" ? 256 : hash === "SHA-384" ? 384 : 512;
+    const hashLength = hash === "SHA-1" ? 160 : hash === "SHA-256" || hash === "SHA3-256" ? 256 : hash === "SHA-384" || hash === "SHA3-384" ? 384 : 512;
     if (length > 255 * hashLength) throw operationError();
     parameters = { name: "HKDF", hash, salt: algorithm.salt, info: algorithm.info, byteLength };
   } else if (algorithm instanceof Pbkdf2Params) {
