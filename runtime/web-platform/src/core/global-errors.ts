@@ -116,10 +116,16 @@ export class GlobalErrorRuntime implements GlobalExceptionReporter {
       ? this.#unhandledHandler : this.#handledHandler;
     const context = slot.context;
     if (context === null) return;
-    const special = event instanceof ErrorEvent && event.type === "error";
-    const args: GlobalHandlerArguments = special
-      ? [event.message, event.filename, event.lineno, event.colno, event.error]
-      : [event];
+    // The provider routes by internal event type. Ordinary subclass getters
+    // cannot change HTML's special-handler branch or its initialized arguments.
+    const special = type === "error" && event instanceof ErrorEvent;
+    let args: GlobalHandlerArguments;
+    if (special) {
+      const data = this.#capabilities.readErrorEventData(event);
+      args = [data.message, data.filename, data.lineno, data.colno, data.error];
+    } else {
+      args = [event];
+    }
     // Web IDL invocation finishes callback/script cleanup before HTML processes
     // the return value. Dispatch cannot defer this to after our wrapper returns.
     const result = this.#capabilities.invokeGlobalHandler(callback as GlobalHandlerCallback, globalThis, args, context);

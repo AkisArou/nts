@@ -101,6 +101,65 @@ test("an ordinary error Event receives one argument and false cancels normally",
   assert.equal(event.defaultPrevented, true);
 });
 
+test("global handler intrinsic data selects error handling independently of a subclass type getter", (t) => {
+  const d = driver(t);
+  let typeReads = 0;
+  class CustomErrorEvent extends ErrorEvent {
+    override get type(): string { typeReads++; return "other"; }
+  }
+  const reason = {};
+  const event = new CustomErrorEvent("error", {
+    cancelable: true, message: "original message", filename: "original.ts", lineno: 12, colno: 4, error: reason,
+  });
+  let received: unknown[] = [];
+  d.runtime.onerror = function (...args: unknown[]) { received = args; return true; };
+  assert.equal(d.dispatchGlobalEvent(event, (error) => d.runtime.reportException(error)), false);
+  assert.deepEqual(received, ["original message", "original.ts", 12, 4, reason]);
+  assert.equal(typeReads, 0);
+  assert.deepEqual(d.errorEventReads, [event]);
+  assert.deepEqual(d.errors, []);
+});
+
+test("global handler intrinsic data reads initialized ErrorEvent fields without invoking subclass getters", (t) => {
+  const d = driver(t);
+  const reads: string[] = [];
+  class CustomErrorEvent extends ErrorEvent {
+    override get message(): never { reads.push("message"); throw new Error("message getter"); }
+    override get filename(): never { reads.push("filename"); throw new Error("filename getter"); }
+    override get lineno(): never { reads.push("lineno"); throw new Error("lineno getter"); }
+    override get colno(): never { reads.push("colno"); throw new Error("colno getter"); }
+    override get error(): never { reads.push("error"); throw new Error("error getter"); }
+  }
+  const reason = Symbol("original error");
+  const event = new CustomErrorEvent("error", {
+    cancelable: true, message: "original message", filename: "original.ts", lineno: 12, colno: 4, error: reason,
+  });
+  let received: unknown[] = [];
+  d.runtime.onerror = function (...args: unknown[]) { received = args; return true; };
+  assert.equal(d.dispatchGlobalEvent(event, (error) => d.runtime.reportException(error)), false);
+  assert.deepEqual(received, ["original message", "original.ts", 12, 4, reason]);
+  assert.deepEqual(reads, []);
+  assert.deepEqual(d.errorEventReads, [event]);
+  assert.deepEqual(d.errors, []);
+});
+
+test("global handler intrinsic data does not treat a subclass error type getter as an internal error event", (t) => {
+  const d = driver(t);
+  let typeReads = 0;
+  class CustomErrorEvent extends ErrorEvent {
+    override get type(): string { typeReads++; return "error"; }
+    override get message(): never { throw new Error("ordinary event message getter"); }
+  }
+  const event = new CustomErrorEvent("unhandledrejection", { cancelable: true });
+  let received: unknown[] = [];
+  d.runtime.onunhandledrejection = function (...args: unknown[]) { received = args; return false; };
+  assert.equal(d.dispatchGlobalEvent(event, (error) => d.runtime.reportException(error)), false);
+  assert.deepEqual(received, [event]);
+  assert.equal(typeReads, 0);
+  assert.deepEqual(d.errorEventReads, []);
+  assert.deepEqual(d.errors, []);
+});
+
 test("global handler invocation cleanup precedes onerror cancellation", (t) => {
   const d = driver(t);
   const reason = {};

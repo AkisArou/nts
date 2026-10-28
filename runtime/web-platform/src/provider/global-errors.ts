@@ -10,6 +10,15 @@ export interface GlobalErrorInformation {
   readonly muted: boolean;
 }
 
+/** Canonical ErrorEvent data, independent of overridable public accessors. */
+export interface GlobalErrorEventData {
+  readonly message: string;
+  readonly filename: string;
+  readonly lineno: number;
+  readonly colno: number;
+  readonly error: unknown;
+}
+
 export type GlobalErrorEventType = "error" | "unhandledrejection" | "rejectionhandled";
 export type GlobalErrorListener = (event: Event) => void;
 
@@ -51,7 +60,17 @@ export interface GlobalErrorCapabilities {
   /** No Get, ToString, stack parsing, or other script-observable input access. */
   extractErrorInformation(exception: unknown): GlobalErrorInformation;
 
-  /** Internal non-capture listener operations at the real global target. */
+  /**
+   * Read the canonical ErrorEvent fields initialized by its constructor. This
+   * infallible intrinsic must not dispatch subclass getters, inspect public
+   * properties, or coerce values. The compiler/provider owns these layouts.
+   */
+  readErrorEventData(event: ErrorEvent): GlobalErrorEventData;
+
+  /**
+   * Internal non-capture listener operations at the real global target.
+   * Route by the event's internal type, never an overridable `type` getter.
+   */
   addGlobalEventListener(type: GlobalErrorEventType, callback: GlobalErrorListener): void;
   removeGlobalEventListener(type: GlobalErrorEventType, callback: GlobalErrorListener): void;
 
@@ -83,6 +102,7 @@ export interface GlobalErrorCapabilities {
 
   /**
    * Dispatch a trusted canonical Event at globalObject; return !canceled.
+   * Route listeners by the event's internal type, not its public properties.
    * target/currentTarget and callback this must be the actual global. Enter its
    * realm for source listener wrappers. Ordinary script listeners use Web IDL
    * callback setup/cleanup; the internal handler wrappers call the separate
