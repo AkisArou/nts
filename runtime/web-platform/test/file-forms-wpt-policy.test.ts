@@ -159,6 +159,21 @@ for (const factory of [
   });
 }
 
+// https://webidl.spec.whatwg.org/#es-operations
+// An exception in a promise-returning operation becomes a rejected promise.
+for (const operation of ["bytes", "text", "arrayBuffer"] as const) {
+  test(`Blob.${operation} rejects an incompatible receiver without throwing synchronously`, async (t) => {
+    useRuntime(t);
+    const blob = new Blob(["abc"]);
+    const read: (this: unknown) => Promise<unknown> = blob[operation];
+    let result: Promise<unknown> | undefined;
+    assert.doesNotThrow(() => { result = read.call({}); });
+    assert.ok(result instanceof Promise);
+    await assert.rejects(result, TypeError);
+    assert.equal(await blob.text(), "abc");
+  });
+}
+
 // https://w3c.github.io/FileAPI/#dom-blob-arraybuffer
 for (const factory of [
   { name: "Blob", create: (): Blob => new Blob([new Uint8Array([1, 2, 3])]) },

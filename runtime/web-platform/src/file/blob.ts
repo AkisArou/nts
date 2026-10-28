@@ -621,17 +621,36 @@ export class Blob {
   }
 
   bytes(): Promise<Uint8Array<ArrayBuffer>> {
-    return this.#readBytes();
+    // Web IDL promise-returning operations reject even when receiver validation
+    // or an immediate allocation fails, rather than throwing at the call site.
+    // https://webidl.spec.whatwg.org/#es-operations
+    try {
+      return this.#readBytes();
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   arrayBuffer(): Promise<ArrayBuffer> {
     // File API reads the Blob's own bytes, without invoking another public
     // operation that script can replace.
     // https://w3c.github.io/FileAPI/#dom-blob-arraybuffer
-    return this.#readBytes().then((bytes) => bytes.buffer);
+    try {
+      return this.#readBytes().then((bytes) => bytes.buffer);
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   text(): Promise<string> {
+    try {
+      return this.#readText();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
+  #readText(): Promise<string> {
     if (this.#hasExternal) {
       return this.#copyBytes().then((bytes) => new TextDecoder().decode(bytes));
     }
