@@ -13,6 +13,9 @@ export type HeaderRecord = Readonly<Record<string, string>>;
 
 export type HeadersInit = Headers | HeaderSequence | HeaderRecord;
 
+/** @internal Web IDL values, before Fetch validates tuple lengths or HTTP syntax. */
+export type ConvertedHeadersInit = readonly (readonly string[])[];
+
 export type HeaderGuard = "none" | "immutable";
 
 interface HeaderGroup {
@@ -66,28 +69,89 @@ export function normalizeValue(value: string): string {
   return normalized;
 }
 
-function isHeaderSequence(init: HeadersInit): init is Headers | HeaderSequence {
-  return Symbol.iterator in init;
+function isObject(value: unknown): value is object {
+  return value !== null && (typeof value === "object" || typeof value === "function");
 }
 
-function convertHeaderSequenceEntry(entry: HeaderSequenceEntry): HeaderEntry {
-  if ((typeof entry !== "object" || entry === null) && typeof entry !== "function") {
-    throw new TypeError("Each header must be an iterable [name, value] tuple");
-  }
+// Abstract Call must not read an iterator function's user-controlled .call.
+// https://tc39.es/ecma262/#sec-call
+const callWithoutArguments: (callback: () => unknown, receiver: object) => unknown =
+  Function.prototype.call.bind(Function.prototype.call);
 
-  let name = "";
-  let value = "";
-  let length = 0;
-  for (const item of entry) {
-    if (length === 0) name = coerceToByteString(item);
-    else if (length === 1) value = coerceToByteString(item);
-    else throw new TypeError("Each header must be an iterable [name, value] tuple");
-    length++;
+function iteratorMethod(value: object): (() => unknown) | undefined {
+  const method = (value as { readonly [Symbol.iterator]?: unknown })[Symbol.iterator];
+  if (method === undefined || method === null) return undefined;
+  if (typeof method !== "function") throw new TypeError("Header iterator must be callable");
+  return method as () => unknown;
+}
+
+function convertSequence<T>(
+  value: object,
+  method: () => unknown,
+  convert: (value: unknown) => T,
+): T[] {
+  const iterator = callWithoutArguments(method, value);
+  if (!isObject(iterator)) throw new TypeError("Header iterator must return an object");
+  const next = (iterator as Iterator<unknown>).next;
+  const result: T[] = [];
+  // Web IDL conversion uses IteratorStepValue, without IteratorClose when an
+  // element conversion throws. Cache next as GetIteratorFromMethod requires.
+  // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+  while (true) {
+    const step = callWithoutArguments(next, iterator);
+    if (!isObject(step)) throw new TypeError("Header iterator result must be an object");
+    const item = step as IteratorResult<unknown>;
+    if (item.done) return result;
+    result.push(convert(item.value));
   }
-  if (length !== 2) {
+}
+
+function convertHeaderSequenceEntry(entry: unknown): string[] {
+  if (!isObject(entry)) {
     throw new TypeError("Each header must be an iterable [name, value] tuple");
   }
-  return [name, value];
+  const method = iteratorMethod(entry);
+  if (method === undefined) throw new TypeError("Header tuple must be iterable");
+  return convertSequence(entry, method, coerceToByteString);
+}
+
+/** @internal Convert HeadersInit at the Web IDL argument or dictionary boundary. */
+export function convertHeadersInit(init: HeadersInit): ConvertedHeadersInit {
+  if (!isObject(init)) throw new TypeError("Headers init must be an object");
+  // Union selection uses GetMethod, not the presence of Symbol.iterator.
+  // https://webidl.spec.whatwg.org/#es-union
+  const method = iteratorMethod(init);
+  if (method !== undefined) return convertSequence(init, method, convertHeaderSequenceEntry);
+
+  const result: HeaderEntry[] = [];
+  const record = init as Readonly<Record<string, unknown>>;
+  // Convert each own string-keyed member before reading the next value.
+  // https://webidl.spec.whatwg.org/#es-record
+  for (const key of Object.keys(record)) {
+    const name = coerceToByteString(key);
+    const value = coerceToByteString(record[key]);
+    result.push([name, value]);
+  }
+  return result;
+}
+
+let fillConvertedHeaders: (init: ConvertedHeadersInit) => Headers;
+let copyHeaderList: (headers: Headers) => Headers;
+let readHeaderList: (headers: Headers, name: string) => string | null;
+
+/** @internal Run Fetch's fill steps after all surrounding Web IDL conversion. */
+export function createHeadersFromConvertedInit(init: ConvertedHeadersInit): Headers {
+  return fillConvertedHeaders(init);
+}
+
+/** @internal Copy the list and its wire order; the new guard remains "none". */
+export function copyHeaders(headers: Headers): Headers {
+  return copyHeaderList(headers);
+}
+
+/** @internal Read header state without calling a script-overridden public get(). */
+export function getHeaderValue(headers: Headers, name: string): string | null {
+  return readHeaderList(headers, name);
 }
 
 /**
@@ -106,81 +170,106 @@ export const headersMakeImmutable: unique symbol = Symbol("Headers make immutabl
 const HEADERS_ITERATOR_PROTOTYPE = idlIteratorPrototype("Headers Iterator");
 
 export class Headers {
-  private readonly list: HeaderEntry[] = [];
-  private guard: HeaderGuard = "none";
-  private sortedCache: HeaderEntry[] | null = null;
+  readonly #list: HeaderEntry[] = [];
+  #guard: HeaderGuard = "none";
+  #sortedCache: HeaderEntry[] | null = null;
+
+  static {
+    fillConvertedHeaders = (init) => {
+      const headers = new Headers();
+      headers.#fill(init);
+      return headers;
+    };
+    copyHeaderList = (source) => {
+      const headers = new Headers();
+      for (const entry of source.#list) headers.#list.push([entry[0], entry[1]]);
+      return headers;
+    };
+    readHeaderList = (headers, name) => headers.#get(normalizeName(name));
+  }
 
   constructor(init?: HeadersInit) {
-    if (init === undefined) {
-      return;
-    }
-    if (isHeaderSequence(init)) {
-      for (const entry of init) {
-        const [name, value] = convertHeaderSequenceEntry(entry);
-        this.append(name, value);
-      }
-      return;
-    }
+    if (init !== undefined) this.#fill(convertHeadersInit(init));
+  }
 
-    for (const [name, value] of Object.entries(init)) {
-      this.append(name, value);
+  #fill(init: ConvertedHeadersInit): void {
+    // Fetch's fill algorithm follows conversion of the entire HeadersInit.
+    // https://fetch.spec.whatwg.org/#concept-headers-fill
+    for (let i = 0; i < init.length; i++) {
+      const entry = init[i];
+      if (entry === undefined || entry.length !== 2) {
+        throw new TypeError("Each header must be an iterable [name, value] tuple");
+      }
+      const name = entry[0];
+      const value = entry[1];
+      if (name === undefined || value === undefined) {
+        throw new TypeError("Each header must be an iterable [name, value] tuple");
+      }
+      this.#appendConverted(name, value);
     }
   }
 
   #writable(): void {
-    if (this.guard === "immutable") {
+    if (this.#guard === "immutable") {
       throw new TypeError("Headers are immutable");
     }
   }
 
   append(name: string, value: string): void {
+    this.#appendConverted(name, value);
+  }
+
+  #appendConverted(name: string, value: string): void {
     const key = normalizeName(name);
     const normalized = normalizeValue(value);
     this.#writable();
-    this.sortedCache = null;
-    this.list.push([key, normalized]);
+    this.#sortedCache = null;
+    this.#list.push([key, normalized]);
   }
 
   set(name: string, value: string): void {
     const key = normalizeName(name);
     const normalized = normalizeValue(value);
     this.#writable();
-    this.sortedCache = null;
+    this.#sortedCache = null;
     let found = false;
     let write = 0;
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       if (entry[0] !== key) {
-        this.list[write++] = entry;
+        this.#list[write++] = entry;
       } else if (!found) {
-        this.list[write++] = [key, normalized];
+        this.#list[write++] = [key, normalized];
         found = true;
       }
     }
     if (!found) {
-      this.list[write++] = [key, normalized];
+      this.#list[write++] = [key, normalized];
     }
-    this.list.length = write;
+    this.#list.length = write;
   }
 
   delete(name: string): void {
     const key = normalizeName(name);
     this.#writable();
-    this.sortedCache = null;
+    this.#sortedCache = null;
     let write = 0;
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       if (entry[0] !== key) {
-        this.list[write++] = entry;
+        this.#list[write++] = entry;
       }
     }
-    this.list.length = write;
+    this.#list.length = write;
   }
 
   get(name: string): string | null {
-    const key = normalizeName(name);
+    return this.#get(normalizeName(name));
+  }
+
+  #get(key: string): string | null {
     let first: string | null = null;
     let values: string[] | null = null;
 
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       if (entry[0] !== key) {
         continue;
       }
@@ -195,7 +284,7 @@ export class Headers {
 
   has(name: string): boolean {
     const key = normalizeName(name);
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       if (entry[0] === key) {
         return true;
       }
@@ -206,7 +295,7 @@ export class Headers {
   getSetCookie(): string[] {
     const values: string[] = [];
 
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       if (entry[0] === "set-cookie") {
         values.push(entry[1]);
       }
@@ -218,28 +307,28 @@ export class Headers {
   [headersRawEntries](): HeaderEntry[] {
     const result: HeaderEntry[] = [];
 
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       result.push([entry[0], entry[1]]);
     }
     return result;
   }
 
   get [headersGuardIsImmutable](): boolean {
-    return this.guard === "immutable";
+    return this.#guard === "immutable";
   }
 
   [headersMakeImmutable](): this {
-    this.guard = "immutable";
+    this.#guard = "immutable";
     return this;
   }
 
   #sorted(): HeaderEntry[] {
-    if (this.sortedCache !== null) {
-      return this.sortedCache;
+    if (this.#sortedCache !== null) {
+      return this.#sortedCache;
     }
     const grouped = new Map<string, HeaderGroup>();
 
-    for (const entry of this.list) {
+    for (const entry of this.#list) {
       let group = grouped.get(entry[0]);
 
       if (group === undefined) {
@@ -261,7 +350,7 @@ export class Headers {
         result.push([group.name, group.values.join(", ")]);
       }
     }
-    this.sortedCache = result;
+    this.#sortedCache = result;
     return result;
   }
 

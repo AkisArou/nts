@@ -12,8 +12,8 @@ import type { Blob } from "../file/blob.ts";
 import type { BlobURLStore } from "../file/object-url.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
-import { Headers, isToken } from "./headers.ts";
-import type { HeadersInit } from "./headers.ts";
+import { Headers, convertHeadersInit, copyHeaders, createHeadersFromConvertedInit, isToken } from "./headers.ts";
+import type { ConvertedHeadersInit, HeadersInit } from "./headers.ts";
 import type { FileURLProvider } from "./file-url.ts";
 import type { DigestProvider } from "./integrity.ts";
 import { ReadableStream } from "../streams/readable.ts";
@@ -118,7 +118,7 @@ interface ConvertedRequestInit {
   readonly cache: RequestCache | undefined;
   readonly credentials: RequestCredentials | undefined;
   readonly duplex: "half" | undefined;
-  readonly headers: Headers | undefined;
+  readonly headers: ConvertedHeadersInit | undefined;
   readonly integrity: string | undefined;
   readonly keepalive: boolean | undefined;
   readonly method: string | undefined;
@@ -254,7 +254,7 @@ function convertRequestInit(init: RequestInit | null | undefined): ConvertedRequ
   const credentials = convertCredentials(init.credentials);
   const duplex = convertDuplex(init.duplex);
   const headerInit = init.headers;
-  const headers = headerInit === undefined ? undefined : new Headers(headerInit);
+  const headers = headerInit === undefined ? undefined : convertHeadersInit(headerInit);
   const integrityValue = init.integrity;
   const integrity = integrityValue === undefined ? undefined : coerceToDOMString(integrityValue);
   const keepaliveValue = init.keepalive;
@@ -437,7 +437,9 @@ export class Request extends Body {
     if (keepalive && convertedInit.body instanceof ReadableStream) {
       throw new TypeError("A streaming request body cannot use keepalive");
     }
-    const headers = new Headers(convertedInit.headers ?? source?.headers);
+    const headers = convertedInit.headers === undefined
+      ? source === null ? new Headers() : copyHeaders(source.requestHeaders)
+      : createHeadersFromConvertedInit(convertedInit.headers);
     const state = hasNewBody
       ? BodyState.fromConvertedBody(convertedInit.body, context.random, context.bodyPolicy)
       : source === null
