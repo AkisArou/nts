@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
-import { Blob, DOMException, WebSocket } from "../src/index.ts";
+import { Blob, CloseEvent, DOMException, Event, MessageEvent, WebSocket } from "../src/index.ts";
 import type {
   SocketIncoming,
   SocketMessage,
@@ -144,4 +144,82 @@ suite("WebSocket.send converts discarded data and counts its UTF-8 bytes after c
   // @ts-expect-error -- the required-argument check also applies after close.
   assert.throws(() => socket.send(), TypeError);
   assert.equal(socket.bufferedAmount, 16);
+});
+
+const handlerNames = ["onopen", "onerror", "onmessage", "onclose"] as const;
+type HandlerName = typeof handlerNames[number];
+
+function setHandlerValue(socket: WebSocket, name: HandlerName, value: unknown): void {
+  const bindings: Record<HandlerName, unknown> = socket;
+  bindings[name] = value;
+}
+
+function handlerEvent(name: HandlerName): Event {
+  if (name === "onmessage") return new MessageEvent("message", { data: "payload" });
+  if (name === "onclose") return new CloseEvent("close");
+  return new Event(name.slice(2));
+}
+
+suite("WebSocket handler attributes convert primitives to null and retain non-callable objects", async (t) => {
+  const { socket, opened, errors } = controlledSocket(t);
+  await opened;
+  const primitives: unknown[] = [null, undefined, false, 0, NaN, "handler", 1n, Symbol("handler")];
+  const object = {
+    get handleEvent(): never {
+      return assert.fail("an event handler attribute must not call an object's handleEvent");
+    },
+  };
+  for (const name of handlerNames) {
+    for (const value of primitives) {
+      setHandlerValue(socket, name, () => assert.fail("a primitive must clear the handler"));
+      setHandlerValue(socket, name, value);
+      assert.equal(socket[name], null);
+      socket.dispatchEvent(handlerEvent(name));
+    }
+    setHandlerValue(socket, name, object);
+    assert.equal(socket[name], object);
+    socket.dispatchEvent(handlerEvent(name));
+    setHandlerValue(socket, name, null);
+  }
+  assert.deepEqual(errors, []);
+});
+
+suite("WebSocket handler replacement preserves its listener position until a primitive clears it", async (t) => {
+  const { socket, opened, errors } = controlledSocket(t);
+  await opened;
+  for (const name of handlerNames) {
+    const order: string[] = [];
+    const event = handlerEvent(name);
+    const before = () => order.push("before");
+    const after = () => order.push("after");
+    const handler = function (this: WebSocket, received: Event): void {
+      assert.equal(this, socket);
+      assert.equal(received, event);
+      order.push("handler");
+    };
+    socket.addEventListener(event.type, before);
+    setHandlerValue(socket, name, {});
+    socket.addEventListener(event.type, after);
+    setHandlerValue(socket, name, handler);
+    assert.equal(socket[name], handler);
+    socket.dispatchEvent(event);
+    assert.deepEqual(order, ["before", "handler", "after"]);
+
+    order.length = 0;
+    setHandlerValue(socket, name, {});
+    setHandlerValue(socket, name, handler);
+    socket.dispatchEvent(event);
+    assert.deepEqual(order, ["before", "handler", "after"]);
+
+    order.length = 0;
+    setHandlerValue(socket, name, undefined);
+    setHandlerValue(socket, name, handler);
+    socket.dispatchEvent(event);
+    assert.deepEqual(order, ["before", "after", "handler"]);
+
+    setHandlerValue(socket, name, null);
+    socket.removeEventListener(event.type, before);
+    socket.removeEventListener(event.type, after);
+  }
+  assert.deepEqual(errors, []);
 });
