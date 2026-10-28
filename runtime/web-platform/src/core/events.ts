@@ -321,20 +321,27 @@ export class CustomEvent<T = unknown> extends Event {
 
   constructor(...args: [type: string, init?: CustomEventInit<T>]) {
     requireArguments(args, 1, "CustomEvent constructor");
-    const type = args[0];
+    const type = coerceToDOMString(args[0]);
     const init = args[1];
-    super(type);
-    if (init === undefined || init === null) {
-      this.#customDetail = null;
-    } else {
+    let bubbles = false;
+    let cancelable = false;
+    let composed = false;
+    let detail: T | null = null;
+    if (init !== undefined && init !== null) {
       requireDictionary(init, "CustomEvent init");
-      const bubbles = init.bubbles ? true : false;
-      const cancelable = init.cancelable ? true : false;
-      const composed = init.composed ? true : false;
-      const detail = init.detail;
-      this[eventApplyConvertedInit](bubbles, cancelable, composed);
-      this.#customDetail = detail === undefined ? null : detail;
+      bubbles = init.bubbles ? true : false;
+      cancelable = init.cancelable ? true : false;
+      composed = init.composed ? true : false;
+      const suppliedDetail = init.detail;
+      detail = suppliedDetail === undefined ? null : suppliedDetail;
     }
+    // Web IDL converts the complete inherited dictionary before DOM's event
+    // construction algorithm captures the time. No dictionary getters run after super.
+    // https://dom.spec.whatwg.org/#concept-event-constructor
+    // https://webidl.spec.whatwg.org/#es-dictionary
+    super(type);
+    this[eventApplyConvertedInit](bubbles, cancelable, composed);
+    this.#customDetail = detail;
   }
 
   get detail(): T | null {
