@@ -117,8 +117,8 @@
     "The released web-ssr row times cache-busted eval and is excluded even though the driver omits a startup tag. A rendering-only variant requires a separate scope decision.",
     "Plain raytrace is covered already. Its explicit public/private-class-field variants retain separate feature coverage, with the unchanged scene and original validation.",
     "WSL uses Proxy only to check duplicate names during static test registration. A faithful checked registration adapter must preserve that validation and ordering; compiler/evaluator work uses no Proxy.",
-    "The original fixed inputs are retained. If one complete operation exceeds10ms on Node24.20.0, seed1 is reported as a timing exception instead of silently shrinking inputs.",
-    "The six identified genuine async workloads require awaited measurement. The unchanged synchronous harness cannot consume a Promise checksum; no immediate or cached numeric substitute is valid."
+    "Approved timing policy: retain complete original inputs; if one full iteration at seed = 1 exceeds 10 ms under Node 24.20.0, document the timing exception in the PR and case README instead of shrinking the input.",
+    "The six genuine async workloads are included as draft ports with work(n): Promise<number>. Maintainers will add awaited execution/checksum support and mark them ready after it lands; the synchronous harness is not modified here."
   ],
   "plannedOrder": [
     {
@@ -3089,7 +3089,12 @@
         "observation": {}
       },
       "category": "Promises and async code",
-      "portOrder": 20
+      "portOrder": 20,
+      "publicationPolicy": {
+        "draft": true,
+        "workSignature": "work(n: number): Promise<number>",
+        "reason": "Awaited harness support is maintained separately."
+      }
     },
     {
       "name": "doxbee-async",
@@ -3205,7 +3210,12 @@
         "observation": {}
       },
       "category": "Promises and async code",
-      "portOrder": 21
+      "portOrder": 21,
+      "publicationPolicy": {
+        "draft": true,
+        "workSignature": "work(n: number): Promise<number>",
+        "reason": "Awaited harness support is maintained separately."
+      }
     },
     {
       "name": "ai-astar",
@@ -4373,7 +4383,12 @@
         "sourceCriterion": "Original async run completes. Preserve every original sign/verify/aggregation/pairing operation and its await; no separate validate method."
       },
       "category": "Promises and async code",
-      "portOrder": 23
+      "portOrder": 23,
+      "publicationPolicy": {
+        "draft": true,
+        "workSignature": "work(n: number): Promise<number>",
+        "reason": "Awaited harness support is maintained separately."
+      }
     },
     {
       "name": "bigint-noble-secp256k1",
@@ -4700,7 +4715,12 @@
         "sourceCriterion": "Original async run completes, including synchronous and asynchronous signatures, verification, recovery, ECDH and Schnorr operations; no separate validate method."
       },
       "category": "Promises and async code",
-      "portOrder": 24
+      "portOrder": 24,
+      "publicationPolicy": {
+        "draft": true,
+        "workSignature": "work(n: number): Promise<number>",
+        "reason": "Awaited harness support is maintained separately."
+      }
     },
     {
       "name": "bigint-noble-ed25519",
@@ -5027,7 +5047,12 @@
         "sourceCriterion": "Original async and synchronous public-key/sign/verify, Ristretto and curve25519 loops complete; no separate validate method."
       },
       "category": "Promises and async code",
-      "portOrder": 25
+      "portOrder": 25,
+      "publicationPolicy": {
+        "draft": true,
+        "workSignature": "work(n: number): Promise<number>",
+        "reason": "Awaited harness support is maintained separately."
+      }
     },
     {
       "name": "bigint-paillier",
@@ -8199,7 +8224,12 @@
         }
       },
       "category": "Promises and async code",
-      "portOrder": 22
+      "portOrder": 22,
+      "publicationPolicy": {
+        "draft": true,
+        "workSignature": "work(n: number): Promise<number>",
+        "reason": "Awaited harness support is maintained separately."
+      }
     },
     {
       "name": "sync-fs",
@@ -21038,6 +21068,38 @@
         "./wasm/j2cl-box2d/build/Box2dBenchmark_j2wasm_entry.js"
       ],
       "rule": "WebAssembly"
+    }
+  ],
+  "asyncDraftWorkloads": [
+    {
+      "name": "doxbee-promise",
+      "workSignature": "work(n: number): Promise<number>",
+      "pullRequestState": "draft until awaited harness execution lands"
+    },
+    {
+      "name": "doxbee-async",
+      "workSignature": "work(n: number): Promise<number>",
+      "pullRequestState": "draft until awaited harness execution lands"
+    },
+    {
+      "name": "async-fs",
+      "workSignature": "work(n: number): Promise<number>",
+      "pullRequestState": "draft until awaited harness execution lands"
+    },
+    {
+      "name": "bigint-noble-bls12-381",
+      "workSignature": "work(n: number): Promise<number>",
+      "pullRequestState": "draft until awaited harness execution lands"
+    },
+    {
+      "name": "bigint-noble-secp256k1",
+      "workSignature": "work(n: number): Promise<number>",
+      "pullRequestState": "draft until awaited harness execution lands"
+    },
+    {
+      "name": "bigint-noble-ed25519",
+      "workSignature": "work(n: number): Promise<number>",
+      "pullRequestState": "draft until awaited harness execution lands"
     }
   ]
 }

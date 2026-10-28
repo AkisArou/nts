@@ -71,10 +71,9 @@ harness's warmup, calibration and best-of-five trials. The five process results
 are 18.5000, 16.5135, 18.1428, 17.3432 and 17.1141 ms. These are local scale
 measurements; maintainers measure their own machines.
 
-One is already the smallest positive count of complete operations. This row
-therefore **does not meet the requested 1–10 ms range** on this machine. The
-original input is preserved, and the PR remains a draft pending a decision on
-accepting that exception or explicitly permitting input scaling.
+Timing exception (approved): **16.5134544 ms at seed = 1 under Node 24.20.0**.
+One is already the smallest positive count of complete original operations;
+the complete input is preserved under the accepted exception policy.
 
 No nts compilation or oracle-count recording is claimed. Those steps belong
 to the maintainer workflow.
@@ -87,7 +86,9 @@ Wasm leaves, optional registrations, source and input licences, exact source
 blobs, reasons, required adaptations, and the proposed category order.
 
 Eligibility records the audit result; it does not mean that all 43 ports have
-been implemented. This case is the first port in that order. Genuine async
-rows require a harness that awaits their completed checksums. The released
-`web-ssr` row is excluded because it times cache-busted evaluation before
-rendering; a render-only variant would require a separate scope decision.
+been implemented. This case is the first port in that order. The six genuine
+async rows are ported as drafts with `work(n): Promise<number>` until the
+maintainers add awaited harness execution: `doxbee-promise`, `doxbee-async`,
+`async-fs`, `bigint-noble-bls12-381`, `bigint-noble-secp256k1`, and
+`bigint-noble-ed25519`. The released `web-ssr` row remains excluded because it
+times cache-busted evaluation before rendering.
