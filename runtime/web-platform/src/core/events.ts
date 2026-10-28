@@ -43,6 +43,7 @@ export const eventApplyConvertedInit: unique symbol = Symbol("Event apply conver
 let hasEventBrand!: (value: unknown) => value is Event;
 let eventTypeForDispatch!: (event: Event) => string;
 let eventCanceledForDispatch!: (event: Event) => boolean;
+let cancelEventForAlgorithms!: (event: Event) => void;
 let initializeEvent!: (
   event: Event, type: string, bubbles: boolean, cancelable: boolean,
 ) => boolean;
@@ -54,6 +55,11 @@ let endEventDispatch!: (event: Event) => void;
 let eventPropagationStopped!: (event: Event) => boolean;
 let eventImmediatePropagationStopped!: (event: Event) => boolean;
 let setEventPassiveListener!: (event: Event, passive: boolean) => void;
+
+/** @internal Set the canceled flag without invoking an overridable public method. */
+export function cancelEvent(event: Event): void {
+  cancelEventForAlgorithms(event);
+}
 
 export class Event {
   static readonly NONE = 0;
@@ -81,6 +87,7 @@ export class Event {
       typeof value === "object" && value !== null && #eventType in value;
     eventTypeForDispatch = (event): string => event.#eventType;
     eventCanceledForDispatch = (event): boolean => event.#canceled;
+    cancelEventForAlgorithms = (event): void => event.#cancel();
     initializeEvent = (event, type, bubbles, cancelable): boolean =>
       event.#initialize(type, bubbles, cancelable);
     applyConvertedEventInit = (event, bubbles, cancelable, composed): void =>
@@ -183,6 +190,10 @@ export class Event {
   }
 
   preventDefault(): void {
+    this.#cancel();
+  }
+
+  #cancel(): void {
     if (this.#eventCancelable && !this.#passiveListener) this.#canceled = true;
   }
 
@@ -474,6 +485,8 @@ let registerInternal!: (
   resist: boolean,
 ) => void;
 let retireWeaklyHeld!: (target: EventTarget, listener: ListenerRecord) => void;
+let removeInternalListener!: (target: EventTarget, type: string, callback: EventListener) => void;
+let dispatchTrustedForAlgorithms!: (target: EventTarget, event: Event) => boolean;
 
 /**
  * Retires a weakly held listener once its resource is collected. The held value
@@ -578,6 +591,10 @@ export class EventTarget {
     retireWeaklyHeld = (target, listener): void => {
       target.#retireWeaklyHeld(listener);
     };
+    removeInternalListener = (target, type, callback): void => {
+      target.#removeListener(type, callback, false);
+    };
+    dispatchTrustedForAlgorithms = (target, event): boolean => target.#dispatch(event, true);
   }
 
   /**
@@ -689,7 +706,7 @@ export class EventTarget {
       options?: ListenerOptions | boolean,
     ]
   ): void {
-    const listeners = this.#listeners;
+    if (!(#listeners in this)) throw new TypeError("EventTarget method called on an incompatible receiver");
     requireArguments(args, 2, "EventTarget.removeEventListener");
     const type = args[0];
     const callback = args[1];
@@ -698,7 +715,11 @@ export class EventTarget {
     const convertedCallback = convertEventListener(callback);
     const capture = convertEventListenerOptions(options);
     if (convertedCallback === null) return;
-    for (const item of listeners) {
+    this.#removeListener(convertedType, convertedCallback, capture);
+  }
+
+  #removeListener(convertedType: string, convertedCallback: ConvertedEventListener, capture: boolean): void {
+    for (const item of this.#listeners) {
       if (
         !item.removed &&
         item.type === convertedType &&
@@ -725,7 +746,7 @@ export class EventTarget {
 
   /** Provider-created events are trusted; script-dispatched events are not. */
   protected [eventTargetDispatchTrusted](event: Event): boolean {
-    return this.#dispatch(event, true);
+    return dispatchTrustedEvent(this, event);
   }
 
   #dispatch(event: Event, trusted: boolean): boolean {
@@ -797,16 +818,7 @@ export class EventTarget {
     callback: ((this: Target, event: E) => void) | null,
     accepts: (event: Event) => event is E,
   ): void {
-    slot.callback = callback;
-    if (callback === null) {
-      if (slot.listener !== null) target.removeEventListener(type, slot.listener);
-      slot.listener = null;
-    } else if (slot.listener === null) {
-      slot.listener = (event) => {
-        if (slot.callback !== null && accepts(event)) slot.callback.call(target, event);
-      };
-      target.addEventListener(type, slot.listener);
-    }
+    setEventHandlerAttribute(target, slot, type, callback, accepts);
   }
 
   /** Lets a specialized EventTarget account for the lifetime of its listeners. */
@@ -935,6 +947,32 @@ export function addInternalEventListener(
     options.resistStopPropagation ?? false,
   );
 }
+
+/** @internal Fire an event without dispatch through a subclass's public method. */
+export function dispatchTrustedEvent(target: EventTarget, event: Event): boolean {
+  return dispatchTrustedForAlgorithms(target, event);
+}
+
+/** @internal HTML event-handler attribute activation and deactivation. */
+export function setEventHandlerAttribute<Target extends EventTarget, E extends Event>(
+  target: Target,
+  slot: EventHandlerSlot<Target, E>,
+  type: string,
+  callback: ((this: Target, event: E) => void) | null,
+  accepts: (event: Event) => event is E,
+): void {
+  slot.callback = callback;
+  if (callback === null) {
+    if (slot.listener !== null) removeInternalListener(target, type, slot.listener);
+    slot.listener = null;
+  } else if (slot.listener === null) {
+    slot.listener = (event) => {
+      if (slot.callback !== null && accepts(event)) slot.callback.call(target, event);
+    };
+    addInternalEventListener(target, type, slot.listener);
+  }
+}
+
 
 export interface MessageEventInit<T> extends EventInit {
   data?: T | null;

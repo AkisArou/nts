@@ -1,7 +1,8 @@
 import { trimASCIIWhitespace } from "../core/ascii.ts";
 import { concatBytes, latin1, TextDecoder } from "../core/encoding.ts";
 import { DOMException } from "../core/errors.ts";
-import { Event, EventTarget, eventTargetDispatchTrusted } from "../core/events.ts";
+import { Event, EventTarget, cancelEvent, dispatchTrustedEvent, setEventHandlerAttribute } from "../core/events.ts";
+import type { EventHandlerSlot, EventListener } from "../core/events.ts";
 import { ProgressEvent } from "../core/progress-event.ts";
 import { coerceToDOMString, requireArguments } from "../core/webidl.ts";
 import { parseMIMEType } from "../forms/mime.ts";
@@ -17,9 +18,10 @@ type FileReaderEventType = "loadstart" | "progress" | "load" | "abort" | "error"
 export type FileReaderEventHandler = (this: FileReader, event: Event) => unknown;
 export type FileReaderEventHandlerValue = FileReaderEventHandler | object | null;
 
-class ReaderHandlerSlot {
+class ReaderHandlerSlot implements EventHandlerSlot<FileReader, Event> {
   value: object | null = null;
-  active = false;
+  callback: FileReaderEventHandler | null = null;
+  listener: EventListener | null = null;
 }
 
 class ReadOperation {
@@ -100,16 +102,11 @@ async function cancelRead(reader: ReadableStreamDefaultReader<Uint8Array>): Prom
   }
 }
 
-const callHandler: (handler: FileReaderEventHandler, receiver: FileReader, event: Event) => unknown =
-  Function.prototype.call.bind(Function.prototype.call);
-const cancelEvent: (event: Event) => void = Function.prototype.call.bind(Event.prototype.preventDefault);
-// HTML activates handler listeners through internal listener operations. Calling
-// the canonical operations also avoids dispatch through a subclass override.
-const addHandlerListener: (target: FileReader, type: string, listener: FileReaderEventHandler) => void =
-  Function.prototype.call.bind(EventTarget.prototype.addEventListener);
-const removeHandlerListener: (target: FileReader, type: string, listener: FileReaderEventHandler) => void =
-  Function.prototype.call.bind(EventTarget.prototype.removeEventListener);
+// Typed nts programs cannot replace Function.prototype.call or attach an own
+// call property to a function. Handler callbacks keep their receiver directly.
 let invokeHandler!: (reader: FileReader, index: number, event: Event) => void;
+
+function isReaderEvent(_event: Event): _event is Event { return true; }
 
 function onLoadstart(this: FileReader, event: Event): void { invokeHandler(this, 0, event); }
 function onProgress(this: FileReader, event: Event): void { invokeHandler(this, 1, event); }
@@ -146,8 +143,8 @@ export class FileReader extends EventTarget {
     invokeHandler = (reader, index, event): void => {
       const callback = reader.#handlers[index]?.value;
       // LegacyTreatNonObjectAsNull retains non-callable objects, whose invocation
-      // is a no-op. A callback is called without consulting its public .call.
-      if (typeof callback === "function" && callHandler(callback as FileReaderEventHandler, reader, event) === false) {
+      // is a no-op. Keep the FileReader receiver on the callback call.
+      if (typeof callback === "function" && (callback as FileReaderEventHandler).call(reader, event) === false) {
         cancelEvent(event);
       }
     };
@@ -178,13 +175,7 @@ export class FileReader extends EventTarget {
     const slot = this.#handlers[index];
     if (slot === undefined) throw new Error("FileReader handler slot is missing");
     slot.value = value !== null && (typeof value === "object" || typeof value === "function") ? value : null;
-    if (slot.value === null) {
-      if (slot.active) removeHandlerListener(this, type, callback);
-      slot.active = false;
-    } else if (!slot.active) {
-      addHandlerListener(this, type, callback);
-      slot.active = true;
-    }
+    setEventHandlerAttribute(this, slot, type, slot.value === null ? null : callback, isReaderEvent);
   }
 
   readAsArrayBuffer(blob: Blob): void {
@@ -301,6 +292,6 @@ export class FileReader extends EventTarget {
   }
 
   #fire(type: FileReaderEventType, loaded: number, total: number): void {
-    this[eventTargetDispatchTrusted](new ProgressEvent(type, { lengthComputable: total !== 0, loaded, total }));
+    dispatchTrustedEvent(this, new ProgressEvent(type, { lengthComputable: total !== 0, loaded, total }));
   }
 }

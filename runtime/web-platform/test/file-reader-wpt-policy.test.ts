@@ -552,13 +552,13 @@ test("FileReader HTML handlers retain non-callable objects but treat primitives 
   }
 });
 
-test("FileReader handlers ignore a shadowed call and return false cancels synthetic events", () => {
+test("FileReader handlers preserve their receiver and return false cancels synthetic events", () => {
   const reader = new FileReader();
   const calls: unknown[] = [];
-  reader.onload = Object.assign(function (this: FileReader, event: Event) {
+  reader.onload = function (this: FileReader, event: Event) {
     calls.push(this, event);
     return false;
-  }, { call() { throw new Error("public call must not be read"); } });
+  };
   const event = new Event("load", { cancelable: true });
   assert.equal(reader.dispatchEvent(event), false);
   assert.equal(event.defaultPrevented, true);
@@ -595,4 +595,36 @@ test("FileReader handler assignment bypasses subclass listener-registration over
   assert.doesNotThrow(() => { reader.onload = () => calls.push("replacement"); });
   reader.dispatchEvent(new Event("load"));
   assert.deepEqual(calls, ["handler", "replacement"]);
+});
+
+test("FileReader handler callback.call spoofing", { skip: "typed nts programs cannot attach an own call property to a function" }, () => {});
+
+test("FileReader handler cancellation bypasses a public preventDefault override", () => {
+  let overrides = 0;
+  class CustomEvent extends Event {
+    override preventDefault(): void { overrides++; }
+  }
+  const reader = new FileReader();
+  reader.onload = () => false;
+  const event = new CustomEvent("load", { cancelable: true });
+  assert.equal(reader.dispatchEvent(event), false);
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(overrides, 0);
+});
+
+test("FileReader fires trusted events without invoking a public dispatchEvent override", async () => {
+  let overrides = 0;
+  class CustomReader extends FileReader {
+    override dispatchEvent(): never { overrides++; throw new Error("public dispatchEvent"); }
+  }
+  const reader = new CustomReader();
+  const completed = Promise.withResolvers<void>();
+  reader.onloadend = (event) => {
+    assert.equal(event.isTrusted, true);
+    completed.resolve();
+  };
+  reader.readAsText(new Blob(["abc"]));
+  await completed.promise;
+  assert.equal(reader.result, "abc");
+  assert.equal(overrides, 0);
 });

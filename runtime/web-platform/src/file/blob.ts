@@ -112,10 +112,8 @@ function isObject(value: unknown): value is object {
   return value !== null && (typeof value === "object" || typeof value === "function");
 }
 
-// Capture abstract Call without reading an iterator function's public .call.
-const callIteratorMethod: (method: () => unknown, receiver: object) => unknown =
-  Function.prototype.call.bind(Function.prototype.call);
-
+// Typed nts programs cannot attach an own call property to an iterator function.
+// Direct calls retain the iterator receiver and the one-time next lookup.
 function isBufferSource(value: unknown): value is AllowSharedBufferSource {
   return (
     value instanceof ArrayBuffer || value instanceof SharedArrayBuffer || ArrayBuffer.isView(value)
@@ -138,7 +136,7 @@ function convertBlobParts(input: unknown): BlobPart[] {
   }
   const method = (input as { readonly [Symbol.iterator]?: unknown })[Symbol.iterator];
   if (typeof method !== "function") throw new TypeError("Blob parts must be iterable");
-  const iterator = callIteratorMethod(method as () => unknown, input);
+  const iterator = (method as () => unknown).call(input);
   if (!isObject(iterator)) throw new TypeError("Blob parts iterator must return an object");
   const next = (iterator as Iterator<unknown>).next;
 
@@ -148,7 +146,7 @@ function convertBlobParts(input: unknown): BlobPart[] {
   // GetIteratorFromMethod, then finish conversion before processing options.
   // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
   while (true) {
-    const result = callIteratorMethod(next, iterator);
+    const result = next.call(iterator);
     if (!isObject(result)) throw new TypeError("Blob parts iterator result must be an object");
     const item = result as IteratorResult<unknown>;
     if (item.done) return converted;
