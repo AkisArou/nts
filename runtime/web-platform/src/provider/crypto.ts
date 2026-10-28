@@ -434,8 +434,8 @@ export interface CryptoFailure {
  * extractability or format-policy checks. Invalid mathematical key material may
  * return { failure: "invalid-key" }; other native failures return
  * { failure: "operation" }. Native code does not throw across this interface.
- * Verification returns a boolean or a failure value. The shared caller alone selects observable
- * errors and their order.
+ * Verification distinguishes an invalid-signature false result from a reported
+ * native failure. The shared caller alone selects observable errors and their order.
  */
 export interface CryptoProvider extends CryptoDigestProvider {
   /** One whole-message cSHAKE call; SHAKE-equivalent empty N/S stays native too. */
@@ -460,6 +460,9 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * Shared code selects the permitted format and checks extractability first.
    * DER output uses the standard key's SPKI/PKCS #8 structures, never encrypted
    * PKCS #8, PEM, native structs or a provider-specific algorithm identifier.
+   * Modern Algorithms §8.4.5: ML-DSA raw export returns public-key bytes, and
+   * raw-seed returns the original private seed. Its PKCS #8 export must use
+   * RFC 9881's seed-only [0] IMPLICIT OCTET STRING, never expandedKey or both.
    */
   exportKey(key: CryptoKeyHandle, format: "raw" | "raw-seed" | "spki" | "pkcs8"): Uint8Array | CryptoFailure;
 
