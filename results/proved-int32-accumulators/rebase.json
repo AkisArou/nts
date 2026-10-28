@@ -1,0 +1,9 @@
+{
+  "measuredSource": "ca2fe8bf6fafdb6c3d50f1c7f677042480b7d7f5",
+  "measuredFixtureAndOracle": "c889ecf07f10fba56a81931cb9ab6ae622f7a9a7",
+  "measuredBase": "715b6015bb238257e3187dafd9a2ed7d707dcb08",
+  "rebasedSource": "35e4adc25944fedd7a0f1541e67002a4d53b885d",
+  "rebasedBase": "fb57e6d5830eccb88d2611b6ee979e8ba362d6ff",
+  "addedAndRemovedLinesMatchAfterMemoryEnumRename": true,
+  "adaptation": "Three test references use hir::Memory instead of hir::Provider. Main renamed only the enum; variants, fields, branches and printed metadata remain unchanged."
+}
