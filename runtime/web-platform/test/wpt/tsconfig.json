@@ -43,6 +43,8 @@
     "../wpt-eventsource.test.ts",
     "../eventsource-wpt-policy.test.ts",
     "../wpt-domexception.test.ts",
-    "../domexception-policy.test.ts"
+    "../domexception-policy.test.ts",
+    "../wpt-promise-rejection-event.test.ts",
+    "../promise-rejection-event-policy.test.ts"
   ]
 }
