@@ -19817,6 +19817,22 @@
             }
           ],
           "portability": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink. Removing these operations would change the original representation or callable metadata; no such rewrite is proposed."
+        },
+        {
+          "kind": "completed-port-prototype-descriptor-audit",
+          "pullRequest": 120,
+          "directOperationCallsPerCompleteIteration": {
+            "Object.create": 3649,
+            "Object.getPrototypeOf": 3310,
+            "Object.defineProperty": 2,
+            "Object.getOwnPropertyDescriptor": 1,
+            "Object.getOwnPropertySymbols": 2
+          },
+          "prototypePreservingAstCopies": 3310,
+          "copyInvariant": "Original runtime prototype and identical original-node backlink; enumerable:false, configurable:false, writable:true; all first/repeated original and port observations pass.",
+          "forcedClassAdaptation": "221 original emitted Reflect.construct helper calls become native superclass construction. All original helper bodies remain; README and audits disclose static class metadata and dormant constructor call adaptations.",
+          "scope": "Direct method call sites only; bound/native aliases excluded. Observation does not patch intrinsics and is absent from the actual case.",
+          "evidence": "https://github.com/AkisArou/nts/pull/120"
         }
       ],
       "requiredAdaptations": [
@@ -19829,9 +19845,24 @@
       ],
       "category": "Large real programs",
       "portOrder": 43,
-      "portStatus": "in-progress-approved-unchanged-port",
-      "portStatusEvidence": "lebab-wtb-model-audit.json",
-      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
+      "portStatus": "ready-for-maintainer-compilation",
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/120",
+      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized.",
+      "publishedBranch": "chatgpt/jetstream-lebab-wtb",
+      "pullRequest": {
+        "number": 120,
+        "url": "https://github.com/AkisArou/nts/pull/120"
+      },
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics; ESNext/DOM declarations for original feature probes",
+        "sharedTestsPassed": 7,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 147.895118,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/120"
+      }
     },
     {
       "name": "postcss-wtb",
@@ -21625,12 +21656,11 @@
   },
   "portSummary": {
     "selected": 43,
-    "openPullRequests": 41,
-    "readyForMaintainerCompilation": 35,
+    "openPullRequests": 42,
+    "readyForMaintainerCompilation": 36,
     "draftsAwaitingAwaitedHarness": 6,
     "pendingPorts": [
-      "babel-wtb",
-      "lebab-wtb"
+      "babel-wtb"
     ],
     "maintainerResponsibilities": [
       "nts compilation and refusal recording",
@@ -21639,9 +21669,7 @@
       "gate execution",
       "measurement and landing"
     ],
-    "pendingImplementation": [
-      "lebab-wtb"
-    ],
+    "pendingImplementation": [],
     "validatedAwaitingOrderedPullRequest": [],
     "blockedPorts": [
       "babel-wtb"

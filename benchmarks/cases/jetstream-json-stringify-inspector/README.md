@@ -109,11 +109,11 @@ These operations execute inside the original compiler or transformation, beyond 
 
 ## Port status
 
-The inventory records every selected workload's status and PR link. **41 of the
-43 selected programs have open PRs**: 35 ready for maintainer compilation and
+The inventory records every selected workload's status and PR link. **42 of the
+43 selected programs have open PRs**: 36 ready for maintainer compilation and
 six drafts (#69–#74) waiting for awaited harness support.
 
-The next ten ports were opened in the handoff order, all targeting #44's
+The next eleven ports were opened in the handoff order, all targeting #44's
 `chatgpt/jetstream-json-stringify-inspector` branch:
 
 | Program | PR | Local Node 24.20.0 ms | Shared tests passed |
@@ -128,14 +128,18 @@ The next ten ports were opened in the handoff order, all targeting #44's
 | `typescript-octane` | [#108](https://github.com/AkisArou/nts/pull/108) | 250.195342 | 7/7 |
 | `typescript-lib` | [#118](https://github.com/AkisArou/nts/pull/118) | 1135.598815 | 7/7 |
 | `WSL` | [#119](https://github.com/AkisArou/nts/pull/119) | 8307.094613 | 9/9 |
+| `lebab-wtb` | [#120](https://github.com/AkisArou/nts/pull/120) | 147.895118 | 7/7 |
 
 Every listed case passes strict TypeScript 7.0.2 with zero diagnostics. Times
 are the best of five fresh processes using the unchanged common harness;
-all use `seed = 1`. FlightPlanner falls within 1–10 ms. The other nine retain
+all use `seed = 1`. FlightPlanner falls within 1–10 ms. The other ten retain
 one full original operation under the approved timing exception.
 
-Lebab is the remaining permitted row being typed and validated. WSL's original
-Proxy registry, all 285 tests, and all 22,354 prototype replacements remain.
+All 42 currently licence-cleared selected programs now have PRs. WSL's
+original Proxy registry, all 285 tests, and all 22,354 prototype replacements
+remain. Lebab retains all ten transforms and its complete 20,772-byte Preact
+input; the original and typed port return identical code and warnings. All
+545 upstream transformation fixtures pass, with the two original skips kept.
 TypeScript-lib retains all 118 input files, the original 54 diagnostics and zero
 emitted outputs, with all original third-party notices. Its WHATWG source-code
 portions use the offered BSD-3-Clause option verified before TypeScript 5.9.2.
