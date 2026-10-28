@@ -30862,8 +30862,16 @@ impl<'a> FuncBuilder<'a> {
             .get(symbol.0 as usize)?
             .declarations
             .first()?;
+        self.intrinsic_declared_by(declaration)
+    }
+
+    /// The same backend-owned helper whether the declaration is called,
+    /// probed with `typeof`, or passed as a function value.
+    fn intrinsic_declared_by(&self, declaration: NodeId) -> Option<String> {
         let native = self.node(declaration).native.as_ref()?;
-        if native.abi.as_deref() != Some("intrinsic") || self.has_a_body(declaration) {
+        if native.abi.as_deref() != Some("intrinsic")
+            || self.has_a_body(self.implementation_of(declaration))
+        {
             return None;
         }
         native
@@ -34462,6 +34470,9 @@ impl<'a> FuncBuilder<'a> {
         forwarded: Vec<ValueId>,
     ) -> Result<(Callee, Vec<ValueId>), Diagnostic> {
         if !info.source.binds_receiver() {
+            if let Some(helper) = self.intrinsic_declared_by(id) {
+                return Ok((Callee::External(helper), forwarded));
+            }
             let called = self
                 .qualified
                 .get(&id)
