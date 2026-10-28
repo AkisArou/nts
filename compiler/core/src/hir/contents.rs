@@ -9,7 +9,7 @@
 use super::facts::Facts;
 
 mod provider;
-pub use provider::{Container, FunctionFacts};
+pub use provider::{Container, FunctionFacts, Inspection, RecognizedWrite, RejectedUse};
 
 use super::{BlockId, Callee, HirType, OpKind, Origin, Program, ValueId};
 

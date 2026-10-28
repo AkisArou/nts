@@ -54,6 +54,42 @@ pub struct FunctionFacts {
     fallback: Option<Unknown>,
 }
 
+/// Why a particular actual use prevented a closed writer-set proof.
+#[derive(Debug, Clone, Copy)]
+pub struct RejectedUse {
+    pub root: ValueId,
+    /// None for a return terminator.
+    pub operation: Option<ValueId>,
+    pub operand: ValueId,
+    pub argument: Option<usize>,
+    pub reason: Unknown,
+}
+
+/// One recognized store, not a claim that every store has been found.
+#[derive(Debug, Clone, Copy)]
+pub struct RecognizedWrite {
+    pub root: ValueId,
+    pub value: ValueId,
+}
+
+/// Observation only. `facts` remains the only authoritative content proof.
+/// Rejected uses and recognized writes can be partial on budget exhaustion;
+/// their absence must never license an optimization or a complete-writer claim.
+#[derive(Debug)]
+pub struct Inspection {
+    pub facts: FunctionFacts,
+    pub rejected: Vec<RejectedUse>,
+    pub writes: Vec<RecognizedWrite>,
+}
+
+#[derive(Debug)]
+enum Observation {
+    Rejected(RejectedUse),
+    Write(RecognizedWrite),
+}
+
+fn ignore_observation(_: Observation) {}
+
 impl FunctionFacts {
     #[must_use]
     pub fn value(&self, id: ValueId) -> ValueFact {
@@ -65,16 +101,33 @@ impl FunctionFacts {
 
     #[must_use]
     pub fn of(func: &Func) -> Self {
-        Self::build(func, false)
+        Self::build(func, false, &mut ignore_observation)
     }
 
     /// Candidate-only arithmetic queries also need ordinary scalar producers
     /// when a function has no container. They use this same lattice/provider.
     pub(crate) fn for_arithmetic(func: &Func) -> Self {
-        Self::build(func, true)
+        Self::build(func, true, &mut ignore_observation)
     }
 
-    fn build(func: &Func, numbers: bool) -> Self {
+    /// Reuse the exact production identity/effects walk with an explicit sink.
+    /// The ordinary build monomorphizes a no-op sink and allocates no trace.
+    #[must_use]
+    pub fn inspect(func: &Func) -> Inspection {
+        let mut rejected = Vec::new();
+        let mut writes = Vec::new();
+        let facts = Self::build(func, false, &mut |event| match event {
+            Observation::Rejected(use_) => rejected.push(use_),
+            Observation::Write(write) => writes.push(write),
+        });
+        Inspection {
+            facts,
+            rejected,
+            writes,
+        }
+    }
+
+    fn build(func: &Func, numbers: bool, observe: &mut impl FnMut(Observation)) -> Self {
         // Reject large inputs before scanning roots or cloning an edge. Block
         // and value counts do not bound repeated operands, so charge those
         // separately before visiting or allocating their vectors below.
@@ -118,7 +171,7 @@ impl FunctionFacts {
                 ..Self::default()
             };
         }
-        match analyze(func, &roots, &mut budget) {
+        match analyze(func, &roots, &mut budget, observe) {
             Ok(result) => result,
             Err(()) => Self {
                 fallback: Some(Unknown::Budget),
@@ -255,7 +308,20 @@ struct Effects {
     reads: FxHashMap<ValueId, ValueId>,
 }
 
-fn effects(identities: &mut Identities<'_, '_>, roots: &[ValueId]) -> Result<Effects, ()> {
+fn stored_value(name: &str, args: &[ValueId]) -> Option<ValueId> {
+    match name {
+        "nts_map_set" => args.get(2),
+        hir::entries::ENTRY_SET => args.get(3),
+        _ => None,
+    }
+    .copied()
+}
+
+fn effects(
+    identities: &mut Identities<'_, '_>,
+    roots: &[ValueId],
+    observe: &mut impl FnMut(Observation),
+) -> Result<Effects, ()> {
     let func = identities.func;
     let mut problems = FxHashMap::default();
     let mut writes: FxHashMap<ValueId, Vec<ValueId>> =
@@ -294,6 +360,13 @@ fn effects(identities: &mut Identities<'_, '_>, roots: &[ValueId]) -> Result<Eff
                 let of = identities.of(operand)?;
                 for root in of.roots {
                     if of.unknown || !is_receiver(call, index) {
+                        observe(Observation::Rejected(RejectedUse {
+                            root,
+                            operation: Some(id),
+                            operand,
+                            argument: Some(index),
+                            reason: Unknown::OpenWriterSet,
+                        }));
                         problems.insert(root, Unknown::OpenWriterSet);
                     }
                 }
@@ -304,18 +377,21 @@ fn effects(identities: &mut Identities<'_, '_>, roots: &[ValueId]) -> Result<Eff
                 let of = identities.of(receiver)?;
                 if of.roots.len() != 1 || of.unknown {
                     for root in of.roots {
+                        observe(Observation::Rejected(RejectedUse {
+                            root,
+                            operation: Some(id),
+                            operand: receiver,
+                            argument: Some(0),
+                            reason: Unknown::AmbiguousIdentity,
+                        }));
                         problems.insert(root, Unknown::AmbiguousIdentity);
                     }
                     continue;
                 }
                 let root = *of.roots.iter().next().ok_or(())?;
-                let stored = match name {
-                    "nts_map_set" => args.get(2),
-                    hir::entries::ENTRY_SET => args.get(3),
-                    _ => None,
-                };
-                if let Some(value) = stored {
-                    writes.entry(root).or_default().push(*value);
+                if let Some(value) = stored_value(name, args) {
+                    writes.entry(root).or_default().push(value);
+                    observe(Observation::Write(RecognizedWrite { root, value }));
                 }
                 if matches!(
                     name,
@@ -329,6 +405,13 @@ fn effects(identities: &mut Identities<'_, '_>, roots: &[ValueId]) -> Result<Eff
         // hands the object outside the closed writer scope.
         if let hir::Terminator::Return(Some(value)) = block.terminator {
             for root in identities.of(value)?.roots {
+                observe(Observation::Rejected(RejectedUse {
+                    root,
+                    operation: None,
+                    operand: value,
+                    argument: None,
+                    reason: Unknown::EscapingIdentity,
+                }));
                 problems.insert(root, Unknown::EscapingIdentity);
             }
         }
@@ -399,13 +482,18 @@ fn propagated(
     })
 }
 
-fn analyze(func: &Func, roots: &[ValueId], budget: &mut Budget) -> Result<FunctionFacts, ()> {
+fn analyze(
+    func: &Func,
+    roots: &[ValueId],
+    budget: &mut Budget,
+    observe: &mut impl FnMut(Observation),
+) -> Result<FunctionFacts, ()> {
     let mut identities = Identities::new(func, roots, budget)?;
     let Effects {
         problems,
         writes,
         reads,
-    } = effects(&mut identities, roots)?;
+    } = effects(&mut identities, roots, observe)?;
     identities.budget.charge(func.values.len())?;
     let mut values: Vec<_> = func.values.iter().map(|op| scalar(func, op)).collect();
     let mut contents: FxHashMap<ValueId, Option<ValueFact>> = roots
@@ -697,6 +785,54 @@ mod tests {
             result_absent: Absent::Impossible,
             written_return_elements: Vec::new(),
         }
+    }
+
+    #[test]
+    fn inspection_reports_the_actual_rejection_without_licensing_its_writes() {
+        let mut body = fixture(op(OpKind::ConstFloat(4.0), number()));
+        let id = ValueId(u32::try_from(body.values.len()).expect("small fixture"));
+        body.values.push(op(OpKind::Length(ValueId(1)), number()));
+        body.blocks[0].ops.push(id);
+        let plain = FunctionFacts::of(&body);
+        let inspection = FunctionFacts::inspect(&body);
+        assert_eq!(plain.values, inspection.facts.values);
+        assert_eq!(plain.visits, inspection.facts.visits);
+        assert_eq!(
+            plain.budget_exhaustions,
+            inspection.facts.budget_exhaustions
+        );
+        assert_eq!(
+            plain.containers[0].contents,
+            inspection.facts.containers[0].contents
+        );
+        assert!(matches!(
+            inspection.facts.containers[0].contents,
+            ValueFact::Unknown(Unknown::OpenWriterSet)
+        ));
+        assert_eq!(inspection.rejected.len(), 1);
+        assert_eq!(inspection.rejected[0].operation, Some(id));
+        assert_eq!(inspection.rejected[0].root, ValueId(1));
+        assert_eq!(inspection.writes.len(), 1);
+        assert_eq!(inspection.writes[0].value, ValueId(5));
+        assert!(
+            inspection.facts.value(ValueId(5)).numeric().is_some(),
+            "a recognized scalar writer does not close the rejected writer set"
+        );
+    }
+
+    #[test]
+    fn inspection_budget_failure_is_explicit_and_retains_unknown_facts() {
+        let mut body = fixture(op(OpKind::ConstFloat(4.0), number()));
+        body.values
+            .resize(MAX_VALUES + 1, op(OpKind::ConstUndefined, HirType::Erased));
+        let inspection = FunctionFacts::inspect(&body);
+        assert_eq!(inspection.facts.budget_exhaustions, 1);
+        assert_eq!(
+            inspection.facts.value(ValueId(9)),
+            ValueFact::Unknown(Unknown::Budget)
+        );
+        assert!(inspection.rejected.is_empty());
+        assert!(inspection.writes.is_empty());
     }
 
     #[test]
