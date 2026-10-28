@@ -126,13 +126,13 @@ fn object_key_refusal_keeps_primitive_and_erased_keys_licensed() {
     assert!(
         refused
             .iter()
-            .any(|(name, why)| name == "objectKey" && why.contains("object-typed key")),
+            .any(|entry| entry.name == "objectKey" && entry.reason.contains("object-typed key")),
         "{refused:?}"
     );
     assert!(
         !refused
             .iter()
-            .any(|(name, _)| name == "primitiveKey" || name == "erasedKey"),
+            .any(|entry| entry.name == "primitiveKey" || entry.name == "erasedKey"),
         "{refused:?}"
     );
     let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);

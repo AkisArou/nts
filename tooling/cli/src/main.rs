@@ -1638,7 +1638,12 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
         ..hir::Options::default()
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
-    for (name, why) in &prepared.program.uncompiled {
+    for (name, why) in prepared
+        .program
+        .uncompiled
+        .iter()
+        .map(|entry| (&entry.name, &entry.reason))
+    {
         println!("{name}\t{why}");
     }
     Ok(())

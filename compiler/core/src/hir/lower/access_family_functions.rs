@@ -587,7 +587,7 @@ fn fill(
         // cascade has named every virtual reader. An initial lowering failure
         // has the same contract as one discovered while settling: neither
         // grants permission to emit a runtime refusal stub for the row.
-        program.uncompiled.push((
+        program.uncompiled.push(crate::hir::Uncompiled::refused(
             name,
             refusal_reason(context, program, family, supply, writes, raising),
         ));
@@ -656,7 +656,8 @@ fn refusal_reason(
             Some(target) => program
                 .uncompiled
                 .iter()
-                .find(|(name, _)| *name == target)
+                .map(|entry| (&entry.name, &entry.reason))
+                .find(|(name, _)| **name == target)
                 .map_or_else(
                     || format!("the accessor `{target}` has no lowered body"),
                     |(_, reason)| format!("the accessor `{target}` was refused: {reason}"),

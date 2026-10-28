@@ -532,7 +532,7 @@ fn rejected_tail_calls_take_the_existing_missing_direct_callee_boundary() {
     );
     assert_eq!(program.layouts[0].methods[0].as_ref(), Some(&refused));
     assert_eq!(program.uncompiled.len(), 1);
-    assert_eq!(program.uncompiled[0].0, refused);
+    assert_eq!(program.uncompiled[0].name, refused);
     let OpKind::Call { callee, .. } = &program.funcs[0].values[0].kind else {
         panic!("call lost")
     };
@@ -541,6 +541,29 @@ fn rejected_tail_calls_take_the_existing_missing_direct_callee_boundary() {
         crate::hir::refused::missing_callee(callee, &present),
         Some(refused.as_str()),
         "normal cascade must recognize this exact call"
+    );
+    assert_eq!(
+        program.uncompiled[0].kind,
+        crate::hir::UncompiledKind::RefusedBody
+    );
+    let mut lowered = crate::hir::lower::Lowered {
+        program,
+        ..Default::default()
+    };
+    crate::hir::drop_callers_of_refused(&mut lowered);
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "NTS1003"
+                && diagnostic.message.contains("`caller`")
+                && diagnostic.message.contains(&refused))
+    );
+    assert!(
+        lowered
+            .program
+            .refused_bodies()
+            .any(|entry| entry.name == "caller")
     );
 }
 
@@ -886,7 +909,7 @@ fn actual_table_adaptation_rejects_unlicensed_tail_without_poisoning_other_slots
     super::bridge(&indexed, &hierarchy, &mut rejected);
     assert_unrelated_slot(&rejected);
     assert_eq!(rejected.uncompiled.len(), 1);
-    let refused = &rejected.uncompiled[0].0;
+    let refused = &rejected.uncompiled[0].name;
     assert_eq!(rejected.layouts[0].methods[0].as_ref(), Some(refused));
     assert!(
         !rejected.funcs.iter().any(|func| &func.name == refused),

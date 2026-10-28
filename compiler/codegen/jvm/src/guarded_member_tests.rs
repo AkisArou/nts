@@ -281,7 +281,10 @@ fn add_bad(program: &mut Program, class_contract: &Func, face_contract: &Func) {
             1,
         ),
     ] {
-        program.uncompiled.push((original.into(), reason.into()));
+        program.uncompiled.push(nts_core::hir::Uncompiled::refused(
+            original.into(),
+            reason.into(),
+        ));
         program.guarded_dispatch.insert(
             name.into(),
             GuardedDispatch {

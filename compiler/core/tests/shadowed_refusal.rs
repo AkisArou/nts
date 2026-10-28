@@ -43,6 +43,7 @@ fn held(lowered: &Prepared) -> Vec<&str> {
         .program
         .uncompiled
         .iter()
+        .map(|entry| (&entry.name, &entry.reason))
         .map(|(at, _)| at.as_str())
         .collect()
 }
@@ -52,7 +53,8 @@ fn reason_for<'a>(lowered: &'a Prepared, name: &str) -> Option<&'a str> {
         .program
         .uncompiled
         .iter()
-        .find(|(at, _)| at == name)
+        .map(|entry| (&entry.name, &entry.reason))
+        .find(|(at, _)| *at == name)
         .map(|(_, why)| why.as_str())
 }
 

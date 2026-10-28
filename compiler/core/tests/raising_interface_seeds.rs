@@ -118,5 +118,11 @@ fn the_strict_gate_still_withholds_the_uniform_raising_entry() {
             .iter()
             .any(|f| f.name == "throughADeclaration")
     );
-    assert!(program.uncompiled.iter().any(|(name, _)| name == "guarded"));
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(name, _)| name == "guarded")
+    );
 }

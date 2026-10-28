@@ -216,9 +216,15 @@ fn accessor_reads_keep_checked_narrowing_and_actual_getter_absence() {
             .iter()
             .any(|op| { matches!(op.kind, OpKind::Unerase { .. }) && op.ty == hir::HirType::Bool })
     );
-    assert!(program.uncompiled.iter().any(|(name, reason)| {
-        name == "assertedRead" && reason.contains("an erased value where a concrete")
-    }));
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(name, reason)| {
+                name == "assertedRead" && reason.contains("an erased value where a concrete")
+            })
+    );
     let nullable = program
         .funcs
         .iter()
@@ -622,9 +628,13 @@ fn a_transitively_refused_getter_refuses_interface_readers() {
         "caughtReceiver",
     ] {
         assert!(
-            program.uncompiled.iter().any(|(name, reason)| {
-                name == caller && reason.starts_with("it calls `") && reason.contains("`eval`")
-            }),
+            program
+                .uncompiled
+                .iter()
+                .map(|entry| (&entry.name, &entry.reason))
+                .any(|(name, reason)| {
+                    name == caller && reason.starts_with("it calls `") && reason.contains("`eval`")
+                }),
             "{caller} must inherit the concrete getter refusal: {:?}",
             program.uncompiled
         );
@@ -648,9 +658,13 @@ fn an_initially_refused_getter_uses_the_same_dependency_cascade() {
         "directCaught",
     ] {
         assert!(
-            program.uncompiled.iter().any(|(name, reason)| {
-                name == caller && reason.starts_with("it calls `") && reason.contains("`eval`")
-            }),
+            program
+                .uncompiled
+                .iter()
+                .map(|entry| (&entry.name, &entry.reason))
+                .any(|(name, reason)| {
+                    name == caller && reason.starts_with("it calls `") && reason.contains("`eval`")
+                }),
             "{caller} must inherit the initial getter refusal: {:?}",
             program.uncompiled
         );
@@ -681,14 +695,21 @@ fn a_class_test_can_prove_the_stored_receivers_exact_layout() {
 #[test]
 fn field_dispatch_does_not_turn_prototype_getters_into_own_properties() {
     let program = prepared_fixture("accessor-spread-boundary");
-    assert!(program.uncompiled.iter().any(|(_, reason)| {
-        reason.contains("own properties, order or storage are not uniform")
-    }));
+    assert!(
+        program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(_, reason)| {
+                reason.contains("own properties, order or storage are not uniform")
+            })
+    );
     assert!(!program.funcs.iter().any(|func| func.name == "spreadFace"));
     assert!(
         program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .any(|(_, reason)| { reason.contains("an `Object` static through an interface") })
     );
     assert!(
@@ -1012,9 +1033,13 @@ fn a_prefix_class_is_read_at_the_faces_own_position() {
 fn a_family_read_narrowed_by_a_test_over_stored_fields_is_the_narrowed_type() {
     let program = prepared_fixture("accessor-narrowed-family");
     let refused = |name: &str| {
-        program.uncompiled.iter().any(|(refused, reason)| {
-            refused == name && reason.contains("an erased value where a concrete")
-        })
+        program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(refused, reason)| {
+                refused == name && reason.contains("an erased value where a concrete")
+            })
     };
     let name_of = program
         .funcs

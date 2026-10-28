@@ -181,7 +181,11 @@ fn default_root(
 
 fn first_reasons<'a>(program: &'a JvmProgram<'_>) -> FxHashMap<&'a str, &'a str> {
     let mut reasons = FxHashMap::default();
-    for (name, reason) in &program.uncompiled {
+    for (name, reason) in program
+        .uncompiled
+        .iter()
+        .map(|entry| (&entry.name, &entry.reason))
+    {
         reasons.entry(name.as_str()).or_insert(reason.as_str());
     }
     reasons

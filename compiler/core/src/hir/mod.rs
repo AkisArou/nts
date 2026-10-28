@@ -3527,8 +3527,9 @@ pub struct Program {
     /// the Node session looking for a refusal that does not exist -- the same
     /// conflation as the message it replaced, pointing the other way.
     pub public_functions: Vec<String>,
-    /// Exported functions that were **not** compiled, and the refusal that took
-    /// each one.
+    /// Named absent functions and their causes, including explanation-only
+    /// interface declarations. Use [`Self::refused_bodies`] when counting lost
+    /// implementations; diagnostic cause lookup needs both kinds.
     ///
     /// **The wrapper knew the effect and not the cause.** `is exported and no
     /// function of that name was compiled` is true, says nothing about why, and
@@ -3544,7 +3545,44 @@ pub struct Program {
     /// The message is the refusal's own text. Where that is a cascade — `calls
     /// X, which was refused above` — it names the callee rather than the root,
     /// which is still a place to go and is what the cascade was built to say.
-    pub uncompiled: Vec<(String, String)>,
+    pub uncompiled: Vec<Uncompiled>,
+}
+
+/// Whether an absent function lost a body or only explains a missing declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UncompiledKind {
+    RefusedBody,
+    ExplanationOnly,
+}
+
+/// A named absence, with its classification attached at the recording site.
+/// Explanation-only interface declarations still explain real callers' refusals;
+/// their presence alone does not mean executable behavior was dropped.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Uncompiled {
+    pub name: String,
+    pub reason: String,
+    pub kind: UncompiledKind,
+}
+
+impl Uncompiled {
+    #[must_use]
+    pub fn refused(name: String, reason: String) -> Self {
+        Self {
+            name,
+            reason,
+            kind: UncompiledKind::RefusedBody,
+        }
+    }
+
+    #[must_use]
+    pub fn explanation(name: String, reason: String) -> Self {
+        Self {
+            name,
+            reason,
+            kind: UncompiledKind::ExplanationOnly,
+        }
+    }
 }
 
 /// A variable that outlives every call.
@@ -3587,6 +3625,14 @@ pub struct Global {
 }
 
 impl Program {
+    /// Bodies actually dropped by lowering or preparation. Diagnostic explanation
+    /// entries remain in `uncompiled` for cascade and dispatch reason lookup.
+    pub fn refused_bodies(&self) -> impl Iterator<Item = &Uncompiled> {
+        self.uncompiled
+            .iter()
+            .filter(|entry| entry.kind == UncompiledKind::RefusedBody)
+    }
+
     /// Classes the entry publishes, independent of canonical layout names.
     /// A class can share an interface's storage without sharing its identity.
     pub fn published_classes(&self) -> impl Iterator<Item = PublishedClass<'_>> {
@@ -6027,7 +6073,10 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
             format!("`{name}` cannot be compiled because {why}"),
             origin.location,
         ));
-        lowered.program.uncompiled.push((name.clone(), why));
+        lowered
+            .program
+            .uncompiled
+            .push(crate::hir::Uncompiled::refused(name.clone(), why));
         lowered.program.funcs.retain(|func| func.name != name);
     }
     // A function dropped here may have been the only caller of another, which
@@ -6534,7 +6583,10 @@ fn refuse_host_handles(lowered: &mut lower::Lowered) {
         lowered
             .program
             .uncompiled
-            .push((func.name.clone(), WHY.to_owned()));
+            .push(crate::hir::Uncompiled::refused(
+                func.name.clone(),
+                WHY.to_owned(),
+            ));
         refused.insert(func.name.clone());
     }
     lowered.program.funcs.retain(|f| !refused.contains(&f.name));
@@ -6612,7 +6664,10 @@ fn check_host_pairs(lowered: &mut lower::Lowered) {
             why.clone(),
             at,
         ));
-        lowered.program.uncompiled.push((name.clone(), why));
+        lowered
+            .program
+            .uncompiled
+            .push(crate::hir::Uncompiled::refused(name.clone(), why));
         names.insert(name);
     }
     if !names.is_empty() {
@@ -6656,7 +6711,10 @@ fn settle(lowered: &mut lower::Lowered) {
         lowered
             .program
             .uncompiled
-            .push((func.name.clone(), (*why).to_owned()));
+            .push(crate::hir::Uncompiled::refused(
+                func.name.clone(),
+                (*why).to_owned(),
+            ));
         refused.insert(func.name.clone());
     }
     lowered.program.funcs.retain(|f| !refused.contains(&f.name));
@@ -6680,7 +6738,10 @@ fn settle(lowered: &mut lower::Lowered) {
         // a wrapper asked later why a function is missing reads `uncompiled`,
         // and a name absent from it gets "was not compiled" with the cause
         // left unsaid.
-        lowered.program.uncompiled.push((func.name.clone(), why));
+        lowered
+            .program
+            .uncompiled
+            .push(crate::hir::Uncompiled::refused(func.name.clone(), why));
         unreachable_calls.insert(func.name.clone());
     }
     lowered
@@ -7299,7 +7360,12 @@ fn why_a_callee_is_missing(program: &Program, callee: &str) -> String {
     // of one name emitting one call, which `8482afb63` fixed a table over. Saying
     // "refused above" there sends a reader looking for a refusal nobody made;
     // naming the instantiations points at the call.
-    if let Some((_, reason)) = program.uncompiled.iter().find(|(name, _)| name == callee) {
+    if let Some((_, reason)) = program
+        .uncompiled
+        .iter()
+        .map(|entry| (&entry.name, &entry.reason))
+        .find(|(name, _)| *name == callee)
+    {
         return format!("and {reason}");
     }
     let instantiated: Vec<&str> = program
@@ -7498,12 +7564,16 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
                 .program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .any(|(at, _)| *at == caller)
             {
                 lowered
                     .program
                     .uncompiled
-                    .push((caller.clone(), format!("it calls `{callee}`, {why}")));
+                    .push(crate::hir::Uncompiled::refused(
+                        caller.clone(),
+                        format!("it calls `{callee}`, {why}"),
+                    ));
             }
             lowered.program.funcs.retain(|func| func.name != caller);
         }

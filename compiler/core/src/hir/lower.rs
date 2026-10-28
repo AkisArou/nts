@@ -11801,8 +11801,16 @@ fn note_uncompiled(
         if program.funcs.iter().any(|func| func.name == at) {
             return;
         }
-        if !program.uncompiled.iter().any(|(had, _)| *had == at) {
-            program.uncompiled.push((at, diagnostic.message.clone()));
+        if !program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(had, _)| *had == at)
+        {
+            program.uncompiled.push(crate::hir::Uncompiled::refused(
+                at,
+                diagnostic.message.clone(),
+            ));
         }
     };
     // **The emitted name first, because that is the one every asker uses.** A
@@ -12471,10 +12479,13 @@ fn raising_method(
         // says so.
         Err(diagnostic) => {
             if let Ok((_, name)) = second.emitted_member_name(class, member, instance) {
-                lowered.program.uncompiled.push((
-                    format!("{name}{RAISING_SUFFIX}"),
-                    diagnostic.message.clone(),
-                ));
+                lowered
+                    .program
+                    .uncompiled
+                    .push(crate::hir::Uncompiled::refused(
+                        format!("{name}{RAISING_SUFFIX}"),
+                        diagnostic.message.clone(),
+                    ));
             }
         }
     }
@@ -14894,7 +14905,10 @@ fn lower_module_initializer(
                 lowered
                     .program
                     .uncompiled
-                    .push((module_evaluate_name(at), diagnostic.message.clone()));
+                    .push(crate::hir::Uncompiled::refused(
+                        module_evaluate_name(at),
+                        diagnostic.message.clone(),
+                    ));
                 lowered.diagnostics.push(diagnostic);
             }
         }
@@ -14929,7 +14943,10 @@ fn lower_conversions(
                 lowered
                     .program
                     .uncompiled
-                    .push((request.name.clone(), diagnostic.message.clone()));
+                    .push(crate::hir::Uncompiled::refused(
+                        request.name.clone(),
+                        diagnostic.message.clone(),
+                    ));
                 lowered.diagnostics.push(diagnostic);
             }
         }
@@ -16087,12 +16104,16 @@ fn record_unstorable_exports(
                 .program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .any(|(at, _)| at == published)
             {
                 lowered
                     .program
                     .uncompiled
-                    .push((published.clone(), reason.clone()));
+                    .push(crate::hir::Uncompiled::refused(
+                        published.clone(),
+                        reason.clone(),
+                    ));
             }
         }
     }
@@ -16331,12 +16352,16 @@ fn lower_wanted_closures(
                     .program
                     .uncompiled
                     .iter()
+                    .map(|entry| (&entry.name, &entry.reason))
                     .any(|(had, _)| *had == name)
                 {
                     lowered
                         .program
                         .uncompiled
-                        .push((name, diagnostic.message.clone()));
+                        .push(crate::hir::Uncompiled::refused(
+                            name,
+                            diagnostic.message.clone(),
+                        ));
                 }
                 lowered.diagnostics.push(diagnostic);
             }
@@ -17097,15 +17122,23 @@ fn attribute_nested_to_their_refused_outer(
             let Some(name) = asking.emitted_function_name(child) else {
                 continue;
             };
-            if lowered.program.uncompiled.iter().any(|(at, _)| *at == name)
+            if lowered
+                .program
+                .uncompiled
+                .iter()
+                .map(|entry| (&entry.name, &entry.reason))
+                .any(|(at, _)| *at == name)
                 || lowered.program.funcs.iter().any(|func| func.name == name)
             {
                 continue;
             }
-            lowered.program.uncompiled.push((
-                name,
-                format!("it is declared inside `{outer_name}`, which was not compiled"),
-            ));
+            lowered
+                .program
+                .uncompiled
+                .push(crate::hir::Uncompiled::refused(
+                    name,
+                    format!("it is declared inside `{outer_name}`, which was not compiled"),
+                ));
         }
     }
 }
@@ -17145,7 +17178,7 @@ fn drop_refusals_the_program_contradicts(lowered: &mut Lowered) {
     lowered
         .program
         .uncompiled
-        .retain(|(name, _)| !emitted.contains(name.as_str()));
+        .retain(|entry| !emitted.contains(entry.name.as_str()));
 }
 
 /// The index of a `message: string` field, if a type has one.
@@ -17956,7 +17989,7 @@ fn declare_interface_methods(
             // `uncompiled` is where a name with no function goes; `emit-c`
             // and the napi wrapper read it to explain an absent export
             // instead of reporting the effect.
-            program.uncompiled.push((
+            program.uncompiled.push(crate::hir::Uncompiled::explanation(
                 declared,
                 "no class in this program implements it, so its method has no body to declare"
                     .to_owned(),
@@ -18070,11 +18103,15 @@ fn record_unimplemented_interfaces(hierarchy: &Hierarchy, program: &mut Program)
             };
             for declared in spellings {
                 if program.funcs.iter().any(|func| func.name == declared)
-                    || program.uncompiled.iter().any(|(name, _)| *name == declared)
+                    || program
+                        .uncompiled
+                        .iter()
+                        .map(|entry| (&entry.name, &entry.reason))
+                        .any(|(name, _)| *name == declared)
                 {
                     continue;
                 }
-                program.uncompiled.push((
+                program.uncompiled.push(crate::hir::Uncompiled::explanation(
                     declared,
                     "no class in this program implements it, so its method has no body to declare"
                         .to_owned(),

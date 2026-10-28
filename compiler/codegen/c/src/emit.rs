@@ -821,8 +821,11 @@ fn drop_orphaned_bodies(
         // member with no implementer is, and is not a refusal by anybody.
         let why = if refused.contains(&missing) {
             "which this backend refused above".to_owned()
-        } else if let Some((_, reason)) =
-            program.uncompiled.iter().find(|(name, _)| *name == missing)
+        } else if let Some((_, reason)) = program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .find(|(name, _)| **name == missing)
         {
             format!("which this lowering declined: {reason}")
         } else {
@@ -899,19 +902,23 @@ fn published_symbols(program: &Program) -> (Vec<String>, Vec<String>) {
 /// refusal twice under a sentence about layouts, and would leave nothing that
 /// means what `published_without_a_symbol` is for.
 fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
-    program.uncompiled.iter().any(|(name, _)| {
-        // **Both separators, because a member's key carries the one its emitted
-        // name does**: `Owner#member` for an instance method, `Owner.member` for a
-        // static. Only `#` was tested here, and it answered for a static only
-        // because the *bare* member name happened to be recorded beside it -- so
-        // when `note_uncompiled` stopped publishing a member under its bare name,
-        // a class whose only refusal was a static would have started reporting
-        // "published without a symbol" about a name lowering had declined.
-        name == emitted
-            || name
-                .split_once(['#', '.'])
-                .is_some_and(|(owner, _)| owner == emitted)
-    })
+    program
+        .uncompiled
+        .iter()
+        .map(|entry| (&entry.name, &entry.reason))
+        .any(|(name, _)| {
+            // **Both separators, because a member's key carries the one its emitted
+            // name does**: `Owner#member` for an instance method, `Owner.member` for a
+            // static. Only `#` was tested here, and it answered for a static only
+            // because the *bare* member name happened to be recorded beside it -- so
+            // when `note_uncompiled` stopped publishing a member under its bare name,
+            // a class whose only refusal was a static would have started reporting
+            // "published without a symbol" about a name lowering had declined.
+            name == emitted
+                || name
+                    .split_once(['#', '.'])
+                    .is_some_and(|(owner, _)| owner == emitted)
+        })
 }
 
 /// C for `program`, laid out for a target whose C ABI is `abi`.

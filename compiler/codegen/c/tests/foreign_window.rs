@@ -18,7 +18,11 @@ fn assert_style_call(program: &hir::Program, caller: &str, symbol: &str, arity: 
         .unwrap_or_else(|| panic!("missing {caller}; refused: {:?}", program.uncompiled));
     assert!(func.exported, "the source export {caller} was not retained");
     assert!(
-        !program.uncompiled.iter().any(|(name, _)| name == caller),
+        !program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(name, _)| name == caller),
         "the source export {caller} was refused: {:?}",
         program.uncompiled
     );

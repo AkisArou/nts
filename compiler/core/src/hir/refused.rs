@@ -58,7 +58,11 @@ pub(super) fn guard_slots(program: &mut Program) {
         .map(|(at, func)| (func.name.as_str(), at))
         .collect();
     let mut reasons = FxHashMap::default();
-    for (name, reason) in &program.uncompiled {
+    for (name, reason) in program
+        .uncompiled
+        .iter()
+        .map(|entry| (&entry.name, &entry.reason))
+    {
         reasons.entry(name.as_str()).or_insert(reason.as_str());
     }
     // Slots are program-wide (lower::number_slots), but a subclass can drop
@@ -66,7 +70,13 @@ pub(super) fn guard_slots(program: &mut Program) {
     // prefer each receiver's actual inherited ABI below.
     let contracts = fallback_contracts(program, &by_name);
     let mut names: FxHashSet<String> = program.funcs.iter().map(|func| func.name.clone()).collect();
-    names.extend(program.uncompiled.iter().map(|(name, _)| name.clone()));
+    names.extend(
+        program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .map(|(name, _)| name.clone()),
+    );
     let layouts = super::fields::LayoutIndex::build(program);
     let mut chain_contracts = FxHashMap::default();
     let mut added = Vec::new();

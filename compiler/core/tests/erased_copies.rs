@@ -138,6 +138,7 @@ fn escape_mutation_unknown_edges_casts_and_spreads_do_not_prove_a_copy() {
                 .program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .any(|(entry, _)| entry.starts_with(&format!("{name}@"))),
             "{name} offered a refused copy without a closed use and producer proof"
         );
@@ -164,6 +165,7 @@ fn escape_mutation_unknown_edges_casts_and_spreads_do_not_prove_a_copy() {
                 .program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .filter(|(name, _)| name.starts_with("bounded@") && !name.ends_with("@raises"))
                 .map(|(name, _)| name.as_str()),
         )

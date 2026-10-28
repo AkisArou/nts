@@ -48,8 +48,7 @@ fn a_printer_callback_raises_even_without_a_source_try() {
     // AggregateError's library signature mentions abstract iterator methods;
     // those have no program implementation. Every source callable must compile.
     assert!(
-        lowered.program.uncompiled.iter().all(|(_, reason)| reason
-            == "no class in this program implements it, so its method has no body to declare"),
+        lowered.program.refused_bodies().next().is_none(),
         "{:?}",
         lowered.program.uncompiled
     );
@@ -112,6 +111,7 @@ fn an_unavailable_raising_printer_keeps_the_runtime_stop() {
             .program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .any(|(_, reason)| { reason.contains("a function returning the type parameter `T`") }),
         "{:?}",
         lowered.program.uncompiled

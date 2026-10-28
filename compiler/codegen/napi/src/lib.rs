@@ -2113,7 +2113,8 @@ fn why_uncompiled(program: &hir::Program, name: &str, absent: &str) -> String {
     program
         .uncompiled
         .iter()
-        .find(|(at, _)| at == name)
+        .map(|entry| (&entry.name, &entry.reason))
+        .find(|(at, _)| *at == name)
         .map_or_else(|| absent.to_owned(), |(_, why)| format!("{absent}: {why}"))
 }
 
@@ -3630,7 +3631,8 @@ fn report_unrepresentable_exports(
                 program
                     .uncompiled
                     .iter()
-                    .find(|(at, _)| at == emitted || at == name)
+                    .map(|entry| (&entry.name, &entry.reason))
+                    .find(|(at, _)| *at == emitted || *at == name)
                     .map_or_else(
                         || {
                             // **Two causes wore one sentence.** `uncompiled`
@@ -3701,7 +3703,8 @@ fn report_unrepresentable_exports(
             } else if let Some((_, why)) = program
                 .uncompiled
                 .iter()
-                .find(|(at, _)| *at == format!("{name}#constructor"))
+                .map(|entry| (&entry.name, &entry.reason))
+                .find(|(at, _)| **at == format!("{name}#constructor"))
             {
                 format!("is a class whose constructor was not compiled: {why}")
             // **And the export's own entry**, which was recorded and never
@@ -3717,7 +3720,12 @@ fn report_unrepresentable_exports(
             // does not fix"*, and this printed "is not a function this backend
             // can name" about a function. Wrong twice over, and the Node lane
             // said so twice before the cause was found.
-            } else if let Some((_, why)) = program.uncompiled.iter().find(|(at, _)| at == name) {
+            } else if let Some((_, why)) = program
+                .uncompiled
+                .iter()
+                .map(|entry| (&entry.name, &entry.reason))
+                .find(|(at, _)| *at == name)
+            {
                 format!("is exported and was not compiled: {why}")
             // **A value whose initializer the backend refused.** `deferred`
             // means "written by `module#init`", so when this backend declines

@@ -71,7 +71,10 @@ fn fixture() -> Program {
             layout("Base", 0, &["Base#run", "Base#run"], None),
             layout("Derived", 1, &[ORIGINAL, ORIGINAL], Some(TypeId(0))),
         ],
-        uncompiled: vec![(ORIGINAL.into(), "first cause".into())],
+        uncompiled: vec![crate::hir::Uncompiled::refused(
+            ORIGINAL.into(),
+            "first cause".into(),
+        )],
         ..Program::default()
     }
 }
@@ -108,9 +111,10 @@ fn assert_original_absent(program: &Program) {
 #[test]
 fn the_same_receiver_original_and_contract_reuses_one_named_stop() {
     let mut program = fixture();
-    program
-        .uncompiled
-        .push((ORIGINAL.into(), "later different cause".into()));
+    program.uncompiled.push(crate::hir::Uncompiled::refused(
+        ORIGINAL.into(),
+        "later different cause".into(),
+    ));
     guard_slots(&mut program);
     assert_eq!(
         program.funcs.len(),
@@ -140,9 +144,10 @@ fn the_same_receiver_original_and_contract_reuses_one_named_stop() {
 fn different_originals_with_the_same_contract_and_cause_keep_distinct_stops() {
     let mut program = fixture();
     program.layouts[1].methods[1] = Some("Other#run".into());
-    program
-        .uncompiled
-        .push(("Other#run".into(), "first cause".into()));
+    program.uncompiled.push(crate::hir::Uncompiled::refused(
+        "Other#run".into(),
+        "first cause".into(),
+    ));
     guard_slots(&mut program);
     let one = entry(&program, 1, 0);
     let two = entry(&program, 1, 1);

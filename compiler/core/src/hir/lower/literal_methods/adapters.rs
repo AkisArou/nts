@@ -70,11 +70,14 @@ pub(in crate::hir::lower) fn declare(
                 renamed.insert(name.clone(), name);
             }
         } else {
-            lowered.program.uncompiled.push((
-                name.clone(),
-                "a stored literal method whose forwarding contract could not be materialized"
-                    .to_owned(),
-            ));
+            lowered
+                .program
+                .uncompiled
+                .push(crate::hir::Uncompiled::refused(
+                    name.clone(),
+                    "a stored literal method whose forwarding contract could not be materialized"
+                        .to_owned(),
+                ));
             for layout in layout_collector.layouts() {
                 for (slot, entry) in layout.methods.iter().enumerate() {
                     if entry.as_ref() == Some(&name) {

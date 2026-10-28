@@ -685,7 +685,9 @@ fn refuse_split(program: &mut Program, index: usize, why: &str) -> Diagnostic {
         entry.name
     );
     let diagnostic = Diagnostic::error("NTS1001", message.clone(), entry.origin.location);
-    program.uncompiled.push((entry.name, message));
+    program
+        .uncompiled
+        .push(crate::hir::Uncompiled::refused(entry.name, message));
     diagnostic
 }
 
@@ -997,7 +999,7 @@ mod tests {
         assert!(diagnostics[0].message.contains("hoisted from the body"));
         assert!(program.funcs.is_empty());
         assert_eq!(program.uncompiled.len(), 1);
-        assert_eq!(program.uncompiled[0].0, "constant");
+        assert_eq!(program.uncompiled[0].name, "constant");
     }
 
     #[test]

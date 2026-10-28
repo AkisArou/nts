@@ -600,7 +600,11 @@ fn refuse_uninhabited(
     program
         .funcs
         .retain(|func| !refused.iter().any(|(name, _)| *name == func.name));
-    program.uncompiled.extend(refused);
+    program.uncompiled.extend(
+        refused
+            .into_iter()
+            .map(|(name, reason)| crate::hir::Uncompiled::refused(name, reason)),
+    );
     refusals
 }
 

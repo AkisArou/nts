@@ -70,6 +70,7 @@ fn a_refused_constructor_is_recorded_under_the_name_a_wrapper_asks_with() {
                 .program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .any(|(at, _)| *at == format!("{class}#constructor")),
             "`{class}#constructor` was refused with a cause and recorded under \
              no name a reader asks with; `uncompiled` holds {:?}",
@@ -77,6 +78,7 @@ fn a_refused_constructor_is_recorded_under_the_name_a_wrapper_asks_with() {
                 .program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .map(|(at, _)| at.as_str())
                 .collect::<Vec<_>>()
         );
@@ -86,6 +88,7 @@ fn a_refused_constructor_is_recorded_under_the_name_a_wrapper_asks_with() {
             .program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .any(|(at, _)| at == "Refused#constructor"),
         "`Refused#constructor` was refused with a cause and recorded under no \
          name a reader asks with; `uncompiled` holds {:?}",
@@ -93,6 +96,7 @@ fn a_refused_constructor_is_recorded_under_the_name_a_wrapper_asks_with() {
             .program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .map(|(at, _)| at.as_str())
             .collect::<Vec<_>>()
     );

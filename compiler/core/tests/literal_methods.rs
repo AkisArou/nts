@@ -96,9 +96,15 @@ fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
     );
     let prepared = hir::prepare(&snapshot).unwrap();
     assert!(!prepared.program.funcs.iter().any(|f| f.name == "call"));
-    assert!(prepared.program.uncompiled.iter().any(
-        |(name, why)| name == "call" && why.contains("no class in this program implements it")
-    ));
+    assert!(
+        prepared
+            .program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(|(name, why)| name == "call"
+                && why.contains("no class in this program implements it"))
+    );
 }
 
 #[test]
@@ -148,9 +154,14 @@ fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
             .any(|body| body.name.contains("#take@field$"))
     );
     assert!(
-        prepared.program.uncompiled.iter().any(
-            |(name, why)| name == "result" && why.contains("without a complete dispatch table")
-        )
+        prepared
+            .program
+            .uncompiled
+            .iter()
+            .map(|entry| (&entry.name, &entry.reason))
+            .any(
+                |(name, why)| name == "result" && why.contains("without a complete dispatch table")
+            )
     );
 }
 
@@ -161,7 +172,7 @@ fn method_identity_copies_cover_aliases_and_downstream_helpers() {
     let prepared = hir::prepare(&snapshot).unwrap();
     assert_eq!(
         prepared.program.uncompiled,
-        [] as [(std::string::String, std::string::String); 0]
+        [] as [nts_core::hir::Uncompiled; 0]
     );
     assert!(
         prepared
@@ -193,7 +204,7 @@ fn mixed_comparison_and_invocation_preserves_the_legacy_face_globally() {
     let prepared = hir::prepare(&snapshot).unwrap();
     assert_eq!(
         prepared.program.uncompiled,
-        [] as [(std::string::String, std::string::String); 0]
+        [] as [nts_core::hir::Uncompiled; 0]
     );
     assert!(
         prepared

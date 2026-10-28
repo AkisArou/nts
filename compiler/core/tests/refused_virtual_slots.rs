@@ -151,7 +151,8 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
         let (_, reason) = program
             .uncompiled
             .iter()
-            .find(|(name, _)| name == "Refused#value")
+            .map(|entry| (&entry.name, &entry.reason))
+            .find(|(name, _)| *name == "Refused#value")
             .expect("the override must actually be refused");
         let declaration = program
             .funcs
@@ -206,7 +207,11 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
             );
         }
         assert!(
-            program.uncompiled.iter().any(|(name, _)| name == "direct"),
+            program
+                .uncompiled
+                .iter()
+                .map(|entry| (&entry.name, &entry.reason))
+                .any(|(name, _)| name == "direct"),
             "direct-call cascade must stay in force"
         );
         assert!(

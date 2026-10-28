@@ -114,7 +114,7 @@ fn a_discarded_unsigned_mask_drops_storage_but_keeps_its_width_throw() {
     );
     assert_eq!(
         prepared.program.uncompiled,
-        [] as [(std::string::String, std::string::String); 0]
+        [] as [nts_core::hir::Uncompiled; 0]
     );
     let body = prepared
         .program

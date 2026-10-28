@@ -533,7 +533,7 @@ fn refuse_optional_projection(
     for &layout in holders {
         program.layouts[layout].methods[slot as usize] = Some(name.clone());
     }
-    program.uncompiled.push((name.clone(), format!(
+    program.uncompiled.push(crate::hir::Uncompiled::refused(name.clone(), format!(
         "the optional tail of `{target}` has no matching owned written implementation contract for `{owner}`"
     )));
     name

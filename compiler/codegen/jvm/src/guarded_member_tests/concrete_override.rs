@@ -179,9 +179,10 @@ fn named_good_stop(program: &mut Program, name: &str, original: &str, slots: &[u
     entry.params[0].ty = HirType::Managed(ManagedType::Object(TypeId(3)));
     entry.values[0].ty = entry.params[0].ty.clone();
     program.funcs.push(entry);
-    program
-        .uncompiled
-        .push((original.into(), GOOD_REASON.into()));
+    program.uncompiled.push(nts_core::hir::Uncompiled::refused(
+        original.into(),
+        GOOD_REASON.into(),
+    ));
     program.guarded_dispatch.insert(
         name.into(),
         GuardedDispatch {

@@ -5520,3 +5520,50 @@ fn a_gir_import_is_bound_by_the_build_and_rebound_when_its_gir_changes() {
     build_with(&other);
     assert_eq!(entries(), third, "a copy of the same nts bound again");
 }
+
+#[test]
+fn unused_native_interface_declarations_do_not_make_a_build_partial() {
+    if !available() || !jdk() {
+        skip("node, clang and a JDK");
+        return;
+    }
+    let project = fixture(
+        "clean-native-declarations",
+        r"
+import { defineConfig, library, target } from '@nts/config';
+export default defineConfig({ products: {
+  c: library.native({ entry: './src/main.ts', targets: [target.linux({ backend: 'c' })] }),
+  llvm: library.native({ entry: './src/main.ts', targets: [target.linux({ backend: 'llvm' })] }),
+  jvm: library.jvm({ entry: './src/main.ts', release: 8 })
+} });
+",
+    );
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("repo");
+    std::fs::write(project.join("tsconfig.json"), format!(
+        r#"{{"compilerOptions":{{"target":"ESNext","module":"ESNext","strict":true,"types":[]}},"files":["src/main.ts",{:?}]}}"#,
+        repo.join("runtime/native/libc.d.ts"),
+    )).expect("tsconfig");
+    std::fs::write(
+        project.join("src/main.ts"),
+        "export function good(n: number): number { return n + 1; }\n",
+    )
+    .expect("clean source");
+    let clean = build(&project, &[]);
+    assert!(clean.ok, "{}{}", clean.stdout, clean.stderr);
+    assert!(!clean.stdout.contains("PARTIAL:"), "{}", clean.stdout);
+    assert!(!clean.stderr.contains("declined:"), "{}", clean.stderr);
+    assert!(
+        project
+            .join(".nts/build/c/linux-gnu-x86_64/libc.so")
+            .exists()
+    );
+    assert!(
+        project
+            .join(".nts/build/llvm/linux-gnu-x86_64/libllvm.so")
+            .exists()
+    );
+    assert!(project.join(".nts/build/jvm/java-8/jvm.jar").exists());
+}

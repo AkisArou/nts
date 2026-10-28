@@ -119,6 +119,7 @@ fn a_covariant_return_does_not_hide_the_class_parameters_erasure_mismatch() {
         program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .any(|(name, why)| name == "throughParent"
                 && why.contains("passes parameter 1 as a string")
                 && why.contains("declares an erased value"))
@@ -153,6 +154,7 @@ fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() 
         !program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .any(|(name, _)| name == "TaggedSink#take")
     );
 }
@@ -299,6 +301,7 @@ fn a_narrowed_input_a_defaulted_optional_and_an_interface_cast_block_inference()
             program
                 .uncompiled
                 .iter()
+                .map(|entry| (&entry.name, &entry.reason))
                 .any(|(refused, _)| refused == name),
             "{name} stays a named refusal"
         );
@@ -332,6 +335,7 @@ fn a_named_literal_fills_the_row_and_allows_class_edges() {
         !program
             .uncompiled
             .iter()
+            .map(|entry| (&entry.name, &entry.reason))
             .any(|(name, _)| name == "Sink#take")
     );
     let exact = program
