@@ -179,3 +179,26 @@ recorded case on every backend ([conformance](../conformance/typescript.md)).
   tools land ([log](../records/notebooks/decisions-log.md#gate-and-landing-10-27)).
 - **The process itself** is record 0355
   ([one worktree per lane, and landing by tool](../records/0355-one-worktree-per-lane-and-land-by-tool.md)).
+- **Measuring** (10-28,
+  [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)):
+  - the noise rule: rounds of before, after and before again, over at least 5
+    processes; instruction counts decide regressions; wall time has a floor of
+    max(3%, twice the spread); and where a row's layout range exceeds the
+    effect, the mean over seeded code layouts decides (P-3);
+  - every comparator's version is pinned (node, Bun, the JDK and clang),
+    every report records the machine's load, and reference numbers are taken
+    whenever the landing lock is free and the load is low (P-4).
+- **The full run** (10-28, same log entry):
+  - a nightly full run, and a weekly one with result caches off; `--touching`
+    selects tests only after a test proves that it selects deterministically
+    (Q-3);
+  - it gates native instruction counts per benchmark row, against the noise
+    band, starting with the counting drivers (P-5);
+  - it includes a sanitized, reference-counted differential run over the whole
+    corpus (Q-7);
+  - the compile-time guard adds backend code generation and link time (P-6);
+  - result caches key on the schema, compiler and runtime digests (X-7,
+    [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+
+  The cadence, the count gate, the sanitized run and the guard's additions
+  are not built yet.

@@ -3,8 +3,9 @@
 Windows programs written in TypeScript against Win32, the Windows Runtime and
 WinUI 3, compiled to native code and cross-built from Linux. For anyone
 writing a Windows program for nts or binding a Windows API. It builds on the
-[native target](native.md) and its C interop; nts itself never runs on
-Windows.
+[native target](native.md) and its C interop. nts itself does not run on
+Windows yet: native Windows is to be its third host, after Linux and macOS,
+and WSL serves meanwhile ([native](native.md#decisions)).
 
 ## Targets and the toolchain
 
@@ -163,18 +164,26 @@ built and never run. Without the VM the Windows interop tests report `SKIP`.
 
 ## Open questions
 
-- Cycles through delegates and other host objects:
-  [I-6](../open-questions.md#5-interop-and-hosts); WinRT delegates are memory
-  stage 7 ([memory](../foundations/memory.md#build-order)).
-- Hardware to verify on: [A-1](../open-questions.md#10-platforms-and-hardware).
-- A bundled toolchain, and publishing the Win32 metadata surface:
-  [T-1, B-3](../open-questions.md#6-bindings-products-toolchains-dependencies).
+- A bundled toolchain:
+  [T-1](../open-questions.md#6-bindings-products-toolchains-dependencies).
 
 ## Decisions
 
 - Win32 first, then WinRT and COM, then WinUI 3; the mingw ABI through zig
-  now, MSVC later; a local Windows 11 VM runs what Linux builds, and nts never
-  runs on Windows ([notebook](../records/notebooks/windows-lane-goal.md)).
+  now, MSVC later; a local Windows 11 VM runs what Linux builds
+  ([notebook](../records/notebooks/windows-lane-goal.md)).
+- The compiler is to run on native Windows, after Linux and macOS; WSL
+  serves meanwhile (T-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- No Windows machine or arm64 device is bought yet: Windows builds stay unrun
+  at landing, and the hardware comes after a Mac (A-1; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- The Win32 metadata surface, being permissively licensed, may be published;
+  surfaces are otherwise generated on each machine (B-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- Cycles through WinRT delegates and other host objects are collected in
+  memory stage 7 ([memory](../foundations/memory.md#build-order); I-6, 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
 - Windows programs may stay unrun at a landing whose only refusals are their
   platform skips ([log](../records/notebooks/decisions-log.md#team-and-process)).
 - An exception escaping a callback on a UI target is reported, and the loop

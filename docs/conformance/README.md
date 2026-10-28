@@ -42,3 +42,15 @@ programs compared with node, refusals, recorded outcomes and memory cases.
   and the gap is reported ([log](../records/notebooks/decisions-log.md#team-and-process)).
 - test262 runs on every built backend, the JVM included; Wasm rejoins when
   its Binaryen backend exists.
+- Where test262 and node disagree, test262 decides the language, and node
+  what the specification leaves to the host
+  ([language](../language/README.md#decisions); L23, 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).
+- Every conformance record is a per-case ratchet: each case may only move
+  toward passing, and a record changes only through a reviewed `results:`
+  commit (Q-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
+  Not built.
+- A differential program fuzzer, comparing generated programs with node, is
+  built now, as a phase 2 instrument (Q-6; 10-28,
+  [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).

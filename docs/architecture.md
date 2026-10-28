@@ -23,7 +23,7 @@ C (→ clang) · LLVM IR · JVM class files (→ DEX) · WasmGC (via Binaryen IR
 what preparation decided and decide nothing a sibling backend would decide
 differently.
 
-**Memory is chosen per build, not per backend.** `hir::Provider` has three:
+**Memory is chosen per build, not per backend.** `hir::Memory` has three:
 
 - `NoGc` allocates and never frees: for testing, never shipped.
 - `HostGc` leaves the heap to a managed host: the JVM or ART collector, or WasmGC.

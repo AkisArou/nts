@@ -12,7 +12,7 @@ implementation of a builtin is [builtins](builtins.md).
 | feature | today | designed or decided |
 |---|---|---|
 | `Date` as a time value: `new Date(ms)`, `getTime`, `valueOf` | **built on every backend:** the compiler's own | |
-| `Date.now()`, `new Date()` | refused, since they read a clock: `Date.now` as a missing builtin (`NTS1100`), `new Date()` as a lowering gap (`NTS1001`) | the clock as a provided capability (decision 2, G12) |
+| `Date.now()`, `new Date()` | refused, since they read a clock: `Date.now` as a missing builtin (`NTS1100`), `new Date()` as a lowering gap (`NTS1001`) | the clock as a provided capability (decision 2; [builtins](builtins.md#the-clock-and-randomness)) |
 | local time: `getFullYear`, `getHours`, `getTimezoneOffset`, ... | refused by name (`NTS1001`): they need a time-zone database | node's pinned time-zone data, only in programs that use local time (G13) |
 | the rest of `Date`: `Date.UTC` (`NTS1100`), `toISOString`, parsing, formatting, setters (`NTS1001`) | refused | `runtime/ecmascript`'s `Date` |
 | `Temporal` | refused: not a provided global (`NTS1100`) | `runtime/ecmascript`'s, where the host has none (G15) |
@@ -88,7 +88,7 @@ each target's Intl comes from is decided:
 | target | Intl comes from | notes |
 |---|---|---|
 | native (C, LLVM) | ICU4C, node's version, built from its pinned, hash-checked source (D3) | a static C++ standard library, linked only into programs that use Intl |
-| JVM, Android | ICU4J, the same version, bundled | not the JDK's, and not the device's; whether a platform's own ICU may ever serve is open (D-3) |
+| JVM, Android | ICU4J, the same version, bundled | not the JDK's, and not the device's: ICU is bundled, revisited only for mobile size ([Decisions](#decisions)) |
 | Wasm in a browser or node, Chromium | the host's `Intl` (decision 3) | zero bytes; results follow the host's ICU, exact under node |
 | Wasm, standalone | none (D6) | the Unicode services still work there |
 
@@ -114,9 +114,11 @@ from the ICU providers, and all calendar-bearing values share one calendar
 context. Every `Temporal` value localizes through the shared Intl, and keeps
 the specified fallback when Intl is absent.
 
-The pinned node has no `Temporal`. Providing it wherever the host lacks it,
-node included, goes beyond "behaves like node" and is the user's call (G15),
-as is browser support on Wasm.
+The pinned node has no `Temporal`. nts is to provide it wherever the host
+lacks it, node included, as it does any feature the specification has and
+node lacks ([Decisions](#decisions)); it is not bound yet. Whether browsers
+provide it to Wasm is still to be researched (G15 in
+[open questions](../open-questions.md#2-builtins-and-globals)).
 
 ## Testing
 
@@ -146,3 +148,10 @@ as is browser support on Wasm.
   a static C++ standard library only in programs that use Intl. **D5:**
   word-break dictionaries follow the text. **D6:** no Intl on standalone Wasm
   for now ([log](../records/notebooks/decisions-log.md#unicode-10-27)).
+- **`Temporal`, and any builtin node lacks, is provided wherever the host
+  lacks it,** node included (G15; 10-28,
+  [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
+  Not built.
+- **ICU is bundled, never the platform's,** for exactness (D2, D3); the
+  choice is revisited for mobile size (D-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).

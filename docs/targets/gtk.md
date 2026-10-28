@@ -169,13 +169,6 @@ reference counting, under Xvfb (`GSK_RENDERER=cairo`) in the interop tests of
 the full run. `tests/interop/gtk-*` holds them, `gtk-cycles` the cycle tests.
 Nothing packages a GTK program beyond its executable.
 
-## Open questions
-
-- Callbacks GLib makes on threads nts does not own:
-  [I-3](../open-questions.md#5-interop-and-hosts).
-- Platform surfaces generated locally, or published where the licence allows:
-  [B-3](../open-questions.md#6-bindings-products-toolchains-dependencies).
-
 ## Decisions
 
 - The goal is a real GTK 4 application with a GJS-shaped API: closures
@@ -189,3 +182,11 @@ Nothing packages a GTK program beyond its executable.
   ([notebook](../records/notebooks/gtk-lane-goal.md#m5-a-surface-better-than-gjs)).
 - An exception escaping a callback on a UI target is reported, and the loop
   keeps running ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- A callback GLib makes on a thread nts does not own is carried to the owner
+  thread, and one that must return a value from that thread is refused (C-3,
+  I-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  Not built.
+- The GIR surfaces, being permissively licensed, may be published; surfaces
+  are otherwise generated on each machine (B-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).

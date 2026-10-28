@@ -152,8 +152,11 @@ passes, and a C function's `NSString *` is `BridgedString`.
 An exception escaping a delegate method, an action or a block is the program's
 uncaught error. On Apple the rule is to report it and keep the run loop going;
 that is not built, and the program stops with status 1. An `NSException`
-reaches no `catch` ([errors](../language/errors.md#callbacks-a-host-invokes),
-register [I-2](../open-questions.md#5-interop-and-hosts)).
+reaches no `catch` yet ([errors](../language/errors.md#callbacks-a-host-invokes));
+it is decided to become a catchable `Error` carrying the exception, once
+unwinding through C frames is researched
+([errors](../language/errors.md#decisions), register
+[I-2](../open-questions.md#5-interop-and-hosts)).
 
 ## What has run where
 
@@ -165,14 +168,8 @@ qemu. No Mac is available now, so the Apple interop tests (`tests/interop/macos-
 
 ## Open questions
 
-- Cycles through blocks, and through host objects in general:
-  [M-4](../open-questions.md#3-memory),
-  [I-6](../open-questions.md#5-interop-and-hosts).
+- Cycles through blocks: [M-4](../open-questions.md#3-memory).
 - `NSException` reaching a `catch`: [I-2](../open-questions.md#5-interop-and-hosts).
-- Hardware to verify on (an Apple-silicon Mac, or hosted CI):
-  [A-1](../open-questions.md#10-platforms-and-hardware).
-- Whether surfaces derived from Apple's SDK may be published:
-  [B-3](../open-questions.md#6-bindings-products-toolchains-dependencies).
 
 ## Decisions
 
@@ -187,3 +184,14 @@ qemu. No Mac is available now, so the Apple interop tests (`tests/interop/macos-
   platform skips ([log](../records/notebooks/decisions-log.md#team-and-process)).
 - An exception escaping a callback on a UI target is reported, and the loop
   keeps running ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- No Mac is bought yet: Apple builds stay unrun at landing, and an
+  Apple-silicon Mac mini is bought first when the macOS host work begins (A-1;
+  10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- Surfaces derived from Apple's SDK are generated on each machine and never
+  published (B-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- Cycles through the Objective-C classes nts defines are collected in memory
+  stage 7 (I-6; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28));
+  blocks wait on M-4.

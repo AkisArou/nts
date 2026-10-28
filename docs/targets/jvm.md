@@ -114,7 +114,9 @@ const names = catalog.names();     // the Java list itself: no copy
   a value-returning callback from a foreign thread is refused when bound.
 - **Exceptions:** a Java exception never reaches a TypeScript `catch`. A bound
   call inside a `try` is refused (NTS1001), and outside one an exception ends
-  the program (J4 proposes a catchable `JavaError`).
+  the program. Every host error is decided to become a catchable `Error`
+  carrying the host value ([errors](../language/errors.md#decisions)); J4
+  proposes its shape, a `JavaError` with the throwable as `cause`.
 
 ## Java calling TypeScript
 
@@ -158,14 +160,9 @@ decided ([JVM and Wasm](../foundations/jvm-and-wasm.md#where-they-stand)).
 
 ## Open questions
 
-- Weak references, Map hashing, `Math` against V8, and Java exceptions:
-  J1 to J4 on [JVM and Wasm](../foundations/jvm-and-wasm.md#proposed-decisions).
+- Weak references, `Math` against V8, and the shape of a Java exception:
+  J1, J3 and J4 on [JVM and Wasm](../foundations/jvm-and-wasm.md#proposed-decisions).
 - Host failures reaching a `catch`: [I-2](../open-questions.md#5-interop-and-hosts).
-- One async runtime or three: [C-4](../open-questions.md#4-concurrency-and-async).
-- `SharedArrayBuffer` and Android's API floor (VarHandle needs 33):
-  [G19](../open-questions.md#2-builtins-and-globals).
-- The platform's ICU or a bundled one:
-  [D-3](../open-questions.md#6-bindings-products-toolchains-dependencies).
 
 ## Decisions
 
@@ -178,3 +175,16 @@ decided ([JVM and Wasm](../foundations/jvm-and-wasm.md#where-they-stand)).
 - A red that affects only the JVM does not block a landing; it is recorded in
   `tooling/conformance/jvm-declines.known` and fixed after
   ([log](../records/notebooks/decisions-log.md#priorities-and-order)).
+- `SharedArrayBuffer` and `Atomics` on Android need API 33 (`VarHandle`), so
+  they are refused below it; the Android floor stays API 29 (G19; 10-28,
+  [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
+- ICU4J is bundled, never the device's, revisited only for mobile size (D-3;
+  10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- The JVM keeps the one async ordering contract every backend keeps, held by
+  shared ordering fixtures (C-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- Map hashing is J2: the cached `String.hashCode` with the per-table tree
+  fallback (X-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+  Not built.

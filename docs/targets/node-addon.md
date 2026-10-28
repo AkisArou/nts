@@ -5,6 +5,9 @@ loads with `require` and calls like any module. The native half is the C
 backend's output, and a generated layer publishes the entry module's exports
 through Node-API. For anyone shipping an addon, and for reading how node's own
 tests run against compiled modules ([node conformance](../conformance/node.md)).
+The opposite direction, a compiled native program loading someone else's
+`.node` addon as node does, is nts as a Node-API host, decided and described
+on the [native](native.md#decisions) page.
 
 ## Building
 
@@ -99,39 +102,28 @@ for conformance schedule their I/O and timers on node's libuv loop
 ([async](../language/async.md#the-event-loop-on-each-target)); the global
 `setTimeout`, which needs a host, stops the program by name (`nts_post_delayed
 before a host was installed`). A promise does
-not cross the boundary: an `async` export is left out of the addon and named
-at build time (register [I-4](../open-questions.md#5-interop-and-hosts)). With no host installed, the
-owner-thread test answers true, so a call from a worker thread is not detected
-(register [C-3](../open-questions.md#4-concurrency-and-async)).
+not cross the boundary yet: an `async` export is left out of the addon and
+named at build time, and it is decided to cross as a deferred plus a
+threadsafe function ([Decisions](#decisions)). With no host installed, the
+owner-thread test answers true, so a call from a worker thread is not
+detected; the runtime is decided to check every entry from a thread it does
+not own ([async](../language/async.md#decisions)).
 
 ## Memory
 
 The addon's own heap counts references with its cycle collector, as every
 native program does. Nothing on the native side holds a JavaScript value, so
 no cycle can run through both heaps; once record 0356's live references exist,
-one can, and a holder family for N-API is the answer (register
-[I-6](../open-questions.md#5-interop-and-hosts)).
+one can, and a holder family for N-API, in memory stage 7, collects it
+([Decisions](#decisions)).
 
 ## One instance per process
 
 An addon's module globals, and the environment `NAPI_MODULE_INIT` hands the
 runtime, are process-wide statics. A second instance in the same process, such
 as the addon loaded again in a worker thread, would share them. One instance
-per process, refused clearly otherwise, is the recommendation, with the
-instance becoming a parameter when workers arrive (register
-[I-7](../open-questions.md#5-interop-and-hosts)).
-
-## Open questions
-
-- Promises across the boundary, as a deferred and a threadsafe function:
-  [I-4](../open-questions.md#5-interop-and-hosts).
-- One instance per process: [I-7](../open-questions.md#5-interop-and-hosts).
-- Cycles through host objects once JavaScript values are held:
-  [I-6](../open-questions.md#5-interop-and-hosts).
-- node's builtins or nts's own inside an addon:
-  [G11](../open-questions.md#2-builtins-and-globals).
-- Shipping prebuilt addons to npm:
-  [S-3](../open-questions.md#6-bindings-products-toolchains-dependencies).
+per process is decided, a second refused clearly, until the instance becomes
+a parameter with workers ([Decisions](#decisions)); the refusal is not built.
 
 ## Decisions
 
@@ -141,3 +133,19 @@ instance becoming a parameter when workers arrive (register
 - An exception escaping a callback a host invokes crosses into node as a
   JavaScript exception, and node's own rules apply
   ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- A promise crosses the boundary as a deferred plus a threadsafe function
+  (I-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  Not built.
+- One nts instance per process, for now, and a second is refused clearly;
+  the instance becomes a parameter with workers (I-7; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- Once JavaScript values are held, cycles through them are collected by an
+  N-API holder family, in memory stage 7 (I-6; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- An addon uses nts's own builtins, one semantics everywhere; this is
+  revisited if their size shows (G11; 10-28,
+  [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
+- Addons reach npm as prebuilt binaries per platform, as esbuild and swc
+  ship (S-3; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).

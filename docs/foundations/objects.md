@@ -141,8 +141,9 @@ proved to hold integers, when it is `int32_t` or `int64_t` (`hir::elements`).
   length, or by an index the same array's length guards, which is a relation
   rather than a range: `for (i = 0; i < xs.length; i++)`. An unproved check is
   a compare and a branch, inline.
-- **A read out of range stops by name,** where JavaScript answers `undefined`
-  (L4 in [open questions](../open-questions.md)).
+- **A read out of range stops by name** today, where JavaScript answers
+  `undefined`; by the bounds rule it is to give `undefined`
+  ([Decisions](#decisions)).
 - **A write at `length` appends** to an array of numbers or other uncounted
   elements, with growth behind a call; a write further out stops by name,
   since a hole has no representation in a dense array. An array of references
@@ -219,8 +220,10 @@ tag and an 8-byte payload holding a double, a boolean or a reference.
   `T | undefined` are a pointer with one absent value. `null` and `undefined`
   together need the tagged form, since they are different values.
 - **A member read on an erased value by a key known only at run time** is
-  refused (L7 in [open questions](../open-questions.md)). Untyped JSON needs a
-  new representation for it, designed with JSON.
+  refused today. It is decided to go through a table of member names per type,
+  found through the value's run-time descriptor, while typed code stays direct
+  ([types](../language/types.md#decisions)). Untyped JSON needs a new
+  representation for it, designed with JSON.
 
 ## Objects at an exported boundary
 
@@ -252,3 +255,7 @@ and [objects](../records/notebooks/studies/primitives-objects.md) studies.
   [0356](../records/0356-objects-cross-an-exported-boundary-by-proof-copied-where-invisible-live-otherwise.md)).
 - **Nothing is fixed:** a representation that loses a benchmark row is replaced
   outright ([log](../records/notebooks/decisions-log.md#the-bar)).
+- **The bounds rule:** every index is proved in range or checked, and a read
+  out of range gives `undefined`, as JavaScript answers (X-5, with L4; 10-28,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+  The checks are built; the `undefined` is not.

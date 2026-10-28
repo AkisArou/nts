@@ -18,18 +18,25 @@ features mean in detail; this one is the map.
   or object type is a flat struct, a number proved whole is an integer, and
   `any`, `unknown` and mixed unions are erased values that carry a tag
   ([types.md](types.md)).
-- **Behaves like node.** A compiled program prints what node prints running the
-  same source, and node is the oracle every fixture is compared with. Where nts
-  cannot match node, it refuses the construct at compile time, naming it, or
-  stops at run time by name. A wrong answer that runs is a defect, recorded
-  under `tests/outcomes/` until it is fixed.
+- **The specification decides, and node is the oracle.** The ECMAScript
+  specification (test262) decides what the language means; node decides what
+  the specification leaves to the host: node's APIs, `console`'s format, timer
+  order and the report of an uncaught error. A compiled program prints what
+  node prints running the same source, and node is the oracle every fixture is
+  compared with. Where node lacks a feature the specification has, such as
+  proper tail calls or `Temporal`, nts provides it (neither is built yet), so
+  a program that works on node behaves the same and some that fail on node
+  run. Where nts cannot
+  match, it refuses the construct at compile time, naming it, or stops at run
+  time by name. A wrong answer that runs is a defect, recorded under
+  `tests/outcomes/` until it is fixed.
 
 A refusal names the construct and why (`NTS1001 ... is not supported by this
 lowering yet`). A builtin no provider supplies is NTS1100, and `eval` is
-NTS1101; those two stop `nts build`. Any other refusal still writes the
-program, without the refused functions, and cuts refused top-level statements:
-register [L20](../open-questions.md#1-language-and-compiler) would make every
-refusal fail the build. `nts refusals` lists what a program refuses.
+NTS1101. Any refusal fails `nts build`; `--partial` writes the program without
+the refused parts, for experiments, and says so
+([cli](../reference/cli.md#refusals-by-command)). `nts refusals` lists what a
+program refuses.
 
 ## How to read the tables
 
@@ -61,7 +68,8 @@ The marks are features, not tests. The measured state is in `results/`
 | `?.`, `??`, `??=`, `\|\|=`, `&&=` | compiled | |
 | `delete` | partly | of an optional property only |
 | `void`, the comma operator | compiled | |
-| a member read or write by a key known only at run time | partly | on arrays and index signatures (`Record<string, T>`); on any other type it is refused (register [L7](../open-questions.md#1-language-and-compiler)) |
+| a member read or write by a key known only at run time | partly | on arrays and index signatures (`Record<string, T>`); on any other type it is refused; decided: a read on `any` or `unknown` goes through a table of member names per type ([types.md](types.md#decisions)) |
+| JSX | partly | only through the React Compiler's transform (`react` in [`nts.config.ts`](../reference/nts-config.md#top-level-fields)); decided: compiled in the compiler's core, for any JSX library ([Decisions](#decisions)) |
 | `valueOf` and `toString` called by a conversion | partly | a static dispatch; refused where both answer objects |
 
 ## Statements and control flow
@@ -71,11 +79,11 @@ The marks are features, not tests. The measured state is in `results/`
 | `if`, `switch` with fall-through, `for`, `while`, `do` | compiled | |
 | `break`, `continue`, labels on any statement | compiled | |
 | `let`, `const`; destructuring with defaults, rests, nesting and holes, in declarations, assignments and loop heads | compiled | |
-| `var` | partly | function-scoped and hoisted; a read before its assignment is a wrong answer or a stop (register [L4](../open-questions.md#1-language-and-compiler)), and a closure over a loop's `var` is refused |
+| `var` | partly | function-scoped and hoisted; a read before its assignment is a wrong answer or a stop today, and is decided to read `undefined` ([types.md](types.md#when-a-types-claim-is-false-at-run-time)); a closure over a loop's `var` is refused |
 | `for...of` | compiled | see [iteration](#iteration) |
 | `for...in` | partly | over an object's keys; over an array it is refused |
 | `throw`, `try`, `catch`, `finally` | partly | some throws through indirect calls escape their `try` ([errors.md](errors.md#throws-that-escape-a-try)) |
-| `using`, `await using` | not yet | register [L16](../open-questions.md#1-language-and-compiler) |
+| `using`, `await using` | not yet | decided, with the full iteration protocol ([async.md](async.md#decisions)) |
 | `with`, sloppy-mode code, legacy octal literals | out of scope | not in strict code; the checker rejects them ([boundaries.md](boundaries.md#sloppy-mode)) |
 
 ## Functions
@@ -85,11 +93,12 @@ The marks are features, not tests. The measured state is in `results/`
 | declarations, expressions and arrows, nested and hoisted | compiled | [functions.md](functions.md) |
 | optional, default, rest and destructured parameters; overloads | compiled | |
 | closures, including over variables something writes | compiled | some capture shapes are refused |
-| functions and methods as values | compiled | `o.m === o.m` is `false` (register [L12](../open-questions.md#1-language-and-compiler)) |
+| functions and methods as values | compiled | `o.m === o.m` is `false`; decided: `true`, by caching method values per class ([functions.md](functions.md#decisions)) |
 | `this` in functions; `call`, `apply`, `bind` | compiled | a `this:` type is proved at entry |
-| the `arguments` object | not yet | register [L2](../open-questions.md#1-language-and-compiler) |
+| the `arguments` object | not yet | decided: implemented, unaliased as strict mode has it ([functions.md](functions.md#decisions)) |
 | generic functions | compiled | copied per instantiation |
 | recursion | compiled | no depth limit: stack exhaustion stops by name |
+| proper tail calls | not yet | decided: implemented ([functions.md](functions.md#recursion)) |
 | `async` functions and `await` | compiled | [async.md](async.md) |
 | generators | partly | the value of a `yield` is refused |
 | a function's source text (`String(f)`) | partly | `function f() { [native code] }` on every backend, where node gives the source; decided: the source is kept for each function whose `toString` the compiler can see is called ([boundaries](boundaries.md#not-boundaries)) |
@@ -101,14 +110,14 @@ The marks are features, not tests. The measured state is in `results/`
 | fields: public, `private`, `protected`, `readonly`, `static`, `#private`; initializers; parameter properties | compiled | |
 | constructors; methods, getters and setters, public or `#private`; `static` members and `static {}` blocks | compiled | |
 | inheritance, `super`, `override`, `abstract`, `implements`, virtual dispatch | compiled | |
-| class expressions; classes declared inside a function | partly | a class declared in a function is one class for every call, sharing its statics (register [L12](../open-questions.md#1-language-and-compiler)); refused: a class expression not bound to a name, and a class that reads the enclosing function's locals |
+| class expressions; classes declared inside a function | partly | a class declared in a function is one class for every call, sharing its statics, and a class object per evaluation is decided ([functions.md](functions.md#decisions)); refused: a class expression not bound to a name, and a class that reads the enclosing function's locals |
 | a class as a value: stored, passed, returned, compared | compiled | |
 | an error class called without `new` (`TypeError("m")`); `new` through a value holding a class | not yet | |
 | generic classes | partly | copied per instantiation; a generic method on a generic class is refused, and so is an exported generic class nothing instantiates (register [L9](../open-questions.md#1-language-and-compiler)) |
 | members keyed by symbols, including `[Symbol.iterator]()` | compiled | |
 | `#x in o` | compiled | |
-| `new.target` | not yet | refused, as `a meta property` (register [L12](../open-questions.md#1-language-and-compiler)) |
-| decorators | not yet | standard decorators are compiled away silently today (register [L10](../open-questions.md#1-language-and-compiler)); `experimentalDecorators` is refused |
+| `new.target` | not yet | refused, as `a meta property`; decided: implemented ([functions.md](functions.md#decisions)) |
+| decorators | not yet | standard decorators are compiled away silently today; decided: refused by name until the standard semantics are implemented ([Decisions](#decisions)); `experimentalDecorators` is refused |
 | auto-accessors (`accessor x = 1`) | not yet | the `accessor` modifier is not read, so the member compiles as a plain field (L10) |
 | `Object.freeze`, `seal`, `preventExtensions`; property descriptors (`Object.defineProperty`, `getOwnPropertyDescriptor`); `Proxy` and `Reflect`; `globalThis` | not yet | in scope later, after the static foundations and a discussion ([boundaries.md](boundaries.md#in-scope-not-yet-built); registers [L24 to L26](../open-questions.md#1-language-and-compiler)) |
 | the prototype chain: `Object.getPrototypeOf`, `setPrototypeOf`, `__proto__`, `Object.create(proto)` | out of scope | [boundaries.md](boundaries.md#the-prototype-chain); `Object.create(null)` compiles |
@@ -122,10 +131,10 @@ The marks are features, not tests. The measured state is in `results/`
 | `import` and `export` in every ES form; default and namespace imports; re-exports | compiled | [modules.md](modules.md) |
 | cycles; evaluation order | compiled | every module in the program runs at startup |
 | `import()` of a module of the program | compiled | a computed specifier is refused |
-| top-level `await`, `import.meta`, JSON and text modules | not yet | register [L17](../open-questions.md#1-language-and-compiler) |
-| npm dependencies | partly | compiled from their TypeScript source; JavaScript-only packages are not (register [D-4](../open-questions.md#6-bindings-products-toolchains-dependencies)) |
-| `node:*` modules | not yet | no resolver (register [G10](../open-questions.md#2-builtins-and-globals)) |
-| CommonJS | not yet | register [L18](../open-questions.md#1-language-and-compiler) |
+| top-level `await`, `import.meta`, JSON and text modules | not yet | decided: implemented ([modules.md](modules.md#decisions)); what `import.meta.url` holds is register [L17](../open-questions.md#1-language-and-compiler) |
+| npm dependencies | partly | compiled from their TypeScript source; JavaScript-only packages are not yet, and are decided to compile against their JSDoc and `.d.ts` types ([modules.md](modules.md#decisions)) |
+| `node:*` modules | not yet | no resolver yet; decided: all 28 modules on native, through a `node:` resolver ([modules.md](modules.md#decisions)) |
+| CommonJS | not yet | decided: CommonJS dependencies come in through an interop layer, and sources stay strict ES modules ([modules.md](modules.md#decisions)) |
 
 ## The type system
 
@@ -138,10 +147,10 @@ The marks are features, not tests. The measured state is in `results/`
 | `as`, `satisfies`, `as const`, `!` | compiled | `as` and `!` are checked where a wrong claim would be read |
 | optional and `readonly` properties, index signatures | compiled | |
 | `enum`, numeric and string; `const enum` | compiled | the reverse mapping at a computed index is refused |
-| `declare` | compiled | register [L13](../open-questions.md#1-language-and-compiler) |
+| `declare` | compiled | a declared function is bound as a C function today; decided: `declare` names what the environment provides, and C is reached only through `c:` imports ([modules.md](modules.md#decisions)) |
 | function types | compiled | |
 | constructor types | not yet | `new` through one is refused |
-| namespaces; declaration merging | partly | calls to a namespace's functions, and an enum merged with a namespace, compile; a namespace holding a value is refused (register [L11](../open-questions.md#1-language-and-compiler)) |
+| namespaces; declaration merging | partly | calls to a namespace's functions, and an enum merged with a namespace, compile; a namespace holding a value is refused; both are decided, as TypeScript emits them ([modules.md](modules.md#decisions)) |
 
 ## Values
 
@@ -155,13 +164,12 @@ The marks are features, not tests. The measured state is in `results/`
 | typed arrays | partly | the eight numeric kinds; `Uint8ClampedArray`, `Float16Array`, `BigInt64Array` and `BigUint64Array` are not provided |
 | `Date` | partly | the time value only: `new Date(ms)`, `getTime`, `valueOf` |
 | `WeakMap`, `WeakSet`, `WeakRef`, `FinalizationRegistry` | not yet | no representation yet |
-| `SharedArrayBuffer`, `Atomics` | not yet | register [G19](../open-questions.md#2-builtins-and-globals) |
+| `SharedArrayBuffer`, `Atomics` | not yet | decided: on C11 atomics, with workers ([async.md](async.md#decisions)) |
 
 ## ECMAScript globals
 
-One list of provided globals serves every target (register
-[G1](../open-questions.md#2-builtins-and-globals); the design is
-[foundations/builtins.md](../foundations/builtins.md)).
+One list of provided globals serves every target today; the approved design
+that replaces it is [foundations/builtins.md](../foundations/builtins.md).
 
 | Feature | Mark | Notes |
 |---|---|---|
@@ -176,11 +184,11 @@ One list of provided globals serves every target (register
 | `Symbol`, `Symbol.for`, `description` | partly | a well-known symbol works as a key, not as a value |
 | `Object.keys`, `values`, `entries`, `is`, `hasOwn`, `assign` | partly | `fromEntries` and `groupBy` are not provided |
 | `Array.isArray`, `Array.from` | partly | `Array.of` and `fromAsync` are not provided; an array-like is refused |
-| `console.log` and its siblings | partly | primitive values only (register [G18](../open-questions.md#2-builtins-and-globals)) |
-| the clock and randomness: `Date.now`, `new Date()`, `Math.random` | not yet | register [G12](../open-questions.md#2-builtins-and-globals) |
+| `console.log` and its siblings | partly | primitive values only; decided: values formatted as node's `util.inspect` does ([builtins](../foundations/builtins.md#decisions)) |
+| the clock and randomness: `Date.now`, `new Date()`, `Math.random` | not yet | designed in [builtins](../foundations/builtins.md#the-clock-and-randomness) |
 | the calendar: `getFullYear` and its family, `toISOString` | not yet | |
 | `Intl`, `Temporal` | not yet | implementations in `runtime/ecmascript` are not wired in |
-| `eval`, `Function` from source text | out of scope | `eval` is NTS1101 and the `Function` constructor NTS1100, for now; whether it stays a boundary is register [L1](../open-questions.md#1-language-and-compiler), the user's call ([boundaries.md](boundaries.md#dynamic-code)) |
+| `eval`, `Function` from source text | out of scope | a permanent boundary: `eval` is NTS1101 and the `Function` constructor NTS1100 ([boundaries.md](boundaries.md#dynamic-code)) |
 
 ## Iteration
 
@@ -196,7 +204,7 @@ One list of provided globals serves every target (register
 | `for await` over an `AsyncIterable` object or a synchronous sequence | not yet | |
 | iterator helpers (`map`, `filter`, `take`, `Iterator.from`) | not yet | |
 
-The whole protocol is register [L16](../open-questions.md#1-language-and-compiler).
+The whole protocol is decided, as phase 3 work ([async.md](async.md#decisions)).
 
 ## Evaluation order
 
@@ -246,3 +254,15 @@ The whole protocol is register [L16](../open-questions.md#1-language-and-compile
   descriptors are in scope for later, after the static foundations and a
   discussion, each costing nothing where a program does not use it (10-27,
   [Language and hosts](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- The ECMAScript specification decides what the language means, and node what
+  the specification leaves to the host; where node lacks a feature the
+  specification has, nts provides it (L23; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).
+- Decorators are refused by name until the TC39 standard semantics are
+  implemented, later; JSX is compiled in the compiler's core, for any JSX
+  library, with TypeScript's own JSX emit as the oracle (L10; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Neither is
+  built.
+- The TypeScript nts compiles follows tsrs's releases of stable TypeScript,
+  and each upgrade is gated by the four conformance suites (L19; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).

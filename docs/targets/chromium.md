@@ -73,7 +73,7 @@ per operation.
   [`contracts/workarounds.md`](../../runtime/chromium/contracts/workarounds.md).
 - **Errors:** a member Blink marks as raising throws an `Error` whose message
   is "Name: message", the DOMException's name and Blink's text; it is not a
-  `DOMException`.
+  `DOMException` yet, as it is decided to be ([Decisions](#decisions)).
 
 ## Three heaps
 
@@ -127,12 +127,8 @@ part of the gate.
 
 ## Open questions
 
-- The app's shape (a separate app process with IPC, as Electron):
-  [S-4](../open-questions.md#6-bindings-products-toolchains-dependencies).
-- One DOM source for Chromium and browser Wasm, and cycles across heaps:
-  [I-8, I-6](../open-questions.md#5-interop-and-hosts).
-- The lib.dom overlay injected by the target, and Blink's errors as
-  `DOMException`: [G6](../open-questions.md#2-builtins-and-globals).
+- One DOM source for Chromium and browser Wasm:
+  [I-8](../open-questions.md#5-interop-and-hosts).
 
 ## Decisions
 
@@ -142,3 +138,16 @@ part of the gate.
 - An exception escaping a callback on a UI target, Chromium included, is
   reported, and the loop keeps running
   ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- An app is a separate app process with IPC, as in Electron: the renderer
+  program handles the DOM, and the app process holds system access (S-4;
+  10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+  Not built.
+- `target.chromium()` injects the lib.dom overlay, checked against lib.dom,
+  and Blink's errors surface as `DOMException` (G6; 10-28,
+  [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
+  The target injects the overlay files today; Blink's errors are not yet
+  `DOMException`s.
+- Cycles across the three heaps are collected in memory stage 7, by the joint
+  collection designed above (I-6; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).

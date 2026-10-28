@@ -72,8 +72,10 @@ These stops end the process with `abort` (status 134), as do the run-time
 refusals the compiler emits where it cannot carry a construct further
 (`nts: refused at run time: ...`). A failed checked assertion that no handler
 can receive is the exception: it prints `nts: refused: ...` and exits with
-status 1. Making everything JavaScript throws catchable, stack exhaustion
-included, is register [L14](../open-questions.md#1-language-and-compiler).
+status 1. Everything JavaScript throws is decided to be catchable, stack
+exhaustion as a `RangeError` ([Decisions](#decisions)); what checking for
+stack exhaustion costs is register
+[L14](../open-questions.md#1-language-and-compiler).
 
 ## Throws that escape a `try`
 
@@ -94,8 +96,8 @@ A call through a parameter is carried. Where a function's raising copy cannot
 be built at all, a `try` that would need it is refused at compile time
 instead, as ``a function that itself calls something whose `throw` cannot be
 carried``.
-The fix, a raising flag in the calling convention of every indirect call, is
-register [L15](../open-questions.md#1-language-and-compiler).
+The fix is decided: a raising flag in the calling convention of every indirect
+call, as Swift has ([Decisions](#decisions)).
 
 ## Uncaught errors
 
@@ -112,8 +114,8 @@ program wrote before the throw is kept. Node also prints the throwing source
 line and the stack; nts has neither (below). A promise rejection that no
 handler takes by the end of its turn is reported the same way, naming an error
 object's class without its message (`nts: uncaught RangeError`;
-[async.md](async.md#unhandled-rejections)). The report format is
-register [X-2](../open-questions.md#9-debugging-reproducibility-security-versioning).
+[async.md](async.md#unhandled-rejections)). Node's report format is decided,
+its cost measured first ([Decisions](#decisions)).
 
 ## Callbacks a host invokes
 
@@ -140,9 +142,9 @@ Reading `e.stack` is refused, naming the reason:
 ``NTS1001 `stack`, which this compiler's `Error` does not have — a compiled
 binary keeps no record of its frames``. Compiled programs carry no line tables
 yet, so neither a stack trace nor the source line of an uncaught error can be
-printed. Line tables by default, with `stack` symbolized from them on demand,
-is register
-[X-1 and X-2](../open-questions.md#9-debugging-reproducibility-security-versioning).
+printed. Line tables in every build are decided
+([native](../targets/native.md#decisions)), and `stack` is to be symbolized
+from them on demand ([Decisions](#decisions)).
 
 ## Decisions
 
@@ -150,3 +152,18 @@ is register
   uncaught error, handled per target as the table above states, and never
   unwinds through the host's frames (10-27, on the user's delegation,
   [Language and hosts](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- Everything JavaScript throws is catchable: a raising flag in the calling
+  convention of every indirect call, as Swift has, and stack exhaustion as a
+  `RangeError` once the cost of its check is measured (L14, L15; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.
+- `Error.stack` is symbolized from the line tables on demand, and an uncaught
+  error is reported in node's format, with its source line and stack; the
+  cost is measured first (X-2; 10-28,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+  Not built.
+- Every host error (a `GError`, an `NSError` or `NSException`, an `HRESULT`, a
+  C++ or Java exception) becomes a catchable `Error` carrying the host value;
+  how to unwind through C frames is researched first (I-2; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  `GError`, `NSError` and `HRESULT` already reach a `catch`; the others do
+  not.

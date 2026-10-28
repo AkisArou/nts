@@ -16,10 +16,10 @@ library. The platform UI SDKs have pages of their own ([GTK](gtk.md),
 | macOS | x86-64, aarch64 | cross-built from Linux ([Apple](apple.md)) | x86-64 on a VM; arm64 never |
 | Windows | x86-64, aarch64 | cross-built with zig's mingw ([Windows](windows.md)) | x86-64 on a VM; arm64 never |
 
-The compiler itself runs on Linux (register
-[T-3](../open-questions.md#6-bindings-products-toolchains-dependencies)). An
-x86-64 build targets x86-64-v3 (AVX2, BMI2, FMA) and stops by name on an older
-CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
+The compiler itself runs on Linux. macOS on Apple silicon is to be its next
+host, then native Windows, and WSL serves meanwhile ([Decisions](#decisions)).
+An x86-64 build targets x86-64-v3 (AVX2, BMI2, FMA) and stops by name on an
+older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 
 ## Two backends, one runtime
 
@@ -256,8 +256,8 @@ nts bind-c --module c:epoll --header sys/epoll.h \
   own (`--constants-out`). A variadic tail is written as `...rest: unknown[]`,
   which does not compile until the binding types it.
 - It binds the items it is named, and generates signatures only, never
-  ownership (register
-  [B-1](../open-questions.md#6-bindings-products-toolchains-dependencies)).
+  ownership. Binding whole headers, with an overrides file, is decided for
+  after ResourceFlow ([Decisions](#decisions)).
   The flags are in the [CLI reference](../reference/cli.md#nts-bind-c).
 
 ## C calling TypeScript
@@ -302,8 +302,9 @@ int main(void) {
 - **Generators:** `<export>_next` answers true for each yield and false once
   done; a yielded managed value is borrowed until the next step. An async
   generator is not stepped from C.
-- An exported class publishes its layout and none of its methods (register
-  [S-2](../open-questions.md#6-bindings-products-toolchains-dependencies)).
+- An exported class publishes its layout and none of its methods. Objects are
+  decided to cross the C ABI as opaque handles, with generated Swift, Kotlin
+  and Java wrappers later ([Decisions](#decisions)).
 
 ## Ownership of C pointers
 
@@ -321,26 +322,13 @@ int main(void) {
   and cleanup over native operations, so that an obligation such as "destroy
   what `counter_new` returned" or "unsubscribe before freeing the context" is
   discharged at compile time. The ownership vocabulary arrives together with
-  its enforcement, never as an unchecked annotation (register
-  [I-5](../open-questions.md#5-interop-and-hosts)).
+  its enforcement, never as an unchecked annotation; ResourceFlow is decided
+  to be built that way ([Decisions](#decisions)).
 
 ## Open questions
 
-- Callbacks on threads nts does not own, and a thread entering the runtime
-  unchecked:
-  [I-3](../open-questions.md#5-interop-and-hosts),
-  [C-3](../open-questions.md#4-concurrency-and-async).
-- Promises across a boundary, and documenting `nts_checkpoint` for C embedders:
-  [I-4](../open-questions.md#5-interop-and-hosts).
-- Ownership of plain C pointers: [I-5](../open-questions.md#5-interop-and-hosts).
-- What `bind-c` derives, and library surfaces beyond functions:
-  [B-1, S-2](../open-questions.md#6-bindings-products-toolchains-dependencies).
-- A bundled toolchain, LLVM's version, and which hosts run nts:
-  [T-1, T-2, T-3](../open-questions.md#6-bindings-products-toolchains-dependencies).
-- System libraries in the build (libuv, OpenSSL) and a dependency policy:
-  [D-1](../open-questions.md#6-bindings-products-toolchains-dependencies).
-- Debug builds, and the library ABI version:
-  [X-1, X-7](../open-questions.md#9-debugging-reproducibility-security-versioning).
+- A bundled toolchain, and LLVM's version:
+  [T-1, T-2](../open-questions.md#6-bindings-products-toolchains-dependencies).
 
 ## Decisions
 
@@ -365,3 +353,46 @@ int main(void) {
   ([log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
 - nts never depends on a system package
   ([log](../records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)).
+  What a program may link is the dependency policy's, still to be written
+  (D-1, [foundations](../foundations/README.md#decisions)); today's host
+  builds still link the system's libuv and libcrypto (contradictions 3 and 4
+  in [open questions](../open-questions.md#contradictions)).
+
+From the open-questions audit (10-28):
+
+- **The compiler's hosts:** Linux, then macOS on Apple silicon, then native
+  Windows; WSL serves meanwhile (T-3,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- **Debugging:** `#line` and line tables in every build by default, frame
+  pointers on if they measure cheap, and an unoptimized debug profile (X-1,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+  Not built.
+- **The library ABI version** of record
+  [0018](../records/0018-module-evaluation-and-the-library-abi.md) is to be
+  built now, not later (X-7,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
+  Not built yet.
+- **ResourceFlow comes with its enforcement,** and after it `bind-c` binds
+  whole headers, with an overrides file (I-5, B-1,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  Not built.
+- **Objects cross the C ABI as opaque handles;** generated Swift, Kotlin and
+  Java wrappers come later (S-2,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+- **A C embedder settles promises through `nts_checkpoint`,** the documented
+  contract above (I-4,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- **Threads nts does not own** follow one rule: every entry is checked, a
+  callback is carried to the owner thread, and a call that must return a value
+  from another thread is refused ([async](../language/async.md#decisions)).
+
+A new decision of 10-28:
+
+- **nts is a Node-API host:** a native program (C or LLVM) loads a Node-API
+  addon, a `.node` file, as node, Bun and Deno do, so npm packages that ship
+  native addons, such as `sharp`, run; the JVM and browsers load no native
+  code. It is not the [Node addon](node-addon.md) target, in which nts builds
+  an addon that node loads (10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  Not built; what is still to design is register
+  [I-10](../open-questions.md#5-interop-and-hosts).

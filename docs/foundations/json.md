@@ -40,15 +40,21 @@ The global `JSON.parse` is not provided today (NTS1100). The design:
 - **On the JVM,** the same generated parser runs over Java kernels.
 - **On Wasm,** the generated parser reads the text after one copy into a GC
   `i16` array (proposal W8, [JVM and Wasm](jvm-and-wasm.md)).
-- **An untyped `JSON.parse`** (`any`, `unknown`) needs a representation for
-  untyped values that is still to be designed.
+- **An untyped `JSON.parse`** (`any`, `unknown`) is served by the TypeScript
+  parser below until the compiler has an untyped parser of its own, whose
+  representation for untyped values is still to be designed.
 
-`runtime/web-platform` holds a specification-exact JSON parser in TypeScript
-(G9 in [open questions](../open-questions.md)). A program can import it as
-ordinary code, and it is the oracle for the generated parsers.
+`runtime/web-platform` holds a specification-exact JSON parser in TypeScript,
+which moves to `runtime/ecmascript` ([builtins](builtins.md#decisions)). A
+program can import it as ordinary code, and it is the oracle for the
+generated parsers.
 
 ## Decisions
 
 - Parsing typed JSON, the errors, key order, a class as `T`, simdjson linked
   statically, nts's own non-ASCII scan, and no depth limit:
   [log](../records/notebooks/decisions-log.md#numbers-and-json-10-22).
+- The TypeScript JSON parser serves an untyped `JSON.parse` until the compiler
+  has its own untyped parser, and then becomes the test oracle (G9; 10-28,
+  [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
+  Not built: no `JSON.parse` is provided yet.

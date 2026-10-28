@@ -380,3 +380,7 @@ the others report what the frontend captured either way.
 - **A missing builtin is `NTS1100`, "not on this target",** checked per target
   against one full lib ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22),
   decision 11).
+- **A diagnostic registry** lists every code the commands print, with its
+  meaning, whether it is permanent or "not yet", and its message; the missing
+  early errors are completed in phase 3 (L21; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.

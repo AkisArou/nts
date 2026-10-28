@@ -69,7 +69,16 @@ Benchmarks run through every phase.
      (*done*);
    - the compile-time tripwire counts every compiler thread from the start,
      against a threshold set from repeated runs of one binary (*done*); the
-     reference-counting build gets a row of its own next.
+     reference-counting build gets a row of its own next;
+   - the compile-time guard adds backend code generation and link time (P-6);
+   - native instruction counts per benchmark row gate the full run, against
+     the noise band, starting with the counting drivers (P-5);
+   - a nightly full run and a weekly one with result caches off; `--touching`
+     only once a test proves it selects deterministically (Q-3);
+   - a sanitized, reference-counted differential run over the whole corpus in
+     every full run (Q-7);
+   - a per-case ratchet on the conformance records, changed only through
+     reviewed `results:` commits (Q-4).
 5. **The fast landing model** (approved):
    1. a change owes only the checks it can affect, so docs, records and
       comments land in seconds, with no train (*done*: the fast lane);
@@ -121,14 +130,20 @@ Benchmarks run through every phase.
       so a refused program never runs with parts cut (*done*);
     - reads that JavaScript answers with `undefined` give `undefined`:
       holes, uninitialized fields, a `var` read before its assignment, reads
-      past the end (L4, X1).
+      past the end (L4, X1);
+    - native `setTimeout` clamps its delay as node does, with a two-arm
+      fixture that pins HTML's rule too (C-6).
+12. **A diagnostic registry** (L21): every code with its meaning, whether it
+    is permanent or "not yet", and its message.
+13. **The library ABI version** of record 0018, with result caches keyed on
+    the schema, compiler and runtime digests (X-7).
 
 ## Phase 2: foundations, native first
 
 The designs and their build orders are in [`foundations/`](foundations).
 
 1. **Instruments before mechanisms:**
-   - the memory census;
+   - the memory census, whose numbers set the retention bound (M-1);
    - the memory rows: `tree-teardown`, `sort-objects`, `release-acyclic`,
      `immutable-update`, `array-copying-methods`, `cyclic-churn`;
    - the six remaining Are We Fast Yet ports: Richards, DeltaBlue, Havlak, CD,
@@ -138,7 +153,10 @@ The designs and their build orders are in [`foundations/`](foundations).
      (four ports), Richards' module-scope sentinel, and Storage's recursive
      array return;
    - the Unicode rows (`case-convert-latin1`, `-greek`, `-cjk`,
-     `-unchanged`), the new-letter fixtures and the version-pin check (*done*).
+     `-unchanged`), the new-letter fixtures and the version-pin check (*done*);
+   - startup time, executable size and peak RSS rows, against node and Bun
+     (P-2);
+   - a differential program fuzzer (Q-6).
 2. **Memory stages 1 and 2** (cheap counting wins; the one placement analysis,
    facts only), beside **Unicode stage 1** (case mapping). Stage 1 so far:
    release by type, the count-free sort and proved-integer `Math.min` and
@@ -150,7 +168,17 @@ The designs and their build orders are in [`foundations/`](foundations).
    from its stage 1, with WinterTC's Minimum Common Web API as the web floor on
    native and the JVM. JSON moves to `runtime/ecmascript` and `URL` to
    `runtime/web-platform` before stage 5 makes them reachable. The clock and
-   randomness come with stage 6.
+   randomness come with stage 6. Decided for it:
+   - the floor's `WebAssembly` API last, through an embedded engine linked
+     only into programs that reach it;
+   - `node:*` for native programs at stage 9, with a `node:` resolver and the
+     `process` and `Buffer` globals (G10), and beside it nts as a Node-API
+     host that loads `.node` addons such as `sharp` (research first: I-10);
+   - `console` formatting values as node's `util.inspect` does (G18), and
+     randomness and crypto from each target's own sources (G16);
+   - an untyped `JSON.parse` served by the TypeScript parser until the
+     compiler has its own (G9).
+5. **The dependency policy** (D-1), written as a foundations page.
 
 ## Phase 3: conformance-driven development
 
@@ -185,7 +213,7 @@ When it resumes, there are **four suites, on every backend:**
 | the TypeScript conformance suite, with records per backend | built |
 | `emit --backends`, and choosing the cases a change touches (`--touching`) | partly built |
 | a persistent cache of frontend results | none: the frontend captures every request |
-| the program generator | not started |
+| the program generator | not started; built as a phase 2 instrument (Q-6) |
 
 When `--touching` exists, the rule "run the five test262 records before the
 gate" becomes "run the inner loop on every backend before queueing".
@@ -197,6 +225,23 @@ gate" becomes "run the inner loop on every backend before queueing".
 4. early errors;
 5. decorators last.
 
+**Language work decided for this phase:**
+- the `arguments` object, unaliased (L2);
+- proper tail calls: loops, guaranteed tail calls, trampolines on the JVM
+  (L3);
+- member reads on `any` and `unknown` by a run-time key (L7);
+- JSX in the compiler's core, against TypeScript's JSX emit (L10);
+- namespaces holding values, and declaration merging (L11);
+- JavaScript's identity: a class per evaluation, cached method values,
+  `new.target` (L12);
+- `declare` as the environment's, with C only through `c:` imports (L13);
+- every error JavaScript throws catchable, stack exhaustion as a `RangeError`
+  once its cost is measured (L14);
+- generators, the iteration protocol and `using`, in full (L16);
+- top-level `await`, `import.meta`, and JSON and text modules (L17);
+- one async ordering contract, held by shared fixtures on every backend
+  (C-4).
+
 ## Phase 4: the JVM and Wasm
 
 Both rest on [their foundations](foundations/jvm-and-wasm.md), whose open
@@ -207,6 +252,7 @@ proposals wait on research.
   - JSON's Java kernels;
   - a zmij port;
   - nts's Unicode tables (D4);
+  - J2's table protection over `String` keys, with the keyed hash (X-4);
   - the paused `jvm/appended-results` work.
 - **Wasm** is one WasmGC backend, browser-first, built through Binaryen
   ([targets](targets/wasm.md)). Wasm stays a target; its first implementation,
@@ -218,6 +264,9 @@ proposals wait on research.
   - how the standalone profile gets its runtime pieces (number formatting,
     hashing, Unicode tables);
   - Wasm's literal hashes, through the shared hash definition.
+
+  Its products are `target.web()` and `target.wasi()`, with ES-module and
+  component products (S-1).
 
 ## Benchmarks
 
@@ -233,7 +282,8 @@ proposals wait on research.
   - native: C++;
   - JVM: Java;
   - Wasm: C compiled to Wasm, and AssemblyScript;
-  - every backend: node and Bun.
+  - every backend: node and Bun;
+  - each at a pinned version, node, Bun, the JDK and clang included (P-4).
 - **Instruction counts** are the regression signal between runs; wall time is
   for the ratios. Every result is shown with its ratios, the machine's
   conditions and the verdict.
@@ -255,11 +305,42 @@ Noted, not scheduled:
 - one exit-code convention across commands, and the command line parsed once;
 - a per-case ratchet for the TypeScript corpus;
 - one hash definition in core, used by every backend, including Wasm's literal
-  hashes.
+  hashes;
+- test262's `eval` and `Function` cases out of the denominator, citing
+  boundaries (L1);
+- line tables and `#line` in every build, frame pointers if cheap, an
+  unoptimized debug profile, and `Error.stack` with node's uncaught-error
+  report (X-1, X-2);
+- the runtime's check on every entry from a thread it does not own, on every
+  host (C-3, I-3; record 0018);
+- promises across boundaries: a deferred plus a threadsafe function for
+  N-API, and `nts_checkpoint` documented for C embedders (I-4);
+- one nts instance per process, a second refused clearly (I-7);
+- ResourceFlow with its enforcement, then `bind-c` over whole headers (I-5,
+  B-1);
+- host errors as catchable `Error`s carrying the host value, after research
+  on unwinding through C frames (I-2);
+- the per-target intersection type check (B-2), and publishing the
+  permissively licensed surfaces (B-3);
+- objects across the C ABI as opaque handles, then Swift, Kotlin and Java
+  wrappers (S-2);
+- prebuilt binaries per platform for npm (S-3);
+- the Chromium app as a separate process with IPC (S-4), and Blink's errors as
+  `DOMException` (G6);
+- CommonJS dependencies through an interop layer (L18), and JavaScript-only
+  npm packages compiled against their JSDoc and `.d.ts` types, with hand
+  ports of the top packages (D-4);
+- the compiler on macOS (Apple silicon), then on native Windows (T-3), with a
+  Mac mini bought when that work begins (A-1);
+- analysis budgets scaled by program size, each exhaustion reported by name
+  (P-7);
+- node's own tests in the gate once the node lane resumes (Q-5).
 
 ## Decisions
 
 The priorities are the user's ([log](records/notebooks/decisions-log.md#priorities-and-order)).
 The JetStream subset was decided on 10-17, and decorators come last (10-15).
-How the old plan was folded into this one is in
+The work added on 10-28 names each decision's register ID; the decisions are
+in the log, from [Language (10-28)](records/notebooks/decisions-log.md#language-10-28)
+on. How the old plan was folded into this one is in
 [the plan's history](records/notebooks/plan-history.md).

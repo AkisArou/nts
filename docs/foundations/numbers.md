@@ -175,7 +175,7 @@ ECMAScript divides `Math` in two, and so does nts.
 - **`Math.random`, designed, not built:** V8's own generator (xorshift128+),
   seeded once from the OS's random source, so a test can seed it to reproduce
   `node --random-seed=N` exactly. [Builtins](builtins.md#the-clock-and-randomness)
-  has the design; today it is `NTS1100` (G12).
+  has the design; today it is `NTS1100`.
 
 ## How native code is built
 

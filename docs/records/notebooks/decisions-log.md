@@ -298,6 +298,14 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   profile's; an app's own choice is its `nts.config.ts` override.
 - **WinterTC's Minimum Common Web API is the web floor on native and the JVM**
   (register G5, G7): "I agree about WinterTC's Minimum Common Web API!".
+- **The floor includes the `WebAssembly` JavaScript API** (register G5, G7,
+  added later the same day): `compile`, `instantiate`, `validate`, `Module`,
+  `Instance`, `Memory`, `Table`, `Global` and the error types. On native and
+  the JVM, a program that uses it gets an embedded Wasm engine, chosen under the
+  dependency policy (register D-1) and linked only into programs that reach
+  `WebAssembly`, so programs that do not pay nothing. It comes last in the
+  web-floor work. Asked whether to leave it out of the floor, the user
+  answered "Yes we want that!", keeping it in.
 - **One package per spec family:** `es:*` in `runtime/ecmascript`, `web:*` in
   `runtime/web-platform`, `node:*` in `runtime/node`; JSON and `URL` move
   accordingly: "they should move to the appropriate dirs".
@@ -309,6 +317,236 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   by one, and a project with any of them off is refused, naming the flags and
   the tsconfig that sets them. Asked "Require `strict` in a project's
   tsconfig?", the user answered "Yes, strict!".
+
+## Language (10-28)
+
+From the open-questions audit; each is the register's recommendation unless
+the entry says otherwise.
+
+- **The specification decides the language, and node what it leaves to the
+  host** (register L23). test262 settles what a program means; node settles
+  node's APIs, `console`'s format, timer order and the report of an uncaught
+  error. Where node lacks a feature the specification has (proper tail calls,
+  `Temporal`), nts provides it, so code that works on node behaves the same
+  and some programs that fail on node run. Asked which oracle wins when
+  test262 and node disagree, the user answered "I guess we should probably
+  follow the real js specs, right?". _Revises_ the register's recommendation,
+  which was node.
+- **Proper tail calls are implemented** (register L3), as L23 implies: a self
+  tail call becomes a loop; other tail calls are guaranteed tail calls (LLVM's
+  `musttail`, clang's attribute in C), with trampolines where a backend has
+  none (the JVM); stack traces omit tail frames, as Safari's do. _Revises_ the
+  register's recommendation, which followed node and left them out of the
+  denominator.
+- **`eval` and `new Function` of run-time strings are a permanent boundary**
+  (register L1). Source the compiler proves constant may be compiled later, as
+  an optimization; the `eval` tests leave test262's denominator.
+- **The `arguments` object is implemented,** unaliased, as strict mode has it
+  (register L2).
+- **Member reads on `any` and `unknown` by a run-time key** are supported
+  (register L7): a table of member names per type, read through the value's
+  run-time descriptor, while typed code stays direct. This unlocks untyped JSON
+  and npm JavaScript.
+- **Decorators are refused by name** until the TC39 standard semantics are
+  implemented, later (register L10).
+- **JSX is compiled in the compiler's core,** for any JSX library and not only
+  through React's transform, with TypeScript's own JSX emit as the oracle
+  (register L10).
+- **Namespaces holding values, and declaration merging,** are implemented as
+  TypeScript emits them (register L11).
+- **Run-time identity matches JavaScript** (register L12): a class object per
+  evaluation, `o.m === o.m` by caching method values per class, `new.target`,
+  `#x in o`.
+- **`declare` names something the environment provides,** through a builtin
+  provider; C functions are reached only through explicit `c:` imports
+  (register L13).
+- **Everything JavaScript throws is catchable** (registers L14, L15): a raising
+  flag on every indirect call, as Swift has, and stack exhaustion as a
+  `RangeError`, its cost measured first (L14's research stays open).
+- **Generators, the iteration protocol and `using`** get the full protocol,
+  built in phase 3 (register L16).
+- **Top-level `await`, `import.meta`, and JSON and text modules** are
+  implemented (register L17), with `import.meta.url` as `bun build --compile`
+  defines it, which is checked first.
+- **Sources are strict ES modules** (register L18): CommonJS dependencies come
+  in through an interop layer, and nothing is compiled in sloppy mode.
+- **The TypeScript version follows tsrs's releases of stable TypeScript,** each
+  upgrade gated by the four conformance suites (register L19).
+- **A diagnostic registry, now** (register L21): every code with its meaning,
+  whether it is permanent or "not yet", and its message. The missing early
+  errors are completed in phase 3.
+
+## Builtins and globals (10-28)
+
+From the open-questions audit; each is the register's recommendation.
+
+- **nts's own implementation by default** (register G2); the host's only where
+  a decision says so (Intl and RegExp on JS hosts, decision 3 of 10-22), each
+  chosen by its benchmark row and conformance record.
+- **Feature detection folds per target at compile time,** in both forms,
+  `typeof X === "undefined"` and `"X" in globalThis` (register G3);
+  `globalThis` itself stays deferred (L24).
+- **`types: ["node"]` wherever a target's profile provides `node:*`** (register
+  G4): native programs see node's types, timers included, and Chromium and
+  browsers see the DOM's.
+- **Chromium's overlay is injected by `target.chromium()`,** checked against
+  lib.dom, and Blink's errors surface as `DOMException` (register G6).
+- **The TypeScript JSON parser,** moving to `runtime/ecmascript`, serves an
+  untyped `JSON.parse` until the compiler has its own untyped parser, and then
+  becomes the test oracle (register G9).
+- **All 28 `node:*` modules are owed on native,** with a `node:` resolver and
+  the `process` and `Buffer` globals in the native profile (register G10).
+- **A Node addon uses nts's own builtins,** one semantics; revisited if the
+  size cost shows (register G11).
+- **Builtins node lacks, such as `Temporal`, are provided wherever the host
+  lacks them,** node included (register G15). Browser support, for Wasm, is
+  still to be researched.
+- **Randomness and crypto:** the OS's secure random generator on each target;
+  `crypto.subtle` from the vendored OpenSSL on native, the JCA on the JVM, and
+  the host on JS hosts (register G16).
+- **`console` formats values as node's `util.inspect` does,** in shared
+  TypeScript, written to each platform's log (register G18).
+- **`SharedArrayBuffer` and `Atomics` on Android need API 33:** they are
+  refused below it, and the Android floor stays API 29 (register G19).
+
+## Memory, concurrency and interop (10-28)
+
+From the open-questions audit; each is the register's recommendation unless
+the entry says otherwise.
+
+- **The bound on what a region or reuse may keep alive** is set from the memory
+  census's numbers (register M-1).
+- **Where the cycle collector's candidate index goes in the 16-byte header** is
+  decided in memory stage 6, by measurement (register M-2).
+- **A worker is the web `Worker` API first** (register C-1): a thread per
+  worker, an isolated environment, structured clone and transfer, and literal
+  hashes per thread. Node's `worker_threads` maps onto it later.
+- **`SharedArrayBuffer` and `Atomics` rest on C11 atomics,** in memory stage 9
+  (register C-2). `Atomics.wait` works on the main thread on native, as in
+  node, and is refused in browsers and Chromium, as HTML has it. _Revises_ the
+  register's recommendation, which refused it on the main thread, as browsers
+  do.
+- **One rule for threads nts does not own** (registers C-3, I-3): the runtime
+  checks every entry from such a thread; callbacks are carried to the owner
+  thread; a call that must return a value from another thread is refused
+  (record 0018).
+- **One async ordering contract for every backend,** enforced by shared
+  ordering fixtures (register C-4).
+- **Native `setTimeout` clamps its delay as node does,** browsers and Chromium
+  as HTML does, and a two-arm fixture pins both (register C-6).
+- **Every host error becomes a catchable `Error` carrying the host value**
+  (register I-2); unwinding through C frames is researched first.
+- **Promises cross boundaries** (register I-4): through N-API as a deferred
+  plus a threadsafe function, and for C embedders through a documented
+  `nts_checkpoint`.
+- **ResourceFlow is built, with its enforcement** (register I-5), and the pages
+  state that the memory model (M5) covers the language, not binding
+  declarations.
+- **Cycles through host objects are collected in memory stage 7** (register
+  I-6), with Chromium's joint collection, and with an N-API family once record
+  0356's references exist.
+- **One nts instance per process,** for now, a second refused clearly
+  (register I-7); the instance becomes a parameter with workers.
+- **nts is a Node-API host,** a new decision rather than a register question:
+  a program compiled for a native target (C, LLVM) can load a Node-API addon,
+  a `.node` file, the way node, Bun and Deno do, so npm packages that ship
+  native addons, such as `sharp`, run. The JVM and browsers load no native
+  code. It is distinct from the Node addon target, in which nts builds addons
+  that node loads. The user: "We should also implement N-API too (I do not
+  mean generating NAPI like we currently do. I mean like nodejs, bun, hermes
+  do, so we can run packages like sharp etc)!". What is still to design is
+  register I-10.
+
+## Products, toolchains and dependencies (10-28)
+
+From the open-questions audit; each is the register's recommendation unless
+the entry says otherwise.
+
+- **`bind-c` binds whole headers,** with an overrides file, after ResourceFlow
+  (register B-1).
+- **The per-target intersection type check is implemented** (register B-2).
+- **Platform surface packages are generated locally by default;** only the
+  permissively licensed ones are published (GIR, the Win32 metadata), and
+  Apple's stay local (register B-3).
+- **Wasm products:** `target.web()` and `target.wasi()`, with ES-module and
+  component products, after the Binaryen backend (register S-1).
+- **Library surfaces:** objects cross the C ABI as opaque handles now;
+  generated Swift, Kotlin and Java wrappers come later (register S-2).
+- **npm distribution is prebuilt binaries per platform,** as esbuild and swc
+  ship (register S-3).
+- **A Chromium app is a separate app process with IPC,** as in Electron: the
+  renderer program handles the DOM, and the app process holds system access
+  (register S-4).
+- **The compiler runs on Linux, then macOS on Apple silicon, then native
+  Windows;** WSL works meanwhile (register T-3). Asked about the register's
+  recommendation, Windows through WSL, the user answered "Shouldn't we support
+  windows properly though?". _Revises_ that recommendation, and _supersedes_
+  "nts itself never runs on Windows" ([Lanes](#lanes-09-23-09-24)). The
+  bundled toolchain (register T-1) is to be put to the user separately.
+- **A dependency policy, as a foundations page** (register D-1): exact against
+  node, a permissive licence, a measured size, built from vendored source, and
+  linked only when a program uses it. Platform SDKs are not "system packages".
+- **ICU is bundled,** for exactness (D2, D3); revisited for mobile size
+  (register D-3).
+- **npm packages that ship only JavaScript:** their `.js` is compiled against
+  their JSDoc and `.d.ts` types (record 0011) as the main path, plus hand
+  ports of the top packages (register D-4).
+- **No hardware is bought yet** (register A-1, the user's call on spending):
+  Apple, Windows and arm64 builds stay unrun at landing. When the macOS host
+  work begins, an Apple-silicon Mac mini is bought first; a Windows machine and
+  an arm64 device come later.
+
+## Performance and process (10-28)
+
+From the open-questions audit; each is the register's recommendation.
+
+- **Startup time, executable size and peak RSS become rows** now, against node
+  and Bun, as memory stage 0 instruments (register P-2).
+- **The noise rule** (register P-3): rounds of before, after and before again,
+  over at least 5 processes; instruction counts decide regressions; wall time
+  has a floor of max(3%, twice the spread); and where a row's layout range
+  exceeds the effect, the mean over seeded code layouts decides.
+- **Every comparator's version is pinned:** node, Bun, the JDK and clang
+  (register P-4). Every report records the machine's load, and reference
+  numbers are taken whenever the landing lock is free and the load is low.
+- **Native instruction counts per benchmark row gate the full run,** against
+  the noise band, starting with the counting drivers (register P-5).
+- **The compile-time guard adds backend code generation and link time**
+  (register P-6).
+- **Analysis budgets scale with program size,** and every exhaustion is
+  reported by name (register P-7).
+- **A nightly full run, and a weekly one with result caches off** (register
+  Q-3); `--touching` selects tests only after a test proves that it selects
+  deterministically.
+- **A per-case ratchet on conformance records** (register Q-4): each case may
+  only move toward passing, and a record changes only through a reviewed
+  `results:` commit.
+- **The node pin moves with node's LTS releases,** together with the Unicode
+  pin (D2); node's own tests gate once the node lane resumes (register Q-5).
+- **A differential program fuzzer is built now,** as a phase 2 instrument
+  (register Q-6).
+- **Every full run includes a sanitized, reference-counted differential run
+  over the whole corpus** (register Q-7).
+
+## Debugging, security and versioning (10-28)
+
+From the open-questions audit; each is the register's recommendation.
+
+- **Line tables in every build** (register X-1): `#line` and line tables by
+  default, frame pointers on if they measure cheap, and an unoptimized debug
+  profile.
+- **`Error.stack` is symbolized from the line tables on demand,** and an
+  uncaught error is reported in node's format; the cost is measured first
+  (register X-2).
+- **Hashing is keyed and seeded, with a tree fallback,** adopted once its
+  pending A/B shows the cost, and J2 on the JVM (register X-4).
+- **The bounds rule is written into the specification** (register X-5): every
+  index is proved in range or checked, and an out-of-range read gives
+  `undefined` (L4).
+- **The library ABI version is built now** (register X-7), and result caches
+  key on the schema, compiler and runtime digests.
+- **Vendored assertions stay in release builds** (register X-8) unless a
+  benchmark row shows their cost; then it is decided per library.
 
 ## Gate and landing (10-27)
 
@@ -331,7 +569,9 @@ From [`foundations/memory.md`](../../foundations/memory.md):
   hardware and no hosted CI: a local quickemu VM.
 - **Windows (09-24):** Win32 first, then WinRT and COM, then WinUI 3. The
   mingw ABI through zig now, MSVC later. A quickemu Windows 11 VM; nts itself
-  never runs on Windows.
+  never runs on Windows. _Superseded 10-28:_ the compiler is to run on native
+  Windows, after Linux and macOS
+  ([register T-3](#products-toolchains-and-dependencies-10-28)).
 - **React (09-24):** React gets its own runtime with typed internals; upstream
   React is the reference and the oracle only, never shipped.
 

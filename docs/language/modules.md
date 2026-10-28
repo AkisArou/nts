@@ -56,15 +56,17 @@ could find"), a bare specifier naming a package, and import attributes.
 ## Top-level `await` and `import.meta`
 
 Both are refused, on every backend: ``NTS1001 a top-level `await` `` and
-`NTS1001 a meta property`. Implementing them, with `import.meta.url` defined
-as `bun build --compile` defines it, is register
-[L17](../open-questions.md#1-language-and-compiler).
+`NTS1001 a meta property`. Both are decided to be implemented
+([Decisions](#decisions)), with `import.meta.url` defined as
+`bun build --compile` defines it, which is checked first (register
+[L17](../open-questions.md#1-language-and-compiler)).
 
 ## JSON and text modules
 
-Not supported: no lowering handles a module that is a JSON or text file
+Not supported yet: no lowering handles a module that is a JSON or text file
 (`import data from "./data.json" with { type: "json" }`), although the checker
-resolves one under `moduleResolution: "bundler"`. Also register L17.
+resolves one under `moduleResolution: "bundler"`. They are decided with
+top-level `await` ([Decisions](#decisions)).
 
 ## JavaScript files
 
@@ -76,8 +78,8 @@ nothing checked the types they claim.
 
 There is no CommonJS: `require`, `module`, `exports` and `__dirname` are not
 provided, and `export =` with `import = require()` is rejected by the checker.
-Whether CommonJS dependencies come in through an interop layer is register
-[L18](../open-questions.md#1-language-and-compiler), a decision for the user.
+Sources stay strict ES modules, and CommonJS dependencies are decided to come
+in through an interop layer, which is not built ([Decisions](#decisions)).
 
 ## Packages
 
@@ -104,16 +106,17 @@ The sources are vendored under `.nts/vendor`, and the build runs through a
 generated `tsconfig.nts.json` that maps each specifier there. A package that
 ships only JavaScript, typed by JSDoc or not, has nothing to recover, and the
 build lists it under "these have no TypeScript to compile". Most of npm is such
-packages; compiling `.js` against its JSDoc and `.d.ts` types is register
-[D-4](../open-questions.md#6-bindings-products-toolchains-dependencies), a
-decision for the user.
+packages. Compiling their `.js` against their JSDoc and `.d.ts` types, with
+hand ports of the most used packages, is decided and not built
+([Decisions](#decisions)).
 
 ## `node:*`
 
 `runtime/node/` implements node's modules in TypeScript, one directory each,
 built and tested today as Node addons ([conformance/node.md](../conformance/node.md)
 counts them). No resolver yet maps `node:fs` to `runtime/node/fs` in a
-compiled program (register [G10](../open-questions.md#2-builtins-and-globals)).
+compiled program; a `node:` resolver for all 28 modules on native is decided
+([Decisions](#decisions)).
 With `@types/node` in the program, `import { readFileSync } from "node:fs"`
 type-checks against node's declarations and each call is refused as an
 implementation that is not in the program; without them the checker reports
@@ -129,6 +132,11 @@ Apple's frameworks and `winrt:` for the Windows Runtime, the last three
 generated from the platform's own metadata, once per SDK. Each target's page
 says how: [native](../targets/native.md), [GTK](../targets/gtk.md),
 [Apple](../targets/apple.md), [Windows](../targets/windows.md).
+
+A `declare` written in the program's own source is bound as a C function
+today. It is decided to name something the environment provides, resolved
+through a builtin provider, so a C function is reached only through a `c:`
+import ([Decisions](#decisions)).
 
 ## `@nts/*`
 
@@ -148,3 +156,26 @@ says how: [native](../targets/native.md), [GTK](../targets/gtk.md),
   decision 9, same entry).
 - tsrs is the frontend, called in process, with no intermediate steps (10-22
   and 10-23, [Frontend: tsrs](../records/notebooks/decisions-log.md#frontend-tsrs)).
+- Top-level `await`, `import.meta`, and JSON and text modules are implemented,
+  with `import.meta.url` as `bun build --compile` defines it (L17; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.
+- Sources are strict ES modules: CommonJS dependencies come in through an
+  interop layer, and nothing is compiled in sloppy mode (L18; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).
+- An npm package that ships only JavaScript is compiled from its `.js`
+  against its JSDoc and `.d.ts` types
+  ([record 0011](../records/0011-node-js-as-a-source-package.md)) as the main
+  path, with hand ports of the top packages (D-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+  Not built.
+- All 28 `node:*` modules are owed on native, through a `node:` resolver, with
+  `process` and `Buffer` as globals in the native profile (G10; 10-28,
+  [log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)).
+  Not built.
+- `declare` names something the environment provides, through a builtin
+  provider; C functions are reached only through explicit `c:` imports (L13;
+  10-28, [log](../records/notebooks/decisions-log.md#language-10-28)). Not
+  built.
+- Namespaces holding values, and declaration merging, are implemented as
+  TypeScript emits them (L11; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.

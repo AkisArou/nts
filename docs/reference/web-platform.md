@@ -48,13 +48,15 @@ codecs, provider primitives, internal errors) is not a web global.
 `src/json` implements `JSON.parse` (with its reviver and `context.source`),
 `JSON.stringify` (with its replacer and `space`), `JSON.rawJSON` and
 `JSON.isRawJSON` over an erased JSON value graph, and is the oracle for the
-parsers the compiler generates ([JSON](../foundations/json.md)). What it
-becomes once the compiler parses untyped JSON itself is G9 in
-[open questions](../open-questions.md).
+parsers the compiler generates ([JSON](../foundations/json.md)). It is decided
+to move to `runtime/ecmascript`, and to serve an untyped `JSON.parse` until the
+compiler parses untyped JSON itself, then to stay as the test oracle
+([JSON](../foundations/json.md#decisions)).
 
-`URL` is not here: the WHATWG URL implementation is `runtime/node/url`, and the
-web platform reaches a URL parser through its provider (`URLParser`). Moving
-`URL` into shared ownership is the recommendation (G7).
+`URL` is not here yet: the WHATWG URL implementation is `runtime/node/url`, and
+the web platform reaches a URL parser through its provider (`URLParser`).
+Moving `URL` here, one package per spec family, is decided
+([builtins](../foundations/builtins.md#decisions)).
 
 ## The modules
 

@@ -1,7 +1,8 @@
 # Hashing and hash tables
 
-**Status:** designed, not built. The seed is the user's decision; the rest is
-the coordinator's design, to be settled by the rows below.
+**Status:** designed, not built. Keyed, seeded hashing with the table's tree
+fallback is the user's decision, adopted once the A/B (step 4) shows its cost;
+the function is chosen by the rows below.
 
 `Map`, `Set` and objects used as dictionaries hash their keys. Two things
 matter: speed on the short keys real programs use (property names, words,
@@ -103,3 +104,8 @@ against the code.
   that iteration stays correct.
 
 Both are in the [log](../records/notebooks/decisions-log.md#objects-10-22).
+
+- **Keyed, seeded hashing with the tree fallback** is adopted once its pending
+  A/B shows the cost; on the JVM, J2 of
+  [the JVM and Wasm](jvm-and-wasm.md#proposed-decisions) (X-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).

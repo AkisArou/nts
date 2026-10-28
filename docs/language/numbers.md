@@ -61,8 +61,8 @@ matches node bit for bit is decided, not built
 ([foundations/numbers.md](../foundations/numbers.md#math)).
 
 Refused with NTS1100: `Math.clz32`, `asinh`, `acosh`, `atanh`, `f16round`,
-and `Math.random`, which waits for the environment's randomness (register
-[G12](../open-questions.md#2-builtins-and-globals)).
+and `Math.random`, which waits for the environment's randomness, designed in
+[builtins](../foundations/builtins.md#the-clock-and-randomness).
 
 ## BigInt
 

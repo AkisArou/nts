@@ -27,8 +27,9 @@ the evidence behind each decision.
   claims about foreign code. There, nts proves the fact itself, checks it at
   run time, or refuses
   ([types](../language/types.md#when-a-types-claim-is-false-at-run-time),
-  [log](../records/notebooks/decisions-log.md#the-bar)). What a failed check
-  does is register [L6](../open-questions.md#1-language-and-compiler). A layout
+  [log](../records/notebooks/decisions-log.md#the-bar)). A failed check of an
+  erased value throws a catchable `TypeError`
+  ([types](../language/types.md#decisions)). A layout
   taken from a declared class or field type is kept sound by those checks and
   refusals. Any other fact that licenses an unchecked operation (a narrowed
   type, a literal type, a container's contents) needs a proof: operator
@@ -60,7 +61,7 @@ means it is on main.
 | **Control flow** | exceptions, generators, async/await, the event loop | Mostly built ([async](../language/async.md)); the event loop is chosen per platform. | Gaps such as `next()` on an async generator. |
 | **RegExp** | the regular-expression engine | Not provided. | Decided: matchers generated at compile time for literal patterns, plus the TypeScript interpreter in `runtime/ecmascript` for dynamic ones. Needs the Unicode data. |
 | **JSON** | parse and stringify | `JSON.stringify` writes each layout through a writer the compiler generates. `JSON.parse` is not provided (NTS1100). | Designed: a parser generated per static type for `JSON.parse(text) as T`, simdjson's scanner on native, a new representation for untyped values. |
-| **Builtins** ([design](builtins.md)) | which implementation of each global and module a target uses | One name list for every target; NTS1100 stops a build that reaches a missing builtin. | Proposed: features, providers and per-target profiles, resolved at build time; the clock and randomness with deterministic providers for the tests. |
+| **Builtins** ([design](builtins.md)) | which implementation of each global and module a target uses | One name list for every target; NTS1100 stops a build that reaches a missing builtin. | Approved: features, providers and per-target profiles, resolved at build time; the clock and randomness with deterministic providers for the tests. |
 | **Host boundary** | bytes, buffers, files, the network, C interop | C interop and the event loop are built. | Decided, not done: build libuv, zlib, brotli, zstd and OpenSSL from node's own sources instead of system libraries. |
 
 Dates, time zones and Intl are built on these foundations
@@ -107,7 +108,7 @@ to, and what is still open.
 | [Objects, arrays and functions](objects.md) | built: layouts, interfaces by shape, dispatch, arrays, closures, dynamic values |
 | [Memory management](memory.md) | decided; the new analysis not built |
 | [JSON](json.md) | `stringify` built; typed `parse` designed |
-| [Builtins](builtins.md) | proposed, for approval; stages 1 and 2 partly built |
+| [Builtins](builtins.md) | approved; stages 1 and 2 partly built |
 | [Dates, time zones and Intl](time-and-intl.md) | providers and decisions; nothing bound as a builtin yet |
 | [The JVM and Wasm](jvm-and-wasm.md) | proposed, for approval |
 
@@ -128,3 +129,16 @@ On vendored code and libraries
 - OpenSSL 3.5 is vendored, replacing the system's libcrypto.
 - The TypeScript URL and HTTP parsers stay, with ada and llhttp as C++
   references in benchmark rows, and are replaced only where a row loses.
+
+From the open-questions audit (10-28):
+
+- A dependency policy is adopted as a foundations page, which is still to be
+  written (D-1,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
+  Its terms: exact against node, a permissive licence, a measured size, built
+  from vendored source, and linked only when a program uses it; platform SDKs
+  are not "system packages".
+- Vendored assertions stay in release builds, which define no `NDEBUG`, since
+  they guard code nts does not edit; where a benchmark row shows their cost,
+  it is decided per library (X-8,
+  [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).

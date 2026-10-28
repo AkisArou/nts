@@ -427,16 +427,16 @@ node and Bun in the same sitting.
 
 | stage | work | rows it must move |
 |---|---|---|
-| 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`); a macOS cycle test like `gtk-cycles`, recording today's behaviour (it runs when a Mac is available again; there is none now) | none: instruments and fixes |
+| 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`); startup time, executable size and peak RSS rows against node and Bun; a macOS cycle test like `gtk-cycles`, recording today's behaviour (it runs when a Mac is available again; there is none now) | none: instruments and fixes |
 | 1 | release specialized by type; count-free sort; erased-value releases; one count per map key; anchors held only to the last borrow | `sort-objects` below node and Bun (the merge loop's counting is its cost); `release-acyclic` and `cyclic-churn` lose their generic-walker share; `map-entries-top-k` about −5% more; `awfy-towers` below Bun |
 | 2 | the one memory analysis, facts only, as formulated above; its first slice end to end (a parser-shaped workload and a tree or list builder) | none may move; each difference from today's placement explained |
 | 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `release-acyclic` below node and Bun; `json-build-append` must not regress |
 | 4 | borrowed region inputs | `record-word-counts` and `json-stringify-doc` a few percent |
 | 5 | reuse for arrays and objects | `immutable-update`, `array-copying-methods` below node and Bun; stop if they don't move |
 | 6 | page allocator: mimalloc v3 (v2 as control) and rpmalloc against today's, with today's object layout; then the 16-byte header, measured separately; in-place growth for large buffers | `json-build-append` below Bun; memory of every allocating row; reuse distance; executable size; RSS retained by long-running programs |
-| 7 | weak references, on the contract fixed in stage 0; holder families for WinRT delegates and for the Objective-C classes nts defines (blocks: design open) | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry`; `windows-winrt` keeps no delegate without `remove_Closed`; the macOS cycle test collects |
+| 7 | weak references, on the contract fixed in stage 0; holder families for WinRT delegates and for the Objective-C classes nts defines (blocks: design open); Chromium's joint collection; an N-API family once record 0356's live references exist | test262's `WeakRef`, `WeakMap`, `WeakSet`, `FinalizationRegistry`; `windows-winrt` keeps no delegate without `remove_Closed`; the macOS cycle test collects |
 | 8 | proving types acyclic from how they are built, only if a row needs it | cycle-candidate traffic |
-| 9 | workers as isolated heaps | a message row against node's `worker_threads` |
+| 9 | workers as isolated heaps, behind the web `Worker` API; `SharedArrayBuffer` and `Atomics` on C11 atomics | a message row against node's `worker_threads` |
 
 Stages 1 and 2 run side by side; 3 needs 2; 4 needs 3; 5 and 6 are
 independent; 7 needs the stage 0 contract.
@@ -470,6 +470,24 @@ never declared.
 | M4 | **Vendor mimalloc for the native heap if it wins the rows,** otherwise our own page allocator | Tried first in stage 6. Koka, Lean and CPython ship it. |
 | M5 | **No memory annotations in the language:** no user-visible arena, unique or acyclic markers | It extends decision 12. Go's explicit arenas stalled because they "do not compose well". |
 | M6 | **The cycle collector stays trial deletion for now.** Its next step is measurement only (per-phase counters, pause and retained-memory distributions, batch-size and candidate-filter controls); an exact tracing backstop waits until stages 2 and 3 have moved the allocation side | Even removing all collector work would leave the cycle-heavy row well behind node, because allocation and the program's own work remain. An exact tracing backstop needs precise roots for C and LLVM frames and a heap registry, the largest architecture change on offer. |
+
+From the open-questions audit (10-28,
+[log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)):
+
+- **The bound on what a region or reuse may keep alive** (principle 7) is set
+  from the memory census's numbers (M-1).
+- **Where the cycle collector's candidate index goes in the 16-byte header**
+  is decided in stage 6, by measurement (M-2).
+- **M5 covers the language, not binding declarations:** the ownership
+  vocabulary ResourceFlow checks in a C binding
+  ([native](../targets/native.md#ownership-of-c-pointers)) is not a memory
+  annotation in the language (I-5).
+- **Startup time, executable size and peak RSS are rows,** against node and
+  Bun, built as stage 0 instruments (P-2,
+  [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
+- **Analysis budgets scale with program size,** and every exhausted budget is
+  reported by name, as principle 8 fails closed (P-7,
+  [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
 
 ## Evidence
 

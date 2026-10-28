@@ -99,12 +99,13 @@ A profile is code in `@nts/config`, one per target:
 | `gtk`, `macos`, `windows` | as `native` | `host:loop` is GLib, CFRunLoop or the Win32 message loop |
 | `chromium` | `@nts/chromium` (Blink), then as `native` | `node:*` denied (decision 8) |
 | `jvm`, `android` | the compiler, then nts's sources, then the JDK and the Android SDK | `node:*` denied for now (decision 8) |
-| `wasm-js` (browsers, node) | the host's builtins, starting with Intl and RegExp (decision 3), then nts's sources | `node:*` denied for now |
+| `wasm-js` (browsers, node) | the host's Intl and RegExp (decision 3), then nts's sources; another host builtin only where a decision names it (G2) | `node:*` denied for now |
 | `wasm-standalone` | the compiler, then nts's sources | Intl not provided (D6) |
 | `node-addon` | as `native` | `host:loop` is node's |
 
-Where both the host and nts implement a feature, its benchmark row and
-conformance record choose between them (decision 3).
+Where both the host and nts implement a feature, nts's own is the default, and
+the host's is taken only where a decision says so; each such choice is made
+by the feature's benchmark row and conformance record (decision 3, G2).
 
 A product may override a choice in `nts.config.ts`, but only with a provider
 that has a conformance record (decision 6):
@@ -124,8 +125,9 @@ providers: { "es:Intl": { use: "@nts/ecmascript", options: { locales: ["en", "el
 4. **Requirements resolve the same way.** A linked library joins the link only
    when something the program reaches requires it.
 5. **One provider per feature per program.**
-6. **A guard folds:** `typeof X === "undefined"` on a feature the target lacks
-   becomes a constant, and the branch it rules out is pruned (decision 7).
+6. **A guard folds:** `typeof X === "undefined"` and `"X" in globalThis` on a
+   feature the target lacks become constants, and the branch they rule out is
+   pruned (decision 7, G3); `globalThis` itself is deferred (L24).
    `features.rs` already does this for helpers.
 7. **Provider modules join the program** through the frontend's hook for added
    files, and are checked once more. The hook gets a compile-time tripwire.
@@ -147,8 +149,9 @@ NTS1001 stays for real lowering gaps.
 ### Types
 
 Every target uses one full lib, ESNext plus DOM, with `types: ["node"]` where
-the profile provides `node:*`. NTS1100 is the per-target check (decision 11).
-Upstream declarations stay as written.
+the profile provides `node:*`, so native programs see node's types, timers
+included, and Chromium and browsers see the DOM's (G4). NTS1100 is the
+per-target check (decision 11). Upstream declarations stay as written.
 
 ### Size
 
@@ -230,7 +233,7 @@ its result are [in the records](../records/notebooks/studies/v8-math-random.md).
 
 | # | stage | state |
 |---|---|---|
-| 1 | One diagnostic: NTS1100, fatal on every backend. The study's 51 probes become refusal fixtures, each with a control. `hir::Provider` is renamed `hir::Memory`. | NTS1100 and NTS1101 built, and fatal for `nts build`; the rest open |
+| 1 | One diagnostic: NTS1100, fatal on every backend. The study's 51 probes become refusal fixtures, each with a control. `hir::Provider` is renamed `hir::Memory`. | NTS1100 and NTS1101 built, and fatal for `nts build`; the rename built; the probe fixtures open |
 | 2 | Feature identity, and the compiler's table | `SymbolRecord::library` and the helper slice of `features.rs` built; the compiler's provider table, with members, open |
 | 3 | Manifests, profiles and the resolver, encoding exactly what exists today. `host:loop` replaces `loop_host()`. `nts providers` and a census step. | open |
 | 4 | One binding table in lowering. `nts:dom` binds by name, and the overlay goes. | open |
@@ -247,16 +250,13 @@ Stages 1 to 6 need no decision beyond approving this page.
 
 ## Still open
 
-These are in [`../open-questions.md`](../open-questions.md), with
-recommendations:
-- G2: host or own, feature by feature, beyond Intl and RegExp;
-- G3: which forms of feature detection fold;
-- G4: node's types beside the DOM's, such as `setTimeout`'s two signatures;
-- G6: Chromium's overlay under this mechanism;
-- G9: what becomes of the untyped JSON parser (moving to `runtime/ecmascript`);
-- G11: which builtins a Node addon uses;
-- G13 to G19: time zones, Intl's locales, Temporal on Wasm, crypto, the DOM on
-  Wasm, `console`, and shared memory.
+These are in [`../open-questions.md`](../open-questions.md#2-builtins-and-globals),
+with recommendations:
+- G8: platform network stacks beside the shared engine (stage 10);
+- G13: time zones without Intl;
+- G14: Intl's locales, and what each costs;
+- G15: whether browsers provide `Temporal` to Wasm;
+- G17: the DOM in a browser, for Wasm.
 
 ## Decisions
 
@@ -268,10 +268,51 @@ providers, and an app's `nts.config.ts` may override a choice. With it, also
 
 - **The web floor on native and the JVM is WinterTC's Minimum Common Web
   API:** every API in it is provided there (register G5, G7).
+- **The floor includes the `WebAssembly` JavaScript API** (`compile`,
+  `instantiate`, `validate`, `Module`, `Instance`, `Memory`, `Table`, `Global`
+  and the error types). On native and the JVM a program that reaches
+  `WebAssembly` gets an embedded Wasm engine, chosen under the dependency
+  policy (D-1, [foundations](README.md#decisions)) and linked only into that
+  program; a program that does not reach it pays nothing. It comes last in the
+  web-floor work.
 - **One package per spec family:** `es:*` features live in
   `runtime/ecmascript`, `web:*` in `runtime/web-platform` and `node:*` in
   `runtime/node`. So JSON (ECMAScript) moves to `runtime/ecmascript` and `URL`
   (WHATWG) to `runtime/web-platform`.
+
+From the open-questions audit, also 10-28
+([log](../records/notebooks/decisions-log.md#builtins-and-globals-10-28)):
+
+- **nts's own implementation is the default;** the host's only where a
+  decision says so, as decision 3 does for Intl and RegExp on JS hosts, each
+  chosen by its benchmark row and conformance record (G2).
+- **Feature detection folds per target at compile time,** in both forms:
+  `typeof X === "undefined"` and `"X" in globalThis` (G3).
+- **`types: ["node"]` wherever a profile provides `node:*`:** native programs
+  see node's types, timers included; Chromium and browsers see the DOM's (G4).
+- **Randomness and crypto:** the OS's secure random generator on each target,
+  as `host:random`; `crypto.subtle` from the vendored OpenSSL on native, the
+  JCA on the JVM, and the host on JS hosts (G16).
+- **`console` formats values as node's `util.inspect` does,** in shared
+  TypeScript, and writes to each platform's log (G18).
+
+Each target's own choices are on its page: Chromium's overlay (G6) on
+[Chromium](../targets/chromium.md#decisions), a Node addon's builtins (G11) on
+[Node addon](../targets/node-addon.md#decisions), `SharedArrayBuffer` on
+Android (G19) on [the JVM](../targets/jvm.md#decisions); the untyped JSON
+parser (G9) is on [JSON](json.md#decisions), `node:*` (G10) on
+[modules](../language/modules.md#decisions), and `Temporal` (G15) on
+[time and Intl](time-and-intl.md#decisions).
+
+Also 10-28, a new decision
+([log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)):
+
+- **nts is a Node-API host on native targets**
+  ([native](../targets/native.md#decisions)). In the `node:*` surface, a
+  `require` of a `.node` file and `process.dlopen` resolve to that host, so an
+  npm package that ships a native addon, such as `sharp`, runs. Not built;
+  what is still to design is register
+  [I-10](../open-questions.md#5-interop-and-hosts).
 
 From the user ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)):
 

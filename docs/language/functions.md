@@ -23,7 +23,8 @@ can call each other. A named function expression can call itself by its name.
 
 Generic functions are copied for each set of type arguments the program uses
 ([types.md](types.md#a-type-is-a-layout)). The `arguments` object is refused
-(register [L2](../open-questions.md#1-language-and-compiler)). A default that
+today; it is decided to be implemented, unaliased as strict mode has it
+([Decisions](#decisions)). A default that
 captures a parameter of an enclosing function, where the default is filled in
 at the call, is refused by name.
 
@@ -96,8 +97,8 @@ because the body reads `this` at a layout:
 A failed test stops the program by name (`nts_refused`), not with a
 `TypeError`. A `this` that merely has `C`'s shape, such as an object literal
 passed to `f.call`, fails the test, though the checker accepted the call and
-node would run it. Making these catchable is register
-[L14](../open-questions.md#1-language-and-compiler).
+node would run it. These are decided to become catchable, as everything
+JavaScript throws is ([errors.md](errors.md#decisions)).
 
 `.bind` makes a closure of its own holding the function, the receiver and the
 bound arguments. Refused: a `bind` that binds into a rest parameter, a `bind`
@@ -117,8 +118,8 @@ overrides the method, the call's `this` is proved an instance of the declaring
 class; where a subclass overrides it, the call's `this` must be the object the
 method was read from, and any other stops by name, since the closure holds the
 implementation it was read with. Each read makes a new function value, so
-`o.m === o.m` is `false` where JavaScript answers `true` (register
-[L12](../open-questions.md#1-language-and-compiler)).
+`o.m === o.m` is `false` where JavaScript answers `true`; caching method
+values per class is decided ([Decisions](#decisions)).
 
 ## Recursion
 
@@ -126,3 +127,24 @@ Recursion compiles, direct and mutual. There is no call-depth limit of its own:
 unbounded recursion runs into the stack's guard and stops by name, where node
 throws a `RangeError` the program can catch
 ([errors.md](errors.md#which-run-time-errors-a-program-can-catch)).
+
+Proper tail calls, which the specification requires and node lacks, are
+decided and not built: a self tail call becomes a loop; any other tail call is
+a guaranteed tail call (LLVM's `musttail`, clang's `musttail` attribute in C),
+or a trampoline where a backend has none (the JVM). A stack trace omits the
+frames tail calls replaced, as Safari's does.
+
+## Decisions
+
+- **The `arguments` object is implemented,** unaliased, as strict mode has it
+  (L2; 10-28, [log](../records/notebooks/decisions-log.md#language-10-28)).
+  Not built.
+- **Proper tail calls are implemented,** as the specification requires: loops
+  for self tail calls, guaranteed tail calls elsewhere, trampolines where a
+  backend has none, and stack traces without tail frames (L3; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.
+- **Run-time identity matches JavaScript:** a class object per evaluation,
+  `o.m === o.m` by caching method values per class, `new.target`, and
+  `#x in o` (L12; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built,
+  except `#x in o`.

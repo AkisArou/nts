@@ -49,12 +49,11 @@ parser, interpreter or JIT, and nts never adds one because a program reaches
 these. `eval` is refused as NTS1101, "never provided", and the `Function`
 constructor as a builtin nts does not provide (NTS1100).
 
-This is out of scope for now. Whether it is permanent is open question
-[L1](../open-questions.md#1-language-and-compiler). Its recommendation is a
-permanent boundary, except for source the compiler proves constant, which a
-[design note](../records/notebooks/eval.md) shows how to compile ahead of time. Until L1 is
-decided, test262's `eval` and `Function` cases are not excluded: they count in
-the in-scope denominator.
+This is a permanent boundary ([Decisions](#decisions)). Source the compiler
+proves constant may be compiled ahead of time later, as an optimization, as a
+[design note](../records/notebooks/eval.md) shows. test262's `eval` and
+`Function` cases leave the in-scope denominator; `test262-exclusions.json`
+does not exclude them yet.
 
 ## The prototype chain
 
@@ -105,7 +104,8 @@ provided.
 In test262, `noStrict` and `raw` files are scope-excluded: counted, and not
 attempted ([test262](../conformance/test262.md#scope-at-the-pin)). Every
 `caller` case is a `noStrict` file. A JavaScript dependency written for sloppy
-mode, and CommonJS, are open question L18.
+mode is not compiled either, and a CommonJS dependency comes in through an
+interop layer ([modules](modules.md#commonjs)).
 
 ## Annex B
 
@@ -158,12 +158,17 @@ stay excluded too.
 These are refused or wrong today, and each is a gap or an open question, never
 a boundary:
 
-- the `arguments` object (open question L2);
+- the `arguments` object, decided to be implemented
+  ([functions](functions.md#decisions));
 - reads where JavaScript answers `undefined` but the type promises a value:
   holes, out-of-range indexes, uninitialized slots. They abort, read 0 or
-  refuse, depending on the backend (L4);
-- member reads by a key known only while the program runs (L7);
-- decorators (L10) and proper tail calls (L3);
+  refuse, depending on the backend, and are decided to give `undefined`
+  ([types](types.md#when-a-types-claim-is-false-at-run-time));
+- member reads by a key known only while the program runs, decided to go
+  through a table of member names per type ([types](types.md#decisions));
+- decorators, refused by name until the standard semantics are implemented
+  ([language](README.md#decisions)), and proper tail calls, decided to be
+  implemented ([functions](functions.md#recursion));
 - a function's `length`;
 - a function's source text: `toString` gives `function NAME() { [native code] }`
   on every backend, where node gives the source. Decided: the source is kept for
@@ -188,3 +193,11 @@ a boundary:
   ([log](../records/notebooks/decisions-log.md#test262-09-29-10-02)).
 - Intl is in scope, with locale subsets
   ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)).
+- `eval`, and `Function` or `new Function` given source text known only at run
+  time, are a permanent boundary; source the compiler proves constant may be
+  compiled later, as an optimization, and their test262 cases leave the
+  denominator (L1; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).
+- Nothing is compiled in sloppy mode; a CommonJS dependency comes in through
+  an interop layer (L18; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).

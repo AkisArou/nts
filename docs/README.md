@@ -12,7 +12,9 @@ result runs, and how it is held to each standard.
   their time or better, for now; each row's bar is set again when that row is
   worked on. nts also comes as close as it can to each target's own language:
   C++ for native code, Java for the JVM, C++ compiled to Wasm for Wasm.
-- **Correct first.** Node is the oracle, down to the last digit of a formatted
+- **Correct first.** The ECMAScript specification decides what a program
+  means, and node what the specification leaves to the host; node is the
+  oracle every program is compared with, down to the last digit of a formatted
   number. A construct nts cannot compile is refused by name at build time;
   nothing is compiled wrong on purpose.
 - **Clean architecture.** A problem is fixed at its cause; no workaround stands

@@ -31,15 +31,16 @@ and builtins. Each environment has a page of its own, listed at the end.
   the TypeScript interpreter in `runtime/ecmascript`, and the host's on JS
   hosts and in Chromium.
 - **Holes in arrays of numbers** read as 0 on C, a recorded wrong answer.
-  The proposed fix is X1; the rule is register
-  [L4](../open-questions.md#1-language-and-compiler).
+  The rule is decided: such a read gives `undefined`
+  ([types](../language/types.md#when-a-types-claim-is-false-at-run-time));
+  the proposed representation is X1.
 - **Map hashing** is unseeded everywhere; [hashing](../foundations/hashing.md)
   has the design.
 - **Builtins are a fixed list in the compiler,** and anything else is refused.
   The mechanism that declares a provider per target has its product decisions
   ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22))
-  and a proposed design ([builtins](../foundations/builtins.md)); most of it is
-  unbuilt.
+  and an approved design ([builtins](../foundations/builtins.md)); most of it
+  is unbuilt.
 - **`Intl` is reachable nowhere.** It is not a provided global, so every
   backend refuses it, although TypeScript implementations over ICU4C and ICU4J
   exist in `runtime/ecmascript`.
@@ -76,7 +77,7 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
 | SharedArrayBuffer, Atomics | R (with workers) | R | R | R | R | ◐ |
 | errors | C (`stack` R) | = | = | J | W | ◐ |
 | Proxy, Reflect, `globalThis`, `Object.freeze` and its family | R · ◐ in scope, deferred | R · ◐ | R · ◐ | R · ◐ | R · ◐ | R · ◐ |
-| `eval`, `Function` | R · out of scope for now (L1) | R | R | R | R | R |
+| `eval`, `Function` | R · a permanent boundary (L1) | R | R | R | R | R |
 
 ### Web platform
 
@@ -140,3 +141,7 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
 - Apple and Windows programs may stay unrun at a landing whose only refusals
   are their platform skips
   ([log](../records/notebooks/decisions-log.md#team-and-process)).
+- No hardware is bought yet, so Apple, Windows and arm64 builds stay unrun at
+  landing. When the macOS host work begins, an Apple-silicon Mac mini is
+  bought first; a Windows machine and an arm64 device come later (A-1; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).

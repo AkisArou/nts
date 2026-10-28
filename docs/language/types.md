@@ -70,8 +70,8 @@ as permission: every operation on an `any` value needs a representation the
 compiler can prove from a literal, a call, a narrowing or an assertion.
 Otherwise the construct is refused by name, as in
 ``NTS1001 `k` on `any`, which is erased here``. A member read on an erased
-value by a key known only at run time is refused (register
-[L7](../open-questions.md#1-language-and-compiler)).
+value by a key known only at run time is refused today; it is decided to read
+through a table of member names per type ([Decisions](#decisions)).
 
 The compiler removes erasure a program does not need. A value erased and then
 recovered in one function keeps its concrete form, and an erased array whose
@@ -103,8 +103,9 @@ function, or in the copy nts compiles of a function called inside a `try`
 ([errors.md](errors.md#how-a-throw-travels)). Anywhere else the program stops
 by name, printing `nts: refused: The asserted native class does not match the
 value` and exiting with status 1. Either way the program never reads a payload as something it is
-not. Whether `as` should have a run-time effect at all is register
-[L6](../open-questions.md#1-language-and-compiler).
+not. A failed test is decided to be a catchable `TypeError` everywhere
+([Decisions](#decisions)); the stop by name remains until every throw can
+reach its handler.
 
 ## Interfaces are satisfied by shape
 
@@ -149,24 +150,25 @@ compiler also records `verbatimModuleSyntax`, `preserveConstEnums` and
 TypeScript's types are unsound in known places, and a layout built from a false
 claim reads the wrong bytes. Today's behaviour, case by case:
 
-| The case | node | nts today | Register |
+| The case | node | nts today | Question |
 |---|---|---|---|
-| an index past the end of an array the type says is full | `undefined` | stops by name: `nts: refused: index 5 is outside [0, 3)` | [L4](../open-questions.md#1-language-and-compiler) |
+| an index past the end of an array the type says is full | `undefined` | stops by name: `nts: refused: index 5 is outside [0, 3)` | L4, [decided](#decisions) |
 | a hole in a `number[]` or `boolean[]` (`new Array(n)`, a slot never written) | `undefined` | reads as `0` or `false` on C (`tests/outcomes/a-hole-in-an-array-of-numbers-reads-as-zero`) | L4 |
 | a field declared `x!: T` and never written | `undefined` | reads as a zero value (`tests/outcomes/a-required-field-with-no-initializer-starts-as-undefined`) | L4 |
 | a `var` read before its assignment | `undefined` | at module scope a wrong answer (`tests/outcomes/a-var-read-before-its-declaration`); through a closure, a stop by name | L4 |
 | a `Sub[]` widened to `Base[]`, then given a `Base` | the `Base` behaves as a `Base` | widening between different element layouts is refused (NTS1001) on every backend; between equal layouts, C and LLVM call the `Base` as a `Sub` (`tests/outcomes/a-base-pushed-through-a-covariant-array-dispatches-as-the-subclass`), and the JVM declines (NTS4001) | [L5](../open-questions.md#1-language-and-compiler) |
-| an erased value asserted to the wrong type | reads on | `TypeError` or a stop by name (casts, above) | [L6](../open-questions.md#1-language-and-compiler) |
-| a `this` that is not the declared `this:` type | reads on | stops by name ([functions.md](functions.md#this)) | [L14](../open-questions.md#1-language-and-compiler) |
+| an erased value asserted to the wrong type | reads on | `TypeError` or a stop by name (casts, above) | L6, [decided](#decisions) |
+| a `this` that is not the declared `this:` type | reads on | stops by name ([functions.md](functions.md#this)) | L14, [decided](errors.md#decisions) |
 
 **The policy:** every case in this table behaves as node does, with one
 exception. An erased value asserted to a type it does not have throws a
 catchable `TypeError`, as the cast table above describes; the stop by name
-remains only until a throw through any call can reach its handler (register
-[L15](../open-questions.md#1-language-and-compiler)). Reads that JavaScript
-answers with `undefined` give `undefined`, by the representation of register
-L4. Until each case meets the policy, a wrong answer that runs is recorded
-under `tests/outcomes/`.
+remains only until a throw through any call can reach its handler (L15,
+[errors.md](errors.md#decisions)). Reads that JavaScript answers with
+`undefined` give `undefined`, by a representation that marks the slots not
+proved written (X1 in [the JVM and Wasm](../foundations/jvm-and-wasm.md#proposed-decisions)).
+Until each case meets the policy, a wrong answer that runs is recorded under
+`tests/outcomes/`.
 
 ## Decisions
 
@@ -179,6 +181,11 @@ under `tests/outcomes/`.
   one exception:** an erased value (from `any`, `unknown`, JSON or foreign
   code) asserted to a type it does not have throws a catchable `TypeError`
   (10-27, [log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- **A member read on `any` or `unknown` by a key known only at run time** goes
+  through a table of member names per type, found through the value's
+  run-time descriptor, while typed code stays direct; it is what untyped JSON
+  and npm JavaScript need (L7; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)). Not built.
 - `JSON.parse(text) as T` that does not match `T` is a `TypeError` naming the
   JSON path; invalid JSON is a `SyntaxError` first; a class as `T` is refused
   for now, plain object types only (10-22,

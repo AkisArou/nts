@@ -18,9 +18,9 @@ Promise ordering is specified and observable, so it is never handed to a
 platform primitive with an ordering of its own. The one exception is a
 Chromium renderer, where nts uses Blink's microtask queue rather than run a
 second one beside it. The three runtime implementations keep one contract by
-cross-reference, checked by ordering fixtures compared with node; whether that
-should become one shared contract test on every backend is register
-[C-4](../open-questions.md#4-concurrency-and-async).
+cross-reference, checked by ordering fixtures compared with node; one contract
+for every backend, enforced by shared ordering fixtures, is decided
+([Decisions](#decisions)).
 
 ## Promises
 
@@ -85,8 +85,8 @@ An `async function*` walked by `for await...of` compiles. Refused:
 
 A `break` out of a `for await` does not close the generator
 (`tests/outcomes/an-early-async-generator-exit-leaves-the-frame-open`). The
-whole iteration protocol is register
-[L16](../open-questions.md#1-language-and-compiler).
+whole iteration protocol, with `using`, is decided as phase 3 work
+([Decisions](#decisions)).
 
 ## The checkpoint
 
@@ -140,7 +140,7 @@ I/O, so promise ordering is reproducible.
 On the JVM, the default environment (the one a runnable jar uses) advances a
 virtual clock: a timer fires when nothing else is runnable, in deadline order,
 without waiting out its delay as node would. A promise does not cross a Node addon's boundary
-(register [I-4](../open-questions.md#5-interop-and-hosts)), and on Wasm, by
+yet ([node addons](../targets/node-addon.md#decisions)), and on Wasm, by
 design, a promise an export returns becomes a JavaScript promise, whose
 reactions run on the host's queue (register
 [C-5](../open-questions.md#4-concurrency-and-async)).
@@ -154,8 +154,8 @@ C, LLVM and the JVM, and designed for Wasm.
   milliseconds, with `NaN` or a negative read as 0 and a cap at 2^53, by one
   rule in the runtime (`nts_delay`) rather than in each host. There is no
   floor of 1 ms, so `setTimeout(a, 1); setTimeout(b, 0)` runs `b` first, where
-  node runs `a` first (register
-  [C-6](../open-questions.md#4-concurrency-and-async)). Wasm, by design, hands the delay
+  node runs `a` first; node's rule is decided for native
+  ([Decisions](#decisions)). Wasm, by design, hands the delay
   to the JavaScript host, and Chromium applies HTML's rule.
 - **Equal deadlines** fire in the order the timers were created.
 - **Refused:** a timer that forwards arguments to its callback
@@ -181,9 +181,11 @@ from any other thread reaches the heap only by posting through the host
 (`post_from_any_thread`). Under libuv the owner is the thread that installed
 the host, and a callback entering compiled code from another thread stops the
 program by name. With no host installed, as in a Node addon or a library, the
-owner test answers true and a foreign thread is not detected (register
-[C-3](../open-questions.md#4-concurrency-and-async)). There are no workers yet
-(register [C-1](../open-questions.md#4-concurrency-and-async)).
+owner test answers true and a foreign thread is not detected; the runtime is
+decided to check every entry from a thread it does not own
+([Decisions](#decisions)). There are no workers yet, and no
+`SharedArrayBuffer` or `Atomics`; what they are to be is decided
+([Decisions](#decisions)).
 
 ## Decisions
 
@@ -198,3 +200,29 @@ owner test answers true and a foreign thread is not detected (register
   seeded randomness under the differential tests (10-22, decision 2,
   [Builtins and runtimes](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)).
   The JVM's virtual clock in a runnable jar is not that.
+- **A worker is the web `Worker` API first:** a thread per worker, an
+  isolated environment, structured clone and transfer, and literal hashes per
+  thread; node's `worker_threads` maps onto it later (C-1; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- **`SharedArrayBuffer` and `Atomics` rest on C11 atomics,** in memory stage 9.
+  `Atomics.wait` works on the main thread on native, as in node, and is
+  refused in browsers and Chromium, as HTML has it (C-2; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  On Android they need API 33 ([JVM](../targets/jvm.md#decisions)).
+- **One rule for threads nts does not own:** the runtime checks every entry
+  from such a thread; a callback is carried to the owner thread; a call that
+  must return a value from another thread is refused (C-3, I-3, record
+  [0018](../records/0018-module-evaluation-and-the-library-abi.md); 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  Partly built: under libuv a foreign entry stops by name; with no host
+  installed, nothing is checked.
+- **One async ordering contract for every backend,** enforced by shared
+  ordering fixtures (C-4; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- **Native `setTimeout` clamps its delay as node does,** and browsers and
+  Chromium as HTML does; a two-arm fixture pins both (C-6; 10-28,
+  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+  Not built.
+- **Generators, the iteration protocol and `using`** get the full protocol,
+  built in phase 3 (L16; 10-28,
+  [log](../records/notebooks/decisions-log.md#language-10-28)).

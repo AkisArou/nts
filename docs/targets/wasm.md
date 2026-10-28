@@ -32,8 +32,9 @@ the design the Binaryen backend is built to.
 
 ## A module and its glue
 
-There is no Wasm target or product in `nts.config.ts` (register
-[S-1](../open-questions.md#6-bindings-products-toolchains-dependencies)). A
+There is no Wasm target or product in `nts.config.ts` yet: `target.web()` and
+`target.wasi()`, with ES-module and component products, come after the
+Binaryen backend ([Decisions](#decisions)). A
 module is written with its glue, as the first implementation wrote it:
 
 | file | what it is |
@@ -161,8 +162,8 @@ relied on.
 
 - Proposals W1, W2 and W5 to W8, and X1 for holes in arrays of numbers (which
   Wasm refuses): [JVM and Wasm](../foundations/jvm-and-wasm.md#proposed-decisions).
-- Wasm as a product, and Binaryen inside the compiler:
-  [S-1, D-2](../open-questions.md#6-bindings-products-toolchains-dependencies).
+- Binaryen inside the compiler:
+  [D-2](../open-questions.md#6-bindings-products-toolchains-dependencies).
 - Engines and the WASI version, and one DOM source with Chromium:
   [I-9, I-8](../open-questions.md#5-interop-and-hosts).
 - Two microtask queues on a JS host:
@@ -191,3 +192,6 @@ relied on.
   ([log](../records/notebooks/decisions-log.md#wasm-10-24-10-25)).
 - Native comes first; Wasm is designed after it
   ([log](../records/notebooks/decisions-log.md#priorities-and-order)).
+- **Wasm products:** `target.web()` and `target.wasi()`, with ES-module and
+  component products, after the Binaryen backend (S-1; 10-28,
+  [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
