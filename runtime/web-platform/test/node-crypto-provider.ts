@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import {
+  argon2Sync,
   constants,
   createCipheriv,
   createDecipheriv,
@@ -773,6 +774,24 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   derive(parameters: CryptoDerivationParameters, key: CryptoKeyHandle): Uint8Array | CryptoFailure {
     try {
+      if (parameters.name === "Argon2d" || parameters.name === "Argon2i" || parameters.name === "Argon2id") {
+        const secretKey = keyObjects.get(key);
+        if (secretKey === undefined || secretKey.type !== "secret") return { failure: "invalid-key" };
+        const algorithm = parameters.name === "Argon2d" ? "argon2d" : parameters.name === "Argon2i" ? "argon2i" : "argon2id";
+        // Node 24.20's native Argon2 operation is RFC 9106 version 0x13.
+        // It accepts password octets, not a KeyObject, and validates nonce and
+        // native memory bounds. No cryptographic work is reimplemented here.
+        return owned(argon2Sync(algorithm, {
+          message: secretKey.export(),
+          nonce: parameters.nonce,
+          parallelism: parameters.parallelism,
+          memory: parameters.memory,
+          passes: parameters.passes,
+          tagLength: parameters.byteLength,
+          secret: parameters.secretValue,
+          associatedData: parameters.associatedData,
+        }));
+      }
       if (parameters.name === "HKDF" || parameters.name === "PBKDF2") {
         const secretKey = keyObjects.get(key);
         if (secretKey === undefined || secretKey.type !== "secret") return { failure: "invalid-key" };

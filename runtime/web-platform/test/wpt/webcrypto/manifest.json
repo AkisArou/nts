@@ -29,10 +29,8 @@
         "WebCryptoAPI/derive_bits_keys/argon2.js"
       ],
       "harnessScripts": [],
-      "expectedTests": 1,
-      "blockedTestFiles": [
-        "exclusions/derive_bits_keys/argon2.tentative.https.any.js.part-001.json"
-      ]
+      "expectedTests": 4,
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
@@ -833,9 +831,7 @@
       ],
       "harnessScripts": [],
       "expectedTests": 45,
-      "blockedTestFiles": [
-        "exclusions/import_export/Argon2_importKey.tentative.https.any.js.part-001.json"
-      ]
+      "blockedTestFiles": []
     },
     {
       "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",

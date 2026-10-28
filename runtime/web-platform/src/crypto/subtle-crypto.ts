@@ -88,7 +88,7 @@ function isOkpAlgorithm(name: string): boolean {
 }
 
 function isKdfAlgorithm(name: string): boolean {
-  return name === "HKDF" || name === "PBKDF2";
+  return name === "HKDF" || name === "PBKDF2" || name === "Argon2d" || name === "Argon2i" || name === "Argon2id";
 }
 
 function encryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
