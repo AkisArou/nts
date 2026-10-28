@@ -7,6 +7,7 @@ import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import { Headers } from "../src/fetch/headers.ts";
 import type { HeadersInit } from "../src/fetch/headers.ts";
 import { Request } from "../src/fetch/request.ts";
+import { ReadableStream } from "../src/streams/readable.ts";
 
 function useRuntime(t: TestContext): void {
   const runtime = createHostNodeWebPlatform();
@@ -231,6 +232,88 @@ for (const operation of ["append", "set"] as const) {
     assert.equal(headers.get("undefined"), "undefined");
   });
 }
+
+// https://fetch.spec.whatwg.org/#dom-request
+// The selected body with a null source requires same-origin or cors before an
+// inherited stream is proxied, so constructor rejection leaves it untouched.
+test("Request rejects a new no-cors stream body without consuming or cancelling it", async (t) => {
+  useRuntime(t);
+  const callbacks: string[] = [];
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new Uint8Array([65])); controller.close(); },
+    cancel() { callbacks.push("cancel"); },
+  });
+  assert.throws(() => new Request("https://example.test/", {
+    method: "POST", mode: "no-cors", body, duplex: "half",
+  }), TypeError);
+  assert.equal(body.locked, false);
+  assert.deepEqual(callbacks, []);
+  const request = new Request("https://example.test/", {
+    method: "POST", mode: "cors", body, duplex: "half",
+  });
+  assert.deepEqual(await request.bytes(), new Uint8Array([65]));
+  assert.deepEqual(callbacks, []);
+});
+
+test("Request rejects an inherited no-cors stream body before transferring the original", async (t) => {
+  useRuntime(t);
+  const callbacks: string[] = [];
+  const original = new Request("https://example.test/", {
+    method: "POST", duplex: "half",
+    body: new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array([65])); controller.close(); },
+      cancel() { callbacks.push("cancel"); },
+    }),
+  });
+  const originalBody = original.body;
+  assert.ok(originalBody !== null);
+  assert.throws(() => new Request(original, { mode: "no-cors" }), TypeError);
+  assert.equal(original.body, originalBody);
+  assert.equal(original.bodyUsed, false);
+  assert.equal(originalBody.locked, false);
+  assert.deepEqual(callbacks, []);
+  assert.deepEqual(await original.bytes(), new Uint8Array([65]));
+  assert.deepEqual(callbacks, []);
+});
+
+for (const mode of ["same-origin", "cors"] as const) {
+  test(`Request accepts a ${mode} stream body and preserves its bytes`, async (t) => {
+    useRuntime(t);
+    const request = new Request("https://example.test/", {
+      method: "POST", mode, duplex: "half",
+      body: new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new Uint8Array([65])); controller.close(); },
+      }),
+    });
+    assert.equal(request.mode, mode);
+    assert.deepEqual(await request.bytes(), new Uint8Array([65]));
+  });
+}
+
+test("Request permits an inherited replayable body in no-cors mode", async (t) => {
+  useRuntime(t);
+  const original = new Request("https://example.test/", { method: "POST", body: "original" });
+  const request = new Request(original, { mode: "no-cors", body: null });
+  assert.equal(original.bodyUsed, true);
+  assert.equal(request.mode, "no-cors");
+  assert.equal(await request.text(), "original");
+  await assert.rejects(original.text(), TypeError);
+});
+
+test("Request checks the replacement body rather than an unused inherited stream", async (t) => {
+  useRuntime(t);
+  const original = new Request("https://example.test/", {
+    method: "POST", duplex: "half",
+    body: new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array([65])); controller.close(); },
+    }),
+  });
+  const request = new Request(original, { mode: "no-cors", body: "replacement" });
+  assert.equal(original.bodyUsed, false);
+  assert.equal(original.body?.locked, false);
+  assert.equal(await request.text(), "replacement");
+  assert.deepEqual(await original.bytes(), new Uint8Array([65]));
+});
 
 for (const operation of ["get", "has", "delete"] as const) {
   test(`Headers.${operation} distinguishes a missing name from explicit undefined`, () => {
