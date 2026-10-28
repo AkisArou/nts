@@ -100,6 +100,44 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN HASH MAP: add with the hash-map case.
+{
+  const name = "jetstream-hash-map";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { HashMap, render, seed, work } = await import("./cases/jetstream-hash-map/case.ts");
+    // Proposed additions to the coordinator-owned JetStream test file.
+    
+    test('hash-map retains all original full-input sums', () => {
+      assert.deepEqual(render(1), { lookupSum: 18900000, keySum: 4049955000, valueSum: 3780000 });
+    });
+    
+    test('hash-map repeats complete iterations with independent checksums', () => {
+      assert.equal(seed, 1);
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 1981364232);
+      assert.equal(work(2), 3067650816);
+      assert.equal(work(1), 1981364232);
+    });
+    
+    test('hash-map preserves sparse initialization and original dormant failures', () => {
+      const map = new HashMap(31, 0.5);
+      assert.equal(map._capacity, 32);
+      assert.equal(map._elementData.length, 1);
+      assert.equal(map._threshold, 0);
+      map.put('Aa', 1);
+      map.put('BB', 2);
+      assert.equal(map.get('Aa'), 1);
+      assert.equal(map.get('BB'), 2);
+      assert.throws(() => map.keySet().iterator().next(), { name: 'TypeError', message: 'this.makeNext is not a function' });
+      assert.throws(() => map.values().iterator().next(), { name: 'TypeError', message: 'this.makeNext is not a function' });
+      assert.throws(() => map.keySet().contains('Aa'), { name: 'TypeError', message: 'this._associatedMap.contains is not a function' });
+      assert.throws(() => map.clone(), { name: 'ReferenceError', message: 'put is not defined' });
+    });
+  }
+}
+// END HASH MAP.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
