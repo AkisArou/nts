@@ -4,6 +4,9 @@ import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ReadableStream } from "../src/streams/readable.ts";
+import { CountQueuingStrategy } from "../src/streams/count-queuing-strategy.ts";
+import { ByteLengthQueuingStrategy } from "../src/streams/byte-length-queuing-strategy.ts";
+import type { QueuingStrategyInit } from "../src/streams/queuing-strategy.ts";
 import type {
   ReadableByteStreamController,
   ReadableStreamBYOBView,
@@ -149,3 +152,65 @@ test("byte cancellation closes pending reads before a callback error rejects can
   assert.deepEqual(events, ["cancel callback", "closed fulfilled", "read fulfilled", "cancel rejected"]);
   assert.equal(controller.desiredSize, 0);
 });
+
+// https://webidl.spec.whatwg.org/#es-dictionary
+// A required dictionary member with value undefined is missing, even if present.
+for (const Strategy of [CountQueuingStrategy, ByteLengthQueuingStrategy]) {
+  test(`${Strategy.name} rejects an undefined required highWaterMark after one getter read`, () => {
+    let reads = 0;
+    const init = {
+      get highWaterMark(): number | undefined {
+        reads++;
+        return undefined;
+      },
+    };
+    assert.throws(() => new Strategy(init as QueuingStrategyInit), TypeError);
+    assert.equal(reads, 1);
+    assert.throws(() => new Strategy({} as QueuingStrategyInit), TypeError);
+  });
+
+  test(`${Strategy.name} gets and converts highWaterMark once before starting a stream`, async () => {
+    const order: string[] = [];
+    const number = {
+      valueOf(): number {
+        order.push("convert");
+        return 2;
+      },
+    };
+    const init = {
+      get highWaterMark(): number {
+        order.push("get");
+        return number as unknown as number;
+      },
+    };
+    let desiredSize: number | null | undefined;
+    const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
+      start(controller) {
+        order.push("start");
+        controller.enqueue(new Uint8Array([7]));
+        desiredSize = controller.desiredSize;
+        controller.close();
+      },
+    }, new Strategy(init));
+    assert.deepEqual(order, ["get", "convert", "start"]);
+    assert.equal(desiredSize, 1);
+    const result = await stream.getReader().read();
+    assert.equal(result.done, false);
+    assert.deepEqual(result.value, new Uint8Array([7]));
+  });
+
+  test(`${Strategy.name} propagates a dictionary getter error before a stream starts`, () => {
+    const order: string[] = [];
+    const error = new Error("highWaterMark getter failed");
+    const init = {
+      get highWaterMark(): number {
+        order.push("get");
+        throw error;
+      },
+    };
+    assert.throws(() => new ReadableStream<Uint8Array<ArrayBuffer>>({
+      start() { order.push("start"); },
+    }, new Strategy(init)), (thrown: unknown) => thrown === error);
+    assert.deepEqual(order, ["get"]);
+  });
+}
