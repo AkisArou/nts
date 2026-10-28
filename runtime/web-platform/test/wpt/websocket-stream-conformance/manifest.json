@@ -831,8 +831,8 @@
     }
   ],
   "baselinePolicy": {
-    "namedBlocksApplied": false,
-    "note": "All 107 selected registrations are initially enabled, including upstream timing and operating-system buffer assumptions. Any later named block requires the observed baseline and an explicit reason; it must not count as a pass."
+    "namedBlocksApplied": true,
+    "note": "The complete comparable before/after baseline uses the same ten named timing/buffer blocks and retains 97 runnable registrations. The earlier unrestricted 107-registration exploratory attempt is recorded separately as incomplete in validation.json; a block never counts as a pass."
   },
   "registrationCountSource": "Counted from the original registrations, including literal loop expansion in close.any.js and websocket-error.any.js. The shared runner requires each observed registration count to match.",
   "summary": {
@@ -840,8 +840,8 @@
     "fixtureFiles": 9,
     "fixtureVariants": 13,
     "expectedRegisteredTests": 107,
-    "expectedRunnableTests": 107,
-    "explicitlyBlockedTests": 0,
+    "expectedRunnableTests": 97,
+    "explicitlyBlockedTests": 10,
     "excludedPaths": 0,
     "excludedHttp2Variants": 8,
     "excludedHttp2VariantsForSelectedFixtures": 8,
