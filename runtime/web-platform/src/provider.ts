@@ -5,6 +5,12 @@
  * entry point instead of depending on the shared runtime's internal layout.
  */
 export { createPerformance } from "./performance/performance.ts";
+export { WebPlatformGlobalBindings } from "./provider/web-platform-runtime.ts";
+export type {
+  WebPlatformGlobalCapabilities,
+  WebPlatformGlobalHooks,
+  WebPlatformGlobalBootstrap,
+} from "./provider/web-platform-runtime.ts";
 export { GlobalErrorRuntime } from "./core/global-errors.ts";
 export type {
   GlobalErrorCapabilities,
