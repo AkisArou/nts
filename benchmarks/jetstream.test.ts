@@ -100,6 +100,28 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN SYNC FS: add with the in-memory filesystem case.
+{
+  const name = "jetstream-sync-fs";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+    test(`${name}: all names, topology and surviving file bytes match upstream`, () => {
+      const result = module.render(1);
+      assert.ok(isRecord(result));
+      assert.equal(result.totalFileCount, 1108);
+      assert.equal(result.totalDirCount, 5000);
+      assert.equal(result.lastFileHash, 436945457);
+      assert.equal(sha256(JSON.stringify(result)), "fca540e3753aea7836cbe9431c908f33cfd8e05f190bc4ecac71334bebebdb46");
+      assert.equal(module.work(1), 438165245);
+      assert.equal(module.work(2), 439385033);
+      assert.throws(() => module.work(0), /Invalid file hash: undefined/);
+    });
+  }
+}
+// END SYNC FS.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
