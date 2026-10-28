@@ -61,6 +61,7 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/file-forms-wpt-policy.test.ts \
   runtime/web-platform/test/file-reader-wpt-policy.test.ts \
   runtime/web-platform/test/file-forms-urlencoded-policy.test.ts \
+  runtime/web-platform/test/navigator-user-agent-policy.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \
   runtime/web-platform/test/abort-wpt-policy.test.ts \
