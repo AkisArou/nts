@@ -36,7 +36,6 @@ pub(crate) struct Capture<'p, 'r> {
     workspace_uri_resolutions: usize,
     nodes: FxHashMap<Node<'p>, NodeId>,
     native_nodes: Vec<Option<Node<'p>>>,
-    declaration_sources: crate::declaration::Sources,
     declaration_source_ids: FxHashMap<Node<'p>, nts_semantic_schema::DeclarationSourceId>,
     queries: Vec<queries::Queries>,
     files: Vec<(File<'p>, NodeId)>,
@@ -101,7 +100,6 @@ impl<'p, 'r> Capture<'p, 'r> {
             workspace_uri_resolutions: 0,
             nodes: FxHashMap::default(),
             native_nodes: Vec::new(),
-            declaration_sources: crate::declaration::Sources::default(),
             declaration_source_ids: FxHashMap::default(),
             queries: Vec::new(),
             files: Vec::new(),
@@ -116,9 +114,9 @@ impl<'p, 'r> Capture<'p, 'r> {
         };
         for file in files {
             let source = SourceId(arena_index(capture.snapshot.sources.len())?);
-            let context = capture.intern_declaration_source(file)?;
-            capture.snapshot.source_contexts.insert(source, context);
             let tree = crate::native_ast::capture(file, source)?;
+            let context = capture.intern_declaration_source(file, Some(&tree.tree))?;
+            capture.snapshot.source_contexts.insert(source, context);
             let base = arena_index(capture.snapshot.nodes.len())?;
             capture
                 .snapshot

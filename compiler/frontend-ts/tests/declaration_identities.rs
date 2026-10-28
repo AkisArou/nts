@@ -406,3 +406,19 @@ fn large_merged_declarations_validate_independently_of_site_order() {
         "every captured member of the merge needs its real site"
     );
 }
+
+#[test]
+fn captured_source_identity_includes_bom_and_trailing_unicode_trivia() {
+    let source = "\u{feff}export const value = 1;\n// 😀 trailing comment\n  \n";
+    let project = Project::new("source-trivia", source);
+    let snapshot = project.snapshot("tsconfig.json");
+    let context = snapshot
+        .declaration_sources
+        .iter()
+        .find(|context| context.path.ends_with("main.ts"))
+        .unwrap();
+    assert_eq!(
+        context.utf16_len,
+        u32::try_from(source.encode_utf16().count()).unwrap()
+    );
+}

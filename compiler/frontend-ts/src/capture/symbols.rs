@@ -13,7 +13,7 @@ impl<'p> Capture<'p, '_> {
             return Ok(*id);
         }
         let declarations: Vec<_> = symbol.declarations().collect();
-        let mut declaration_sites = Vec::new();
+        let mut declaration_sites = Vec::with_capacity(declarations.len());
         for &node in &declarations {
             if let Some(site) = self.declaration_site(node)? {
                 declaration_sites.push(site);
