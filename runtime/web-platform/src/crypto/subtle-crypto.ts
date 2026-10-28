@@ -20,6 +20,7 @@ import {
   toKeyUsages,
 } from "./jwk.ts";
 import type { JsonWebKeyObject, KeyFormat } from "./jwk.ts";
+import { deriveKdfBits, getKdfKeyLength, importKdfKey } from "./kdf.ts";
 import { deriveOkpBits, signOkp, verifyOkp } from "./okp.ts";
 import { exportOkpKey, generateOkpKey, importOkpKey } from "./okp-key.ts";
 import { decryptRsa, encryptRsa, signRsa, verifyRsa } from "./rsa.ts";
@@ -82,6 +83,10 @@ function isOkpAlgorithm(name: string): boolean {
   return name === "Ed25519" || name === "X25519";
 }
 
+function isKdfAlgorithm(name: string): boolean {
+  return name === "HKDF" || name === "PBKDF2";
+}
+
 function encryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
   return algorithm.name === "RSA-OAEP"
     ? encryptRsa(provider, algorithm, key, bytes)
@@ -109,6 +114,7 @@ function verifyBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, k
 }
 
 function deriveBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, length: number | null): Uint8Array {
+  if (isKdfAlgorithm(algorithm.name)) return deriveKdfBits(provider, algorithm, key, length);
   return algorithm.name === "X25519" ? deriveOkpBits(provider, algorithm, key, length)
     : deriveEcBits(provider, algorithm, key, length);
 }
@@ -121,6 +127,7 @@ function importKeyMaterial(
   extractable: boolean,
   usages: readonly KeyUsage[],
 ): CryptoKey {
+  if (isKdfAlgorithm(algorithm.name)) return importKdfKey(provider, format, data, algorithm, extractable, usages);
   if (isOkpAlgorithm(algorithm.name)) return importOkpKey(provider, format, data, algorithm, extractable, usages);
   if (isEcAlgorithm(algorithm.name)) return importEcKey(provider, format, data, algorithm, extractable, usages);
   if (isRsaAlgorithm(algorithm.name)) return importRsaKey(provider, format, data, algorithm, extractable, usages);
@@ -136,7 +143,7 @@ function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: Cry
 
 /**
  * Web Cryptography §14. Digests, HMAC, AES, RSA, EC and 25519 operations.
- * Curve448 algorithms and KDFs are separate handoff items.
+ * Curve448 algorithms and runtime assembly are separate handoff items.
  * Members are plain declarations; descriptor-only Web IDL shape is deferred.
  */
 export class SubtleCrypto {
@@ -291,7 +298,7 @@ export class SubtleCrypto {
       const normalizedLength = normalizeAlgorithm(derivedIdentifier, "get key length");
       return cryptoTask(scheduler, () => {
         requireKeyUsage(slots, normalized, "deriveKey");
-        const length = getSecretKeyLength(normalizedLength);
+        const length = isKdfAlgorithm(normalizedLength.name) ? getKdfKeyLength() : getSecretKeyLength(normalizedLength);
         const secret = deriveBytes(provider, normalized, slots, length);
         return importKeyMaterial(provider, "raw", secret, normalizedImport, canExport, usages);
       });
@@ -300,7 +307,7 @@ export class SubtleCrypto {
     }
   }
 
-  /** §14.3.8. An omitted or null length requests the full encoded agreement secret. */
+  /** §14.3.8. Algorithms decide whether an omitted or null length is supported. */
   deriveBits(algorithm: unknown, baseKey: unknown, length: unknown = null): Promise<ArrayBuffer> {
     try {
       const provider = this.#provider;

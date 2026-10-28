@@ -12,6 +12,8 @@ import {
   diffieHellman,
   ECDH,
   generateKeyPairSync,
+  hkdfSync,
+  pbkdf2Sync,
   privateDecrypt,
   publicEncrypt,
   sign,
@@ -704,6 +706,25 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   derive(parameters: CryptoDerivationParameters, key: CryptoKeyHandle): Uint8Array | CryptoFailure {
     try {
+      if (parameters.name === "HKDF" || parameters.name === "PBKDF2") {
+        const secretKey = keyObjects.get(key);
+        if (secretKey === undefined || secretKey.type !== "secret") return { failure: "invalid-key" };
+        if (parameters.name === "HKDF") {
+          // Node 24.20 limits info to 1024 octets, unlike Web Crypto. Its native
+          // primitive also rejects zero output: request one byte for native
+          // validation, then return the requested empty, independently owned value.
+          // Positive outputs already have a fresh, exactly sized ArrayBuffer.
+          const result = hkdfSync(hashName(parameters.hash), secretKey,
+            parameters.salt, parameters.info, parameters.byteLength === 0 ? 1 : parameters.byteLength);
+          return parameters.byteLength === 0 ? new ByteArray(0) : new ByteArray(result);
+        }
+        // Export bytes directly to the native primitive: PBKDF2 passwords are
+        // octet strings, including embedded NUL and non-UTF-8 input.
+        // Node 24.20 limits iterations to 2^31-1; the shared unsigned-long
+        // range remains 2^32-1. Shared PBKDF2 handles zero output before this call.
+        return owned(pbkdf2Sync(secretKey.export(), parameters.salt,
+          parameters.iterations, parameters.byteLength, hashName(parameters.hash)));
+      }
       if (parameters.name !== "ECDH" && parameters.name !== "X25519") return { failure: "operation" };
       const privateKey = keyObjects.get(key);
       const publicKey = keyObjects.get(parameters.publicKey);

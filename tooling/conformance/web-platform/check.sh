@@ -45,6 +45,11 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/crypto-ec-provider.test.ts \
   runtime/web-platform/test/crypto-ec-wrap.test.ts \
   runtime/web-platform/test/crypto-ec.test.ts \
+  runtime/web-platform/test/crypto-kdf-derive.test.ts \
+  runtime/web-platform/test/crypto-kdf-key.test.ts \
+  runtime/web-platform/test/crypto-kdf-normalization.test.ts \
+  runtime/web-platform/test/crypto-kdf-provider.test.ts \
+  runtime/web-platform/test/crypto-kdf.test.ts \
   runtime/web-platform/test/crypto-normalization.test.ts \
   runtime/web-platform/test/crypto-okp-der.test.ts \
   runtime/web-platform/test/crypto-okp-derive.test.ts \
