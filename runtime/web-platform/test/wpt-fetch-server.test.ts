@@ -62,7 +62,7 @@ function request(server: WptServer, path: string, options: RequestOptions = {}):
 
 const resource = "/fetch/api/resources/";
 
-test("finite network Fetch WPT resources", { timeout: 60_000 }, async (t) => {
+test("finite network Fetch WPT resources", async (t) => {
   await t.test("static JSON resources preserve file bytes and use application/json", async (t) => {
     const server = await serverFor(t);
     const expected = await readFile(new URL("./wpt/server/upstream-manifest.json", import.meta.url));
