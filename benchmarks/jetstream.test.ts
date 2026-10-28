@@ -100,6 +100,37 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN CRYPTO MD5 SP: complete original workload checks.
+{
+  const name = "jetstream-crypto-md5-sp";
+  if (modules.has(name)) {
+    checked.add(name);
+    // Proposed additions to the coordinator-owned JetStream test.
+    // This typed transcription is derived from the RSA Data Security, Inc. MD5 Message-Digest Algorithm.
+    const { hex_md5, hex_hmac_md5, md5_vm_test, render, observation, seed, work } = await import("./cases/jetstream-crypto-md5-sp/case.ts");
+
+    test('crypto-md5-sp retains the complete input and original inner repetitions', () => {
+      assert.equal(render(1), 'a831e91e0f70eddcb70dc61c6f82f6cd');
+      assert.deepEqual(observation(), { digest: 'a831e91e0f70eddcb70dc61c6f82f6cd', inputLength: 15824 });
+      assert.equal(md5_vm_test(), true);
+    });
+
+    test('crypto-md5-sp retains the original digest and HMAC helpers', () => {
+      assert.equal(hex_md5('abc'), '900150983cd24fb0d6963f7d28e17f72');
+      assert.equal(hex_hmac_md5('key', 'The quick brown fox jumps over the lazy dog'), '80070713463e7749b90c2dc24911e275');
+    });
+
+    test('crypto-md5-sp repeats complete original iterations', () => {
+      assert.equal(seed, 1);
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 1301045875);
+      assert.equal(work(2), 2978762336);
+      assert.equal(work(1), 1301045875);
+    });
+  }
+}
+// END CRYPTO MD5 SP.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
