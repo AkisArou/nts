@@ -65,9 +65,11 @@ Benchmarks run through every phase.
      gate (*done*);
    - no cold build per train: tests are built with line tables only, at
      opt-level 1, and the debug build folder is pruned within a bound (*done*);
-   - every step runs in one canonical environment, whoever launches the gate;
+   - every step runs in one canonical environment, whoever launches the gate
+     (*done*);
    - the compile-time tripwire counts every compiler thread from the start,
-     against a threshold set from repeated runs of one binary.
+     against a threshold set from repeated runs of one binary (*done*); the
+     reference-counting build gets a row of its own next.
 5. **The fast landing model** (approved):
    1. a change owes only the checks it can affect, so docs, records and
       comments land in seconds, with no train (*done*: the fast lane);
@@ -99,8 +101,8 @@ Benchmarks run through every phase.
       known cut names its cause (*done*);
     - the differential oracle compares a recorded number of cases per
       project, measured complete, under a CPU-time bound, so what a gate
-      checks never depends on the machine's load;
-    - a wall-clock deadline decides no result anywhere in the gate.
+      checks never depends on the machine's load (*done*);
+    - a wall-clock deadline decides no result anywhere in the gate (*done*).
 11. **The silent wrong answers found on the way,** in this order (a store
     that would close a cycle now keeps a counted root, so a closure that
     captures `this` no longer leaks: *done*):
@@ -238,7 +240,8 @@ Noted, not scheduled:
   `map-literal-keys`);
 - integer accumulators, so that `(a + b) | 0` stays in int32: needs
   container content facts to prove the addend (the guarded form was measured
-  and parked, since it lost where the accumulator was not the bottleneck);
+  and parked on its compile cost; the row it seemed to lose lies inside that
+  row's layout range);
 - argument ranges through recursion: an index computed as `(3 - from) - to`
   across recursive calls widens to an unbounded range with `NaN`, so the
   recursive methods of `awfy-towers` keep double indices and check them twice;
