@@ -1,0 +1,166 @@
+{
+  "label": "before",
+  "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "sourceCommit": "c41a89baf7a5ccb381d6927b5ae8fb09aaabd7e1",
+  "sourceTree": "d1bbc78f3ec9368982799cf852cede52e1caef44",
+  "command": "node --expose-gc --test --test-reporter=spec runtime/web-platform/test/wpt-websocket-stream.test.ts",
+  "tools": {
+    "node": "v24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "manifestSha256": "9fa99250dad7f9ec542988c2825b71c91bed45fdfaa02cc1db401c6b0c652aa4",
+  "logSha256": "25bcc065c4ec5a203a466947cb5363818d4e3915f011a6fa9c4c5f7801b50fff",
+  "summary": {
+    "runs": 13,
+    "pass": 97,
+    "fail": 0,
+    "blocked": 10
+  },
+  "files": [
+    {
+      "file": "websockets/stream/tentative/abort.any.js",
+      "variants": 1,
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/backpressure-receive.any.js",
+      "variants": 1,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/backpressure-send.any.js",
+      "variants": 1,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/close.any.js",
+      "variants": 2,
+      "pass": 52,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "file": "websockets/stream/tentative/constructor.any.js",
+      "variants": 1,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/read.any.js",
+      "variants": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/remote-close.any.js",
+      "variants": 2,
+      "pass": 12,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "file": "websockets/stream/tentative/websocket-error.any.js",
+      "variants": 1,
+      "pass": 10,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/write.any.js",
+      "variants": 2,
+      "pass": 8,
+      "fail": 0,
+      "blocked": 4
+    }
+  ],
+  "runs": [
+    {
+      "file": "websockets/stream/tentative/abort.any.js?wss",
+      "pass": 5,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/backpressure-receive.any.js?wss",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/backpressure-send.any.js?wss",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/close.any.js?default",
+      "pass": 26,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/close.any.js?wss",
+      "pass": 26,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/constructor.any.js?wss",
+      "pass": 8,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/read.any.js?default",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/read.any.js?wss",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/remote-close.any.js?default",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/remote-close.any.js?wss",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "file": "websockets/stream/tentative/websocket-error.any.js",
+      "pass": 10,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "file": "websockets/stream/tentative/write.any.js?default",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "file": "websockets/stream/tentative/write.any.js?wss",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 2
+    }
+  ],
+  "note": "WPT leaf registrations only; file and suite wrappers are excluded. The stable profile has identical fixture and manifest bytes before and after. Native byte work and prerequisite source remain unchanged."
+}
