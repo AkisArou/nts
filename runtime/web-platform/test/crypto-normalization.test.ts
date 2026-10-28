@@ -9,9 +9,14 @@ import {
   Algorithm,
   AesCbcParams,
   AesCtrParams,
+  AesDerivedKeyParams,
   AesGcmParams,
   AesKeyGenParams,
   DigestAlgorithm,
+  EcdhKeyDeriveParams,
+  EcdsaParams,
+  EcKeyGenParams,
+  EcKeyImportParams,
   HmacImportParams,
   HmacKeyGenParams,
   RsaHashedImportParams,
@@ -21,7 +26,9 @@ import {
   normalizeAlgorithm,
 } from "../src/crypto/algorithms.ts";
 import type { CryptoOperation } from "../src/crypto/algorithms.ts";
+import { createCryptoKey, CryptoKey, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
 import { toCryptoUnsignedInteger } from "../src/crypto/webidl.ts";
+import type { CryptoKeyHandle } from "../src/provider/crypto.ts";
 
 function notSupported(error: unknown): boolean {
   return error instanceof DOMException && error.name === "NotSupportedError";
@@ -551,5 +558,132 @@ test("OAEP label is optional and preserves BufferSource view bounds", () => {
     assert.throws(() => normalizeAlgorithm({ name: "RSA-OAEP", label: null }, operation), TypeError);
     assert.throws(() => normalizeAlgorithm({ name: "RSA-OAEP", label: new Uint8Array(new SharedArrayBuffer(0)) }, operation), TypeError);
     assert.throws(() => normalizeAlgorithm({ name: "RSA-OAEP", label: new Uint8Array(new ArrayBuffer(0, { maxByteLength: 1 })) }, operation), TypeError);
+  }
+});
+
+// EC dictionaries and deriveKey length registration: §§23.3–23.6, 24.3, 27.6, 31.2.
+test("EC import and generation retain case-sensitive namedCurve strings for operation policy", () => {
+  for (const name of ["ECDSA", "ECDH"] as const) {
+    for (const namedCurve of ["P-256", "P-384", "P-521", "p-256", "unknown", "", null, 256]) {
+      const generated = normalizeAlgorithm({ name: name.toLowerCase(), namedCurve }, "generateKey");
+      const imported = normalizeAlgorithm({ name: name.toLowerCase(), namedCurve }, "importKey");
+      assert.ok(generated instanceof EcKeyGenParams);
+      assert.ok(imported instanceof EcKeyImportParams);
+      assert.equal(generated.name, name);
+      assert.equal(generated.namedCurve, String(namedCurve));
+      assert.equal(imported.namedCurve, String(namedCurve));
+      assert.notEqual(generated, imported);
+    }
+    for (const operation of ["generateKey", "importKey"] as const) {
+      assert.throws(() => normalizeAlgorithm({ name }, operation), TypeError);
+      assert.throws(() => normalizeAlgorithm({ name, namedCurve: Symbol("P-256") }, operation), TypeError);
+      const reads: string[] = [];
+      const normalized = normalizeAlgorithm({
+        get name() { reads.push("name"); return name; },
+        get namedCurve() {
+          reads.push("namedCurve");
+          return { [Symbol.toPrimitive](hint: string) { reads.push(hint); return "P-384"; } };
+        },
+        get hash() { throw new Error("EC key algorithms do not read hash"); },
+      }, operation);
+      assert.ok(normalized instanceof EcKeyGenParams || normalized instanceof EcKeyImportParams);
+      assert.equal(normalized.namedCurve, "P-384");
+      assert.deepEqual(reads, ["name", "name", "namedCurve", "string"]);
+    }
+  }
+});
+
+test("ECDSA selects and normalizes a hash separately for each signature operation", () => {
+  for (const operation of ["sign", "verify"] as const) {
+    for (const hash of ["SHA-1", "SHA-256", "SHA-384", "SHA-512"] as const) {
+      const reads: string[] = [];
+      const normalized = normalizeAlgorithm({
+        get name() { reads.push("name"); return "eCdSa"; },
+        get hash() {
+          reads.push("hash");
+          return { get name() { reads.push("hash.name"); return hash.toLowerCase(); } };
+        },
+        get namedCurve() { throw new Error("a signature reads its curve from the key"); },
+      }, operation);
+      assert.ok(normalized instanceof EcdsaParams);
+      assert.ok(normalized.hash instanceof DigestAlgorithm);
+      assert.equal(normalized.name, "ECDSA");
+      assert.equal(normalized.hash.name, hash);
+      assert.deepEqual(reads, ["name", "name", "hash", "hash.name", "hash.name"]);
+    }
+    assert.throws(() => normalizeAlgorithm("ECDSA", operation), TypeError);
+    assert.throws(() => normalizeAlgorithm({ name: "ECDSA", hash: undefined }, operation), TypeError);
+    assert.throws(() => normalizeAlgorithm({ name: "ECDSA", hash: Symbol("SHA-256") }, operation), TypeError);
+    assert.throws(() => normalizeAlgorithm({ name: "ECDSA", hash: "SHA-3" }, operation), notSupported);
+  }
+});
+
+test("ECDH public dictionary conversion checks only the CryptoKey brand and preserves its identity", () => {
+  for (const type of ["public", "private", "secret"] as const) {
+    const publicKey = createCryptoKey(type, false, new KeyAlgorithm("not ECDH"), [], {} as CryptoKeyHandle);
+    const reads: string[] = [];
+    const normalized = normalizeAlgorithm({
+      get name() { reads.push("name"); return "ecdh"; },
+      get public() { reads.push("public"); return publicKey; },
+      get namedCurve() { throw new Error("ECDH does not read a namedCurve parameter"); },
+      get hash() { throw new Error("ECDH does not read a hash parameter"); },
+    }, "deriveBits");
+    assert.ok(normalized instanceof EcdhKeyDeriveParams);
+    assert.equal(normalized.name, "ECDH");
+    assert.equal(normalized.public, publicKey);
+    assert.deepEqual(reads, ["name", "name", "public"]);
+  }
+  for (const publicKey of [undefined, null, false, "key", {}, Object.create(CryptoKey.prototype)]) {
+    assert.throws(() => normalizeAlgorithm({ name: "ECDH", public: publicKey }, "deriveBits"), TypeError);
+  }
+  const error = new Error("peer getter");
+  assert.throws(() => normalizeAlgorithm({ name: "ECDH", get public() { throw error; } }, "deriveBits"), value => value === error);
+});
+
+test("EC export dictionaries ignore every operation-specific member", () => {
+  for (const name of ["ECDSA", "ECDH"] as const) {
+    const normalized = normalizeAlgorithm({
+      name,
+      get namedCurve() { throw new Error("unused curve"); },
+      get hash() { throw new Error("unused hash"); },
+      get public() { throw new Error("unused peer"); },
+    }, "exportKey");
+    assert.equal(normalized.constructor, Algorithm);
+    assert.deepEqual(Object.keys(normalized), ["name"]);
+  }
+});
+
+test("deriveKey length registration uses AES derived and HMAC import dictionaries", () => {
+  for (const name of ["AES-CTR", "AES-CBC", "AES-GCM", "AES-KW"] as const) {
+    for (const length of [0, 128, 192, 256, 65_535]) {
+      const reads: string[] = [];
+      const normalized = normalizeAlgorithm({
+        get name() { reads.push("name"); return name.toLowerCase(); },
+        get length() {
+          reads.push("length");
+          return { valueOf() { reads.push("length.valueOf"); return length + 0.5; } };
+        },
+        get iv() { throw new Error("derived AES keys do not read IVs"); },
+      }, "get key length");
+      assert.ok(normalized instanceof AesDerivedKeyParams);
+      assert.equal(normalized.name, name);
+      assert.equal(normalized.length, length);
+      assert.deepEqual(reads, ["name", "name", "length", "length.valueOf"]);
+    }
+    for (const length of [undefined, -1, 65_536, NaN, 1n]) {
+      assert.throws(() => normalizeAlgorithm({ name, length }, "get key length"), TypeError);
+    }
+  }
+  for (const length of [undefined, 0, 1, 4_294_967_295]) {
+    const reads: string[] = [];
+    const normalized = normalizeAlgorithm({
+      get name() { reads.push("name"); return "hmac"; },
+      get hash() { reads.push("hash"); return { get name() { reads.push("hash.name"); return "sha-512"; } }; },
+      get length() { reads.push("length"); return length; },
+    }, "get key length");
+    assert.ok(normalized instanceof HmacImportParams);
+    assert.equal(normalized.length, length);
+    assert.equal(normalized.hash.name, "SHA-512");
+    assert.deepEqual(reads, ["name", "name", "hash", "length", "hash.name", "hash.name"]);
   }
 });

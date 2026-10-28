@@ -13,6 +13,12 @@ export type KeyUsage =
   | "wrapKey"
   | "unwrapKey";
 
+/** Web Cryptography §17. An ordinary dictionary containing two independent keys. */
+export interface CryptoKeyPair {
+  privateKey: CryptoKey;
+  publicKey: CryptoKey;
+}
+
 function copyUsages(usages: readonly KeyUsage[]): KeyUsage[] {
   const copy: KeyUsage[] = [];
   for (let index = 0; index < usages.length; index++) copy[index] = usages[index]!;

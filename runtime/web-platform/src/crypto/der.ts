@@ -1,6 +1,7 @@
 import { DOMException } from "../core/errors.ts";
-import type { CryptoRsaComponents, CryptoRsaOtherPrime } from "../provider/crypto.ts";
+import type { CryptoEcComponents, CryptoNamedCurve, CryptoRsaComponents, CryptoRsaOtherPrime } from "../provider/crypto.ts";
 import { cryptoByteSubarray, cryptoViewByteLength } from "./buffer-source.ts";
+import { ecCurveByteLength } from "./ec-curve.ts";
 
 function invalidDer(): never {
   throw new DOMException("The key is not a valid DER encoding", "DataError");
@@ -10,7 +11,7 @@ function invalidDer(): never {
  * Web Cryptography §9's exact ASN.1 parser, restricted to the key structures
  * used here. X.690 §§8–11: definite, shortest lengths; primitive integers and
  * strings; minimal signed integers; exact consumption at every boundary.
- * This checks encodings, not RSA arithmetic. The native import owns mathematics.
+ * This checks encodings, not key arithmetic. The native import owns mathematics.
  */
 class DerReader {
   readonly bytes: Uint8Array;
@@ -285,4 +286,104 @@ export function parseRsaDer(format: "spki" | "pkcs8", bytes: Uint8Array, require
   if (!envelope.done()) attributes(envelope);
   envelope.complete();
   return privateComponents(privateKey);
+}
+
+const ecPublicKeyOid: readonly number[] = [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01];
+const p256Oid: readonly number[] = [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07];
+const p384Oid: readonly number[] = [0x2b, 0x81, 0x04, 0x00, 0x22];
+const p521Oid: readonly number[] = [0x2b, 0x81, 0x04, 0x00, 0x23];
+
+function oidEquals(bytes: Uint8Array, expected: readonly number[]): boolean {
+  if (cryptoViewByteLength(bytes) !== expected.length) return false;
+  for (let index = 0; index < expected.length; index++) if (bytes[index] !== expected[index]) return false;
+  return true;
+}
+
+function ecNamedCurve(reader: DerReader): CryptoNamedCurve {
+  const oid = reader.read(0x06).content();
+  if (oidEquals(oid, p256Oid)) return "P-256";
+  if (oidEquals(oid, p384Oid)) return "P-384";
+  if (oidEquals(oid, p521Oid)) return "P-521";
+  invalidDer();
+}
+
+function ecAlgorithm(reader: DerReader): CryptoNamedCurve {
+  const algorithm = reader.read(0x30);
+  if (!oidEquals(algorithm.read(0x06).content(), ecPublicKeyOid)) invalidDer();
+  // RFC 5480 §2.1.1 requires the namedCurve OID. Absent, implicit-curve,
+  // and explicit-domain parameters are not Web Cryptography encodings.
+  const namedCurve = ecNamedCurve(algorithm);
+  algorithm.complete();
+  return namedCurve;
+}
+
+/** SEC 1 §2.3.4. Compressed points are optional and are not supported here. */
+export function parseEcPoint(bytes: Uint8Array, namedCurve: CryptoNamedCurve): CryptoEcComponents {
+  const width = ecCurveByteLength(namedCurve);
+  if (cryptoViewByteLength(bytes) !== 1 + 2 * width || bytes[0] !== 0x04) invalidDer();
+  return {
+    family: "EC", namedCurve,
+    x: cryptoByteSubarray(bytes, 1, 1 + width),
+    y: cryptoByteSubarray(bytes, 1 + width, 1 + 2 * width),
+  };
+}
+
+function ecBitString(reader: DerReader, namedCurve: CryptoNamedCurve): CryptoEcComponents {
+  const value = reader.read(0x03);
+  if (value.done() || value.bytes[value.position++] !== 0) invalidDer();
+  return parseEcPoint(value.content(), namedCurve);
+}
+
+/** A PKCS #8 private key may omit its redundant public point. */
+export interface EcDerKey {
+  readonly namedCurve: CryptoNamedCurve;
+  readonly x: Uint8Array | undefined;
+  readonly y: Uint8Array | undefined;
+  readonly d: Uint8Array | undefined;
+}
+
+/**
+ * Web Cryptography §§23.7.4–5, 24.4.3–4; RFC 5480 and RFC 5915.
+ * Import permits absent inner parameters/publicKey. Export must include both.
+ * Native import validates the scalar/point mathematics; shared key policy also
+ * compares a supplied public point with the native scalar-derived point.
+ */
+export function parseEcDer(format: "spki" | "pkcs8", bytes: Uint8Array, requirePrivateFields = false): EcDerKey {
+  const source = new DerReader(bytes);
+  const envelope = source.read(0x30);
+  source.complete();
+  if (format === "spki") {
+    const namedCurve = ecAlgorithm(envelope);
+    const point = ecBitString(envelope, namedCurve);
+    envelope.complete();
+    return { namedCurve, x: point.x, y: point.y, d: undefined };
+  }
+  const version = envelope.integer(true);
+  if (cryptoViewByteLength(version) !== 1 || version[0] !== 0) invalidDer();
+  const namedCurve = ecAlgorithm(envelope);
+  const privateOctets = envelope.read(0x04);
+  if (!envelope.done()) attributes(envelope);
+  envelope.complete();
+  const privateKey = privateOctets.read(0x30);
+  privateOctets.complete();
+  const privateVersion = privateKey.integer();
+  if (cryptoViewByteLength(privateVersion) !== 1 || privateVersion[0] !== 1) invalidDer();
+  const d = privateKey.read(0x04).content();
+  if (cryptoViewByteLength(d) !== ecCurveByteLength(namedCurve)) invalidDer();
+  if (!privateKey.done() && privateKey.peek() === 0xa0) {
+    const parameters = privateKey.read(0xa0);
+    if (ecNamedCurve(parameters) !== namedCurve) invalidDer();
+    parameters.complete();
+  } else if (requirePrivateFields) invalidDer();
+  let x: Uint8Array | undefined;
+  let y: Uint8Array | undefined;
+  if (!privateKey.done() && privateKey.peek() === 0xa1) {
+    const publicKey = privateKey.read(0xa1);
+    const point = ecBitString(publicKey, namedCurve);
+    publicKey.complete();
+    x = point.x;
+    y = point.y;
+  } else if (requirePrivateFields) invalidDer();
+  privateKey.complete();
+  return { namedCurve, x, y, d };
 }

@@ -9,6 +9,8 @@ import {
   toCryptoBufferSource,
 } from "./buffer-source.ts";
 import type { CryptoBufferSource } from "./buffer-source.ts";
+import { getCryptoKeySlots } from "./crypto-key.ts";
+import type { CryptoKey } from "./crypto-key.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
 
 const stringCodeUnit = Function.prototype.call.bind(String.prototype.charCodeAt) as
@@ -51,10 +53,21 @@ export class DigestAlgorithm extends Algorithm<CryptoDigestName> {
 export type AesAlgorithmName = "AES-CTR" | "AES-CBC" | "AES-GCM" | "AES-KW";
 export type SecretAlgorithmName = AesAlgorithmName | "HMAC";
 export type RsaAlgorithmName = "RSASSA-PKCS1-v1_5" | "RSA-PSS" | "RSA-OAEP";
-type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName;
+export type EcAlgorithmName = "ECDSA" | "ECDH";
+type RegisteredAlgorithmName = CryptoDigestName | SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName;
 
 /** Web Cryptography §27.5. Validation of AES key sizes is an operation step. */
 export class AesKeyGenParams extends Algorithm<AesAlgorithmName> {
+  readonly length: number;
+
+  constructor(name: AesAlgorithmName, length: number) {
+    super(name);
+    this.length = length;
+  }
+}
+
+/** Web Cryptography §27.6. deriveKey normalizes this separately from import. */
+export class AesDerivedKeyParams extends Algorithm<AesAlgorithmName> {
   readonly length: number;
 
   constructor(name: AesAlgorithmName, length: number) {
@@ -172,10 +185,51 @@ export class RsaOaepParams extends Algorithm<"RSA-OAEP"> {
   }
 }
 
+/** Web Cryptography §23.3. The hash is selected for each signature operation. */
+export class EcdsaParams extends Algorithm<"ECDSA"> {
+  readonly hash: DigestAlgorithm;
+
+  constructor(name: "ECDSA", hash: DigestAlgorithm) {
+    super(name);
+    this.hash = hash;
+  }
+}
+
+/** Web Cryptography §23.4. Curve support is checked by the key operation. */
+export class EcKeyGenParams extends Algorithm<EcAlgorithmName> {
+  readonly namedCurve: string;
+
+  constructor(name: EcAlgorithmName, namedCurve: string) {
+    super(name);
+    this.namedCurve = namedCurve;
+  }
+}
+
+/** Web Cryptography §23.6, shared by ECDSA and ECDH import. */
+export class EcKeyImportParams extends Algorithm<EcAlgorithmName> {
+  readonly namedCurve: string;
+
+  constructor(name: EcAlgorithmName, namedCurve: string) {
+    super(name);
+    this.namedCurve = namedCurve;
+  }
+}
+
+/** Web Cryptography §24.3. Conversion checks the CryptoKey brand, not its usage. */
+export class EcdhKeyDeriveParams extends Algorithm<"ECDH"> {
+  readonly public: CryptoKey;
+
+  constructor(name: "ECDH", publicKey: CryptoKey) {
+    super(name);
+    this.public = publicKey;
+  }
+}
+
 export type NormalizedAlgorithm =
   | DigestAlgorithm
-  | Algorithm<SecretAlgorithmName | RsaAlgorithmName>
+  | Algorithm<SecretAlgorithmName | RsaAlgorithmName | EcAlgorithmName>
   | AesKeyGenParams
+  | AesDerivedKeyParams
   | AesCtrParams
   | AesCbcParams
   | AesGcmParams
@@ -184,7 +238,11 @@ export type NormalizedAlgorithm =
   | RsaHashedKeyGenParams
   | RsaHashedImportParams
   | RsaPssParams
-  | RsaOaepParams;
+  | RsaOaepParams
+  | EcdsaParams
+  | EcKeyGenParams
+  | EcKeyImportParams
+  | EcdhKeyDeriveParams;
 
 class AlgorithmRegistration {
   readonly name: RegisteredAlgorithmName;
@@ -208,26 +266,31 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("AES-CTR", "generateKey"),
   new AlgorithmRegistration("AES-CTR", "importKey"),
   new AlgorithmRegistration("AES-CTR", "exportKey"),
+  new AlgorithmRegistration("AES-CTR", "get key length"),
   new AlgorithmRegistration("AES-CBC", "encrypt"),
   new AlgorithmRegistration("AES-CBC", "decrypt"),
   new AlgorithmRegistration("AES-CBC", "generateKey"),
   new AlgorithmRegistration("AES-CBC", "importKey"),
   new AlgorithmRegistration("AES-CBC", "exportKey"),
+  new AlgorithmRegistration("AES-CBC", "get key length"),
   new AlgorithmRegistration("AES-GCM", "encrypt"),
   new AlgorithmRegistration("AES-GCM", "decrypt"),
   new AlgorithmRegistration("AES-GCM", "generateKey"),
   new AlgorithmRegistration("AES-GCM", "importKey"),
   new AlgorithmRegistration("AES-GCM", "exportKey"),
+  new AlgorithmRegistration("AES-GCM", "get key length"),
   new AlgorithmRegistration("AES-KW", "wrapKey"),
   new AlgorithmRegistration("AES-KW", "unwrapKey"),
   new AlgorithmRegistration("AES-KW", "generateKey"),
   new AlgorithmRegistration("AES-KW", "importKey"),
   new AlgorithmRegistration("AES-KW", "exportKey"),
+  new AlgorithmRegistration("AES-KW", "get key length"),
   new AlgorithmRegistration("HMAC", "sign"),
   new AlgorithmRegistration("HMAC", "verify"),
   new AlgorithmRegistration("HMAC", "generateKey"),
   new AlgorithmRegistration("HMAC", "importKey"),
   new AlgorithmRegistration("HMAC", "exportKey"),
+  new AlgorithmRegistration("HMAC", "get key length"),
   new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "sign"),
   new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "verify"),
   new AlgorithmRegistration("RSASSA-PKCS1-v1_5", "generateKey"),
@@ -243,6 +306,15 @@ const registeredAlgorithms: readonly AlgorithmRegistration[] = [
   new AlgorithmRegistration("RSA-OAEP", "generateKey"),
   new AlgorithmRegistration("RSA-OAEP", "importKey"),
   new AlgorithmRegistration("RSA-OAEP", "exportKey"),
+  new AlgorithmRegistration("ECDSA", "sign"),
+  new AlgorithmRegistration("ECDSA", "verify"),
+  new AlgorithmRegistration("ECDSA", "generateKey"),
+  new AlgorithmRegistration("ECDSA", "importKey"),
+  new AlgorithmRegistration("ECDSA", "exportKey"),
+  new AlgorithmRegistration("ECDH", "deriveBits"),
+  new AlgorithmRegistration("ECDH", "generateKey"),
+  new AlgorithmRegistration("ECDH", "importKey"),
+  new AlgorithmRegistration("ECDH", "exportKey"),
 ];
 
 /** Web IDL's (object or DOMString) union conversion, before later argument conversions. */
@@ -312,7 +384,7 @@ function normalizeRegisteredAlgorithm(
   }
 
   if (name === "HMAC") {
-    if (operation !== "generateKey" && operation !== "importKey") return new Algorithm(name);
+    if (operation !== "generateKey" && operation !== "importKey" && operation !== "get key length") return new Algorithm(name);
     const input = algorithm as { readonly hash?: unknown; readonly length?: unknown };
     const hash = toAlgorithmIdentifier(requiredMember(input.hash, "HMAC.hash"));
     const lengthValue = input.length;
@@ -359,10 +431,28 @@ function normalizeRegisteredAlgorithm(
     return new RsaOaepParams(name, label === undefined ? undefined : normalizedBytes(label, copyBuffers));
   }
 
-  if (operation === "generateKey") {
+  if (name === "ECDSA" || name === "ECDH") {
+    if (operation === "generateKey" || operation === "importKey") {
+      const input = algorithm as { readonly namedCurve?: unknown };
+      const namedCurve = coerceToDOMString(requiredMember(input.namedCurve, "EC.namedCurve"));
+      return operation === "generateKey" ? new EcKeyGenParams(name, namedCurve) : new EcKeyImportParams(name, namedCurve);
+    }
+    if (operation === "exportKey") return new Algorithm(name);
+    if (name === "ECDSA") {
+      const input = algorithm as { readonly hash?: unknown };
+      const hash = toAlgorithmIdentifier(requiredMember(input.hash, "ECDSA.hash"));
+      return new EcdsaParams(name, normalizeAlgorithm(hash, "digest"));
+    }
+    const input = algorithm as { readonly public?: unknown };
+    const publicKey = requiredMember(input.public, "ECDH.public");
+    getCryptoKeySlots(publicKey);
+    return new EcdhKeyDeriveParams(name, publicKey as CryptoKey);
+  }
+
+  if (operation === "generateKey" || operation === "get key length") {
     const input = algorithm as { readonly length?: unknown };
     const length = toCryptoUnsignedInteger(requiredMember(input.length, "AES.length"), 16);
-    return new AesKeyGenParams(name, length);
+    return operation === "generateKey" ? new AesKeyGenParams(name, length) : new AesDerivedKeyParams(name, length);
   }
   if (operation === "importKey" || operation === "exportKey" || name === "AES-KW") {
     return new Algorithm(name);
