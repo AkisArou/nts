@@ -1,9 +1,5 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "revisions": {
-    "webidl/ecmascript-binding/es-exceptions": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603"
-  },
   "nodeCompatibilityContext": {
     "version": "v24.20.0",
     "revision": "71b8b174857e25106d39b61a9e6f30d927da8b01",
@@ -14,10 +10,6 @@
   "fixtures": [
     {
       "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
-      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
-      "sha256": "b85850f07bd97c6424439f0c79e2297a2321d4e3989001f9e217192474b0827e",
-      "gitBlob": "9b6978783723ebaa1e925873d71db85c11d927f7",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -281,10 +273,6 @@
     },
     {
       "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
-      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
-      "sha256": "76fcec262583b0902408b1cc5341290c34c8b0b6a465ca73c29b88500289c35d",
-      "gitBlob": "011521652654c93a2d9b8a7915e432b55b9f2084",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -312,10 +300,6 @@
     },
     {
       "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
-      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
-      "sha256": "8f1ed376832ce0d8baad20fa114bbf42e25d2e1cbb082185abf09c139fc1cf20",
-      "gitBlob": "c4ddabdafd4597aac6f13ad5182b78566045c09a",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -373,10 +357,6 @@
     },
     {
       "path": "webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
-      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
-      "sha256": "2e343b3449e4140cabee7440538353a85881414ab026cbd0b632662bd02106b5",
-      "gitBlob": "d1c86930d4cd8ef57fdc6e6b8bcff03049a389ca",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -432,10 +412,6 @@
     },
     {
       "path": "webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
-      "revision": "2f96fa19966d6bc19e979a09479ac8a7aa337c54",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2f96fa19966d6bc19e979a09479ac8a7aa337c54/webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
-      "sha256": "2db2086cc369fc230b476c921809cc953e9d486fdeccde888f25abdef694dc68",
-      "gitBlob": "6f3097b222ed1feb56e1b53606b403944421029d",
       "format": "javascript",
       "support": [],
       "harnessScripts": [],
@@ -449,10 +425,7 @@
   ],
   "support": [],
   "license": {
-    "path": "LICENSE.md",
-    "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
-    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
-    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+    "path": "LICENSE.md"
   },
   "excluded": [
     {
@@ -470,5 +443,6 @@
     "runnable": 56,
     "blocked": 60,
     "excludedSourcePaths": 1
-  }
+  },
+  "versions": "versions.json"
 }

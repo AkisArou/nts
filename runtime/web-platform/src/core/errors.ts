@@ -4,7 +4,7 @@ import { coerceToDOMString } from "./webidl.ts";
 export class DOMException extends Error {
   readonly #exceptionName: string;
   readonly #exceptionMessage: string;
-  readonly [Symbol.toStringTag] = "DOMException";
+  get [Symbol.toStringTag](): string { return "DOMException"; }
   static readonly INDEX_SIZE_ERR = 1;
   static readonly DOMSTRING_SIZE_ERR = 2;
   static readonly HIERARCHY_REQUEST_ERR = 3;
