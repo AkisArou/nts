@@ -1,0 +1,213 @@
+{
+  "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+  "draftRevision": "d5570f3448ce165eacca2e0a519eeacd4d4a5123",
+  "tools": {
+    "node": "24.20.0",
+    "pnpm": "10.15.0",
+    "typescript": "7.0.2"
+  },
+  "typechecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --ignoreConfig --types node --lib esnext --noEmit --strict --noUncheckedIndexedAccess --noImplicitReturns --noUnusedLocals --noUnusedParameters --target ESNext --module preserve --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck runtime/web-platform/test/wpt-websocket-stream.test.ts runtime/web-platform/test/wpt-websocket-stream-lifetime.test.ts runtime/web-platform/test/websocket-stream-wpt-policy.test.ts",
+      "exitCode": 0
+    }
+  ],
+  "packageGate": {
+    "sourceCommit": "794878585cf04117c13ffde7ddd4200071b8d833",
+    "sourceTree": "a0becbdb16e9fa79b41e445f9c26a28c7ff1f480",
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 0,
+    "node": {
+      "tests": 2569,
+      "pass": 2526,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 43,
+      "todo": 0
+    },
+    "streamWpt": {
+      "runs": 13,
+      "pass": 97,
+      "fail": 0,
+      "blocked": 10
+    },
+    "existingWebSocketWpt": {
+      "pass": 846,
+      "fail": 0,
+      "blocked": 25
+    },
+    "existingUpstreamRunner": {
+      "upstreamTests": 2817,
+      "applicableTests": 2772,
+      "passed": 2772,
+      "failed": 0,
+      "notApplicable": 45
+    },
+    "compiledAxis": {
+      "status": "skipped",
+      "reason": "No nts compiler is available. Host evidence does not establish compilation or native behavior."
+    },
+    "logSha256": "b493f022b5f8acf9e1d92816e1df09e2fa4e9a9c9ffcb5bf7b619de5a0b14834",
+    "note": "The later reporting commit changes only evidence and documentation. The 43 skips are ten Stream blocks and 33 inherited blocks/deferred controls."
+  },
+  "sourcePolicy": {
+    "file": "runtime/web-platform/test/websocket-stream-wpt-policy.test.ts",
+    "sha256": "f95bba15a65056e76e53fa177a921f0fc004a4fc992e20ede02e32e01585fc66",
+    "before": {
+      "sourceCommit": "c41a89baf7a5ccb381d6927b5ae8fb09aaabd7e1",
+      "pass": 4,
+      "fail": 31,
+      "cancelled": 0,
+      "skipped": 0,
+      "logSha256": "90d483190ec0a11f271099f3328019bb5681f3cf11c8093e3a43601ce897a82f"
+    },
+    "after": {
+      "sourceCommit": "794878585cf04117c13ffde7ddd4200071b8d833",
+      "pass": 35,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "logSha256": "b493f022b5f8acf9e1d92816e1df09e2fa4e9a9c9ffcb5bf7b619de5a0b14834"
+    },
+    "note": "Same final 35-control file on both sources. Multiple ordering controls expose the same missing task boundary; this is five source fixes, not 31 independent bugs. These are supplemental controls, not WPT reductions."
+  },
+  "lifetimeControls": {
+    "file": "runtime/web-platform/test/wpt-websocket-stream-lifetime.test.ts",
+    "pass": 5,
+    "fail": 0,
+    "gcProbe": {
+      "sourceCommit": "0c7872484e6a3f467feb48f96a669ce31f8d011e",
+      "description": "Same unchanged write.any.js GC-only registration in both variants and same two-runtime assembly; five other registrations per variant are blocked only in this diagnostic.",
+      "before": {
+        "exitCode": 1,
+        "fixtureErrors": 2,
+        "reason": "Immediate cleanup rejects outstanding writes with Web-platform runtime is closed",
+        "logSha256": "8908e5470c301762bbda0ab03ae9a597d4e80af35335c4dff0e3339183887961"
+      },
+      "after": {
+        "exitCode": 0,
+        "pass": 2,
+        "fail": 0,
+        "probeOnlyBlocked": 10,
+        "logSha256": "cc351bf910cc724480ce4595d98251b1225c19765d6e404d3cc7b7944c515466"
+      },
+      "fullProfile": "Both independent GC registrations are enabled in the committed 97-pass profile."
+    }
+  },
+  "initialUnrestrictedAttempt": {
+    "sourceCommit": "0c7872484e6a3f467feb48f96a669ce31f8d011e",
+    "manifestSha256": "b36f9cea92b2521432e9200d6b6ffd04919d28e7d4fd45b5f200f8fe10fbc026",
+    "selectedRuns": 13,
+    "selectedRegistrations": 107,
+    "blocks": 0,
+    "exitCode": 1,
+    "completedWptRuns": 10,
+    "completedWptPasses": 88,
+    "unreportedRegistrations": 19,
+    "node": {
+      "tests": 121,
+      "pass": 98,
+      "fail": 23,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "logSha256": "fbb10a56c9de0ad7c93d4a41b42cd5c14951b676f53173dfcbd38ab425f82396",
+    "note": "Incomplete exploratory run, not a comparable per-file baseline. Three fixture parents fail: one delayed observer of a 20MiB write rejection (above the 16MiB provider limit), and two GC fixture teardown failures. Nineteen child results cannot start after their parents fail. Named timing/buffer classification and provider draining precede the complete baseline capture."
+  },
+  "sabotage": {
+    "candidate": "794878585cf04117c13ffde7ddd4200071b8d833",
+    "candidateTree": "a0becbdb16e9fa79b41e445f9c26a28c7ff1f480",
+    "wptRevision": "a8f306ee4399724f33399dfdcac7da296f3cc05a",
+    "nodeVersion": "v24.20.0",
+    "command": "NTS_WPT_WEBSOCKET_STREAM_FILTER=read.any.js node --expose-gc --test --test-reporter=spec runtime/web-platform/test/wpt-websocket-stream.test.ts",
+    "change": {
+      "path": "runtime/web-platform/src/websocket/websocket-stream.ts",
+      "originalLine": "this.#readableController?.enqueue(incoming.data);",
+      "sabotagedLine": "this.#readableController?.enqueue(incoming.kind === \"binary\" ? \"\" : incoming.data);",
+      "originalGitBlob": "01fdc936aeef7c35be70125ea82d78758722a4b9",
+      "originalSha256": "8aaeda127115f498e3231a0a0b7d1f910fcb72dfe11532ecb7a6747b9c47612b",
+      "sabotagedGitBlob": "5a214d1d695e74650d63cd75de6e1fcaac56e6ac",
+      "sabotagedSha256": "09a06eb056a445d549a59159b0b870e6bd8d08247ec871ed0d9d3302aae3770c",
+      "restoredGitBlob": "01fdc936aeef7c35be70125ea82d78758722a4b9",
+      "restoredSha256": "8aaeda127115f498e3231a0a0b7d1f910fcb72dfe11532ecb7a6747b9c47612b"
+    },
+    "manifestSha256": "9fa99250dad7f9ec542988c2825b71c91bed45fdfaa02cc1db401c6b0c652aa4",
+    "driverSha256": "6ea854426767dfe26553f236a58870b5ce57392898f5fecb7c709439e570ef64",
+    "sabotage": {
+      "exit": 1,
+      "wpt": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "node": {
+        "tests": 5,
+        "pass": 0,
+        "fail": 5,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "files": [
+        {
+          "path": "websockets/stream/tentative/read.any.js?default",
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        },
+        {
+          "path": "websockets/stream/tentative/read.any.js?wss",
+          "pass": 0,
+          "fail": 1,
+          "blocked": 0
+        }
+      ],
+      "log": "websocket-stream-sabotage-read.log",
+      "logSha256": "9fbb97a999247bc990ebc26e9a1b5d21be1c877f1782be3eba2a809a8a840834"
+    },
+    "restored": {
+      "exit": 0,
+      "wpt": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "node": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "files": [
+        {
+          "path": "websockets/stream/tentative/read.any.js?default",
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        },
+        {
+          "path": "websockets/stream/tentative/read.any.js?wss",
+          "pass": 1,
+          "fail": 0,
+          "blocked": 0
+        }
+      ],
+      "log": "websocket-stream-sabotage-restored.log",
+      "logSha256": "1e04aa2d421308518413d4abf5a4c32ac07398381cde1f67f3d0f17e8e9a6a03"
+    },
+    "restoredByteForByte": true,
+    "worktreeCleanBeforeRemoval": true,
+    "worktreeRemoved": true,
+    "hostDiagnosticCPUAffinity": "0-3,6-31; the portable gate itself requires only Node, without taskset"
+  }
+}
