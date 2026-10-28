@@ -1,0 +1,219 @@
+{
+  "date": "2026-10-28",
+  "node": "v24.20.0",
+  "sourceBase": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
+  "sourceCommit": "5139a3767770b0990002c5051b6bfc50d2795c72",
+  "testCommit": "a01743e0a7b7a9700242be4c51bf2706fdc6b890",
+  "scope": "Host evidence with source URLPattern and an explicitly installed test-only URL component capability; no compiled or performance claim.",
+  "baselineMethod": "Same pinned fixtures and final adapter applied to the source base, with URLPattern absent. No Node URLPattern was injected. Genuine Node URL remains an upstream expectation helper.",
+  "files": [
+    {
+      "path": "urlpattern/urlpattern.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 369,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 370,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "urlpattern/urlpattern.https.any.js",
+      "before": {
+        "pass": 1,
+        "fail": 369,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 370,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "urlpattern/urlpattern-constructor.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "urlpattern/urlpattern-hasregexpgroups.any.js",
+      "before": {
+        "pass": 0,
+        "fail": 1,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      }
+    },
+    {
+      "path": "urlpattern/urlpattern-empty-regexp-group.html",
+      "before": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "after": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      }
+    }
+  ],
+  "totals": {
+    "registered": 745,
+    "before": {
+      "pass": 2,
+      "fail": 743,
+      "blocked": 0
+    },
+    "after": {
+      "pass": 745,
+      "fail": 0,
+      "blocked": 0
+    }
+  },
+  "controls": {
+    "pass": 64,
+    "fail": 0,
+    "skip": 0,
+    "existingAdapterControls": 36,
+    "newPolicyProviderAdapterControls": 28
+  },
+  "typechecks": {
+    "tooling/conformance/web-platform/tsconfig.json": {
+      "exitCode": 0,
+      "diagnostics": 0
+    },
+    "runtime/web-platform/test/wpt/tsconfig.json": {
+      "exitCode": 0,
+      "diagnostics": 0
+    }
+  },
+  "sabotage": {
+    "mutation": "Force the canonical source URLPattern.test() to return false.",
+    "fixture": "urlpattern/urlpattern.any.js",
+    "exitCode": 1,
+    "sourceSHA256Before": "4c6a7e22d607339d977f9c69c412b273f6903fda474a9fb2187df1bf9d3d2f71",
+    "sourceSHA256AfterRestore": "4c6a7e22d607339d977f9c69c412b273f6903fda474a9fb2187df1bf9d3d2f71",
+    "restored": true,
+    "files": [
+      {
+        "path": "urlpattern/urlpattern.any.js",
+        "pass": 132,
+        "fail": 238,
+        "blocked": 0
+      }
+    ]
+  },
+  "provenance": [
+    {
+      "path": "urlpattern/urlpattern.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "8e8f63551402b0b14ffedaba165c7d103430e705a335d744bd540db83348d174",
+      "gitBlob": "7d47d22609bf8eb14386b0363e36b86f77b2780d",
+      "bytes": 75,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/urlpattern.https.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "8e8f63551402b0b14ffedaba165c7d103430e705a335d744bd540db83348d174",
+      "gitBlob": "7d47d22609bf8eb14386b0363e36b86f77b2780d",
+      "bytes": 75,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/urlpattern-constructor.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "1bd1e358e89e767f647824bca98584131d65f806de3324ef2786bc1c729f90d0",
+      "gitBlob": "9290911d4b1c77141305f3914badf1ad1cbf6205",
+      "bytes": 418,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/urlpattern-hasregexpgroups.any.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "3ddb2100f7b62cc0ff17d1e193cb6ded16be9cab07402bb783172a8ddeed3085",
+      "gitBlob": "33133d2511b065ca94cc5e793066cc8111b4d6e6",
+      "bytes": 92,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/urlpattern-empty-regexp-group.html",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "e771813ba8fb7b9d38af822c00697e27c54ec4c375ec896aa9fcb5f32f47c86c",
+      "gitBlob": "529184880446661aa8ec7109aaca3807a67e4f00",
+      "bytes": 412,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/resources/urlpatterntests.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "b7f8d058e73d85827a7e5611420edbf8fe6b54a1bb451ba09f30f7f696ae9e8b",
+      "gitBlob": "761f96b6fd3392027f357ce79c11734d9b97557f",
+      "bytes": 7974,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/resources/urlpatterntestdata.json",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "f52a8ba3940de7e55ad47dc58eab5bccb697d7d76335c20ed7aaef6b85b98ab9",
+      "gitBlob": "272b51ef692183730529d39e05642611d147f6c9",
+      "bytes": 92124,
+      "upstreamEqual": true
+    },
+    {
+      "path": "urlpattern/resources/urlpattern-hasregexpgroups-tests.js",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "130329152a601d2242b26eaed2b7a7837972a34c5df324ca284ab23fd986b2d4",
+      "gitBlob": "4be886e4a5390d7d43356d853cc00c7bbb23d361",
+      "bytes": 1566,
+      "upstreamEqual": true
+    },
+    {
+      "path": "LICENSE.md",
+      "revision": "5847ee5cfa4f710cbb78ab9ef5cc66f74433ee03",
+      "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+      "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
+      "bytes": 1500,
+      "upstreamEqual": true
+    }
+  ],
+  "sourceSHA256": {
+    "runtime/web-platform/src/provider/url-pattern.ts": "6dd7db7a18d8c7ec1a1f076aee02ae966634a09faef3a7bfd70b14cb13e45d8e",
+    "runtime/web-platform/src/urlpattern/constructor-string.ts": "2fb8b0933ad3e2d371d62166e6425f7c6bdd68005411b34abe4fc9a0be94f5cc",
+    "runtime/web-platform/src/urlpattern/pattern.ts": "07d1fe567b06f4c8e990b4ba507a7efd2f3ffef7b61ec7d62e777e1fa9fe4367",
+    "runtime/web-platform/src/urlpattern/types.ts": "670f7527a75d11c8e22e7e307493138ec8b03e37d2784ff9ced7d466f9a9df48",
+    "runtime/web-platform/src/urlpattern/url-pattern.ts": "4c6a7e22d607339d977f9c69c412b273f6903fda474a9fb2187df1bf9d3d2f71"
+  },
+  "logSHA256": {
+    "before": "ecd8f520476cef84a95fbb801a26384d332a7eda4659942e140c186c7a6c5e9a",
+    "after": "a524c48e8432edbbcd6bb0840f73ce42621beff5b65924e94c963ca6a2d16e4c",
+    "sabotage": "8f59906659f99f425a9893e9c0e60e7c909a4288529d9d201890d0c283ce77c2",
+    "controls": "a1cf442679d35b93686f11c42b9aee8f915350100cdd0f82d87baf9f213400a1"
+  },
+  "nativeDependencies": [
+    "URLPatternURLCapability canonicalize for username, password, hostname, port, pathname, opaquePathname, search and hash; hasOpaquePath for parsed URL records.",
+    "Provider bootstrap registration and global exposure in the separately coordinated integration PR.",
+    "nts runtime RegExp compilation and UnicodeSets v semantics: maintainers compile and record any existing compiler refusals."
+  ],
+  "notRun": [
+    "nts compiled axis",
+    "full project gate",
+    "performance benchmarks"
+  ]
+}
