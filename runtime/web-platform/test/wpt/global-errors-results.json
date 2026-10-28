@@ -342,5 +342,24 @@
       "https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm",
       "https://html.spec.whatwg.org/multipage/webappapis.html#the-errorevent-interface"
     ]
+  },
+  "stackValidation": {
+    "basePullRequest": 42,
+    "baseCommit": "8b45e2b50aeea02f1eb6b274d03be77adad196d0",
+    "sourceCommit": "306e25dbd043fa026be3efe0fbc7f3235dd469e8",
+    "sourceTree": "8262fe3bcea049de7a51f55b6ad8134e8b522d00",
+    "fullGate": {
+      "exitCode": 0,
+      "tests": 5134,
+      "pass": 4809,
+      "fail": 0,
+      "skipped": 325,
+      "upstreamPass": 2772,
+      "upstreamFail": 0,
+      "upstreamNotApplicable": 45
+    },
+    "strictProjects": "source and WPT pass",
+    "compiled": "not verified; compiler absent",
+    "logSHA256": "b832f228661ed8d25fe37251ff56ee538cf98c914956908fe323ea098948bc31"
   }
 }

@@ -1,5 +1,8 @@
 # Global errors and rejection notifications: source policy
 
+Item B10 is stacked on [URLPattern PR #42](https://github.com/AkisArou/nts/pull/42),
+`chatgpt/urlpattern` at `8b45e2b50aeea02f1eb6b274d03be77adad196d0`.
+
 This change implements the source-owned parts of HTML's `reportError()`,
 `onerror`, `onunhandledrejection` and `onrejectionhandled`. The native binding
 for the actual global event target, error metadata and Promise host hooks is
@@ -337,3 +340,32 @@ The FileReader dependencies remain unchanged: native base64 for
 checkpoint for the two event-order cases. The known load-sensitive 100 ms
 adapter control is unchanged; its injected-clock replacement belongs to the
 maintainers.
+
+## Final stack validation and shared adapter overlap
+
+The public barrel exports the handler types. The provider barrel exports the
+source policy class and complete capability types, including stored callback
+context, canonical ErrorEvent reads and callback invocation completions. Actual
+global exposure is reserved for the next, separate small bootstrap PR.
+
+Both strict TypeScript projects pass on this stack. The full ordinary-node gate
+exits zero: **5,134 tests; 4,809 passed, 0 failed, 325 skipped**. The broader
+upstream runner records **2,772 passed, 0 failed, 45 not applicable**. The
+compiled axis explicitly skips because no compiler is available. These are
+new measurements on the URLPattern stack after all three review fixes; prior
+baseline, sabotage and regression evidence keeps its own recorded source pins.
+
+The shared adapter adds an explicit `uncaughtExceptionChannel` capability, a
+separate `reportUncaughtException` callback, and boolean
+`allow_uncaught_exception` support only when that channel exists. It preserves
+ordinary assertion/error reporting and the default rejection tested by the
+unchanged adapter controls. The merged runner also preserves URLPattern's
+inventory bound and post-close error check. Registration integrity failures
+remain recorded even if a provider catches the thrown exception. Three test
+entries are added to the shared tsconfig and check.sh lists. The maintainers
+merge these additive changes with PR #10 and other conformance tasks.
+
+No competing open PR's Event implementation is edited. Native global identity,
+trusted dispatch, callback contexts/checkpoints, initialized ErrorEvent reads,
+Promise internal slots and production engine hooks remain explicit unverified
+provider dependencies. Host contract-driver success does not satisfy them.
