@@ -32,6 +32,7 @@ pub mod counting;
 pub mod gobject;
 pub mod native;
 pub mod objc;
+pub mod optional;
 pub mod provider;
 pub mod release;
 pub mod string_hash;

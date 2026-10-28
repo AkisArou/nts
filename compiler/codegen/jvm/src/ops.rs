@@ -1716,6 +1716,12 @@ impl Emitter<'_> {
             return Ok(());
         }
         let placed = match &op.kind {
+            OpKind::Optional { .. } | OpKind::OptionalDefined(_) | OpKind::OptionalPayload(_) => {
+                self.optional_operation(code, pool, value)?
+            }
+            OpKind::ConstUndefined if matches!(op.ty, HirType::PossiblyUndefined(_)) => {
+                self.optional_operation(code, pool, value)?
+            }
             // Already in a slot: a parameter by the calling convention, a block
             // parameter because every edge into this block wrote it.
             OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
@@ -3266,7 +3272,11 @@ impl Emitter<'_> {
     }
 
     /// The same question between two types rather than two values.
-    fn assignable_types(&self, source: &HirType, target: &HirType) -> Result<(), Diagnostic> {
+    pub(crate) fn assignable_types(
+        &self,
+        source: &HirType,
+        target: &HirType,
+    ) -> Result<(), Diagnostic> {
         // Wrappers erase their payload's Java class, then restore it on read.
         // A shared wrapper descriptor does not license unrelated payloads.
         match (source, target) {
@@ -4075,7 +4085,8 @@ impl Emitter<'_> {
         // takes it first, which is why this is a branch here rather than one
         // more row in the table below.
         if let HirType::Managed(managed) = &from {
-            let tag = nts_core::hir::tags::of_prepared(self.program, &from);
+            let tag = nts_core::hir::tags::of_prepared(self.program, &from)
+                .ok_or_else(|| refuse(self.func, "an erased value without a fixed source tag"))?;
             if tag != nts_core::hir::tags::OBJECT && !matches!(managed, ManagedType::String) {
                 // A closure singleton erased is itself a constant: the tag is
                 // `FUNCTION` and the reference is the one instance. Building it
@@ -7483,7 +7494,7 @@ impl Emitter<'_> {
                 return self.closure_call(code, pool, result, *slot, args, origin);
             }
         };
-        self.direct_call(code, pool, result, name, args, origin)
+        self.direct_call(code, pool, value, name, args)
     }
 
     /// Discard a helper's answer where nothing wants it.
@@ -7792,11 +7803,12 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
-        result: &HirType,
+        value: ValueId,
         name: &str,
         args: &[ValueId],
-        origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
+        let result = &self.func.value(value).ty.clone();
+        let origin = &self.func.value(value).origin.clone();
         let Some(target) = self.program.funcs.iter().find(|func| func.name == name) else {
             return Err(refuse(
                 self.func,
@@ -7886,6 +7898,14 @@ impl Emitter<'_> {
                 &format!("a call to `{name}`, whose signature has no representation"),
             ));
         };
+        if target
+            .params
+            .iter()
+            .any(|p| matches!(p.ty, HirType::PossiblyUndefined(_)))
+            || matches!(target.return_type, HirType::PossiblyUndefined(_))
+        {
+            return self.optional_direct_call(code, pool, value, target, args);
+        }
         // Every argument against the parameter it lands in. The IR relates
         // these types; the class file has to as well, and where `Layout.base`
         // does not say so the JVM refuses the class rather than the call.
@@ -7971,6 +7991,9 @@ impl Emitter<'_> {
                         // on a pointer-cast backend is a heap write past the
                         // end of the allocation.
                         self.assignable_types(self.ty(*value), &self.func.return_type.clone())?;
+                        if self.optional_return(code, pool, *value)? {
+                            return Ok(());
+                        }
                         // The *method descriptor's* kind, not the value's. They
                         // agree wherever this backend holds a value in its
                         // declared representation and they are exactly what
@@ -8146,6 +8169,7 @@ impl Emitter<'_> {
                         return Err(refuse(self.func, "a block parameter with no storage"));
                     };
                     code.store(&origin, kind, slot);
+                    self.copy_optional_flag(code, pool, to, from)?;
                 }
                 Copy::Save { temp, from } => {
                     let kind = self.kind_of(from)?;
@@ -8155,6 +8179,7 @@ impl Emitter<'_> {
                         return Err(refuse(self.func, "a copy cycle with no scratch slot"));
                     };
                     code.store(&origin, kind, slot);
+                    self.save_optional_flag(code, pool, temp, from)?;
                 }
                 Copy::Restore { to, temp } => {
                     let kind = self.kind_of(to)?;
@@ -8167,6 +8192,7 @@ impl Emitter<'_> {
                         return Err(refuse(self.func, "a block parameter with no storage"));
                     };
                     code.store(&origin, kind, target);
+                    self.restore_optional_flag(code, temp, to)?;
                 }
             }
         }

@@ -334,6 +334,11 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
 /// nobody is looking at.
 fn c_type(ty: &HirType) -> String {
     match ty {
+        HirType::PossiblyUndefined(payload) => {
+            nts_core::hir::possibly_undefined::Payload::new((**payload).clone())
+                .expect("verified optional payload")
+                .native_name()
+        }
         HirType::NativePointer(name) => return name.pointer_type(),
         HirType::Managed(nts_core::hir::ManagedType::String) => "NtsString *",
         // Same as the map below: the harness generates calls from scalar

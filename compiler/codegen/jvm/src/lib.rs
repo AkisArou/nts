@@ -43,6 +43,7 @@ mod face;
 mod fuse;
 mod guarded_members;
 pub mod hierarchy;
+mod optional;
 mod program;
 pub use program::JvmProgram;
 mod intcall;

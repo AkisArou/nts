@@ -150,7 +150,12 @@ fn checked_family_payload(
     what: &str,
 ) -> Result<ValueId, Diagnostic> {
     let held = tag_of(builder, at, read);
-    let wanted_tag = tags::of_representation(&want);
+    let wanted_tag = tags::of_representation(&want).ok_or_else(|| {
+        builder.unsupported(
+            at,
+            "a claimed read whose representation has no single runtime tag",
+        )
+    })?;
     let mut matches = compare(builder, at, held, BinOp::Eq, wanted_tag);
     // Pointer storage can represent one declared absence. Keep that same
     // source contract at its checked read, never accepting other payload tags.

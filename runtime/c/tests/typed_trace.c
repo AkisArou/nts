@@ -249,6 +249,47 @@ static void runtime_array(void) {
             nts_live_bytes() == bytes);
 }
 
+static void undefined_reference(void) {
+  size_t before = nts_live_count(), bytes = nts_live_bytes();
+  NtsHeader *undefined = NTS_UNDEFINED_REFERENCE;
+  const NtsDescriptor *descriptor = undefined->descriptor;
+  check("undefined has a real identity distinct from null", undefined != NULL);
+  check("undefined has no user fields or traced edges",
+        descriptor->references == 0 && descriptor->erased == 0 &&
+            descriptor->cyclic == 0);
+  for (size_t i = 0; i < 100; i++) {
+    nts_retain(undefined);
+    nts_release(undefined);
+  }
+  NtsArray *a = nts_array_new(&refs, 0);
+  nts_array_push_ref(a, undefined);
+  nts_array_push_ref(a, NULL);
+  nts_array_push_ref(a, undefined);
+  nts_retain(&a->header);
+  nts_array_push_ref(a, a);
+  /* A non-final decrement buffers the still-anchored cycle, so this pass
+   * really trial-deletes and restores its children, including undefined. */
+  nts_retain(&a->header);
+  nts_release(&a->header);
+  check("the anchored cycle is buffered before trial deletion",
+        nts_cycle_candidates() != 0);
+  uint64_t epoch = nts_collection_epoch();
+  nts_collect_cycles();
+  check("the anchored cycle was scanned and its outside root restored",
+        nts_collection_epoch() > epoch && a->header.reserved == 2);
+  check("an anchored cycle keeps undefined and null as distinct references",
+        nts_array_at_ref(a, 0) == undefined && nts_array_at_ref(a, 1) == NULL &&
+            nts_array_at_ref(a, 2) == undefined);
+  nts_release(&a->header);
+  nts_collect_cycles();
+  check("undefined survives trial deletion and dead-cycle reclamation",
+        undefined->descriptor == descriptor &&
+            undefined->reserved == NTS_IMMORTAL &&
+            undefined->flags == NTS_BLACK && undefined->length == 0);
+  check("the dead cycle is reclaimed and undefined adds no managed storage",
+        nts_live_count() == before && nts_live_bytes() == bytes);
+}
+
 int main(void) {
   nts_register_holders(NTS_FAMILY_GOBJECT, &holders);
   nts_handle_family_register(NTS_TAG_HANDLE_OBJC, handle_keep, handle_release,
@@ -260,6 +301,7 @@ int main(void) {
   foreign_holder(&typed);
   foreign_holder(&generic);
   runtime_array();
+  undefined_reference();
   nts_collect_cycles();
   check("all typed trace storage is reclaimed",
         nts_live_count() == 0 && nts_live_bytes() == 0);

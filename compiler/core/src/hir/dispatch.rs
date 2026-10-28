@@ -283,6 +283,9 @@ fn keeps_the_declared_prefix(
 /// name already, put there for exactly this kind of sentence.
 fn names(program: &Program, layouts: &super::fields::LayoutIndex, ty: &HirType) -> String {
     match ty {
+        HirType::PossiblyUndefined(payload) => {
+            format!("{} or undefined", names(program, layouts, payload))
+        }
         HirType::Erased => "an erased value".to_owned(),
         HirType::Managed(ManagedType::Object(id)) => layouts.of_class(*id).map_or_else(
             || "an object".to_owned(),

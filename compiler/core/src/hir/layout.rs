@@ -152,6 +152,14 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
             size: 2 * POINTER,
             align: POINTER,
         },
+        HirType::PossiblyUndefined(payload) if payload.is_managed() => Shape {
+            size: POINTER,
+            align: POINTER,
+        },
+        HirType::PossiblyUndefined(payload) => {
+            let payload = shape_of(payload)?;
+            Shape { size: (payload.size + 1).next_multiple_of(payload.align), align: payload.align }
+        },
         HirType::Void | HirType::Never => return None,
     })
 }

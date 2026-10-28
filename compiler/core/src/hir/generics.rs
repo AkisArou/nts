@@ -1403,6 +1403,7 @@ pub(crate) fn spell(ty: &super::HirType) -> String {
     use super::{HirType, ManagedType};
     match ty {
         HirType::Void => "void".to_owned(),
+        HirType::PossiblyUndefined(payload) => format!("optional_{}", spell(payload)),
         HirType::Never => "never".to_owned(),
         HirType::NativePointer(super::native::Pointee::Opaque(name)) => {
             format!("native{}_{}", name.len(), name)

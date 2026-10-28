@@ -403,7 +403,8 @@ fn fill_edges(
             OpKind::ConstUndefined => (tags::UNDEFINED, None),
             OpKind::ConstNull => (tags::NULL, None),
             OpKind::Erase { value, .. } => (
-                tags::of_representation(&func.values[value.0 as usize].ty),
+                tags::of_representation(&func.values[value.0 as usize].ty)
+                    .expect("splittable proves every erased source has a scalar payload"),
                 Some(value),
             ),
             // A member, already split above.

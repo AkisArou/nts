@@ -449,6 +449,10 @@ fn substitute_rejection(rejection: Option<&mut super::Rejection>, of: impl Fn(Va
 #[allow(clippy::too_many_lines)]
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
+        OpKind::Optional { defined, payload } => {
+            *defined = of(*defined);
+            *payload = of(*payload);
+        }
         OpKind::NativeBridge { closure, .. } => *closure = of(*closure),
 
         OpKind::Erase { value, .. }
@@ -516,7 +520,10 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::ObjcClass { .. }
         | OpKind::ObjcSelector { .. }
         | OpKind::DelegateInvoke { .. } => {}
-        OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => *value = of(*value),
+        OpKind::OptionalDefined(value)
+        | OpKind::OptionalPayload(value)
+        | OpKind::Yield { value }
+        | OpKind::GlobalSet { value, .. } => *value = of(*value),
         OpKind::StringUnitAt { string, index, .. } => {
             *string = of(*string);
             *index = of(*index);

@@ -21,6 +21,12 @@ use super::{
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
+    /// An optional value lost definedness or exposed an unproved payload.
+    OptionalValue {
+        func: String,
+        value: ValueId,
+        reason: &'static str,
+    },
     /// An operation marked [`super::Func::exact`] is no longer the integer
     /// `+`, `-` or `*`, at the type, the mark was made for. A pass after
     /// `exact::mark` rewrote it, and the promise a backend makes on it -- that
@@ -1064,8 +1070,10 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
             // `compatible` and not equality: two references are two pointers
             // however their types relate, which is what lets `ref(): this`
             // return the class that implements it.
-            if !virtual_dispatch
-                && let Some(declared) = returns.get(name.as_str())
+            // Ordinary virtual result leniency cannot invent or discard the
+            // defined component. A coupled ABI always needs exact agreement.
+            if let Some(declared) = returns.get(name.as_str())
+                && (!virtual_dispatch || coupled_result(&op.ty, declared))
                 && !compatible(&op.ty, declared)
             {
                 problems.push(Invalid::CallResultType {
@@ -1079,7 +1087,7 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
                 // A virtual callee is reached through a descriptor rather than
                 // by symbol, so a declared name with no emitted function is not
                 // the undefined-symbol hazard `MissingCallee` exists for.
-                if virtual_dispatch {
+                if virtual_dispatch && !coupled_call(func, args, &op.ty) {
                     continue;
                 }
                 problems.push(Invalid::MissingCallee {
@@ -1115,6 +1123,17 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
     }
 }
 
+fn coupled_result(found: &HirType, declared: &HirType) -> bool {
+    matches!(found, HirType::PossiblyUndefined(_))
+        || matches!(declared, HirType::PossiblyUndefined(_))
+}
+fn coupled_call(func: &Func, args: &[ValueId], result: &HirType) -> bool {
+    matches!(result, HirType::PossiblyUndefined(_))
+        || args
+            .iter()
+            .any(|value| matches!(func.value(*value).ty, HirType::PossiblyUndefined(_)))
+}
+
 /// Whether a value of one type can be passed where another is expected.
 ///
 /// Not assignability -- the typechecker answered that. This asks whether the
@@ -1130,6 +1149,13 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
 pub(super) fn compatible(found: &HirType, want: &HirType) -> bool {
     if found == want {
         return true;
+    }
+    // The pointer niche does not license losing the defined component. This
+    // check must precede the ordinary managed-reference compatibility rule.
+    if matches!(found, HirType::PossiblyUndefined(_))
+        || matches!(want, HirType::PossiblyUndefined(_))
+    {
+        return false;
     }
     if matches!(found, HirType::Managed(super::ManagedType::Template))
         || matches!(want, HirType::Managed(super::ManagedType::Template))
@@ -1820,6 +1846,7 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
 
     check_operands(func, problems);
     check_dominance(func, &reachable, problems);
+    super::possibly_undefined::verify(func, &reachable, problems);
 }
 
 fn check_parameters(func: &Func, problems: &mut Vec<Invalid>) {
@@ -2306,6 +2333,7 @@ fn check_dominance(func: &Func, reachable: &FxHashSet<BlockId>, problems: &mut V
 
 pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
+        OpKind::Optional { defined, payload } => vec![*defined, *payload],
         OpKind::Erase { value, .. }
         | OpKind::TagOf { value }
         | OpKind::Unerase { value, .. }
@@ -2359,7 +2387,10 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::ClosureStatic
         | OpKind::ObjectNew { .. }
         | OpKind::GlobalGet(_) => Vec::new(),
-        OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => vec![*value],
+        OpKind::OptionalDefined(value)
+        | OpKind::OptionalPayload(value)
+        | OpKind::Yield { value }
+        | OpKind::GlobalSet { value, .. } => vec![*value],
         OpKind::StringUnitAt { string, index, .. } => vec![*string, *index],
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
         // A view's string is an operand like a converted value's, and for the
@@ -2502,6 +2533,420 @@ mod tests {
             }],
             ..Program::default()
         }
+    }
+
+    fn optional_fixture() -> Program {
+        let optional = HirType::PossiblyUndefined(Box::new(HirType::NUMBER));
+        let value = |kind, ty| {
+            let mut value = op(kind);
+            value.ty = ty;
+            value
+        };
+        func(
+            vec![
+                value(OpKind::Param(0), optional),
+                value(OpKind::OptionalDefined(ValueId(0)), HirType::Bool),
+                value(OpKind::OptionalPayload(ValueId(0)), HirType::NUMBER),
+                value(OpKind::ConstFloat(9.0), HirType::NUMBER),
+            ],
+            vec![
+                block(
+                    vec![],
+                    vec![ValueId(0), ValueId(1)],
+                    Terminator::Branch {
+                        cond: ValueId(1),
+                        then_target: BlockId(1),
+                        then_args: vec![],
+                        else_target: BlockId(2),
+                        else_args: vec![],
+                    },
+                ),
+                block(
+                    vec![],
+                    vec![ValueId(2)],
+                    Terminator::Return(Some(ValueId(2))),
+                ),
+                block(
+                    vec![],
+                    vec![ValueId(3)],
+                    Terminator::Return(Some(ValueId(3))),
+                ),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_foreign_call_needs_the_projected_payload_not_the_optional_carrier() {
+        let mut control = optional_fixture();
+        let mut call = op(OpKind::Call {
+            callee: Callee::External("foreign_number".to_owned()),
+            args: vec![ValueId(2)],
+            frame: None,
+        });
+        call.ty = HirType::NUMBER;
+        control.funcs[0].values.push(call);
+        control.funcs[0].blocks[1].ops.push(ValueId(4));
+        control.funcs[0].blocks[1].terminator = Terminator::Return(Some(ValueId(4)));
+        assert_eq!(verify(&control), Ok(()));
+        let mut subject = control.clone();
+        if let OpKind::Call { args, .. } = &mut subject.funcs[0].values[4].kind {
+            args[0] = ValueId(0);
+        }
+        assert!(
+            verify(&subject)
+                .expect_err("the ABI cannot silently drop presence")
+                .iter()
+                .any(|problem| matches!(
+                    problem,
+                    Invalid::OptionalValue {
+                        value: ValueId(4),
+                        ..
+                    }
+                ))
+        );
+        let mut result = control;
+        result.funcs[0].values[4].ty = HirType::PossiblyUndefined(Box::new(HirType::NUMBER));
+        assert!(
+            verify(&result)
+                .expect_err("the foreign return has no coupled ABI declaration")
+                .iter()
+                .any(|problem| matches!(
+                    problem,
+                    Invalid::OptionalValue {
+                        value: ValueId(4),
+                        ..
+                    }
+                ))
+        );
+    }
+
+    fn optional_store_receiver(array: bool) -> Program {
+        use crate::hir::{Field, Layout, ManagedType};
+        use nts_semantic_schema::TypeId;
+        let payload = if array {
+            HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)))
+        } else {
+            HirType::Managed(ManagedType::Object(TypeId(1)))
+        };
+        let mut maybe = op(OpKind::Param(0));
+        maybe.ty = HirType::PossiblyUndefined(Box::new(payload.clone()));
+        let mut receiver = op(OpKind::Param(1));
+        receiver.ty = payload;
+        let mut store = op(if array {
+            OpKind::ArraySet {
+                array: ValueId(0),
+                index: ValueId(2),
+                value: ValueId(3),
+                checked: true,
+            }
+        } else {
+            OpKind::FieldSet {
+                object: ValueId(0),
+                field: 0,
+                value: ValueId(3),
+            }
+        });
+        store.ty = HirType::Void;
+        let mut program = func(
+            vec![
+                maybe,
+                receiver,
+                op(OpKind::ConstFloat(0.0)),
+                op(OpKind::ConstFloat(7.0)),
+                store,
+            ],
+            vec![block(
+                vec![],
+                (0..5).map(ValueId).collect(),
+                Terminator::Return(Some(ValueId(3))),
+            )],
+        );
+        if !array {
+            program.layouts.push(Layout {
+                types: vec![TypeId(1)],
+                name: "OptionalReceiver".into(),
+                fields: vec![Field {
+                    name: "value".to_owned().into(),
+                    ty: HirType::NUMBER,
+                    written: None,
+                    declared_by: None,
+                    readonly: false,
+                }],
+                methods: vec![],
+                interfaces: vec![],
+                base: None,
+            });
+        }
+        program
+    }
+    #[test]
+    fn a_store_preserves_its_value_but_cannot_discard_the_receivers_presence() {
+        for array in [false, true] {
+            let subject = optional_store_receiver(array);
+            assert!(
+                verify(&subject)
+                    .expect_err("the receiver must first be projected")
+                    .iter()
+                    .any(|problem| matches!(
+                        problem,
+                        Invalid::OptionalValue {
+                            value: ValueId(4),
+                            ..
+                        }
+                    ))
+            );
+            let mut control = subject;
+            match &mut control.funcs[0].values[4].kind {
+                OpKind::ArraySet { array, .. } => *array = ValueId(1),
+                OpKind::FieldSet { object, .. } => *object = ValueId(1),
+                _ => unreachable!(),
+            }
+            assert_eq!(verify(&control), Ok(()));
+        }
+    }
+    #[test]
+    fn an_optional_array_index_cannot_be_mistaken_for_the_stored_value() {
+        let mut subject = optional_store_receiver(true);
+        let number = HirType::PossiblyUndefined(Box::new(HirType::NUMBER));
+        subject.funcs[0].params[0].ty = number.clone();
+        subject.funcs[0].values[0].ty = number;
+        subject.funcs[0].values[4].kind = OpKind::ArraySet {
+            array: ValueId(1),
+            index: ValueId(0),
+            value: ValueId(3),
+            checked: true,
+        };
+        assert!(
+            verify(&subject)
+                .expect_err("the index must first be projected")
+                .iter()
+                .any(|problem| matches!(
+                    problem,
+                    Invalid::OptionalValue {
+                        value: ValueId(4),
+                        ..
+                    }
+                ))
+        );
+        if let OpKind::ArraySet { index, .. } = &mut subject.funcs[0].values[4].kind {
+            *index = ValueId(2);
+        }
+        assert_eq!(verify(&subject), Ok(()));
+    }
+
+    #[test]
+    fn virtual_results_cannot_invent_or_discard_optional_definedness() {
+        use crate::hir::{Layout, ManagedType};
+        use nts_semantic_schema::TypeId;
+        let object = HirType::Managed(ManagedType::Object(TypeId(1)));
+        let mut receiver = op(OpKind::Param(0));
+        receiver.ty = object;
+        let mut call = op(OpKind::Call {
+            callee: Callee::Virtual {
+                slot: 0,
+                declared: "target".into(),
+            },
+            args: vec![ValueId(0)],
+            frame: None,
+        });
+        call.ty = HirType::NUMBER;
+        let mut control = func(
+            vec![receiver.clone(), call],
+            vec![block(
+                vec![],
+                vec![ValueId(0), ValueId(1)],
+                Terminator::Return(Some(ValueId(1))),
+            )],
+        );
+        let target = func(
+            vec![receiver, op(OpKind::ConstFloat(7.0))],
+            vec![block(
+                vec![],
+                vec![ValueId(0), ValueId(1)],
+                Terminator::Return(Some(ValueId(1))),
+            )],
+        );
+        let mut target = target.funcs.into_iter().next().expect("target function");
+        target.name = "target".into();
+        control.funcs.push(target);
+        control.layouts.push(Layout {
+            types: vec![TypeId(1)],
+            name: "VirtualOptional".into(),
+            fields: vec![],
+            methods: vec![Some("target".into())],
+            interfaces: vec![],
+            base: None,
+        });
+        assert_eq!(verify(&control), Ok(()));
+        let pair = HirType::PossiblyUndefined(Box::new(HirType::NUMBER));
+        let mut subject = control.clone();
+        subject.funcs[0].return_type = pair.clone();
+        subject.funcs[0].values[1].ty = pair;
+        assert!(
+            verify(&subject)
+                .expect_err("virtual dispatch must not invent definedness")
+                .iter()
+                .any(|problem| matches!(problem, Invalid::CallResultType { .. }))
+        );
+    }
+
+    #[test]
+    fn an_optional_payload_needs_the_same_values_defined_edge() {
+        let program = optional_fixture();
+        assert_eq!(verify(&program), Ok(()));
+        let mut missing_test = program.clone();
+        missing_test.funcs[0].values[1].kind = OpKind::ConstBool(true);
+        assert!(
+            verify(&missing_test)
+                .expect_err("a true constant is not the optional test")
+                .iter()
+                .any(|invalid| matches!(
+                    invalid,
+                    Invalid::OptionalValue {
+                        value: ValueId(2),
+                        ..
+                    }
+                ))
+        );
+        let mut false_edge = program;
+        false_edge.funcs[0].blocks[1].ops = vec![ValueId(3)];
+        false_edge.funcs[0].blocks[1].terminator = Terminator::Return(Some(ValueId(3)));
+        false_edge.funcs[0].blocks[2].ops = vec![ValueId(2)];
+        false_edge.funcs[0].blocks[2].terminator = Terminator::Return(Some(ValueId(2)));
+        assert!(
+            verify(&false_edge)
+                .expect_err("false is undefined")
+                .iter()
+                .any(|invalid| matches!(
+                    invalid,
+                    Invalid::OptionalValue {
+                        value: ValueId(2),
+                        ..
+                    }
+                ))
+        );
+    }
+
+    #[test]
+    fn one_optional_test_does_not_prove_another_values_payload() {
+        let mut program = optional_fixture();
+        let body = &mut program.funcs[0];
+        let mut second = body.params[0].clone();
+        second.name = "other".to_owned();
+        body.params.push(second);
+        let mut parameter = body.values[0].clone();
+        parameter.kind = OpKind::Param(1);
+        body.values.push(parameter);
+        body.blocks[0].ops.insert(0, ValueId(4));
+        body.values[2].kind = OpKind::OptionalPayload(ValueId(4));
+        assert!(
+            verify(&program)
+                .expect_err("different logical values")
+                .iter()
+                .any(|invalid| matches!(
+                    invalid,
+                    Invalid::OptionalValue {
+                        value: ValueId(2),
+                        ..
+                    }
+                ))
+        );
+    }
+
+    #[test]
+    fn an_optional_cannot_lose_definedness_at_an_ordinary_conversion_or_return() {
+        let mut program = optional_fixture();
+        program.funcs[0].values[2].kind = OpKind::Convert(ValueId(0));
+        assert!(
+            verify(&program)
+                .expect_err("ordinary conversion cannot discard presence")
+                .iter()
+                .any(|invalid| matches!(
+                    invalid,
+                    Invalid::OptionalValue {
+                        value: ValueId(2),
+                        ..
+                    }
+                ))
+        );
+        let mut program = optional_fixture();
+        program.funcs[0].return_type = program.funcs[0].params[0].ty.clone();
+        assert!(
+            verify(&program)
+                .expect_err("both return components are required")
+                .iter()
+                .any(|invalid| matches!(invalid, Invalid::ReturnType { .. }))
+        );
+    }
+
+    #[test]
+    fn a_rejoined_false_edge_does_not_prove_definedness() {
+        let mut program = optional_fixture();
+        program.funcs[0].blocks[2].ops.clear();
+        program.funcs[0].blocks[2].terminator = Terminator::Jump {
+            target: BlockId(1),
+            args: vec![],
+        };
+        assert!(
+            verify(&program)
+                .expect_err("undefined can reach the payload block")
+                .iter()
+                .any(|invalid| matches!(
+                    invalid,
+                    Invalid::OptionalValue {
+                        value: ValueId(2),
+                        ..
+                    }
+                ))
+        );
+    }
+
+    #[test]
+    fn an_optional_reference_is_not_an_ordinary_pointer_at_a_typed_boundary() {
+        let reference = HirType::Managed(crate::hir::ManagedType::String);
+        let optional = HirType::PossiblyUndefined(Box::new(reference.clone()));
+        assert!(!compatible(&optional, &reference));
+        assert!(!compatible(&reference, &optional));
+        assert!(compatible(&optional, &optional));
+    }
+
+    #[test]
+    fn only_a_known_present_constructor_licenses_an_unguarded_payload() {
+        let optional = HirType::PossiblyUndefined(Box::new(HirType::NUMBER));
+        let mut present = op(OpKind::ConstBool(true));
+        present.ty = HirType::Bool;
+        let mut packed = op(OpKind::Optional {
+            defined: ValueId(0),
+            payload: ValueId(1),
+        });
+        packed.ty = optional;
+        let mut program = func(
+            vec![
+                present,
+                op(OpKind::ConstFloat(f64::NAN)),
+                packed,
+                op(OpKind::OptionalPayload(ValueId(2))),
+            ],
+            vec![block(
+                vec![],
+                vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                Terminator::Return(Some(ValueId(3))),
+            )],
+        );
+        assert_eq!(verify(&program), Ok(()));
+        program.funcs[0].values[0].kind = OpKind::ConstBool(false);
+        assert!(
+            verify(&program)
+                .expect_err("a false constructor hides its payload")
+                .iter()
+                .any(|invalid| matches!(
+                    invalid,
+                    Invalid::OptionalValue {
+                        value: ValueId(3),
+                        ..
+                    }
+                ))
+        );
     }
 
     /// Two arrays of different elements are two different objects.

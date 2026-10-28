@@ -9818,6 +9818,7 @@ fn representation_word(ty: &HirType) -> &'static str {
         HirType::Float { .. } => "a number",
         HirType::BigInt => "a bigint",
         HirType::Erased => "an erased value",
+        HirType::PossiblyUndefined(_) => "a possibly undefined value",
         HirType::Managed(managed) => managed_word(managed),
     }
 }
@@ -9859,7 +9860,7 @@ const fn answer_family(ty: &HirType) -> Option<AnswerFamily> {
         HirType::Managed(_) => AnswerFamily::Reference,
         HirType::NativePointer(_) => AnswerFamily::Native,
         HirType::Void => AnswerFamily::Nothing,
-        HirType::Erased | HirType::Never => return None,
+        HirType::Erased | HirType::Never | HirType::PossiblyUndefined(_) => return None,
     })
 }
 
@@ -19604,6 +19605,7 @@ fn named_representation(ty: &HirType) -> &'static str {
     match ty {
         HirType::Void => "nothing",
         HirType::Erased => "an erased value",
+        HirType::PossiblyUndefined(_) => "a possibly undefined value",
         HirType::Bool => "a boolean",
         HirType::BigInt => "a bigint",
         HirType::Never => "a value of type `never`",
@@ -43039,7 +43041,7 @@ impl<'a> FuncBuilder<'a> {
             }
             // Logical BigInt uses the existing tagged payload; late boxing
             // supplies its owned native reference before counting/emission.
-            (HirType::BigInt, Some(value)) => {
+            (HirType::BigInt | HirType::PossiblyUndefined(_), Some(value)) => {
                 let erased = self.push(
                     OpKind::Erase {
                         value,
@@ -79411,7 +79413,7 @@ impl<'a> FuncBuilder<'a> {
             // `lower_absent` spells one.
             HirType::Int { .. } | HirType::BigInt => OpKind::ConstInt(0),
             HirType::Float { .. } => OpKind::ConstFloat(0.0),
-            HirType::Erased => OpKind::ConstUndefined,
+            HirType::Erased | HirType::PossiblyUndefined(_) => OpKind::ConstUndefined,
             // A null reference, which is what `nts_uncaught`'s own `detail`
             // argument uses for "no string here": the slot has the right width
             // and nothing reads it. A native pointer's null is the same word.
@@ -86939,7 +86941,11 @@ const fn spelling_of(ty: &HirType) -> Option<&'static str> {
         HirType::Managed(ManagedType::Object(id)) if super::is_closure_type(*id) => "function",
         HirType::Managed(ManagedType::Symbol) => "symbol",
         HirType::Managed(_) => "object",
-        HirType::Erased | HirType::Void | HirType::Never | HirType::NativePointer(_) => {
+        HirType::Erased
+        | HirType::Void
+        | HirType::Never
+        | HirType::NativePointer(_)
+        | HirType::PossiblyUndefined(_) => {
             return None;
         }
     })

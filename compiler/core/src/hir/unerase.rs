@@ -49,7 +49,8 @@ fn payload_without_absence(func: &Func, erased: ValueId) -> Option<ValueId> {
     let OpKind::Erase { value, absent, .. } = func.value(erased).kind else {
         return None;
     };
-    (absent == Absent::Impossible).then_some(value)
+    (absent == Absent::Impossible && !matches!(func.value(value).ty, HirType::PossiblyUndefined(_)))
+        .then_some(value)
 }
 
 /// Specialize the erased arrays a function allocates and keeps. Reports how
@@ -242,7 +243,9 @@ fn rewrite(
     element: &HirType,
     faces: &BTreeMap<TypeId, SignatureFace>,
 ) {
-    let tag = super::tags::of_registered(faces, element);
+    let Some(tag) = super::tags::of_registered(faces, element) else {
+        return;
+    };
     func.values[array.0 as usize].ty =
         HirType::Managed(ManagedType::Array(Box::new(element.clone())));
 
@@ -750,8 +753,9 @@ fn unwrap_uses(
                 replacements.insert(id, value);
             }
             OpKind::TagOf { value } => {
-                if let Some(representation) = narrowed.get(&value) {
-                    let tag = super::tags::of_registered(faces, representation);
+                if let Some(representation) = narrowed.get(&value)
+                    && let Some(tag) = super::tags::of_registered(faces, representation)
+                {
                     func.values[index].kind = OpKind::ConstInt(i128::from(tag));
                 }
             }

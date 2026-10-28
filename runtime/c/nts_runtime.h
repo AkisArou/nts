@@ -381,6 +381,29 @@ typedef struct NtsHeader {
   uint32_t length;
 } NtsHeader;
 
+/* A scalar and definedness are one logical value. Payload bits are meaningful
+ * only when defined. Occupancy (a hole or absent entry) is a separate fact.
+ * These field orders are the C ABI for compiler-owned optional call results. */
+#define NTS_OPTIONAL_TYPE(Name, Type)                                          \
+  typedef struct {                                                             \
+    Type payload;                                                              \
+    bool defined;                                                              \
+  } Name
+NTS_OPTIONAL_TYPE(NtsOptionalBool, bool);
+NTS_OPTIONAL_TYPE(NtsOptionalI8, int8_t);
+NTS_OPTIONAL_TYPE(NtsOptionalU8, uint8_t);
+NTS_OPTIONAL_TYPE(NtsOptionalI16, int16_t);
+NTS_OPTIONAL_TYPE(NtsOptionalU16, uint16_t);
+NTS_OPTIONAL_TYPE(NtsOptionalI32, int32_t);
+NTS_OPTIONAL_TYPE(NtsOptionalU32, uint32_t);
+NTS_OPTIONAL_TYPE(NtsOptionalI64, int64_t);
+NTS_OPTIONAL_TYPE(NtsOptionalU64, uint64_t);
+NTS_OPTIONAL_TYPE(NtsOptionalF32, float);
+NTS_OPTIONAL_TYPE(NtsOptionalF64, double);
+NTS_OPTIONAL_TYPE(NtsOptionalBigInt, __int128);
+NTS_OPTIONAL_TYPE(NtsOptionalPointer, void *);
+#undef NTS_OPTIONAL_TYPE
+
 /* The entry an interface field's dispatch calls: the receiver's own row where
  * its class has one, and the family's default otherwise.
  *
@@ -1360,6 +1383,14 @@ uint64_t nts_collection_epoch(void);
  * carries this count and is never freed. A sentinel rather than a flag bit so
  * that retain and release need no branch beyond the one they already have. */
 #define NTS_IMMORTAL UINT32_MAX
+
+/* The managed-reference niche for undefined. NULL continues to mean JS null.
+ * This is a real, disjoint, immortal object address, never an invented integer
+ * pointer. It has no user fields and must be tested before a typed payload is
+ * used. Retaining, releasing and tracing it use the ordinary immortal paths.
+ * The cast matches immutable string literals: those paths never write it. */
+extern const NtsHeader nts_undefined_reference;
+#define NTS_UNDEFINED_REFERENCE ((NtsHeader *)&nts_undefined_reference)
 
 /* The memory provider is chosen at build time, and the runtime and the
  * generated program must agree about it -- so it is a define rather than

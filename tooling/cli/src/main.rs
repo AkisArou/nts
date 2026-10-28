@@ -3187,6 +3187,7 @@ fn print_contents(report: &hir::contents::Report, locations: &mut SourceLocation
 
 fn render(ty: &HirType) -> String {
     match ty {
+        HirType::PossiblyUndefined(payload) => format!("possibly-undefined<{}>", render(payload)),
         HirType::NativePointer(name) => format!("native<{name}>"),
         HirType::Void => "void".to_owned(),
         HirType::Never => "never".to_owned(),
@@ -3517,6 +3518,15 @@ fn render_arms(arms: &[nts_core::hir::FieldArm]) -> String {
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
+        OpKind::Optional { defined, payload } => {
+            format!("%{index} = optional %{}, %{} : {ty}", defined.0, payload.0)
+        }
+        OpKind::OptionalDefined(value) => {
+            format!("%{index} = optional.defined %{} : {ty}", value.0)
+        }
+        OpKind::OptionalPayload(value) => {
+            format!("%{index} = optional.payload %{} : {ty}", value.0)
+        }
         OpKind::ConstHandle(bits) => format!("%{index} = const.handle {bits} : {ty}"),
         OpKind::NativeLoad {
             pointer,

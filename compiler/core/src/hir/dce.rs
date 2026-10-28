@@ -159,6 +159,7 @@ const PURE_RUNTIME_CALLS: &[&str] = &[
 #[allow(clippy::match_same_arms)]
 pub(super) fn has_effects(op: &Op) -> bool {
     match &op.kind {
+        OpKind::Optional { .. } | OpKind::OptionalDefined(_) | OpKind::OptionalPayload(_) => false,
         // A checked read may stop the program out of range, which is the whole
         // of what stands for that path once a consumer has been folded away
         // (`super::may_stop`). A bounds proof removes that stop; the separate

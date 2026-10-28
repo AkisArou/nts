@@ -250,6 +250,9 @@ fn object_crosses(
 #[allow(clippy::match_same_arms)]
 fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> Option<Cross> {
     match ty {
+        // The internal coupled ABI is not a JavaScript value. A source-facing
+        // adapter must first materialize its dynamic undefined/payload branch.
+        HirType::PossiblyUndefined(_) => None,
         HirType::NativePointer(_) => None,
         HirType::Void => Some(Cross::Void),
         HirType::Bool => Some(Cross::Bool),
@@ -385,6 +388,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
 
 fn spell(ty: &HirType) -> String {
     match ty {
+        HirType::PossiblyUndefined(payload) => format!("{} | undefined", spell(payload)),
         HirType::NativePointer(name) => format!("a native pointer to {name}"),
         HirType::Void => "void".to_owned(),
         HirType::Bool => "bool".to_owned(),
@@ -427,6 +431,12 @@ fn spell(ty: &HirType) -> String {
 /// the name is built from the same [`c_identifier`] rather than spelled again.
 fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
     match ty {
+        HirType::PossiblyUndefined(payload) => {
+            hir::possibly_undefined::Payload::new((**payload).clone())
+                .expect("verified optional payload")
+                .native_name()
+                .to_owned()
+        }
         HirType::NativePointer(name) => name.pointer_type(),
         // Neither has a value to marshal: `void` is a function that returned
         // nothing, `never` one that did not return.

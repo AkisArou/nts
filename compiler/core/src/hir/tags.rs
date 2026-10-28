@@ -175,9 +175,10 @@ pub const fn of_reference(managed: &ManagedType) -> u32 {
 /// The inverse of what `Erase` emits, and it is here rather than beside that
 /// emission for the reason the rest of this module exists: one table.
 #[must_use]
-pub fn of_representation(ty: &super::HirType) -> u32 {
+pub fn of_representation(ty: &super::HirType) -> Option<u32> {
     use super::HirType;
-    match ty {
+    Some(match ty {
+        HirType::Erased | HirType::PossiblyUndefined(_) => return None,
         HirType::BigInt => BIGINT,
         HirType::Bool => BOOLEAN,
         HirType::Managed(managed) => of_reference(managed),
@@ -207,14 +208,14 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
         // the inverse of.
         HirType::NativePointer(pointee) => erased_handle_tag(pointee).unwrap_or(NUMBER),
         _ => NUMBER,
-    }
+    })
 }
 
 /// The tag of an actual prepared representation. A signature face was
 /// published from a checker function type and keyed by that representation;
 /// it proves a callable payload, not a callback's written signature.
 #[must_use]
-pub fn of_prepared(program: &super::Program, ty: &super::HirType) -> u32 {
+pub fn of_prepared(program: &super::Program, ty: &super::HirType) -> Option<u32> {
     of_registered(&program.signature_faces, ty)
 }
 
@@ -223,12 +224,12 @@ pub fn of_prepared(program: &super::Program, ty: &super::HirType) -> u32 {
 pub(super) fn of_registered(
     faces: &std::collections::BTreeMap<super::TypeId, super::SignatureFace>,
     ty: &super::HirType,
-) -> u32 {
+) -> Option<u32> {
     match ty {
         super::HirType::Managed(ManagedType::Object(ty))
             if super::is_closure_type(*ty) || faces.contains_key(ty) =>
         {
-            FUNCTION
+            Some(FUNCTION)
         }
         _ => of_representation(ty),
     }
@@ -257,7 +258,7 @@ pub(super) fn of_registered(
 /// does. A backend then has nothing left to get wrong.
 #[must_use]
 pub fn payload_is_a_reference(ty: &super::HirType) -> bool {
-    (STRING..=OBJECT).contains(&of_representation(ty))
+    of_representation(ty).is_some_and(|tag| (STRING..=OBJECT).contains(&tag))
         || matches!(ty, super::HirType::Managed(ManagedType::BoxedBigInt))
 }
 
@@ -542,15 +543,15 @@ mod representation {
         );
         assert_eq!(
             super::of_prepared(&program, &HirType::Managed(ManagedType::Object(callable))),
-            FUNCTION
+            Some(FUNCTION)
         );
         assert_eq!(
             super::of_prepared(&program, &HirType::Managed(ManagedType::Object(plain))),
-            OBJECT
+            Some(OBJECT)
         );
         assert_eq!(
             of_representation(&HirType::Managed(ManagedType::Object(callable))),
-            OBJECT
+            Some(OBJECT)
         );
     }
 
@@ -560,7 +561,7 @@ mod representation {
             let wanted = handle_tag(family).expect("a counted family has a tag");
             assert_eq!(
                 of_representation(&handle(family)),
-                wanted,
+                Some(wanted),
                 "{family:?} erases with {wanted} and this table must say so",
             );
         }
@@ -571,7 +572,7 @@ mod representation {
     #[test]
     fn a_c_pointer_has_no_family_tag_to_give() {
         assert_eq!(handle_tag(Family::C), None);
-        assert_eq!(of_representation(&handle(Family::C)), super::NUMBER);
+        assert_eq!(of_representation(&handle(Family::C)), Some(super::NUMBER));
     }
 
     /// A host family has one tag whatever its pair: the pair is the host's to
@@ -583,6 +584,6 @@ mod representation {
             "host_release",
         ));
         assert_eq!(handle_tag(host), Some(super::HANDLE_HOST));
-        assert_eq!(of_representation(&handle(host)), super::HANDLE_HOST);
+        assert_eq!(of_representation(&handle(host)), Some(super::HANDLE_HOST));
     }
 }

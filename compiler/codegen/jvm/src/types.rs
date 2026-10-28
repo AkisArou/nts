@@ -790,6 +790,9 @@ pub fn return_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
     if matches!(ty, HirType::Never) {
         return Some("V".to_owned());
     }
+    if let HirType::PossiblyUndefined(payload) = ty {
+        return crate::optional::returns(payload);
+    }
     descriptor(shape, ty)
 }
 
@@ -805,6 +808,12 @@ pub fn return_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
 pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
     let program = shape.program;
     Some(match ty {
+        HirType::PossiblyUndefined(payload) => {
+            if !crate::optional::reference(payload) {
+                return None;
+            }
+            "Ljava/lang/Object;".to_owned()
+        }
         HirType::Void => "V".to_owned(),
         HirType::Bool => "Z".to_owned(),
         HirType::Int { bits: 64, .. } => "J".to_owned(),
@@ -957,6 +966,13 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
         // Native counting only: no backend on a managed heap makes one.
+        HirType::PossiblyUndefined(payload) => {
+            return if crate::optional::reference(payload) {
+                Some(Kind::Ref)
+            } else {
+                kind(payload)
+            };
+        }
         HirType::Managed(ManagedType::Region) => return None,
         HirType::Erased
         | HirType::BigInt
@@ -1000,12 +1016,20 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
 #[allow(clippy::match_same_arms)]
 pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
     let program = shape.program;
+    if let HirType::PossiblyUndefined(payload) = ty {
+        return if crate::optional::reference(payload) {
+            Some(VType::Object("java/lang/Object".to_owned()))
+        } else {
+            vtype(shape, payload)
+        };
+    }
     Some(match kind(ty)? {
         Kind::Int => VType::Integer,
         Kind::Long => VType::Long,
         Kind::Float => VType::Float,
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
+            HirType::PossiblyUndefined(_) => VType::Object("java/lang/Object".to_owned()),
             HirType::Managed(ManagedType::Region) => return None,
             HirType::Erased => VType::Object(VALUE.to_owned()),
             HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => {
@@ -1088,6 +1112,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
 pub fn describe(ty: &HirType) -> String {
     match ty {
         HirType::Managed(ManagedType::Region) => "a region's handle".to_owned(),
+        HirType::PossiblyUndefined(payload) => format!("possibly undefined {}", describe(payload)),
         HirType::Never => "a value of type `never`".to_owned(),
         HirType::NativePointer(name) => format!("a native pointer to {name}"),
         HirType::BigInt => "a bigint".to_owned(),

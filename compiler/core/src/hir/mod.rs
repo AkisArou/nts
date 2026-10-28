@@ -58,6 +58,7 @@ pub mod liveness;
 pub mod loops;
 mod member_key;
 pub mod obligations;
+pub mod possibly_undefined;
 pub mod presence;
 mod small_dispatch;
 pub mod suspend;
@@ -217,6 +218,10 @@ pub enum HirType {
     /// naming a layout here would make changing it a refactor of every pass
     /// rather than of one emitter.
     Erased,
+    /// One value with coupled definedness and a typed payload. The payload is
+    /// observable only after a proved defined test; annotations never prove it.
+    /// Dynamic values already carry undefined and do not use this wrapper.
+    PossiblyUndefined(Box<HirType>),
     /// A garbage-collected reference.
     ///
     /// The distinction that decides whether a value is counted: under
@@ -441,7 +446,11 @@ impl HirType {
     /// What a write barrier and a root slot are decided from.
     #[must_use]
     pub const fn is_managed(&self) -> bool {
-        matches!(self, Self::Managed(_))
+        match self {
+            Self::Managed(_) => true,
+            Self::PossiblyUndefined(payload) => matches!(**payload, Self::Managed(_)),
+            _ => false,
+        }
     }
 
     /// Whether a value of this type can hold a reference the collector must see.
@@ -455,7 +464,7 @@ impl HirType {
     /// have made the emitter try to cast one.
     #[must_use]
     pub const fn may_hold_a_reference(&self) -> bool {
-        matches!(self, Self::Managed(_) | Self::Erased)
+        self.is_managed() || matches!(self, Self::Erased)
     }
 
     /// The functions a value of this type is retained and released with, when
@@ -506,7 +515,7 @@ impl HirType {
     /// `nts_destroy`, on both backends and for this reason.
     #[must_use]
     pub fn holds_a_pointer(&self) -> bool {
-        matches!(self, Self::Managed(_))
+        self.is_managed()
     }
 
     /// Whether this type fits in a machine register.
@@ -540,6 +549,7 @@ impl HirType {
         self.is_scalar()
             || self.may_hold_a_reference()
             || matches!(self, Self::BigInt | Self::NativePointer(_))
+            || matches!(self, Self::PossiblyUndefined(_))
     }
 }
 
@@ -1100,6 +1110,18 @@ impl ArrayFill {
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
+    /// Construct one possibly-undefined value. A false component discards the
+    /// payload value, without consuming its ownership. Both operands remain
+    /// live until this operation; no view/move equivalence is implied.
+    Optional {
+        defined: ValueId,
+        payload: ValueId,
+    },
+    /// Observe definedness without interpreting the payload.
+    OptionalDefined(ValueId),
+    /// Read a payload on a path proved defined for this exact logical value.
+    /// The verifier checks the proof at the use, not a type annotation.
+    OptionalPayload(ValueId),
     /// An integer-valued native data-pointer constant, in its declared pointer
     /// type. These bits carry neither allocation nor ownership, and never pass
     /// through a JavaScript number. All supported native ABIs have 64-bit pointers.
@@ -1884,7 +1906,7 @@ pub fn zero_of(ty: &HirType) -> OpKind {
         HirType::Bool => OpKind::ConstBool(false),
         HirType::Int { .. } => OpKind::ConstInt(0),
         HirType::Managed(_) | HirType::NativePointer(_) => OpKind::ConstNull,
-        HirType::Erased | HirType::Void => OpKind::ConstUndefined,
+        HirType::Erased | HirType::Void | HirType::PossiblyUndefined(_) => OpKind::ConstUndefined,
         _ => OpKind::ConstFloat(0.0),
     }
 }
@@ -3988,6 +4010,7 @@ impl Program {
     #[cfg(test)]
     fn reaches(&self, ty: &HirType, into: &mut Vec<usize>) {
         match ty {
+            HirType::PossiblyUndefined(payload) => self.reaches(payload, into),
             HirType::Managed(ManagedType::Object(id)) => {
                 match self.layouts.iter().position(|l| l.types.contains(id)) {
                     Some(at) => into.push(at),
@@ -8079,6 +8102,7 @@ fn prepare_lowered(
     // concrete representation. Materialize its owned payload now, as ordinary
     // calls visible to escape analysis and reference counting. Erase itself
     // remains a free repackaging operation.
+    possibly_undefined::lower_erasures(&mut program);
     boxing::materialize(&mut program);
 
     // A table key read and then written looks the key up once, where the

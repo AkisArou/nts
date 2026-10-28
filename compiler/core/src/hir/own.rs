@@ -2358,6 +2358,9 @@ pub(super) fn inert(func: &Func) -> bool {
 fn quiet(kind: &OpKind) -> bool {
     match kind {
         OpKind::Param(_)
+        | OpKind::Optional { .. }
+        | OpKind::OptionalDefined(_)
+        | OpKind::OptionalPayload(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
         | OpKind::ConstHandle(_)

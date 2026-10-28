@@ -30,6 +30,9 @@ pub enum Counter {
 /// pass never emits either, so reaching this is a compiler bug, reported
 /// rather than printed as a call on the wrong object.
 pub fn counter(ty: &HirType) -> Result<Counter, &'static str> {
+    if ty.is_managed() {
+        return Ok(Counter::Runtime);
+    }
     if let Some(counting) = ty.counting() {
         return Ok(Counter::Foreign(counting));
     }
@@ -50,6 +53,9 @@ pub fn counter(ty: &HirType) -> Result<Counter, &'static str> {
 /// two together.
 #[must_use]
 pub fn array_element(ty: &HirType) -> u32 {
+    if ty.is_managed() {
+        return 1;
+    }
     match ty {
         HirType::Managed(_) => 1,
         HirType::Erased => 2,

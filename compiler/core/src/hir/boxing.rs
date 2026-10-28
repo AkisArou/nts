@@ -237,7 +237,10 @@ mod tests {
     #[test]
     fn object_spelling_is_bounded_and_bigint_is_a_primitive_with_owned_storage() {
         use crate::hir::tags;
-        assert_eq!(tags::of_representation(&HirType::BigInt), tags::BIGINT);
+        assert_eq!(
+            tags::of_representation(&HirType::BigInt),
+            Some(tags::BIGINT)
+        );
         assert_eq!(tags::of_reference(&ManagedType::BoxedBigInt), tags::BIGINT);
         assert!(!tags::payload_is_a_reference(&HirType::BigInt));
         assert!(tags::payload_is_a_reference(&HirType::Managed(

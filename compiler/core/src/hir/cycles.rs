@@ -95,6 +95,10 @@ impl<'a> Graph<'a> {
     /// type index. Exhaustive so a new HIR type must decide its reference edges.
     fn reference(&mut self, from: usize, ty: &HirType) {
         let target = match ty {
+            HirType::PossiblyUndefined(payload) => {
+                self.reference(from, payload);
+                return;
+            }
             HirType::Managed(ManagedType::Object(id)) => match self.layout_of.get(id).copied() {
                 Some(at) => self.program.layouts.len() + at,
                 None => self.any_layout(),

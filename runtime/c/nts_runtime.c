@@ -540,6 +540,15 @@ NtsString *nts_bound_function_to_string(const NtsHeader *object) {
   return NTS_TEXT("function () { [native code] }");
 }
 
+static const NtsDescriptor nts_desc_undefined = {.kind = NTS_KIND_OBJECT,
+                                                 .size = sizeof(NtsHeader),
+                                                 .name = "undefined-reference"};
+
+/* Not allocated, counted or a collector candidate. In particular, its black
+ * color is fixed so a trace restoring a live graph never writes this object. */
+const NtsHeader nts_undefined_reference = {&nts_desc_undefined, NTS_IMMORTAL,
+                                           NTS_BLACK, 0u};
+
 const NtsDescriptor nts_desc_ref = {NTS_KIND_ARRAY,
                                     sizeof(void *),
                                     1,

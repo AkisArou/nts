@@ -4448,7 +4448,7 @@ fn erased_conversion(
             // program's signature faces and answers "function", as `typeof` does.
             let tag = if tag == "NTS_TAG_OBJECT"
                 && nts_core::hir::tags::of_prepared(context.program, from)
-                    == nts_core::hir::tags::FUNCTION
+                    == Some(nts_core::hir::tags::FUNCTION)
             {
                 "NTS_TAG_FUNCTION"
             } else {
@@ -4637,6 +4637,17 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
 
 fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
     Ok(match ty {
+        HirType::PossiblyUndefined(payload) => {
+            nts_core::hir::possibly_undefined::Payload::new((**payload).clone())
+                .map_err(|_| {
+                    Diagnostic::error(
+                        "NTS2006",
+                        "an optional payload with no native representation",
+                        origin.location,
+                    )
+                })?
+                .native_name()
+        }
         // `void *` is the one native pointer with a fixed spelling, so it fits a
         // `&'static str` where a named pointee does not: those are built from
         // the layout's own tag and go through `pointer_type`.
@@ -5845,6 +5856,12 @@ fn emit_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
+        OpKind::Optional { .. } | OpKind::OptionalDefined(_) | OpKind::OptionalPayload(_) => {
+            optional::operation(func, value, context)?
+        }
+        OpKind::ConstUndefined if matches!(op.ty, HirType::PossiblyUndefined(_)) => {
+            optional::operation(func, value, context)?
+        }
         // Nothing to compute at the definition site. A parameter *is* the C
         // parameter; a block parameter is written by the edges that jump here;
         // a return is spelled by the terminator.
@@ -7081,6 +7098,7 @@ mod com;
 mod gobject;
 mod native_memory;
 mod objc;
+mod optional;
 
 /// The foreign counting pairs the program calls, declared -- and for a pair
 /// that does not take NULL quietly, the guard every count goes through

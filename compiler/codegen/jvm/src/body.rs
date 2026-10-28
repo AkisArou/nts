@@ -69,7 +69,9 @@ pub fn refuse(func: &Func, what: &str) -> Diagnostic {
 /// does, and saying so here keeps the slot allocation below about slots.
 fn check_signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Result<(), Diagnostic> {
     for param in &func.params {
-        if types::descriptor(types::Shape::packaged(program, package), &param.ty).is_none() {
+        if crate::optional::parameters(types::Shape::packaged(program, package), &param.ty)
+            .is_none()
+        {
             return Err(refuse(
                 func,
                 &format!(
@@ -106,6 +108,14 @@ fn check_signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Resu
 /// module did not load.
 fn puts_label(program: &JvmProgram<'_>, func: &Func, value: ValueId) -> bool {
     match &func.values[value.0 as usize].kind {
+        OpKind::Call { .. }
+            if matches!(
+                func.values[value.0 as usize].ty,
+                HirType::PossiblyUndefined(_)
+            ) =>
+        {
+            true
+        }
         OpKind::Binary { op, .. } => comparison(*op).is_some(),
         OpKind::Unary {
             op: UnOp::Truthy,
@@ -157,7 +167,9 @@ fn puts_label(program: &JvmProgram<'_>, func: &Func, value: ValueId) -> bool {
         // per-arm indices, and `OpenFieldSet` puts labels too although it
         // produces nothing, because the labels are the chain and not the
         // result.
-        OpKind::SharedFieldGet { .. }
+        OpKind::Optional { .. }
+        | OpKind::OptionalDefined(_)
+        | OpKind::SharedFieldGet { .. }
         | OpKind::OpenFieldGet { .. }
         | OpKind::OpenFieldSet { .. } => true,
         // A cast to a face some class holds without extending is tested first
@@ -438,6 +450,7 @@ pub struct Emitter<'a> {
     /// Slot per value. `None` for a value nothing reads.
     pub(crate) slots: Vec<Option<u16>>,
     pub(crate) locals: Vec<VType>,
+    pub(crate) optional: crate::optional::Storage,
     pub(crate) max_locals: u16,
     /// One `int` slot for a materialized comparison, allocated only if used.
     pub(crate) scratch: Option<u16>,
@@ -485,6 +498,8 @@ impl<'a> Emitter<'a> {
         let mut slots = vec![None; func.values.len()];
         let mut locals = Vec::new();
         let mut next = 0u32;
+        let mut optional = crate::optional::Storage::new(func.values.len());
+        let mut param_flags = Vec::new();
 
         // Parameters occupy the first slots, in order, whether or not the body
         // reads them: the JVM places arguments there and a gap would shift
@@ -498,12 +513,28 @@ impl<'a> Emitter<'a> {
             param_slot.push(u16::try_from(next).unwrap_or(u16::MAX));
             next += u32::from(vtype.slots());
             locals.push(vtype);
+            let flag = if crate::optional::split(&param.ty) {
+                let slot = u16::try_from(next).unwrap_or(u16::MAX);
+                next += 1;
+                locals.push(VType::Integer);
+                Some(slot)
+            } else {
+                None
+            };
+            param_flags.push(flag);
         }
+        if let Some(element) = crate::optional::scratch_element(&func.return_type) {
+            optional.out = Some(u16::try_from(next).unwrap_or(u16::MAX));
+            next += 1;
+            locals.push(VType::Object(format!("[{element}")));
+        }
+        optional.first_free = u16::try_from(next).unwrap_or(u16::MAX);
         for (at, op) in func.values.iter().enumerate() {
             if let OpKind::Param(index) = op.kind
                 && let Some(&slot) = param_slot.get(index as usize)
             {
                 slots[at] = Some(slot);
+                optional.flags[at] = param_flags[index as usize];
             }
         }
 
@@ -553,11 +584,23 @@ impl<'a> Emitter<'a> {
             };
             slots[at] = Some(slot);
             next += u32::from(vtype.slots());
-            locals.push(if crosses.contains(&value) || vtype.slots() == 2 {
-                vtype
-            } else {
-                VType::Top
-            });
+            if crate::optional::split(ty) {
+                optional.flags[at] = Some(u16::try_from(next).unwrap_or(u16::MAX));
+                next += 1;
+                locals.push(vtype.clone());
+                locals.push(VType::Integer);
+                continue;
+            }
+            locals.push(
+                if crosses.contains(&value)
+                    || vtype.slots() == 2
+                    || matches!(ty, HirType::PossiblyUndefined(_))
+                {
+                    vtype
+                } else {
+                    VType::Top
+                },
+            );
         }
 
         // Whose answer this is matters. `hir::operands_of` says out loud that
@@ -600,6 +643,7 @@ impl<'a> Emitter<'a> {
             func,
             slots,
             locals,
+            optional,
             max_locals: u16::try_from(next).unwrap_or(u16::MAX),
             templates,
             scratch: None,
@@ -626,6 +670,7 @@ impl<'a> Emitter<'a> {
         // after, because the prologue has to come first in the byte stream.
         let framed = self.order.len() > 1 || materializes;
         self.reserve_scratch(materializes)?;
+        self.reserve_optional_storage()?;
         let locals = self.locals.clone();
         let max_locals = self.max_locals;
         let mut code = Code::new(locals, max_locals);
@@ -637,17 +682,12 @@ impl<'a> Emitter<'a> {
         // bytes of prologue in every one of `tests/programs/arith` before this test
         // existed.
         if framed {
-            let first_free: u16 = self
-                .func
-                .params
-                .iter()
-                .filter_map(|param| types::vtype(self.shape, &param.ty))
-                .map(|vtype| vtype.slots())
-                .sum();
+            let first_free = self.optional.first_free;
             let origin = self.func.origin.clone();
             code.initialize_locals(&origin, first_free);
         }
 
+        self.initialize_optional_scratch(&mut code, pool);
         for &block in &self.order {
             let label = code.label();
             self.labels.insert(block, label);
@@ -668,6 +708,9 @@ impl<'a> Emitter<'a> {
     /// a 1, which is the only thing that needs a scratch slot and the only
     /// thing that puts a label inside a block.
     fn materializes(&self) -> bool {
+        if crate::optional::scratch_element(&self.func.return_type).is_some() {
+            return true;
+        }
         self.order.iter().any(|&block| {
             let block = &self.func.blocks[block.0 as usize];
             let fused = self.fusable(&block.ops, &block.terminator);
@@ -863,12 +906,13 @@ pub fn method_name(raw: &str) -> String {
 /// The descriptor of a function, from its own signature.
 #[must_use]
 pub fn signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Option<String> {
-    let mut params = Vec::with_capacity(func.params.len());
+    let shape = types::Shape::packaged(program, package);
+    let mut params = Vec::new();
     for param in &func.params {
-        params.push(types::descriptor(
-            types::Shape::packaged(program, package),
-            &param.ty,
-        )?);
+        params.extend(crate::optional::parameters(shape, &param.ty)?);
+    }
+    if let Some(element) = crate::optional::scratch_element(&func.return_type) {
+        params.push(format!("[{element}"));
     }
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
