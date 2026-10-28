@@ -1,0 +1,4332 @@
+{
+  "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
+  "note": "Scoped per-file results parsed from the required full package check. Raw mode removes named case exclusions only; genuine optional-feature statuses and the three file-level limitations remain. Neither raw failures nor exclusions count as passes.",
+  "inputs": {
+    "manifestSha256": "9f77188834952539b48459a0a768a11d7845e32cd2d431eafac471e5a167d435",
+    "versionsSha256": "3294597bf6aa6208df5da8695ec4f93c558e0cc2b7030d29dda21b4b64d48f1b",
+    "expandedManifestSha256": "bd2737e21e45ca65c5cf8f5cfaab0fdbaa16f8d23b9780f484aecd98f53461ac",
+    "preSplitManifestSha256": "b18a51de161e7b6b64958ab4857e9307dfe7119af19cab1b4b7bdfe6678fc65d",
+    "exclusionFilesSha256": {
+      "exclusions/algorithm-discards-context.https.window.js.part-001.json": "289372ed9c0dd2c2ec31769578fb3ee737b2f249ac0ddc29e9ee44e14531d069",
+      "exclusions/derive_bits_keys/argon2.tentative.https.any.js.part-001.json": "69a23dda4745b6c3484d00b64dab81a3000342fa8eab5f730d9377207baae103",
+      "exclusions/derive_bits_keys/ecdh_bits.https.any.js.part-001.json": "f353e5055bb2731396b4b7d6f922bce81b17f605bf37cc9a1643b15715a965d8",
+      "exclusions/digest/cshake.tentative.https.any.js.part-001.json": "23e6dd4fa33282bd4ced8ee61ea02b3aa7716d9b89bfc120b5d2a7080d91ca7f",
+      "exclusions/digest/kangarootwelve.tentative.https.any.js.part-001.json": "7d428cea6829a89b80b8df88953e6711245d36cfc4b7dc046ac4cfa495778287",
+      "exclusions/digest/sha3.tentative.https.any.js.part-001.json": "8dd7ac3cca3f1b1f57aad994fab20e6975cc3ad890e9e10e9962404797cddc3e",
+      "exclusions/digest/turboshake.tentative.https.any.js.part-001.json": "4b9a9a9a51ce9804d64d67a12bb6dc4a481bb8dc39c166d98b1c786a800e92b7",
+      "exclusions/encap_decap/encap_decap_bits.tentative.https.any.js.part-001.json": "4801e491a9abd73f23565f8987ba4b6d7dd0a896f7c464e5dfaa37c12d7de833",
+      "exclusions/encap_decap/encap_decap_keys.tentative.https.any.js.part-001.json": "932bf28e9c0476d4feac835bd7f0588c9333fd31e194c33ef374a6b1f6a773de",
+      "exclusions/encrypt_decrypt/aes_cbc.https.any.js.part-001.json": "d65ba6fa4d2e8c9db8f21e9548578ce4b02d22b94d9bd0de21168d863f81a056",
+      "exclusions/encrypt_decrypt/aes_ctr.https.any.js.part-001.json": "7dc1d8c20373e4623f05076e7afa560f8f6bc2c4c8c716d91711638a6f8bc688",
+      "exclusions/encrypt_decrypt/aes_gcm.https.any.js.part-001.json": "403219ad5e486f76d4fa1614709da4bb2165116b1cc646fb5e9f2e556663e8ea",
+      "exclusions/encrypt_decrypt/aes_gcm_256_iv.https.any.js.part-001.json": "189e6979bec18feeb634b7a1576238946b0a326c684289455629cb9c3687bcea",
+      "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-001.json": "6ac6e7ff38a7369c1ff74c68e1c066a36b938811a9f4ce5c7b47b34466d62289",
+      "exclusions/encrypt_decrypt/aes_ocb.tentative.https.any.js.part-002.json": "6549d7c328efdbf9be35a217d41d44e1cac1945655abf68a198a97c9ef2edb98",
+      "exclusions/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js.part-001.json": "465a7886db532674d6192099cff6ccc13c8bc3883cc73c8064acc4cf6cf61379",
+      "exclusions/encrypt_decrypt/rsa_oaep.https.any.js.part-001.json": "4889c0ab710adfed0b5ea858b2d881e86913718c5db669f9cbdf1c18e49f157e",
+      "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-001.json": "e03c4d9c5d5d7b11c763363d6024d1226332258cb36a8ac9290443da74d887fd",
+      "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-002.json": "d395ca9a14d2c2cc96d3d40564a98fe84667ca3acc545d240e573c791db9c6dc",
+      "exclusions/generateKey/failures_AES-OCB.tentative.https.any.js.part-003.json": "10f402f3bbf51a25f6e50c2a22fe26286847c9e0e73cd53fab89d129c6aff3a1",
+      "exclusions/generateKey/failures_ML-DSA.tentative.https.any.js.part-001.json": "0e5983bb0cc245e195abdc75b876589f8f0532220451dd178fa5112fe3d7ac11",
+      "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-001.json": "449b87bf58a999a62daa1e150a39cc6df0135abb92534b5e6b5f275970569878",
+      "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-002.json": "9ca689f453a6edb97af4ba5df2fcaca98f75fdcaf528a2ca6cfb6222e74d3cd3",
+      "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-003.json": "0deb05a93b2bbc0a6a907a5e0b6dd09e8aa41702044f63d53869c8361e8bf83d",
+      "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-004.json": "44204f93d1c2d86f8613854221c4ddb64a6a804c092241aab6f0bbd4b53f5714",
+      "exclusions/generateKey/failures_ML-KEM.tentative.https.any.js.part-005.json": "a6a6b6fa1cee254421328a5a39eef0682ef056ede68e7ac2d4de192ef07a11c3",
+      "exclusions/generateKey/failures_chacha20_poly1305.tentative.https.any.js.part-001.json": "e1e4f6e291f92b5db63b8a3194384e27de3b2546f6dae9032fc0cef8e3ee91ec",
+      "exclusions/generateKey/failures_kmac.tentative.https.any.js.part-001.json": "4ff0f97d19291971eb71bea82f73e1adc97c198a3249c41613cfd23a03bde703",
+      "exclusions/generateKey/failures_kmac.tentative.https.any.js.part-002.json": "b7de7d0b8a84c202fbd528ed898988578529d1408bdd96086f1e16d20838c3f2",
+      "exclusions/generateKey/successes_AES-OCB.tentative.https.any.js.part-001.json": "8443ace72e10d455972317a6e1cfec301585970ebe8e542eebda1f6edf3d9c18",
+      "exclusions/generateKey/successes_AES-OCB.tentative.https.any.js.part-002.json": "fcb8873d2f03db0ef31377e596c9edc99244fb0c2542fb18a2a0e214b378b5c1",
+      "exclusions/generateKey/successes_ML-DSA.tentative.https.any.js.part-001.json": "ebfe8e7d51cf6fdbded86a037718db721b4680568665c8c3b3bf648cab4fd791",
+      "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-001.json": "307fcfbc8d052fdd0195de05fcaf14344286353d589387f8471f406862dfcadb",
+      "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-002.json": "61962ebb3ae566b00c444ded84ab24b6b601908a93bde34763f6087151c6e6bc",
+      "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-003.json": "310bf7a0fbf1a7deecc1eab341c79d45937a80bd77f8b2fc55f1b9841d9945e8",
+      "exclusions/generateKey/successes_ML-KEM.tentative.https.any.js.part-004.json": "d6bc7a3e5f5bb7f56a795291d085d98ff5c913ea3dec846010c8a1a6a46f9a01",
+      "exclusions/generateKey/successes_chacha20_poly1305.tentative.https.any.js.part-001.json": "408bb8f5fe6b911c53bce241987679270bf140c571b612abac66630c49f0ec21",
+      "exclusions/generateKey/successes_chacha20_poly1305.tentative.https.any.js.part-002.json": "39dec915c4ac10cff5b542fdfe45243f86dc67b58fc914c69e4278ad1da0b4bc",
+      "exclusions/generateKey/successes_kmac.tentative.https.any.js.part-001.json": "92f3772e901e2a9526792d7d6a8dc30af4af770a521157a4d41052b35b3e98d9",
+      "exclusions/getPublicKey.tentative.https.any.js.part-001.json": "d3a29ede6d635b9309a214a1788f96b50ada560fdfb4f3f30abde4d2ff47c229",
+      "exclusions/historical.any.js.part-001.json": "d05c7c6fd2f9b786d4f77ba57fc1a4ca09676de4365867a63b86c284829824ad",
+      "exclusions/import_export/AES-OCB_importKey.tentative.https.any.js.part-001.json": "e6e10ec5a2290b548b5376efbae1c2e68e5a5a397d3d29501571c52867b5242b",
+      "exclusions/import_export/Argon2_importKey.tentative.https.any.js.part-001.json": "a6be63f036d9a848b8c860a399697967c7b5b3f88542b7ab14af1b06d4d70246",
+      "exclusions/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js.part-001.json": "74f4b2ead23001ed9491422f81b1769681e6455e3d291eb0c4daf739d3250b8e",
+      "exclusions/import_export/KMAC_importKey.tentative.https.any.js.part-001.json": "4ccc750a402e5106d034ea8ce68cb168175d8de85b2155087362984082e6084a",
+      "exclusions/import_export/KMAC_importKey.tentative.https.any.js.part-002.json": "a21dfa7d13cd40a41110ab3c191899bdb92e3749b78bd175bfdbb1dfab1436fd",
+      "exclusions/import_export/ML-DSA_importKey.tentative.https.any.js.part-001.json": "3ce6604b567d776c975eb841da717b177b284550677d506ac01f56fb867b4f3b",
+      "exclusions/import_export/ML-DSA_importKey.tentative.https.any.js.part-002.json": "20bfe6971c1b95d0fb1b54ccaa90f184461bc940bfe123a83e88d929009a33d5",
+      "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-001.json": "e184d453655370c1376cd2362f164666a0e60c9fc8b904028d4a059744e946ce",
+      "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-002.json": "1514d06d4644b0ee3abeed0c70fddf043dc431a9beba33e5884d9a17a1580270",
+      "exclusions/import_export/ML-KEM_importKey.tentative.https.any.js.part-003.json": "3df2cf213e96cee48d901daa58b3ea26faadad1ee3251b1dca5f09211c81ecd5",
+      "exclusions/import_export/ec_importKey.https.any.js.part-001.json": "7bc3e920eb1821916cc3e768e18c0736b413f8aeeb2163afd8d33c64cb06e2dd",
+      "exclusions/import_export/raw_format_aliases.tentative.https.any.js.part-001.json": "93260e5d762ca57e6058f325797a526e8b333e3cf95ed78f4d87e8b24bee9190",
+      "exclusions/secure_context/crypto-subtle-secure-context-available.https.sub.html.part-001.json": "83eae544c48735af86317fa5dce3c2396f2321ae80fe56bea970e13036662ac0",
+      "exclusions/serialization/aes-cbc.https.any.js.part-001.json": "f2af57deeade62cec8edc60a2e23104ff8aee8a869d2f8c7a318d4690d10eabd",
+      "exclusions/serialization/aes-ctr.https.any.js.part-001.json": "2413102cc68161825df0c0e02d4f8cfd5990a9d2b640fa5580390eb2cef4a8a0",
+      "exclusions/serialization/aes-gcm.https.any.js.part-001.json": "7198f8134f86ec5ae9636382ee6377b84ccf87e7e685e2b3a80eabbc95b3d47c",
+      "exclusions/serialization/aes-kw.https.any.js.part-001.json": "07fe8a0b16c7094a86307c5337c10fc8d1de4a766229bc64f7cecec9143aaee4",
+      "exclusions/serialization/aes-ocb.tentative.https.any.js.part-001.json": "6da0e923b85e24f40e90d4d6b07efd8f85325fd50c7a0c3157554a9db70b238c",
+      "exclusions/serialization/chacha20-poly1305.tentative.https.any.js.part-001.json": "a71ae50588ec079f09eb9744f7d8c0b9b607cea5b3e618d56187aa2213b6e3ec",
+      "exclusions/serialization/ecdh.https.any.js.part-001.json": "1950d74fac9eed0c61607f9e93a5c5f35299a9ab36127a8991072de4a1472a89",
+      "exclusions/serialization/ecdsa.https.any.js.part-001.json": "17dfcbdd0c8b2bb37b45e19ef4743b559fcc6ce7a0f80679118bc0140f042da5",
+      "exclusions/serialization/ed25519.https.any.js.part-001.json": "a3a9dffc2ebbe36865ef1bbd6bcd2090eaea599c1cd63ea9b9a2d7769e13cc55",
+      "exclusions/serialization/ed448.tentative.https.any.js.part-001.json": "a4452f166b48e44055d20346c46c1c47caf90d9fa9ab7548e7323dc21e3fd356",
+      "exclusions/serialization/hmac.https.any.js.part-001.json": "3680fb9db2b4010ca6e44bd970411efa0c3d5deae6c53fe545df86e9ea032def",
+      "exclusions/serialization/kmac.tentative.https.any.js.part-001.json": "77eac4fdf443a6ee4e1b7e05632e2332005159a8b660a4a9900c0a039152d1ff",
+      "exclusions/serialization/mldsa.tentative.https.any.js.part-001.json": "df47bb912e13bc31754e3ffecab46c96305ca6c0ef9470b3c34dc2a9dce3d725",
+      "exclusions/serialization/mlkem.tentative.https.any.js.part-001.json": "1c4bfb65d30861689d592ad7eefecc8a31597d62a4ac55ebefceb04b35105db0",
+      "exclusions/serialization/rsa-oaep.https.any.js.part-001.json": "ad34a74fd71ee66b6fbab287af5fbab47c5997a03bcb5c721056c14a3c1ef04c",
+      "exclusions/serialization/rsa-pss.https.any.js.part-001.json": "c20ea369ef3e0a7ba6392632a74392ec1f5400c58a68ce14e62323b0a2400aa9",
+      "exclusions/serialization/rsassa-pkcs1-v1_5.https.any.js.part-001.json": "00445b59bbc10bca1083a1df007c883cf909ad5b7fd25676f51298fb1be845d2",
+      "exclusions/serialization/x25519.https.any.js.part-001.json": "7f287a59e5f9c117bb482e9855b9cdfd6aece5479638fd92f276a987034e74e6",
+      "exclusions/serialization/x448.tentative.https.any.js.part-001.json": "2a50cd946282ff202a5b08f1fffa4ea96366d97b1ab871fc05881e06f828508c",
+      "exclusions/sign_verify/ecdsa.https.any.js.part-001.json": "d73520ca28c054b5f4ef092665d4796853d71b407fdaf2f110f605f280589a1f",
+      "exclusions/sign_verify/eddsa_curve25519.https.any.js.part-001.json": "4a74e702564e61ec3c30ce398d37e51b5625e17ceddd28f8a449b6c32fa5d409",
+      "exclusions/sign_verify/eddsa_curve448.tentative.https.any.js.part-001.json": "bffbecfbc877271f7d27e17ed439d0758bf5788bd507e751f418482155e10d79",
+      "exclusions/sign_verify/hmac.https.any.js.part-001.json": "a9cd76dbfda1906ae138d89e5532f99f388423effe70b9a54ad3e797d1831a07",
+      "exclusions/sign_verify/kmac.tentative.https.any.js.part-001.json": "b2ed8dfa1456c85c5e23e6194728897b519a403f7c1b6f694d49527f4a7f4815",
+      "exclusions/sign_verify/mldsa.tentative.https.any.js.part-001.json": "d07dac7ca19182c45bf0453a26ce21f13159b0d5576918928f371b6a72bc81cf",
+      "exclusions/sign_verify/rsa_pkcs.https.any.js.part-001.json": "fe0ca75d3ee9f86adb6267ed18ed77a5abf70923b1e63f94e9eb879acdd40b59",
+      "exclusions/sign_verify/rsa_pss.https.any.js.part-001.json": "c57a13b503d714fc02b167a16f60fa4099cd69820c1ce969ab6ed2585e501d7a",
+      "exclusions/supports-modern.tentative.https.any.js.part-001.json": "464eb663f17769eab285ae3df2a82af79298bad85d441e505672472e842408cd",
+      "exclusions/supports.tentative.https.any.js.part-001.json": "41ce0c9add4916c85abd214b53a051eb5de4faa69a406591541a1a56989a8e8e"
+    }
+  },
+  "evidence": {
+    "command": "sh tooling/conformance/web-platform/check.sh",
+    "exitCode": 0,
+    "logFile": "validation/webcrypto-wpt-final-check.log",
+    "logSha256": "701b55cc1611f2309846df3d20135c21164c7a42e1ab469d5548bd96c724eab0",
+    "exportReachability": {
+      "unexplained": 0,
+      "allowed": 5,
+      "audited": 134,
+      "corpusFilesScanned": 4964
+    },
+    "toolchain": {
+      "node": "24.20.0",
+      "pnpm": "10.15.0",
+      "typescript": "7.0.2"
+    },
+    "package": {
+      "tests": 40112,
+      "suites": 3,
+      "pass": 34705,
+      "fail": 0,
+      "skipped": 5407,
+      "cancelled": 0,
+      "todo": 0
+    },
+    "existingUpstream": {
+      "upstreamTests": 2817,
+      "applicableTests": 2771,
+      "passed": 2771,
+      "failed": 0,
+      "notApplicable": 46
+    },
+    "verifiedOriginalFiles": 355,
+    "compiledAxis": "skipped: nts unavailable"
+  },
+  "totals": {
+    "registered": 36330,
+    "pass": 30991,
+    "fail": 0,
+    "blocked": 5339,
+    "executedFiles": 122,
+    "notRunFiles": 3,
+    "harnessFailures": 0
+  },
+  "baseline": {
+    "file": "baseline.json",
+    "totals": {
+      "pass": 27393,
+      "fail": 8889,
+      "blocked": 48
+    }
+  },
+  "afterPackageFixes": {
+    "file": "after-package-fixes.json",
+    "totals": {
+      "pass": 30991,
+      "fail": 36,
+      "blocked": 5303
+    }
+  },
+  "rawCurrent": {
+    "command": "NTS_WPT_CRYPTO_RAW=1 node --expose-gc runtime/web-platform/test/wpt/webcrypto/report.ts",
+    "exitCode": 1,
+    "jsonlSha256": "a1ce7e84faa7acbfe99c19dfe3d3f424bad16fd1ab017b9289519947106a133a",
+    "totals": {
+      "pass": 30991,
+      "fail": 5291,
+      "blocked": 48,
+      "registered": 36330,
+      "executedFiles": 122,
+      "notRunFiles": 3,
+      "harnessFailures": 0
+    }
+  },
+  "blockedCategories": {
+    "browser-document-realm": 13,
+    "browser-worker": 1,
+    "insecure-global-exposure": 3,
+    "native-structured-clone": 40,
+    "optional-compressed-ec-point": 48,
+    "outside-assigned-algorithms": 4932,
+    "upstream-ec-pkcs8-spec": 36,
+    "upstream-normalization-spec": 264,
+    "upstream-spec-order": 2
+  },
+  "files": [
+    {
+      "path": "WebCryptoAPI/algorithm-discards-context.https.window.js",
+      "status": "executed",
+      "registered": 13,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 13,
+      "baseline": {
+        "pass": 0,
+        "fail": 13,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 13
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 13,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: document is not defined",
+          "count": 13
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/crypto_key_cached_slots.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
+      "status": "executed",
+      "registered": 1,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1,
+      "baseline": {
+        "pass": 0,
+        "fail": 1,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 1,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
+      "status": "executed",
+      "registered": 19,
+      "pass": 19,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 18,
+      "pass": 18,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js",
+      "status": "executed",
+      "registered": 17,
+      "pass": 17,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 16,
+      "pass": 16,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.https.any.js",
+      "category": "upstream-asynchronous-registration",
+      "reason": "Unedited define_tests starts importKeys().then(register tests) but returns a separate resolved promise; registrations arrive after its setup test completes. Initial execution reports late registration. No timer delay or fixture rewrite is used to hide the missing await.",
+      "status": "not-run",
+      "registered": null,
+      "pass": null,
+      "fail": null,
+      "blocked": null,
+      "baseline": {
+        "pass": null,
+        "fail": null,
+        "blocked": null
+      },
+      "rawCurrent": {
+        "pass": null,
+        "fail": null,
+        "blocked": null
+      }
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js",
+      "status": "executed",
+      "registered": 29,
+      "pass": 29,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 29,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 29,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 29,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+      "status": "executed",
+      "registered": 40,
+      "pass": 38,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 38,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 38,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 38,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not OperationError: The elliptic-curve operation failed\n+ actual - expected\n\n+ 'OperationError'\n- 'InvalidAccessError'\n",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js",
+      "status": "executed",
+      "registered": 31,
+      "pass": 31,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 31,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 31,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 31,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js",
+      "status": "executed",
+      "registered": 3661,
+      "pass": 3661,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 3661,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 3661,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 3661,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js",
+      "status": "executed",
+      "registered": 8632,
+      "pass": 8632,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 8632,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 8632,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 8632,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/digest/cshake.tentative.https.any.js",
+      "status": "executed",
+      "registered": 88,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 88,
+      "baseline": {
+        "pass": 0,
+        "fail": 88,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 88
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 88,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 88
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/digest.https.any.js",
+      "status": "executed",
+      "registered": 116,
+      "pass": 116,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 116,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 116,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 116,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js",
+      "status": "executed",
+      "registered": 148,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 148,
+      "baseline": {
+        "pass": 0,
+        "fail": 148,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 148
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 148,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 148
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+      "status": "executed",
+      "registered": 48,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 48,
+      "baseline": {
+        "pass": 0,
+        "fail": 48,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 48
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 48,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 48
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
+      "status": "executed",
+      "registered": 135,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 135,
+      "baseline": {
+        "pass": 0,
+        "fail": 135,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 135
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 135,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for digest",
+          "count": 135
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+      "status": "executed",
+      "registered": 9,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 9,
+      "baseline": {
+        "pass": 0,
+        "fail": 9,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 9
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 9,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 3
+        },
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+      "status": "executed",
+      "registered": 120,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 120,
+      "baseline": {
+        "pass": 0,
+        "fail": 120,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 120
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 120,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 30
+        },
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 90
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+      "status": "executed",
+      "registered": 61,
+      "pass": 55,
+      "fail": 0,
+      "blocked": 6,
+      "baseline": {
+        "pass": 55,
+        "fail": 6,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 55,
+        "fail": 0,
+        "blocked": 6
+      },
+      "rawCurrent": {
+        "pass": 55,
+        "fail": 6,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+          "count": 3
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CBC 128-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CBC 192-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CBC 256-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js",
+      "status": "executed",
+      "registered": 52,
+      "pass": 46,
+      "fail": 0,
+      "blocked": 6,
+      "baseline": {
+        "pass": 46,
+        "fail": 6,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 46,
+        "fail": 0,
+        "blocked": 6
+      },
+      "rawCurrent": {
+        "pass": 46,
+        "fail": 6,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt error for test AES-CTR 128-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt error for test AES-CTR 192-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt error for test AES-CTR 256-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CTR 128-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CTR 192-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-CTR 256-bit key: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js",
+      "status": "executed",
+      "registered": 577,
+      "pass": 493,
+      "fail": 0,
+      "blocked": 84,
+      "baseline": {
+        "pass": 493,
+        "fail": 84,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 493,
+        "fail": 0,
+        "blocked": 84
+      },
+      "rawCurrent": {
+        "pass": 493,
+        "fail": 84,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+          "count": 42
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 104-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 112-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 120-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 128-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 32-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 64-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 96-bit tag, 96-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js",
+      "status": "executed",
+      "registered": 577,
+      "pass": 493,
+      "fail": 0,
+      "blocked": 84,
+      "baseline": {
+        "pass": 493,
+        "fail": 84,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 493,
+        "fail": 0,
+        "blocked": 84
+      },
+      "rawCurrent": {
+        "pass": 493,
+        "fail": 84,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw an OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+          "count": 42
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 128-bit key, no additional data, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 192-bit key, no additional data, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 104-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 112-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 120-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 128-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 32-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 64-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test AES-GCM 256-bit key, no additional data, 96-bit tag, 256-bit iv: Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+      "status": "executed",
+      "registered": 277,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 276,
+      "baseline": {
+        "pass": 1,
+        "fail": 276,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 276
+      },
+      "rawCurrent": {
+        "pass": 1,
+        "fail": 276,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 129-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 24-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 48-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 72-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 120-bit iv, illegal tag length 95-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, illegal iv length 0-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, illegal iv length 128-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, no additional data, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, no additional data, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 128-bit key, no additional data, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 129-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 24-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 48-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 72-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 120-bit iv, illegal tag length 95-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, illegal iv length 0-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, illegal iv length 128-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, no additional data, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, no additional data, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 192-bit key, no additional data, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 129-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 24-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 48-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 72-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 120-bit iv, illegal tag length 95-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, 96-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, illegal iv length 0-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, illegal iv length 128-bits",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, no additional data, 128-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, no additional data, 64-bit tag, 120-bit iv",
+          "count": 13
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importKey failed for AES-OCB 256-bit key, no additional data, 96-bit tag, 120-bit iv",
+          "count": 13
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+      "status": "executed",
+      "registered": 28,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 28,
+      "baseline": {
+        "pass": 0,
+        "fail": 28,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 28
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 28,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: decrypt failed unexpectedly: AssertionError [ERR_ASSERTION]: importKey failed unexpectedly: TypeError: Unknown key format",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt failed unexpectedly: AssertionError [ERR_ASSERTION]: importKey failed unexpectedly: TypeError: Unknown key format",
+          "count": 12
+        },
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
+      "status": "executed",
+      "registered": 181,
+      "pass": 157,
+      "fail": 0,
+      "blocked": 24,
+      "baseline": {
+        "pass": 157,
+        "fail": 24,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 157,
+        "fail": 0,
+        "blocked": 24
+      },
+      "rawCurrent": {
+        "pass": 157,
+        "fail": 24,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw OperationError instead of Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer\n+ actual - expected\n\n+ 'TypeError'\n- 'OperationError'\n",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-1 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-1 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-1 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-256 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-256 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-256 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-384 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-384 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-384 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-512 and a label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-512 and empty label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: encrypt error for test RSA-OAEP with SHA-512 and no label: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js",
+      "status": "executed",
+      "registered": 774,
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js",
+      "status": "executed",
+      "registered": 774,
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js",
+      "status": "executed",
+      "registered": 774,
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 774,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js",
+      "status": "executed",
+      "registered": 516,
+      "pass": 516,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 516,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 516,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 516,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+      "status": "executed",
+      "registered": 774,
+      "pass": 360,
+      "fail": 0,
+      "blocked": 414,
+      "baseline": {
+        "pass": 360,
+        "fail": 414,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 360,
+        "fail": 0,
+        "blocked": 414
+      },
+      "rawCurrent": {
+        "pass": 360,
+        "fail": 414,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad algorithm property not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'OperationError'\n",
+          "count": 204
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 204
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
+      "status": "executed",
+      "registered": 476,
+      "pass": 476,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 476,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 476,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 476,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js",
+      "status": "executed",
+      "registered": 454,
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js",
+      "status": "executed",
+      "registered": 412,
+      "pass": 412,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 412,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 412,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 412,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 412,
+      "pass": 412,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 412,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 412,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 412,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_HMAC.https.any.js",
+      "status": "executed",
+      "registered": 616,
+      "pass": 616,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 616,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 616,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 616,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js",
+      "status": "executed",
+      "registered": 516,
+      "pass": 360,
+      "fail": 0,
+      "blocked": 156,
+      "baseline": {
+        "pass": 360,
+        "fail": 156,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 360,
+        "fail": 0,
+        "blocked": 156
+      },
+      "rawCurrent": {
+        "pass": 360,
+        "fail": 156,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 144
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+      "status": "executed",
+      "registered": 1044,
+      "pass": 360,
+      "fail": 0,
+      "blocked": 684,
+      "baseline": {
+        "pass": 360,
+        "fail": 684,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 360,
+        "fail": 0,
+        "blocked": 684
+      },
+      "rawCurrent": {
+        "pass": 360,
+        "fail": 684,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 48
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported\n+ actual - expected\n\n+ 'TypeError'\n- 'SyntaxError'\n",
+          "count": 624
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
+      "status": "executed",
+      "registered": 532,
+      "pass": 532,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 532,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 532,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 532,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js",
+      "status": "executed",
+      "registered": 428,
+      "pass": 428,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 428,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 428,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 428,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js",
+      "status": "executed",
+      "registered": 428,
+      "pass": 428,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 428,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 428,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 428,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X25519.https.any.js",
+      "status": "executed",
+      "registered": 424,
+      "pass": 424,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 424,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 424,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 424,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 424,
+      "pass": 424,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 424,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 424,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 424,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+      "status": "executed",
+      "registered": 500,
+      "pass": 360,
+      "fail": 0,
+      "blocked": 140,
+      "baseline": {
+        "pass": 360,
+        "fail": 140,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 360,
+        "fail": 0,
+        "blocked": 140
+      },
+      "rawCurrent": {
+        "pass": 360,
+        "fail": 140,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 136
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
+      "status": "executed",
+      "registered": 552,
+      "pass": 360,
+      "fail": 0,
+      "blocked": 192,
+      "baseline": {
+        "pass": 360,
+        "fail": 192,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 360,
+        "fail": 0,
+        "blocked": 192
+      },
+      "rawCurrent": {
+        "pass": 360,
+        "fail": 192,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Bad usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 180
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Empty usages not supported\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
+      "status": "executed",
+      "registered": 288,
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 288,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 288,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 288,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js",
+      "status": "executed",
+      "registered": 288,
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 288,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 288,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 288,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js",
+      "status": "executed",
+      "registered": 288,
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 288,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 288,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 288,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js",
+      "status": "executed",
+      "registered": 72,
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 72,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+      "status": "executed",
+      "registered": 288,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 288,
+      "baseline": {
+        "pass": 0,
+        "fail": 288,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 288
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 288,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 288
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
+      "status": "executed",
+      "registered": 72,
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 72,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js",
+      "status": "executed",
+      "registered": 54,
+      "pass": 54,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 54,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 54,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 54,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js",
+      "status": "executed",
+      "registered": 36,
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 36,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 36,
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 36,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_HMAC.https.any.js",
+      "status": "executed",
+      "registered": 192,
+      "pass": 192,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 192,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 192,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 192,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js",
+      "status": "executed",
+      "registered": 108,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 108,
+      "baseline": {
+        "pass": 0,
+        "fail": 108,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 108
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 108,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 108
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+      "status": "executed",
+      "registered": 468,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 468,
+      "baseline": {
+        "pass": 0,
+        "fail": 468,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 468
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 468,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: TypeError: Unknown key usage",
+          "count": 468
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
+      "status": "executed",
+      "registered": 156,
+      "pass": 156,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 156,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 156,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 156,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js",
+      "status": "executed",
+      "registered": 36,
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 36,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js",
+      "status": "executed",
+      "registered": 36,
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 36,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X25519.https.any.js",
+      "status": "executed",
+      "registered": 32,
+      "pass": 32,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 32,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 32,
+      "pass": 32,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 0,
+        "fail": 32,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+      "status": "executed",
+      "registered": 192,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 192,
+      "baseline": {
+        "pass": 0,
+        "fail": 192,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 192
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 192,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 192
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
+      "status": "executed",
+      "registered": 144,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 144,
+      "baseline": {
+        "pass": 0,
+        "fail": 144,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 144
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 144,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: exportKey threw an unexpected error: AssertionError [ERR_ASSERTION]: generateKey threw an unexpected error: NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 144
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 37,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 37,
+      "baseline": {
+        "pass": 0,
+        "fail": 37,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 37
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 37,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: getPublicKey method exists on SubtleCrypto\n\nfalse !== true\n",
+          "count": 1
+        },
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 6
+        },
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 6
+        },
+        {
+          "message": "TypeError: crypto.subtle.getPublicKey is not a function",
+          "count": 24
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/getRandomValues.any.js",
+      "status": "executed",
+      "registered": 39,
+      "pass": 39,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 30,
+        "fail": 9,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 39,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 39,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/historical.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ SubtleCrypto {}\n- undefined\n",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ [class CryptoKey]\n- undefined\n",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ [class SubtleCrypto]\n- undefined\n",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope.",
+      "status": "not-run",
+      "registered": null,
+      "pass": null,
+      "fail": null,
+      "blocked": null,
+      "baseline": {
+        "pass": null,
+        "fail": null,
+        "blocked": null
+      },
+      "rawCurrent": {
+        "pass": null,
+        "fail": null,
+        "blocked": null
+      }
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.tentative.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope.",
+      "status": "not-run",
+      "registered": null,
+      "pass": null,
+      "fail": null,
+      "blocked": null,
+      "baseline": {
+        "pass": null,
+        "fail": null,
+        "blocked": null
+      },
+      "rawCurrent": {
+        "pass": null,
+        "fail": null,
+        "blocked": null
+      }
+    },
+    {
+      "path": "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 72,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 72,
+      "baseline": {
+        "pass": 0,
+        "fail": 72,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 72
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 72,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not NotSupportedError: The algorithm is not supported for importKey\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 6
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format\n+ actual - expected\n\n+ 'TypeError'\n- 'SyntaxError'\n",
+          "count": 6
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 24
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 45,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 45,
+      "baseline": {
+        "pass": 0,
+        "fail": 45,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 45
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 45,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format\n+ actual - expected\n\n+ 'TypeError'\n- 'SyntaxError'\n",
+          "count": 9
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 36
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 24,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 24,
+      "baseline": {
+        "pass": 0,
+        "fail": 24,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 24
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 24,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not NotSupportedError: The algorithm is not supported for importKey\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format\n+ actual - expected\n\n+ 'TypeError'\n- 'SyntaxError'\n",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 8
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 144,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 144,
+      "baseline": {
+        "pass": 0,
+        "fail": 144,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 144
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 144,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not NotSupportedError: The algorithm is not supported for importKey\n+ actual - expected\n\n+ 'NotSupportedError'\n- 'SyntaxError'\n",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Should throw correct error, not TypeError: Unknown key format\n+ actual - expected\n\n+ 'TypeError'\n- 'SyntaxError'\n",
+          "count": 12
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 48
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 72
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 180,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 180,
+      "baseline": {
+        "pass": 0,
+        "fail": 180,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 180
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 180,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 120
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 60
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+      "status": "executed",
+      "registered": 324,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 324,
+      "baseline": {
+        "pass": 0,
+        "fail": 324,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 324
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 324,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: NotSupportedError: The algorithm is not supported for importKey",
+          "count": 24
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key format",
+          "count": 108
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Threw an unexpected error: TypeError: Unknown key usage",
+          "count": 192
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",
+      "status": "executed",
+      "registered": 1,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+      "status": "executed",
+      "registered": 264,
+      "pass": 180,
+      "fail": 0,
+      "blocked": 84,
+      "baseline": {
+        "pass": 24,
+        "fail": 192,
+        "blocked": 48
+      },
+      "afterPackageFixes": {
+        "pass": 180,
+        "fail": 36,
+        "blocked": 48
+      },
+      "rawCurrent": {
+        "pass": 180,
+        "fail": 36,
+        "blocked": 48
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Export threw an unexpected error: AssertionError [ERR_ASSERTION]: Round trip works\n\nfalse !== true\n",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Round trip works\n\nfalse !== true\n",
+          "count": 18
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js",
+      "status": "executed",
+      "registered": 620,
+      "pass": 620,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 620,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 620,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 620,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js",
+      "status": "executed",
+      "registered": 620,
+      "pass": 620,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 620,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 620,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 620,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js",
+      "status": "executed",
+      "registered": 72,
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 20,
+        "fail": 52,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 72,
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 20,
+        "fail": 52,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 72,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js",
+      "status": "executed",
+      "registered": 54,
+      "pass": 54,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 10,
+        "fail": 44,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 54,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 54,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 54,
+      "pass": 54,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 10,
+        "fail": 44,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 54,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 54,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js",
+      "status": "executed",
+      "registered": 530,
+      "pass": 530,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 530,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 530,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 530,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 530,
+      "pass": 530,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 530,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 530,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 530,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js",
+      "status": "executed",
+      "registered": 454,
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 454,
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 454,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
+      "status": "executed",
+      "registered": 20,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 20,
+      "baseline": {
+        "pass": 0,
+        "fail": 20,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 20
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 20,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "TypeError: Unknown key format",
+          "count": 20
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
+      "status": "executed",
+      "registered": 1056,
+      "pass": 1056,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 144,
+        "fail": 912,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 1056,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 1056,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/import_export/symmetric_importKey.https.any.js",
+      "status": "executed",
+      "registered": 606,
+      "pass": 606,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 198,
+        "fail": 408,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 606,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 606,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/normalize-algorithm-name.https.any.js",
+      "status": "executed",
+      "registered": 4,
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/randomUUID.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+      "status": "executed",
+      "registered": 2,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 1,
+      "baseline": {
+        "pass": 1,
+        "fail": 1,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      "rawCurrent": {
+        "pass": 1,
+        "fail": 1,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: Worker is not defined",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-cbc.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ctr.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-gcm.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-kw.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdh.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdsa.https.any.js",
+      "status": "executed",
+      "registered": 3,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3,
+      "baseline": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 3,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed25519.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/hmac.https.any.js",
+      "status": "executed",
+      "registered": 8,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 8,
+      "baseline": {
+        "pass": 0,
+        "fail": 8,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 8
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 8,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 8
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+      "status": "executed",
+      "registered": 6,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 6,
+      "baseline": {
+        "pass": 0,
+        "fail": 6,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 6
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 6,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mldsa.tentative.https.any.js",
+      "status": "executed",
+      "registered": 6,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 6,
+      "baseline": {
+        "pass": 0,
+        "fail": 6,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 6
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 6,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "NotSupportedError: The algorithm is not supported for generateKey",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+      "status": "executed",
+      "registered": 6,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 6,
+      "baseline": {
+        "pass": 0,
+        "fail": 6,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 6
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 6,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "TypeError: Unknown key usage",
+          "count": 6
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-oaep.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-pss.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x25519.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 2,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "ReferenceError: structuredClone is not defined",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/ecdsa.https.any.js",
+      "status": "executed",
+      "registered": 325,
+      "pass": 301,
+      "fail": 0,
+      "blocked": 24,
+      "baseline": {
+        "pass": 301,
+        "fail": 24,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 301,
+        "fail": 0,
+        "blocked": 24
+      },
+      "rawCurrent": {
+        "pass": 301,
+        "fail": 24,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-256 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-384 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error ECDSA P-521 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js",
+      "status": "executed",
+      "registered": 19,
+      "pass": 17,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 17,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 17,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error EdDSA Ed25519: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+      "status": "executed",
+      "registered": 19,
+      "pass": 17,
+      "fail": 0,
+      "blocked": 2,
+      "baseline": {
+        "pass": 17,
+        "fail": 2,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 17,
+        "fail": 0,
+        "blocked": 2
+      },
+      "rawCurrent": {
+        "pass": 17,
+        "fail": 2,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error EdDSA Ed448: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js",
+      "status": "executed",
+      "registered": 14,
+      "pass": 14,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/hmac.https.any.js",
+      "status": "executed",
+      "registered": 65,
+      "pass": 57,
+      "fail": 0,
+      "blocked": 8,
+      "baseline": {
+        "pass": 57,
+        "fail": 8,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 57,
+        "fail": 0,
+        "blocked": 8
+      },
+      "rawCurrent": {
+        "pass": 57,
+        "fail": 8,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error HMAC with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
+      "status": "executed",
+      "registered": 103,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 102,
+      "baseline": {
+        "pass": 1,
+        "fail": 102,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 102
+      },
+      "rawCurrent": {
+        "pass": 1,
+        "fail": 102,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC128 with customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC128 with large data and customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC128 with no customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC256 with customization and 512-bit output. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC256 with large data and customization. Message: ''Unknown key format''",
+          "count": 17
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for KMAC256 with large data and no customization. Message: ''Unknown key format''",
+          "count": 17
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
+      "status": "executed",
+      "registered": 58,
+      "pass": 1,
+      "fail": 0,
+      "blocked": 57,
+      "baseline": {
+        "pass": 1,
+        "fail": 57,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 1,
+        "fail": 0,
+        "blocked": 57
+      },
+      "rawCurrent": {
+        "pass": 1,
+        "fail": 57,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-44 basic test. Message: ''The algorithm is not supported for importKey''",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-44 invalid signature. Message: ''The algorithm is not supported for importKey''",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-65 basic test. Message: ''The algorithm is not supported for importKey''",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-65 invalid signature. Message: ''The algorithm is not supported for importKey''",
+          "count": 1
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-87 basic test. Message: ''The algorithm is not supported for importKey''",
+          "count": 18
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: importVectorKeys failed for ML-DSA-87 invalid signature. Message: ''The algorithm is not supported for importKey''",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js",
+      "status": "executed",
+      "registered": 69,
+      "pass": 61,
+      "fail": 0,
+      "blocked": 8,
+      "baseline": {
+        "pass": 61,
+        "fail": 8,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 61,
+        "fail": 0,
+        "blocked": 8
+      },
+      "rawCurrent": {
+        "pass": 61,
+        "fail": 8,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-1: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-256: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-384: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSASSA-PKCS1-v1_5 with SHA-512: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pss.https.any.js",
+      "status": "executed",
+      "registered": 145,
+      "pass": 129,
+      "fail": 0,
+      "blocked": 16,
+      "baseline": {
+        "pass": 129,
+        "fail": 16,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 129,
+        "fail": 0,
+        "blocked": 16
+      },
+      "rawCurrent": {
+        "pass": 129,
+        "fail": 16,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-1 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-1, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-256 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-256, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-384 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-384, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-512 and no salt: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        },
+        {
+          "message": "AssertionError [ERR_ASSERTION]: Verification should not throw error RSA-PSS with SHA-512, salted: 'Cannot perform ArrayBuffer.prototype.transfer on a detached ArrayBuffer'",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/supports-modern.tentative.https.any.js",
+      "status": "executed",
+      "registered": 94,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 94,
+      "baseline": {
+        "pass": 0,
+        "fail": 94,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 94
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 94,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: SubtleCrypto.supports should be a function\n\nfalse !== true\n",
+          "count": 1
+        },
+        {
+          "message": "TypeError: SubtleCrypto.supports is not a function",
+          "count": 93
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/supports.tentative.https.any.js",
+      "status": "executed",
+      "registered": 171,
+      "pass": 0,
+      "fail": 0,
+      "blocked": 171,
+      "baseline": {
+        "pass": 0,
+        "fail": 171,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 0,
+        "fail": 0,
+        "blocked": 171
+      },
+      "rawCurrent": {
+        "pass": 0,
+        "fail": 171,
+        "blocked": 0
+      },
+      "rawCurrentFailures": [
+        {
+          "message": "AssertionError [ERR_ASSERTION]: SubtleCrypto.supports should be a function\n\nfalse !== true\n",
+          "count": 1
+        },
+        {
+          "message": "TypeError: SubtleCrypto.supports is not a function",
+          "count": 170
+        }
+      ]
+    },
+    {
+      "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+      "status": "executed",
+      "registered": 357,
+      "pass": 357,
+      "fail": 0,
+      "blocked": 0,
+      "baseline": {
+        "pass": 54,
+        "fail": 303,
+        "blocked": 0
+      },
+      "afterPackageFixes": {
+        "pass": 357,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrent": {
+        "pass": 357,
+        "fail": 0,
+        "blocked": 0
+      },
+      "rawCurrentFailures": []
+    }
+  ]
+}

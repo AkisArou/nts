@@ -240,6 +240,186 @@
       "name": "Good parameters: P-521 bits (raw, buffer(67, compressed), {name: ECDH, namedCurve: P-521}, false, [])",
       "category": "optional-compressed-ec-point",
       "reason": "Compressed SEC 1 EC points remain unsupported as documented. The unedited WPT uses assert_implements_optional for this import; uncompressed point coverage remains active."
+    },
+    {
+      "name": "Good parameters: P-256 bits (pkcs8, buffer(138), {name: ECDSA, namedCurve: P-256}, true, [sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-256 bits (pkcs8, buffer(138), {name: ECDSA, namedCurve: P-256}, true, [sign, sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-256 bits (pkcs8, buffer(67), {name: ECDSA, namedCurve: P-256}, true, [sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-256 bits (pkcs8, buffer(67), {name: ECDSA, namedCurve: P-256}, true, [sign, sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-384 bits (pkcs8, buffer(185), {name: ECDSA, namedCurve: P-384}, true, [sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-384 bits (pkcs8, buffer(185), {name: ECDSA, namedCurve: P-384}, true, [sign, sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-384 bits (pkcs8, buffer(80), {name: ECDSA, namedCurve: P-384}, true, [sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-384 bits (pkcs8, buffer(80), {name: ECDSA, namedCurve: P-384}, true, [sign, sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-521 bits (pkcs8, buffer(241), {name: ECDSA, namedCurve: P-521}, true, [sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-521 bits (pkcs8, buffer(241), {name: ECDSA, namedCurve: P-521}, true, [sign, sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-521 bits (pkcs8, buffer(98), {name: ECDSA, namedCurve: P-521}, true, [sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-521 bits (pkcs8, buffer(98), {name: ECDSA, namedCurve: P-521}, true, [sign, sign])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-256 bits (pkcs8, buffer(138), {name: ECDH, namedCurve: P-256}, true, [deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-256 bits (pkcs8, buffer(138), {name: ECDH, namedCurve: P-256}, true, [deriveBits, deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-256 bits (pkcs8, buffer(138), {name: ECDH, namedCurve: P-256}, true, [deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-256 bits (pkcs8, buffer(138), {name: ECDH, namedCurve: P-256}, true, [deriveKey, deriveBits, deriveKey, deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-256 bits (pkcs8, buffer(67), {name: ECDH, namedCurve: P-256}, true, [deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-256 bits (pkcs8, buffer(67), {name: ECDH, namedCurve: P-256}, true, [deriveBits, deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-256 bits (pkcs8, buffer(67), {name: ECDH, namedCurve: P-256}, true, [deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-256 bits (pkcs8, buffer(67), {name: ECDH, namedCurve: P-256}, true, [deriveKey, deriveBits, deriveKey, deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-384 bits (pkcs8, buffer(185), {name: ECDH, namedCurve: P-384}, true, [deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-384 bits (pkcs8, buffer(185), {name: ECDH, namedCurve: P-384}, true, [deriveBits, deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-384 bits (pkcs8, buffer(185), {name: ECDH, namedCurve: P-384}, true, [deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-384 bits (pkcs8, buffer(185), {name: ECDH, namedCurve: P-384}, true, [deriveKey, deriveBits, deriveKey, deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-384 bits (pkcs8, buffer(80), {name: ECDH, namedCurve: P-384}, true, [deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-384 bits (pkcs8, buffer(80), {name: ECDH, namedCurve: P-384}, true, [deriveBits, deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-384 bits (pkcs8, buffer(80), {name: ECDH, namedCurve: P-384}, true, [deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-384 bits (pkcs8, buffer(80), {name: ECDH, namedCurve: P-384}, true, [deriveKey, deriveBits, deriveKey, deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-521 bits (pkcs8, buffer(241), {name: ECDH, namedCurve: P-521}, true, [deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-521 bits (pkcs8, buffer(241), {name: ECDH, namedCurve: P-521}, true, [deriveBits, deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-521 bits (pkcs8, buffer(241), {name: ECDH, namedCurve: P-521}, true, [deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "Good parameters: P-521 bits (pkcs8, buffer(241), {name: ECDH, namedCurve: P-521}, true, [deriveKey, deriveBits, deriveKey, deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-521 bits (pkcs8, buffer(98), {name: ECDH, namedCurve: P-521}, true, [deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-521 bits (pkcs8, buffer(98), {name: ECDH, namedCurve: P-521}, true, [deriveBits, deriveKey])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-521 bits (pkcs8, buffer(98), {name: ECDH, namedCurve: P-521}, true, [deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
+    },
+    {
+      "name": "PKCS8 private-only: P-521 bits (pkcs8, buffer(98), {name: ECDH, namedCurve: P-521}, true, [deriveKey, deriveBits, deriveKey, deriveBits])",
+      "category": "upstream-ec-pkcs8-spec",
+      "reason": "WebCrypto §§23.7.5 and 24.4.4 require ECPrivateKey.parameters and publicKey on PKCS8 export. This fixture expects byte identity with an encoding omitting inner parameters. Native canonical export and existing structural controls follow the specification; the original round-trip failure is retained in after-package-fixes.json."
     }
   ]
 }
