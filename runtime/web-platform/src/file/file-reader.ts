@@ -1,4 +1,5 @@
 import { trimASCIIWhitespace } from "../core/ascii.ts";
+import { forgivingBase64Encode } from "../core/base64.ts";
 import { concatBytes, latin1, TextDecoder } from "../core/encoding.ts";
 import { DOMException } from "../core/errors.ts";
 import { Event, EventTarget, eventTargetDispatchTrusted } from "../core/events.ts";
@@ -10,7 +11,7 @@ import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import type { ReadableStreamDefaultReader } from "../streams/readable.ts";
 import { Blob, getBlobSize, getBlobStream, getBlobType, isBlob } from "./blob.ts";
 
-type ReadKind = "ArrayBuffer" | "BinaryString" | "Text";
+type ReadKind = "ArrayBuffer" | "BinaryString" | "DataURL" | "Text";
 type FileReaderEventType = "loadstart" | "progress" | "load" | "abort" | "error" | "loadend";
 
 /** HTML EventHandler receives Event, including events dispatched by script. */
@@ -121,8 +122,8 @@ function onLoadend(this: FileReader, event: Event): void { invokeHandler(this, 5
 /**
  * File API §6.2: asynchronous reads over canonical immutable Blob storage.
  *
- * readAsDataURL is deliberately absent until the provider exposes a base64
- * encoder. Recognized legacy text encodings likewise require codec support.
+ * Base64 packaging uses the shared codec boundary in core/base64.ts.
+ * Recognized legacy text encodings still require codec support.
  */
 export class FileReader extends EventTarget {
   static readonly EMPTY = 0;
@@ -199,6 +200,12 @@ export class FileReader extends EventTarget {
     this.#read(requireBlob(blob), "BinaryString", undefined);
   }
 
+  readAsDataURL(blob: Blob): void {
+    if (!(#state in this)) throw new TypeError("FileReader method called on an incompatible receiver");
+    requireArguments(arguments, 1, "FileReader.readAsDataURL");
+    this.#read(requireBlob(blob), "DataURL", undefined);
+  }
+
   readAsText(blob: Blob, encoding: string | undefined = undefined): void {
     if (!(#state in this)) throw new TypeError("FileReader method called on an incompatible receiver");
     requireArguments(arguments, 1, "FileReader.readAsText");
@@ -271,6 +278,14 @@ export class FileReader extends EventTarget {
         switch (operation.kind) {
           case "ArrayBuffer": this.#result = bytes.buffer; break;
           case "BinaryString": this.#result = latin1(bytes); break;
+          case "DataURL": {
+            const mimeType = getBlobType(operation.blob);
+            // Match the pinned WPT's octet-stream default. File API's exact
+            // DataURL serialization is tracked at https://github.com/w3c/FileAPI/issues/104.
+            this.#result = "data:" + (mimeType === "" ? "application/octet-stream" : mimeType)
+              + ";base64," + forgivingBase64Encode(bytes);
+            break;
+          }
           case "Text": this.#result = decodeFileText(bytes, getBlobType(operation.blob), operation.encodingLabel); break;
         }
       } catch (error) {

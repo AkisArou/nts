@@ -47,6 +47,9 @@
     "../wpt-versions.test.ts",
     "../wpt-encoding.test.ts",
     "../encoding-policy.test.ts",
-    "../encoding-stream-policy.test.ts"
+    "../encoding-stream-policy.test.ts",
+    "../wpt-base64.test.ts",
+    "../wpt-base64-harness.test.ts",
+    "../base64-policy.test.ts"
   ]
 }

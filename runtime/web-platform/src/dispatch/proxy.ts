@@ -1,4 +1,5 @@
 import { decodeUTF8, encodeByteString, utf8 } from "../core/encoding.ts";
+import { forgivingBase64Encode } from "../core/base64.ts";
 import { DOMException, ProtocolError } from "../core/errors.ts";
 import { percentDecodeBytes } from "../core/percent.ts";
 import { AbortController } from "../core/abort.ts";
@@ -22,7 +23,6 @@ import type {
 import { isNegotiatingTlsUpgrader, upgradeNegotiated } from "../provider/primitives.ts";
 import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
-const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const DEFAULT_MAXIMUM_AUTHENTICATION_ATTEMPTS = 2;
 
 export type ProxyKind = "http-connect" | "socks5";
@@ -104,22 +104,6 @@ export class Socks5ProxyError extends Error {
     this.name = "Socks5ProxyError";
     this.reply = reply;
   }
-}
-
-function base64(bytes: Uint8Array): string {
-  let result = "";
-  for (let index = 0; index < bytes.length; index += 3) {
-    const first = bytes[index] ?? 0;
-    const second = bytes[index + 1] ?? 0;
-    const third = bytes[index + 2] ?? 0;
-    result +=
-      BASE64_ALPHABET.charAt(first >>> 2) +
-      BASE64_ALPHABET.charAt(((first & 3) << 4) | (second >>> 4));
-    result +=
-      index + 1 < bytes.length ? BASE64_ALPHABET.charAt(((second & 15) << 2) | (third >>> 6)) : "=";
-    result += index + 2 < bytes.length ? BASE64_ALPHABET.charAt(third & 63) : "=";
-  }
-  return result;
 }
 
 function decodeUserInfo(value: string): string {
@@ -230,7 +214,7 @@ export function validateAuthorization(value: string): string {
 /** @internal Construct URL-userinfo Basic credentials. */
 export function basicAuthorization(username: string, password: string): string | null {
   if (username === "" && password === "") return null;
-  return "Basic " + base64(utf8.encode(username + ":" + password));
+  return "Basic " + forgivingBase64Encode(utf8.encode(username + ":" + password));
 }
 
 /** @internal Validate immutable configuration headers. */

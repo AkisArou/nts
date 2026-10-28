@@ -61,6 +61,9 @@ node --expose-gc \
   runtime/web-platform/test/wpt-encoding.test.ts \
   runtime/web-platform/test/encoding-policy.test.ts \
   runtime/web-platform/test/encoding-stream-policy.test.ts \
+  runtime/web-platform/test/wpt-base64.test.ts \
+  runtime/web-platform/test/wpt-base64-harness.test.ts \
+  runtime/web-platform/test/base64-policy.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \
   runtime/web-platform/test/event-wpt-policy.test.ts \
   runtime/web-platform/test/abort-wpt-policy.test.ts \

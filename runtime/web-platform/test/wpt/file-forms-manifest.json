@@ -1639,13 +1639,8 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 6,
-      "blockedTests": {
-        "test FileReader InvalidStateError exception for readAsDataURL": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        }
-      },
-      "expectedRunnableTests": 5,
+      "blockedTests": {},
+      "expectedRunnableTests": 6,
       "registrations": [
         {
           "kind": "test",
@@ -1810,25 +1805,8 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 4,
-      "blockedTests": {
-        "FileReader readyState during readAsDataURL": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        },
-        "readAsDataURL result for Blob with specified MIME type": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        },
-        "readAsDataURL result for Blob with unspecified MIME type": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        },
-        "readAsDataURL result for empty Blob": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        }
-      },
-      "expectedRunnableTests": 0,
+      "blockedTests": {},
+      "expectedRunnableTests": 4,
       "registrations": [
         {
           "kind": "async_test",
@@ -1883,13 +1861,8 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 1,
-      "blockedTests": {
-        "FileAPI Test: filereader_readystate": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        }
-      },
-      "expectedRunnableTests": 0,
+      "blockedTests": {},
+      "expectedRunnableTests": 1,
       "registrations": [
         {
           "kind": "async_test",
@@ -1911,21 +1884,8 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 12,
-      "blockedTests": {
-        "readAsDataURL": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        },
-        "result is null during \"loadstart\" event for readAsDataURL": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        },
-        "result is null during \"progress\" event for readAsDataURL": {
-          "category": "provider-capability",
-          "reason": "FileReader.readAsDataURL depends on a native base64 encoding capability that the package does not expose. The source implementation deliberately leaves that method unavailable pending the maintainer-owned native capability; no source transcoder, Node FileReader or fabricated data URL is used. This exact case invokes readAsDataURL, including state-only and repeated-read variants."
-        }
-      },
-      "expectedRunnableTests": 9,
+      "blockedTests": {},
+      "expectedRunnableTests": 12,
       "registrations": [
         {
           "kind": "async_test",
@@ -3576,12 +3536,12 @@
     "selectedFixtureFiles": 34,
     "selectedSupportFiles": 2,
     "expectedRegisteredTests": 502,
-    "explicitlyBlockedTests": 17,
-    "expectedRunnableTests": 485,
+    "explicitlyBlockedTests": 8,
+    "expectedRunnableTests": 494,
     "blocksByCategory": {
       "excluded-language-feature": 5,
       "compiler-capability": 1,
-      "provider-capability": 11
+      "provider-capability": 2
     },
     "deferredBrowserDependentRegistrations": 2,
     "excludedSourcePaths": 84,
