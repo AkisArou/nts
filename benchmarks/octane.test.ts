@@ -2,8 +2,11 @@
 // Upstream source: chromium/octane at 570ad1ccfe86e3eecba0636c8f932ac08edec517.
 // https://github.com/chromium/octane/tree/570ad1ccfe86e3eecba0636c8f932ac08edec517
 // Use each program's original validation. Additional deterministic oracles
-// below were obtained from the pinned, unmodified JavaScript, with base.js's
-// ResetRNG for Splay/Crypto; they were not generated from the TypeScript port.
+// come from the pinned, unmodified JavaScript, with base.js's ResetRNG for
+// Splay/Crypto. Box2D uses an original nts scene; its oracles run that same
+// scene on the unmodified zlib-licensed Box2DWeb engine at
+// 03ff76dac7f9961668011b44c5ae716a30dd0b6f/Box2D.js. No oracle is generated
+// from the transcribed TypeScript engine.
 // Discover installed rows so the shared file can land with RayTrace first.
 // Run with: node --test benchmarks/octane.test.ts
 
@@ -39,6 +42,15 @@ interface CryptoCase extends OctaneCase {
 
 interface Box2DCase extends OctaneCase {
   state(steps: number): number[];
+  sceneSummary(steps?: number): {
+    bodies: number;
+    dynamicBodies: number;
+    circles: number;
+    polygons: number;
+    joints: number;
+    contacts: number;
+    steps: number;
+  };
 }
 
 // Little-endian encoding is explicit, so these independently recorded full
@@ -126,22 +138,37 @@ for (const name of cases) {
     });
   } else if (name === "octane-box2d") {
     const benchmark = module as Box2DCase;
-    test(`${name}: complete original world state matches untouched Octane`, () => {
-      // This is the one program without an original result assertion. These
-      // SHA-256 values cover all 52 bodies' unrounded x, y, angle, vx, vy and
-      // angular velocity, in the original body's linked-list traversal order.
+    test(`${name}: original nts scene exercises boxes, circles and revolute joints`, () => {
+      assert.deepEqual(benchmark.sceneSummary(), {
+        bodies: 32,
+        dynamicBodies: 31,
+        circles: 4,
+        polygons: 28,
+        joints: 6,
+        contacts: 59,
+        steps: 24,
+      });
+    });
+    test(`${name}: original nts scene matches the unmodified zlib engine`, () => {
+      // Run the newly authored scene on the upstream Box2DWeb engine to obtain
+      // these oracles. They cover every unrounded x, y and angle, in creation
+      // order: ground, 21 pyramid boxes, four circles, then six chain links.
       const oracles: [number, string][] = [
-        [0, "e5141106620e29929abaf774aafb89b1d8817c2cbfdf01ce06af9bca1f45e8f9"],
-        [1, "ea2ec53e5312fa0a306fa81747b7af470a6e813419a6fc95a1f61585b14f25c9"],
-        [10, "a8698c9103ffe15b8a087cc6f3758655c25e39e155703d9a67227883b684da6a"],
-        [20, "62d34221bd2473a5d72cd30e7d224aa993fbd37c044d983839de919cdf9a52de"],
+        [0, "565caf67ffb0ffd2f2df6da19b3d64004915a2cb1f20c02a5992ced44f45a6ea"],
+        [1, "bd430806364a9d8e0d97b805996c45eaae5c4dd4e7a57b4b9299010ccca2739a"],
+        [12, "1a3a62a5e7ce0377d0d7b09478f0d0fec0f6ac684eb3f506378c5ed65535b3e9"],
+        [24, "532a8987f3d7e2b17c113748cd5566ff7375899947c55d8dacc88d9e4879ccad"],
+        [48, "20b4ecaa35e9e1b0b33cca3f63d0d6e3ee4814645cd94421b03754e3ec07dfe5"],
       ];
       for (const [steps, expected] of oracles) {
         const values = benchmark.state(steps);
-        assert.equal(values.length, 52 * 6);
+        assert.equal(values.length, 32 * 3);
         assert.equal(float64Hash(values), expected);
       }
-      assert.equal(benchmark.work(1), 3916658119);
+      assert.equal(benchmark.work(0), 0);
+      assert.equal(benchmark.work(1), 1661592278);
+      assert.equal(benchmark.work(2), 958479788);
+      assert.equal(benchmark.work(3), 111546498);
     });
   } else {
     assert.fail(`${name}: missing a program-specific correctness check`);
