@@ -58,6 +58,13 @@ Dates are 2026.
 
 ## Priorities and order
 
+- **Silent wrong answers first, wherever they are found** (10-28): a program
+  that compiles and computes a wrong result comes before any refusal, and
+  refusals follow in the order of how much real code they block. Asked
+  whether the TypeScript suite's new soundness cases take precedence over
+  test262, the user agreed with that ordering ("ok perfect"): the soundness
+  wrong answers come first, and test262's wrong results stay pinned by its
+  records until the foundations reach them.
 - **Primitives before test262** (10-22): test262 records keep gating, but no new
   test262 family starts until the foundations are solid. Now the
   [foundations](../../foundations) plan.

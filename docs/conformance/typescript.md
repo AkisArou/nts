@@ -88,7 +88,7 @@ row, its path and its observation as typed JSON:
 | `wrong` | the thrown class and the program's output, exactly |
 | `refused` | the sorted set of diagnostic codes, each with where it points (`body`, `harness`, `other` or `none`) |
 | `invalid-hir` | the validator's error |
-| `runtime-abort` | the termination (exit status or signal) and the output, exactly |
+| `runtime-abort` | the termination (exit status or signal) and the output, exactly; for a JVM host exception, its class and message line, its frames left to the raw rows |
 
 A record pins what a case did, never how the compiler phrased or numbered it:
 

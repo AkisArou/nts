@@ -7,6 +7,9 @@ one page that changes as work goes; the designs it builds are in
 
 ## Priorities
 
+- **Silent wrong answers first, wherever they are found.** A program that
+  compiles and computes a wrong result comes before any refusal, which is
+  safe; refusals follow in the order of how much real code they block.
 - **Primitives before test262.** The test262 records keep gating, but no new
   test262 family starts until the foundations are solid.
 - **Native (C and LLVM) first.** The JVM and Wasm are kept in mind and designed
@@ -203,12 +206,14 @@ The designs and their build orders are in [`foundations/`](foundations).
    - WebSocket as the client only: the server code in `runtime/web-platform`
      is removed once the realtime pull requests have landed, and the client's
      conformance tests get a peer of their own;
+   - the host libraries built from the pinned node's own sources (OpenSSL,
+     brotli, zlib, zstd and libuv), so that nothing nts builds links a system
+     library; today the machine's OpenSSL and brotli are linked;
    - Brotli for `CompressionStream` and `DecompressionStream` once the
-     compression pull requests have landed, then Web Crypto's Modern
-     Algorithms, as node implements them, once the Web Crypto chain has
-     landed. The Web Crypto cloud agent writes the TypeScript and its
-     maintainer the native half, over the brotli and OpenSSL built from node's
-     sources;
+     compression pull requests and the host libraries have landed, then Web
+     Crypto's Modern Algorithms, as node implements them, once the Web Crypto
+     chain has landed. The Web Crypto cloud agent writes the TypeScript and its
+     maintainer the native half;
    - `runtime/sdk` becoming `runtime/app` (`@nts/app`), its web-standard parts
      moving to `runtime/web-platform` and its lib subset retired;
    - the floor's `WebAssembly` API last, through an embedded engine linked
