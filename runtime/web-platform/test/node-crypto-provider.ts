@@ -335,22 +335,29 @@ function minimalInteger(bytes: Uint8Array): Uint8Array {
 function okpCurveName(key: KeyObject): CryptoOkpCurve | undefined {
   if (key.asymmetricKeyType === "ed25519") return "Ed25519";
   if (key.asymmetricKeyType === "x25519") return "X25519";
+  if (key.asymmetricKeyType === "ed448") return "Ed448";
+  if (key.asymmetricKeyType === "x448") return "X448";
   return undefined;
 }
 
 function okpPublicKey(curve: CryptoOkpCurve, bytes: Uint8Array): KeyObject {
-  if (curve !== "Ed25519" && curve !== "X25519") throw new TypeError("Unsupported native OKP curve");
+  if (curve !== "Ed25519" && curve !== "X25519" && curve !== "Ed448" && curve !== "X448") {
+    throw new TypeError("Unsupported native OKP curve");
+  }
   // The native public-key constructor preserves the encoded octets, including
   // noncanonical and small-order encodings. Validation belongs to the operation.
   return createPublicKey({ format: "jwk", key: { kty: "OKP", crv: curve, x: Buffer.from(bytes).toString("base64url") } });
 }
 
 function okpPrivateKey(curve: CryptoOkpCurve, seed: Uint8Array): KeyObject {
-  if (curve !== "Ed25519" && curve !== "X25519") throw new TypeError("Unsupported native OKP curve");
+  if (curve !== "Ed25519" && curve !== "X25519" && curve !== "Ed448" && curve !== "X448") {
+    throw new TypeError("Unsupported native OKP curve");
+  }
   // RFC 8410's nested OCTET STRING carries the original seed, not the clamped
   // scalar. Native import derives the actual public key from that seed; supplied
   // JWK x is deliberately absent so shared code can perform its consistency check.
-  const oid = derValue(6, new ByteArray([0x2b, 0x65, curve === "Ed25519" ? 0x70 : 0x6e]));
+  const identifier = curve === "Ed25519" ? 0x70 : curve === "X25519" ? 0x6e : curve === "Ed448" ? 0x71 : 0x6f;
+  const oid = derValue(6, new ByteArray([0x2b, 0x65, identifier]));
   const privateKey = derValue(0x30, Buffer.concat([
     derInteger(new ByteArray([0])), derValue(0x30, oid), derValue(4, derValue(4, seed)),
   ]));
@@ -520,8 +527,11 @@ export class NodeCryptoProvider implements CryptoProvider {
   generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
     try {
       if (parameters.family === "OKP") {
-        if (parameters.namedCurve !== "Ed25519" && parameters.namedCurve !== "X25519") return { failure: "operation" };
-        const pair = parameters.namedCurve === "Ed25519" ? generateKeyPairSync("ed25519") : generateKeyPairSync("x25519");
+        const curve = parameters.namedCurve;
+        if (curve !== "Ed25519" && curve !== "X25519" && curve !== "Ed448" && curve !== "X448") return { failure: "operation" };
+        const pair = curve === "Ed25519" ? generateKeyPairSync("ed25519")
+          : curve === "X25519" ? generateKeyPairSync("x25519")
+            : curve === "Ed448" ? generateKeyPairSync("ed448") : generateKeyPairSync("x448");
         return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
       }
       if (parameters.family === "EC") {
@@ -644,9 +654,10 @@ export class NodeCryptoProvider implements CryptoProvider {
         const bytes = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
         return { kind: "bytes", bytes: owned(bytes) };
       }
-      if (parameters.name === "Ed25519") {
-        if (nativeKey.asymmetricKeyType !== "ed25519" || nativeKey.type !== "private") return { failure: "invalid-key" };
-        return { kind: "bytes", bytes: owned(sign(null, data, nativeKey)) };
+      if (parameters.name === "Ed25519" || parameters.name === "Ed448") {
+        if (okpCurveName(nativeKey) !== parameters.name || nativeKey.type !== "private") return { failure: "invalid-key" };
+        const options = parameters.name === "Ed448" ? { key: nativeKey, context: parameters.context } : nativeKey;
+        return { kind: "bytes", bytes: owned(sign(null, data, options)) };
       }
       if (parameters.name === "ECDSA") {
         if (nativeKey.asymmetricKeyType !== "ec" || nativeKey.type !== "private") return { failure: "invalid-key" };
@@ -683,9 +694,10 @@ export class NodeCryptoProvider implements CryptoProvider {
           Buffer.concat([signature.r, signature.s]));
       }
       if (signature.kind !== "bytes") return false;
-      if (parameters.name === "Ed25519") {
-        if (nativeKey.asymmetricKeyType !== "ed25519" || nativeKey.type !== "public") return false;
-        return verify(null, data, nativeKey, signature.bytes);
+      if (parameters.name === "Ed25519" || parameters.name === "Ed448") {
+        if (okpCurveName(nativeKey) !== parameters.name || nativeKey.type !== "public") return false;
+        const options = parameters.name === "Ed448" ? { key: nativeKey, context: parameters.context } : nativeKey;
+        return verify(null, data, options, signature.bytes);
       }
       if (parameters.name === "HMAC") {
         const expected = createHmac(hashName(parameters.hash), nativeKey).update(data).digest();
@@ -725,10 +737,10 @@ export class NodeCryptoProvider implements CryptoProvider {
         return owned(pbkdf2Sync(secretKey.export(), parameters.salt,
           parameters.iterations, parameters.byteLength, hashName(parameters.hash)));
       }
-      if (parameters.name !== "ECDH" && parameters.name !== "X25519") return { failure: "operation" };
+      if (parameters.name !== "ECDH" && parameters.name !== "X25519" && parameters.name !== "X448") return { failure: "operation" };
       const privateKey = keyObjects.get(key);
       const publicKey = keyObjects.get(parameters.publicKey);
-      const nativeType = parameters.name === "ECDH" ? "ec" : "x25519";
+      const nativeType = parameters.name === "ECDH" ? "ec" : parameters.name === "X25519" ? "x25519" : "x448";
       if (privateKey === undefined || publicKey === undefined
         || privateKey.type !== "private" || publicKey.type !== "public"
         || privateKey.asymmetricKeyType !== nativeType || publicKey.asymmetricKeyType !== nativeType) {

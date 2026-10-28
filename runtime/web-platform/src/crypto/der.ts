@@ -1,7 +1,8 @@
 import { DOMException } from "../core/errors.ts";
-import type { CryptoEcComponents, CryptoNamedCurve, CryptoRsaComponents, CryptoRsaOtherPrime } from "../provider/crypto.ts";
+import type { CryptoEcComponents, CryptoNamedCurve, CryptoOkpCurve, CryptoRsaComponents, CryptoRsaOtherPrime } from "../provider/crypto.ts";
 import { cryptoByteSubarray, cryptoViewByteLength } from "./buffer-source.ts";
 import { ecCurveByteLength } from "./ec-curve.ts";
+import { okpCurveByteLength } from "./okp-curve.ts";
 
 function invalidDer(): never {
   throw new DOMException("The key is not a valid DER encoding", "DataError");
@@ -390,12 +391,12 @@ export function parseEcDer(format: "spki" | "pkcs8", bytes: Uint8Array, requireP
 
 /** RFC 8410 key encodings retain the public octets without point validation. */
 export interface OkpDerKey {
-  readonly namedCurve: "Ed25519" | "X25519";
+  readonly namedCurve: CryptoOkpCurve;
   readonly x: Uint8Array | undefined;
   readonly d: Uint8Array | undefined;
 }
 
-function okpAlgorithm(reader: DerReader): "Ed25519" | "X25519" {
+function okpAlgorithm(reader: DerReader): CryptoOkpCurve {
   const algorithm = reader.read(0x30);
   const oid = algorithm.read(0x06).content();
   // RFC 8410 §3 requires absent parameters, including rejecting a NULL value.
@@ -403,14 +404,16 @@ function okpAlgorithm(reader: DerReader): "Ed25519" | "X25519" {
   if (cryptoViewByteLength(oid) !== 3 || oid[0] !== 0x2b || oid[1] !== 0x65) invalidDer();
   if (oid[2] === 0x70) return "Ed25519";
   if (oid[2] === 0x6e) return "X25519";
+  if (oid[2] === 0x71) return "Ed448";
+  if (oid[2] === 0x6f) return "X448";
   invalidDer();
 }
 
 /**
- * Web Cryptography §§25.3.4–5, 26.3.3–4 and RFC 8410 §§4, 7. Its PKCS8
- * operation uses RFC 5208 PrivateKeyInfo, not RFC 5958 OneAsymmetricKey:
+ * Web Cryptography §§25.3.4–5, 26.3.3–4, Secure Curves §§4.3, 6.4 and
+ * RFC 8410 §§4, 7. PKCS8 uses RFC 5208 PrivateKeyInfo, not OneAsymmetricKey:
  * version zero, optional attributes, and an exactly consumed CurvePrivateKey.
- * The inner value is a 32-octet seed, not an ECPrivateKey sequence. Public
+ * The inner value is the original seed octets, not an ECPrivateKey sequence. Public
  * imports deliberately impose no canonical, on-curve or small-order check.
  */
 export function parseOkpDer(format: "spki" | "pkcs8", bytes: Uint8Array): OkpDerKey {
@@ -422,7 +425,7 @@ export function parseOkpDer(format: "spki" | "pkcs8", bytes: Uint8Array): OkpDer
     const publicKey = envelope.read(0x03);
     if (publicKey.done() || publicKey.bytes[publicKey.position++] !== 0) invalidDer();
     const x = publicKey.content();
-    if (cryptoViewByteLength(x) !== 32) invalidDer();
+    if (cryptoViewByteLength(x) !== okpCurveByteLength(namedCurve)) invalidDer();
     envelope.complete();
     return { namedCurve, x, d: undefined };
   }
@@ -434,6 +437,6 @@ export function parseOkpDer(format: "spki" | "pkcs8", bytes: Uint8Array): OkpDer
   envelope.complete();
   const d = privateOctets.read(0x04).content();
   privateOctets.complete();
-  if (cryptoViewByteLength(d) !== 32) invalidDer();
+  if (cryptoViewByteLength(d) !== okpCurveByteLength(namedCurve)) invalidDer();
   return { namedCurve, x: undefined, d };
 }

@@ -80,7 +80,7 @@ function isEcAlgorithm(name: string): boolean {
 }
 
 function isOkpAlgorithm(name: string): boolean {
-  return name === "Ed25519" || name === "X25519";
+  return name === "Ed25519" || name === "X25519" || name === "Ed448" || name === "X448";
 }
 
 function isKdfAlgorithm(name: string): boolean {
@@ -100,14 +100,14 @@ function decryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, 
 }
 
 function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
-  if (algorithm.name === "Ed25519") return signOkp(provider, algorithm, key, bytes);
+  if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return signOkp(provider, algorithm, key, bytes);
   if (algorithm.name === "ECDSA") return signEc(provider, algorithm, key, bytes);
   if (algorithm.name === "HMAC") return signHmac(provider, key, bytes);
   return signRsa(provider, algorithm, key, bytes);
 }
 
 function verifyBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, signature: Uint8Array, bytes: Uint8Array): boolean {
-  if (algorithm.name === "Ed25519") return verifyOkp(provider, algorithm, key, signature, bytes);
+  if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return verifyOkp(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "ECDSA") return verifyEc(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "HMAC") return verifyHmac(provider, key, signature, bytes);
   return verifyRsa(provider, algorithm, key, signature, bytes);
@@ -115,7 +115,7 @@ function verifyBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, k
 
 function deriveBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, length: number | null): Uint8Array {
   if (isKdfAlgorithm(algorithm.name)) return deriveKdfBits(provider, algorithm, key, length);
-  return algorithm.name === "X25519" ? deriveOkpBits(provider, algorithm, key, length)
+  return algorithm.name === "X25519" || algorithm.name === "X448" ? deriveOkpBits(provider, algorithm, key, length)
     : deriveEcBits(provider, algorithm, key, length);
 }
 
@@ -142,8 +142,8 @@ function exportKeyMaterial(provider: CryptoProvider, format: KeyFormat, key: Cry
 }
 
 /**
- * Web Cryptography §14. Digests, HMAC, AES, RSA, EC and 25519 operations.
- * Curve448 algorithms and runtime assembly are separate handoff items.
+ * Web Cryptography §14 and Secure Curves: shared key, cipher, signature and derivation operations.
+ * Runtime assembly is a separate handoff item.
  * Members are plain declarations; descriptor-only Web IDL shape is deferred.
  */
 export class SubtleCrypto {
@@ -218,7 +218,7 @@ export class SubtleCrypto {
     }
   }
 
-  /** §14.3.3 and the registered HMAC/RSA/ECDSA/Ed25519 signing operation. */
+  /** §14.3.3 and the registered HMAC/RSA/ECDSA/EdDSA signing operation. */
   sign(algorithm: unknown, key: unknown, data: unknown): Promise<ArrayBuffer> {
     try {
       const provider = this.#provider;

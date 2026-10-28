@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { createPublicKey, verify as verifySignature } from "node:crypto";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import type { OkpAlgorithmName } from "../src/crypto/algorithms.ts";
 import { Crypto } from "../src/crypto/crypto.ts";
 import { createCryptoKey, getCryptoKeySlots, KeyAlgorithm } from "../src/crypto/crypto-key.ts";
 import type { CryptoKey, KeyUsage } from "../src/crypto/crypto-key.ts";
@@ -68,7 +67,7 @@ function fixture() {
   const scheduler = new VirtualScheduler();
   const subtle = new Crypto({ fill(bytes: Uint8Array): void { bytes.fill(0x37); } }, provider, scheduler).subtle;
   function settle<T>(promise: Promise<T>): Promise<T> { scheduler.runPending(); return promise; }
-  async function key(name: OkpAlgorithmName, type: "public" | "private", usages?: readonly KeyUsage[]): Promise<CryptoKey> {
+  async function key(name: "Ed25519" | "X25519", type: "public" | "private", usages?: readonly KeyUsage[]): Promise<CryptoKey> {
     const use: readonly KeyUsage[] = usages ?? (name === "X25519"
       ? type === "public" ? [] : ["deriveBits"] : type === "public" ? ["verify"] : ["sign"]);
     return settle(subtle.importKey("jwk", type === "public" ? okpPublicJwk(name) : okpPrivateJwk(name), name, true, use));
