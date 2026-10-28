@@ -16,6 +16,9 @@ export {
   EventTarget,
   MessageEvent,
 } from "./core/events.ts";
+
+export { ProgressEvent } from "./core/progress-event.ts";
+export type { ProgressEventInit } from "./core/progress-event.ts";
 export type {
   CloseEventInit,
   CustomEventInit,
@@ -388,6 +391,8 @@ export { EventSource } from "./eventsource/event-source.ts";
 export type { EventSourceInit } from "./eventsource/event-source.ts";
 
 export { Blob, File } from "./file/blob.ts";
+export { FileReader } from "./file/file-reader.ts";
+export type { FileReaderEventHandler, FileReaderEventHandlerValue } from "./file/file-reader.ts";
 export type { BlobEndings, BlobOptions, BlobPart, FileOptions } from "./file/blob.ts";
 
 export { FormData } from "./forms/form-data.ts";
