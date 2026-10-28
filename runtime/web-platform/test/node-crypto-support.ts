@@ -55,6 +55,9 @@ function querySupport(query: CryptoSupportQuery): boolean {
       }
       return p.outputBits <= 0xffff_fff8 && hasCapability("cshake");
     case "cipher": {
+      // CipherBase::SetAAD applies CheckSizeInt32 to every native cipher.
+      // https://github.com/nodejs/node/blob/v24.20.0/src/crypto/crypto_cipher.cc
+      if (p.additionalDataBytes !== undefined && p.additionalDataBytes > 0x7fff_ffff) return false;
       if (p.name === "ChaCha20-Poly1305") return nativeCiphers.has("chacha20-poly1305");
       // Both native GCM and OCB reject an empty IV. OCB's draft permits it;
       // supports must still report a known all-input native failure (§3.3).
@@ -62,7 +65,6 @@ function querySupport(query: CryptoSupportQuery): boolean {
       // Node 24.20/OpenSSL accepts at most 128 IV bytes for GCM, in both
       // directions and for every AES key width. The shared draft range stays.
       if (p.name === "AES-GCM" && p.ivBytes !== undefined && p.ivBytes > 128) return false;
-      if (p.additionalDataBytes !== undefined && p.additionalDataBytes > 0x7fff_ffff) return false;
       if (p.keyBits !== undefined) return nativeCiphers.has(cipherName(p.name, p.keyBits));
       return nativeCiphers.has(cipherName(p.name, 128)) || nativeCiphers.has(cipherName(p.name, 192))
         || nativeCiphers.has(cipherName(p.name, 256));

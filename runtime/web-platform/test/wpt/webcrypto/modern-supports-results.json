@@ -16,8 +16,8 @@
   "newSpecificationDiscrepancies": 0,
   "registrationCountChanges": [],
   "focusedControls": {
-    "total": 27,
-    "pass": 27,
+    "total": 28,
+    "pass": 28,
     "fail": 0,
     "skip": 0
   },
@@ -130,8 +130,8 @@
   },
   "packageGate": "The parent integration records the complete ordered-stack package gate in the PR; the committed evidence here covers affected files and focused controls.",
   "currentCombinedRegression": {
-    "total": 52,
-    "pass": 52,
+    "total": 53,
+    "pass": 53,
     "fail": 0,
     "skip": 0
   },
@@ -189,16 +189,35 @@
         "logSha256": "1b4744b6ed6d042001ce19e78c182263cca58d27dc15c4a8318ef2d0ebc56864"
       },
       "source": "https://github.com/nodejs/node/blob/v24.20.0/deps/openssl/openssl/providers/implementations/include/prov/ciphercommon_gcm.h"
+    },
+    {
+      "issue": "Apply the native signed-int AAD size limit to ChaCha20-Poly1305 before its availability fast path",
+      "sections": [
+        "3.3"
+      ],
+      "source": "https://github.com/nodejs/node/blob/v24.20.0/src/crypto/crypto_cipher.cc",
+      "control": "Typed scalar queries accept 2147483647 AAD bytes and reject 2147483648 for AES-GCM, AES-OCB and ChaCha20-Poly1305 in both directions, without allocating large buffers or executing ciphers",
+      "before": {
+        "exitCode": 1,
+        "logSha256": "37941c82538c06583d5b72a8e6b39b59e71ec5402f76fb6175a89b326af772ab"
+      },
+      "after": {
+        "exitCode": 0,
+        "pass": 53,
+        "fail": 0,
+        "skip": 0,
+        "logSha256": "4c0777ad69f4c010eec437a2fea5545aaecde837394e1cc6447a558f582e074d"
+      }
     }
   ],
   "finalValidation": {
     "publicTypecheckExitCode": 0,
     "wptTypecheckExitCode": 0,
     "standaloneTestTypecheckExitCode": 0,
-    "regressionPass": 52,
+    "regressionPass": 53,
     "regressionFail": 0,
     "regressionSkip": 0,
-    "regressionLogSha256": "d9d8e5e7044d1d5c27d266cc0b23dbfd0d3397739b5defb846be95e9ab635efd",
+    "regressionLogSha256": "4c0777ad69f4c010eec437a2fea5545aaecde837394e1cc6447a558f582e074d",
     "scopedAffectedPass": 265,
     "scopedAffectedFail": 0,
     "scopedAffectedBlocked": 0,
