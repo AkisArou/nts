@@ -124,10 +124,14 @@ export function convertHeadersInit(init: HeadersInit): ConvertedHeadersInit {
   if (method !== undefined) return convertSequence(init, method, convertHeaderSequenceEntry);
 
   const result: HeaderEntry[] = [];
-  const record = init as Readonly<Record<string, unknown>>;
-  // Convert each own string-keyed member before reading the next value.
-  // https://webidl.spec.whatwg.org/#es-record
-  for (const key of Object.keys(record)) {
+  const record = init as Readonly<Record<PropertyKey, unknown>>;
+  // Snapshot all own keys, then inspect each descriptor immediately before its
+  // key and value conversion. Earlier getters can delete later properties, and
+  // enumerable symbol keys must fail ByteString conversion before a value read.
+  // https://webidl.spec.whatwg.org/#es-to-record
+  for (const key of Reflect.ownKeys(record)) {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (descriptor === undefined || !descriptor.enumerable) continue;
     const name = coerceToByteString(key);
     const value = coerceToByteString(record[key]);
     result.push([name, value]);

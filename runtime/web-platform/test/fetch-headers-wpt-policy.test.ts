@@ -185,3 +185,31 @@ test("Request snapshots converted header values once before later dictionary mem
   assert.deepEqual(order, ["headers", "name", "value", "method"]);
   assert.equal(request.headers.get("x"), "before");
 });
+
+// https://webidl.spec.whatwg.org/#es-to-record
+test("Headers rechecks a later record property's existence after an earlier getter", () => {
+  const init: { readonly first: string; second?: string } = {
+    get first(): string { delete init.second; return "one"; },
+    second: "two",
+  };
+  const headers = new Headers(init);
+  assert.deepEqual([...headers], [["first", "one"]]);
+});
+
+test("Headers rejects an enumerable symbol record key before reading its value", () => {
+  const key = Symbol("not a ByteString key");
+  let reads = 0;
+  const init = {
+    x: "one",
+    get [key](): string { reads++; return "two"; },
+  };
+  assert.throws(() => new Headers(init), TypeError);
+  assert.equal(reads, 0);
+});
+
+test("Headers rejects a non-ByteString record key before reading its value", () => {
+  let reads = 0;
+  const init = { get "\u0100"(): string { reads++; return "one"; } };
+  assert.throws(() => new Headers(init), TypeError);
+  assert.equal(reads, 0);
+});
