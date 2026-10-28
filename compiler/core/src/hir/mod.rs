@@ -3402,7 +3402,7 @@ pub struct Program {
     /// provider, since a suspension frame outliving its function is a lifetime
     /// question the provider does not answer. Without this field the backend
     /// could not tell the two cases apart.
-    pub provider: Provider,
+    pub provider: Memory,
     /// The C ABIs the program is built for ([`Options::targets`]): a store
     /// into a written scalar kind must fit on every one, and a read of one is
     /// what C may hand in on any. Every row until `prepare` names the build's.
@@ -5602,7 +5602,7 @@ impl Unprepared {
 /// reference counting's retains and releases are HIR operations, inserted
 /// during preparation (`provide`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Provider {
+pub enum Memory {
     /// Allocate and never free: `hir::rc` inserts no retains or releases, and
     /// nothing collects. What `nts` builds unless `--rc` is passed; meant for
     /// bring-up, allocation testing and bounded-lifetime tools.
@@ -5626,8 +5626,8 @@ pub enum Provider {
 /// What to compile, and how.
 #[derive(Debug, Clone, Copy)]
 pub struct Options<'a> {
-    /// The memory discipline. See [`Provider`].
-    pub provider: Provider,
+    /// The memory discipline. See [`Memory`].
+    pub provider: Memory,
     /// Whether a callback returning to the program's foreign loop is a
     /// checkpoint: `nts_checkpoint_after_callbacks`, which the entry point of
     /// a program whose loop is `GLib`'s turns on. Decided once, by the loop
@@ -5681,7 +5681,7 @@ pub struct Options<'a> {
 impl Default for Options<'_> {
     fn default() -> Self {
         Self {
-            provider: Provider::NoGc,
+            provider: Memory::NoGc,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
             callbacks_checkpoint: false,
@@ -5727,7 +5727,7 @@ pub const HOST: native::NativeAbi = if cfg!(windows) {
 /// They cannot be replaced while preparing a branch of that raw program.
 #[derive(Debug, Clone, Copy)]
 pub struct PreparationOptions<'a> {
-    pub provider: Provider,
+    pub provider: Memory,
     pub callbacks_checkpoint: bool,
     pub specialize_numbers: bool,
     pub roots: reachable::Roots<'a>,
@@ -5747,7 +5747,7 @@ impl PreparationOptions<'_> {
     #[must_use]
     pub fn table_entries(&self) -> bool {
         self.table_entries
-            .unwrap_or(self.provider != Provider::HostGc)
+            .unwrap_or(self.provider != Memory::HostGc)
     }
 }
 
@@ -6611,8 +6611,8 @@ fn refuse_host_handles(lowered: &mut lower::Lowered) {
 }
 
 /// What a host's handles need from the provider: counting, or a refusal.
-fn settle_host_handles(lowered: &mut lower::Lowered, provider: Provider) {
-    if provider == Provider::ReferenceCounting {
+fn settle_host_handles(lowered: &mut lower::Lowered, provider: Memory) {
+    if provider == Memory::ReferenceCounting {
         check_host_pairs(lowered);
     } else {
         refuse_host_handles(lowered);
@@ -7784,9 +7784,9 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
 /// What the provider inserts: reference counting's retains and releases, or,
 /// without counting, the sink that keeps a floating `GObject` the program's
 /// rather than the first container's (`floating`).
-fn provide(program: &mut Program, provider: Provider) -> (rc::Report, contents::Report) {
+fn provide(program: &mut Program, provider: Memory) -> (rc::Report, contents::Report) {
     match provider {
-        Provider::ReferenceCounting => {
+        Memory::ReferenceCounting => {
             let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
             let mut counted = rc::insert(program);
             let contents = contents::elide(program, &old_lengths);
@@ -7794,11 +7794,11 @@ fn provide(program: &mut Program, provider: Provider) -> (rc::Report, contents::
             counted.releases -= contents.inserted_releases_removed;
             (counted, contents)
         }
-        Provider::NoGc => {
+        Memory::NoGc => {
             floating::sink(program);
             (rc::Report::default(), contents::Report::default())
         }
-        Provider::HostGc => {
+        Memory::HostGc => {
             // Lowering also records native frame lifetimes (`for await`).
             // Host references need no such ownership operations. Keep foreign
             // counted handles: a host GC cannot discharge their contract, and
@@ -8073,8 +8073,8 @@ fn prepare_lowered(
     // elimination, because an allocation nothing reads is not evidence of
     // anything.
     let framed = match options.provider {
-        Provider::NoGc | Provider::ReferenceCounting => place_allocations(&mut program),
-        Provider::HostGc => 0,
+        Memory::NoGc | Memory::ReferenceCounting => place_allocations(&mut program),
+        Memory::HostGc => 0,
     };
 
     // Calls a region serves (`regions`): everything one makes allocated in a
@@ -8082,7 +8082,7 @@ fn prepare_lowered(
     // which decides what lives in a frame, and before counting, which places
     // the reset (the region's handle dies after its last hold) and passes the
     // uncounted clones by.
-    let mut regions = if options.provider == Provider::ReferenceCounting {
+    let mut regions = if options.provider == Memory::ReferenceCounting {
         let report = regions::rewrite(&mut program);
         // A function every call of which a region now serves is called only as
         // its clone, and a function nothing calls is a C `static` its compiler
@@ -8153,7 +8153,7 @@ fn prepare_lowered(
 
     // Report against final value/function identities. This inventory only
     // records Unknown facts; it changes no operation or allocation decision.
-    if options.provider == Provider::ReferenceCounting {
+    if options.provider == Memory::ReferenceCounting {
         regions.placement = regions::placement::inventory(&program);
     }
 
@@ -8358,7 +8358,7 @@ fn split_unions(program: &mut Program) -> usize {
 /// parameter names two objects and neither arm dominates it. Extending liveness
 /// there produced a release naming a value that does not dominate its use --
 /// twenty-four `NotDominated` entries across six inserted blocks, under
-/// `NTS_RC=1` only, because `Provider::NoGc` inserts nothing.
+/// `NTS_RC=1` only, because `Memory::NoGc` inserts nothing.
 ///
 /// So the answer for those is the heap, where the retain is real and the whole
 /// question is the runtime's. It costs an allocation on a path that merges two

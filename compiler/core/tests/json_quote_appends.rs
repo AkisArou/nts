@@ -15,7 +15,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, OpKind, Options, Provider, features::Provided};
+use nts_core::hir::{self, Callee, Memory, OpKind, Options, features::Provided};
 use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-json-string-quoted-onto-a-string";
@@ -32,7 +32,7 @@ fn prepared(provided: Provided) -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
-        provider: Provider::ReferenceCounting,
+        provider: Memory::ReferenceCounting,
         provided,
         ..Options::default()
     };

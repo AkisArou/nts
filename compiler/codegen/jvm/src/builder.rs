@@ -29,7 +29,7 @@
 //! `hir::rc` rewrites a `Concat` whose left operand is counted, owned,
 //! unborrowed and dead at that point into `nts_str_append`, which appends in
 //! place when the runtime count says the string is unique. That pass runs only
-//! under `Provider::ReferenceCounting`, so this lane never sees it -- and it
+//! under `Memory::ReferenceCounting`, so this lane never sees it -- and it
 //! could not use it if it did, because the mechanism is a mutable string and
 //! `java.lang.String` is immutable.
 //!

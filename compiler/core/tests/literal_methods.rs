@@ -21,7 +21,7 @@ fn snapshot(fixture: &str) -> nts_semantic_schema::SemanticSnapshot {
 fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
     let snapshot =
         snapshot("tests/programs/a-capturing-literal-dispatched-through-another-interface");
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let prepared = hir::prepare_with(
             &snapshot,
             &hir::Options {

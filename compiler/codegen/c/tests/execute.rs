@@ -33,7 +33,7 @@ fn run(example: &str, harness: &str) -> Option<String> {
 
 /// Compile and run, returning the result whether or not it succeeded.
 fn build_and_run(example: &str, harness: &str) -> Option<std::process::Output> {
-    build_and_run_with(example, harness, hir::Provider::NoGc)
+    build_and_run_with(example, harness, hir::Memory::NoGc)
 }
 
 #[test]
@@ -47,7 +47,7 @@ int main(void) {
     return 0;
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let Some(output) = build_and_run_with(
             "a-field-read-tests-an-unallocated-record",
             harness,
@@ -87,7 +87,7 @@ int main(void) {
     return 0;
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let Some(output) = build_and_run_transformed(
             "interface-field-view-lifetime",
             harness,
@@ -121,7 +121,7 @@ fn a_literal_adapter_checks_the_uniform_result_before_decoding_it() {
 extern double mixed(double);
 int main(void) { (void)mixed(2); return 0; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let Some(output) = build_and_run_transformed(
             "a-capturing-literal-dispatched-through-another-interface",
             harness,
@@ -158,7 +158,7 @@ int main(void) {
     let Some(output) = build_and_run_with(
         "a-literal-method-result-discarded-through-a-void-interface",
         harness,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
     ) else {
         return;
     };
@@ -209,7 +209,7 @@ fn counterfeit_closure_return(program: &mut hir::Program) {
 fn build_and_run_with(
     example: &str,
     harness: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
 ) -> Option<std::process::Output> {
     build_and_run_hosted(example, harness, provider, Host::None)
 }
@@ -225,7 +225,7 @@ const TEST_HOST_SOURCE: &str = include_str!("../../../../runtime/c/nts_test_host
 ///
 /// Keyed by the harness as well as the example: two tests exercising one
 /// example otherwise share a directory, and cargo runs them concurrently.
-fn work_dir(example: &str, harness: &str, provider: hir::Provider) -> std::path::PathBuf {
+fn work_dir(example: &str, harness: &str, provider: hir::Memory) -> std::path::PathBuf {
     let mut hasher = std::hash::DefaultHasher::new();
     std::hash::Hash::hash(harness, &mut hasher);
     std::hash::Hash::hash(&format!("{provider:?}"), &mut hasher);
@@ -273,7 +273,7 @@ enum Host {
 fn build_and_run_hosted(
     example: &str,
     harness: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
     host_kind: Host,
 ) -> Option<std::process::Output> {
     build_and_run_transformed(example, harness, provider, host_kind, |_| {})
@@ -297,7 +297,7 @@ fn fixture_config(example: &str) -> Utf8PathBuf {
 fn build_and_run_transformed(
     example: &str,
     harness: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
     host_kind: Host,
     transform: impl FnOnce(&mut hir::Program),
 ) -> Option<std::process::Output> {
@@ -372,13 +372,13 @@ fn build_and_run_transformed(
     // NoGC is left alone: it never frees, so there is nothing for a
     // use-after-free detector to find, and every one of its tests would pay.
     let provider_define: &[&str] = match provider {
-        hir::Provider::ReferenceCounting => &[
+        hir::Memory::ReferenceCounting => &[
             "-DNTS_PROVIDER_RC",
             "-fsanitize=address",
             "-fno-omit-frame-pointer",
         ],
-        hir::Provider::NoGc => &[],
-        hir::Provider::HostGc => panic!("C execution tests require a native memory provider"),
+        hir::Memory::NoGc => &[],
+        hir::Memory::HostGc => panic!("C execution tests require a native memory provider"),
     };
 
     let compile = std::process::Command::new("clang")
@@ -754,7 +754,7 @@ int main(void) {{
 }}
 "#
     );
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let Some(result) =
             build_and_run_with("a-pattern-parameter-before-scalars", &harness, provider)
         else {
@@ -1241,7 +1241,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some(output) = build_and_run_with("instances", &harness, hir::Provider::ReferenceCounting)
+    let Some(output) = build_and_run_with("instances", &harness, hir::Memory::ReferenceCounting)
     else {
         return;
     };
@@ -1301,7 +1301,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some(output) = build_and_run_with("instances", &harness, hir::Provider::NoGc) else {
+    let Some(output) = build_and_run_with("instances", &harness, hir::Memory::NoGc) else {
         return;
     };
     let printed = String::from_utf8_lossy(&output.stdout);
@@ -1366,7 +1366,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some(output) = build_and_run_with("references", &harness, hir::Provider::ReferenceCounting)
+    let Some(output) = build_and_run_with("references", &harness, hir::Memory::ReferenceCounting)
     else {
         return;
     };
@@ -1440,7 +1440,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some(output) = build_and_run_with("cycles", &harness, hir::Provider::ReferenceCounting)
+    let Some(output) = build_and_run_with("cycles", &harness, hir::Memory::ReferenceCounting)
     else {
         return;
     };
@@ -1825,7 +1825,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some(output) = build_and_run_with("closures", &harness, hir::Provider::ReferenceCounting)
+    let Some(output) = build_and_run_with("closures", &harness, hir::Memory::ReferenceCounting)
     else {
         return;
     };
@@ -1916,7 +1916,7 @@ int main(void) {{
 }}
 "#
     );
-    let Some(output) = build_and_run_with("nullable", &harness, hir::Provider::ReferenceCounting)
+    let Some(output) = build_and_run_with("nullable", &harness, hir::Memory::ReferenceCounting)
     else {
         return;
     };
@@ -1961,7 +1961,7 @@ fn a_timer_callback_runs_and_its_effect_is_visible() {
          \x20   return 0;\n\
          }\n";
     let Some(output) =
-        build_and_run_hosted("timers", harness, hir::Provider::NoGc, Host::Deterministic)
+        build_and_run_hosted("timers", harness, hir::Memory::NoGc, Host::Deterministic)
     else {
         return;
     };
@@ -1994,7 +1994,7 @@ fn a_standalone_program_runs_its_loop_and_exits() {
         return;
     }
     let main = nts_codegen_c::standalone_main(true);
-    let Some(output) = build_and_run_hosted("standalone", &main, hir::Provider::NoGc, Host::Libuv)
+    let Some(output) = build_and_run_hosted("standalone", &main, hir::Memory::NoGc, Host::Libuv)
     else {
         return;
     };

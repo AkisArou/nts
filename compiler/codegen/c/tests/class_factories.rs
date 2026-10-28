@@ -18,7 +18,7 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
         .snapshot(&config)
         .unwrap();
     assert!(!snapshot.has_errors());
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let options = hir::Options {
             provider,
             roots: hir::reachable::Roots::EntrySurface,
@@ -52,7 +52,7 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
         let binary = dir.join("caller");
         let mut cc = Command::new("clang");
         cc.args(["-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"]);
-        if provider == hir::Provider::ReferenceCounting {
+        if provider == hir::Memory::ReferenceCounting {
             cc.arg("-DNTS_PROVIDER_RC");
         }
         let built = cc

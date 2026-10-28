@@ -4261,7 +4261,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
 
     let classes = class_names(program);
     let ownership = hir::own::summarize(program, &program.layouts);
-    let release_managed = program.provider == hir::Provider::ReferenceCounting;
+    let release_managed = program.provider == hir::Memory::ReferenceCounting;
 
     let needed = converted_layouts(program, &classes, refused);
     // Every class this addon defines, by the layout its constructor receives.

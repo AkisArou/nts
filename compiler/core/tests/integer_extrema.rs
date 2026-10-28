@@ -29,9 +29,9 @@ fn only_proved_integer_extrema_specialize_without_narrowing_their_operands() {
         .snapshot(&config)
         .expect("snapshot");
     for provider in [
-        hir::Provider::NoGc,
-        hir::Provider::ReferenceCounting,
-        hir::Provider::HostGc,
+        hir::Memory::NoGc,
+        hir::Memory::ReferenceCounting,
+        hir::Memory::HostGc,
     ] {
         let prepared = hir::prepare_with(
             &snapshot,

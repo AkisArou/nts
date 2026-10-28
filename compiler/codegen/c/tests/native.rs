@@ -1180,7 +1180,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
     let (dir, snapshot) = snapshot_with_types("host-identity", source, false);
     // A host handle needs the counting provider; a never-free program refuses it.
     let options = hir::Options {
-        provider: hir::Provider::ReferenceCounting,
+        provider: hir::Memory::ReferenceCounting,
         ..hir::Options::default()
     };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
@@ -1377,7 +1377,7 @@ export function counted(n: Int32): number {
            check(\"C called twice\", count_calls(), 2);\n\
            return failed;\n\
          }\n";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, snapshot) =
             snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false);
         let prepared = hir::prepare_with(
@@ -1414,7 +1414,7 @@ export function counted(n: Int32): number {
 
 /// `program.c`, the runtime, `native.c` and `caller.c` in `dir`, compiled
 /// and linked as `caller` under `provider`.
-fn build_caller(dir: &Utf8Path, provider: hir::Provider) {
+fn build_caller(dir: &Utf8Path, provider: hir::Memory) {
     let mut objects = Vec::new();
     for source in ["program.c", "nts_runtime.c", "native.c", "caller.c"] {
         let object = format!("{source}.o");
@@ -1430,7 +1430,7 @@ fn build_caller(dir: &Utf8Path, provider: hir::Provider) {
             "-o",
             &object,
         ];
-        if provider == hir::Provider::ReferenceCounting {
+        if provider == hir::Memory::ReferenceCounting {
             args.push("-DNTS_PROVIDER_RC");
         }
         let result = Command::new("clang")
@@ -1483,7 +1483,7 @@ declare function node_value(n: Node): c_int;
     let prepare_rc = |name: &str, body: &str| {
         let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false);
         let options = hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             ..hir::Options::default()
         };
         hir::prepare_with(&snapshot, &options)
@@ -1628,7 +1628,7 @@ void handler_clear(void) {
                   \x20 if (roundTrip(200) != 1000 + 600 + 200) return 2;\n\
                   \x20 if (cleared() != 1) return 3;\n\
                   \x20 return 0;\n}\n";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let name = format!("closure-result-{provider:?}");
         let (dir, snapshot) = snapshot_with_types(&name, source, false);
         let options = hir::Options {
@@ -1665,7 +1665,7 @@ void handler_clear(void) {
                 "-o",
                 &object,
             ];
-            if provider == hir::Provider::ReferenceCounting {
+            if provider == hir::Memory::ReferenceCounting {
                 args.push("-DNTS_PROVIDER_RC");
             }
             let result = Command::new("clang")
@@ -1751,7 +1751,7 @@ export function handedOn(n: number): number {
                   \x20   if (handedOn(20) != 20) return 3;\n\
                   \x20 }\n\
                   \x20 return 0;\n}\n";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
             .canonicalize_utf8()
@@ -1808,7 +1808,7 @@ export function handedOn(n: number): number {
                 "-o",
                 &object,
             ];
-            if provider == hir::Provider::ReferenceCounting {
+            if provider == hir::Memory::ReferenceCounting {
                 args.push("-DNTS_PROVIDER_RC");
             }
             let result = Command::new("clang")
@@ -1924,7 +1924,7 @@ export function size(): number {
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
         // A host handle needs the counting provider.
         let options = hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             ..hir::Options::default()
         };
         let prepared = hir::prepare_with(&snapshot, &options)

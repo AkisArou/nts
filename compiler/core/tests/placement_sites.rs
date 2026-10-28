@@ -5,7 +5,7 @@ use camino::Utf8Path;
 use nts_core::hir::{self, regions::placement};
 use nts_frontend_ts::Frontend;
 
-fn prepared(provider: hir::Provider) -> hir::Prepared {
+fn prepared(provider: hir::Memory) -> hir::Prepared {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs/calls-a-region-could-serve/tsconfig.json")
         .canonicalize_utf8()
@@ -26,7 +26,7 @@ fn prepared(provider: hir::Provider) -> hir::Prepared {
 
 #[test]
 fn live_sites_are_reported_without_licensing_any_allocation() {
-    let mut prepared = prepared(hir::Provider::ReferenceCounting);
+    let mut prepared = prepared(hir::Memory::ReferenceCounting);
     let report = &prepared.regions.placement;
     assert_ne!(report.sites, []);
     assert!(
@@ -69,6 +69,6 @@ fn live_sites_are_reported_without_licensing_any_allocation() {
 
 #[test]
 fn host_gc_has_no_native_placement_facts() {
-    let prepared = prepared(hir::Provider::HostGc);
+    let prepared = prepared(hir::Memory::HostGc);
     assert_eq!(prepared.regions.placement, placement::Report::default());
 }

@@ -11,7 +11,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, OpKind, Options, Provider};
+use nts_core::hir::{self, Memory, OpKind, Options};
 use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-module-constant-read-through-calls";
@@ -28,7 +28,7 @@ fn prepared() -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
-        provider: Provider::ReferenceCounting,
+        provider: Memory::ReferenceCounting,
         ..Options::default()
     };
     hir::prepare_with(&snapshot, &options)

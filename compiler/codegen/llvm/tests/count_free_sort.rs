@@ -130,7 +130,7 @@ fn native_sort_snapshots_survive_collection_reentrancy_and_throws() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let mut prepared = hir::prepare_with(
             &snapshot,
             &hir::Options {
@@ -171,7 +171,7 @@ fn native_sort_snapshots_survive_collection_reentrancy_and_throws() {
                 "-Wno-override-module",
                 "-I.",
             ]);
-            if provider == hir::Provider::ReferenceCounting {
+            if provider == hir::Memory::ReferenceCounting {
                 cc.args([
                     "-DNTS_PROVIDER_RC",
                     "-DNTS_COUNT_OPERATIONS",

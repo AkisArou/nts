@@ -284,7 +284,7 @@ fn blocks(program: &Program, platform: Platform) -> String {
     // A block returning an object hands it back at +0, as ARC's caller
     // expects: under reference counting the closure returns its own count,
     // which goes to the pool. Without counting it owns nothing to give.
-    let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+    let counted = program.provider == nts_core::hir::Memory::ReferenceCounting;
     // An entry point of a class the program writes answers an object the
     // same way (`imp` in lib.rs), so the one declaration serves both -- and
     // is made before the return below, since a program can have entry

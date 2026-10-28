@@ -13,7 +13,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Options, Provider};
+use nts_core::hir::{self, Memory, Options};
 use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-string-parameter-appended-onto-is-taken-over";
@@ -30,7 +30,7 @@ fn prepared() -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
-        provider: Provider::NoGc,
+        provider: Memory::NoGc,
         ..Options::default()
     };
     hir::prepare_with(&snapshot, &options)

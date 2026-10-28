@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind, Provider};
+use nts_core::hir::{self, Callee, HirType, ManagedType, Memory, OpKind};
 use nts_frontend_ts::Frontend;
 
 fn stops(func: &hir::Func) -> Vec<&str> {
@@ -38,11 +38,7 @@ fn a_refused_override_uses_its_nearest_ancestors_slot_contract() {
         .snapshot(&config)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    for provider in [
-        Provider::NoGc,
-        Provider::ReferenceCounting,
-        Provider::HostGc,
-    ] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
         let prepared = hir::prepare_unverified(
             &snapshot,
             &hir::Options {
@@ -102,11 +98,7 @@ fn a_synthetic_stop_does_not_publish_a_class_with_no_surviving_source_member() {
     };
     let original = published(&before);
     assert_eq!(original, ["PublicationControl"]);
-    for provider in [
-        Provider::NoGc,
-        Provider::ReferenceCounting,
-        Provider::HostGc,
-    ] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
         let prepared = hir::prepare_unverified(
             &snapshot,
             &hir::Options {
@@ -135,11 +127,7 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
         .snapshot(&config)
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    for provider in [
-        Provider::NoGc,
-        Provider::ReferenceCounting,
-        Provider::HostGc,
-    ] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
         let prepared = hir::prepare_unverified(
             &snapshot,
             &hir::Options {

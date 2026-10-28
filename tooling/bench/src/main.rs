@@ -1100,8 +1100,8 @@ enum JvmAbsence {
 /// `NTS_BENCH_RC=1` to count everywhere. The rows without it measured a
 /// program nobody would run, and the answer for the one that builds a linked
 /// list was 12x.
-fn provider_for(_case: &Utf8Path) -> hir::Provider {
-    hir::Provider::ReferenceCounting
+fn provider_for(_case: &Utf8Path) -> hir::Memory {
+    hir::Memory::ReferenceCounting
 }
 
 /// The runtime translation units every variant of a case links.
@@ -1135,9 +1135,9 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
     // workload, not of the compiler.
     let provider = provider_for(case);
     let defines: &[&str] = match provider {
-        hir::Provider::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
-        hir::Provider::NoGc => &[],
-        hir::Provider::HostGc => bail!("NTS2001: native C/LLVM benchmarks decline HostGc"),
+        hir::Memory::ReferenceCounting => &["-DNTS_PROVIDER_RC"],
+        hir::Memory::NoGc => &[],
+        hir::Memory::HostGc => bail!("NTS2001: native C/LLVM benchmarks decline HostGc"),
     };
     // Every case counts references now, so the row says its name and not
     // `name (rc)`: a suffix every row carried would distinguish nothing.
@@ -1246,7 +1246,7 @@ fn variants(
     name: &str,
     tsconfig: &Utf8Path,
     entry: &[String],
-    provider: hir::Provider,
+    provider: hir::Memory,
     defines: &[&str],
     specialized: &Utf8Path,
     plain: &Utf8Path,
@@ -2060,7 +2060,7 @@ fn jvm_case(
     name: &str,
     tsconfig: &Utf8Path,
     entry: &[String],
-    provider: hir::Provider,
+    provider: hir::Memory,
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
@@ -2081,8 +2081,8 @@ fn jvm_case(
     // The workload's native allocation budget is independent of this target's
     // host-managed provider. Every native workload choice uses `HostGc` here.
     let provider = match provider {
-        hir::Provider::ReferenceCounting | hir::Provider::NoGc | hir::Provider::HostGc => {
-            hir::Provider::HostGc
+        hir::Memory::ReferenceCounting | hir::Memory::NoGc | hir::Memory::HostGc => {
+            hir::Memory::HostGc
         }
     };
 
@@ -2505,7 +2505,7 @@ fn emit(
     tsconfig: &Utf8Path,
     entry: &[String],
     specialize: bool,
-    provider: hir::Provider,
+    provider: hir::Memory,
     llvm: bool,
 ) -> Result<String> {
     let backend = if llvm {
@@ -2549,7 +2549,7 @@ fn prepared_program(
     tsconfig: &Utf8Path,
     entry: &[String],
     specialize: bool,
-    provider: hir::Provider,
+    provider: hir::Memory,
     backend: nts_codegen_common::Backend,
 ) -> Result<hir::Program> {
     let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir()?)

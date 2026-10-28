@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_core::hir::{self, OpKind, Provider};
+use nts_core::hir::{self, Memory, OpKind};
 use nts_frontend_ts::Frontend;
 
 #[test]
@@ -17,7 +17,7 @@ fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
     let managed = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            provider: Provider::HostGc,
+            provider: Memory::HostGc,
             ..hir::Options::default()
         },
     )
@@ -27,7 +27,7 @@ fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
         "the fixture must exercise native allocation placement"
     );
     assert_eq!(managed.framed, 0);
-    assert_eq!(managed.program.provider, Provider::HostGc);
+    assert_eq!(managed.program.provider, Memory::HostGc);
     assert_eq!(
         format!("{:?}", native.program.layouts),
         format!("{:?}", managed.program.layouts)
@@ -62,11 +62,7 @@ fn async_frames_only_have_lifetime_markers_for_native_providers() {
             .snapshot(&config)
             .unwrap();
         assert!(!snapshot.has_errors());
-        for provider in [
-            Provider::NoGc,
-            Provider::ReferenceCounting,
-            Provider::HostGc,
-        ] {
+        for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
             let prepared = hir::prepare_with(
                 &snapshot,
                 &hir::Options {
@@ -88,7 +84,7 @@ fn async_frames_only_have_lifetime_markers_for_native_providers() {
                 .filter(|op| matches!(op.kind, OpKind::Retain(_) | OpKind::Release(_)))
                 .count();
             assert!(!prepared.program.funcs.is_empty());
-            if provider == Provider::HostGc {
+            if provider == Memory::HostGc {
                 assert_eq!(markers, 0, "{example}");
             } else {
                 assert!(

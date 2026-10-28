@@ -2,10 +2,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, OpKind, Program, Provider};
+use nts_core::hir::{self, Callee, Memory, OpKind, Program};
 use nts_frontend_ts::Frontend;
 
-fn prepared(fixture: &str, provider: Provider) -> Program {
+fn prepared(fixture: &str, provider: Memory) -> Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(fixture)
@@ -46,7 +46,7 @@ fn called_slot(program: &Program, caller: &str) -> usize {
 
 #[test]
 fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
-    for provider in [Provider::NoGc, Provider::ReferenceCounting] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
         let program = prepared(
             "tests/programs/a-try-around-a-helper-that-calls-an-interface-method",
             provider,
@@ -76,7 +76,7 @@ fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
 
 #[test]
 fn a_transitive_literal_call_reaches_the_uniform_raising_entry() {
-    for provider in [Provider::NoGc, Provider::ReferenceCounting] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
         let program = prepared(
             "tests/programs/a-throwing-literal-interface-method-one-helper-below-a-try",
             provider,
@@ -104,7 +104,7 @@ fn a_transitive_literal_call_reaches_the_uniform_raising_entry() {
 fn the_strict_gate_still_withholds_the_uniform_raising_entry() {
     let program = prepared(
         "tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off",
-        Provider::NoGc,
+        Memory::NoGc,
     );
     assert!(
         !program

@@ -217,7 +217,7 @@ fn actual_helpers() -> String {
     helpers
 }
 
-fn build(case: &Case, provider: hir::Provider) -> ScratchDir {
+fn build(case: &Case, provider: hir::Memory) -> ScratchDir {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -301,7 +301,7 @@ export function run(probe: Probe, mode: c_int): Float64 {{
         "-o",
         "caller",
     ]);
-    if provider == hir::Provider::ReferenceCounting {
+    if provider == hir::Memory::ReferenceCounting {
         command.arg("-DNTS_PROVIDER_RC");
     }
     let output = command.output().unwrap();
@@ -316,7 +316,7 @@ export function run(probe: Probe, mode: c_int): Float64 {{
 
 #[test]
 fn failed_outputs_are_not_interpreted_and_successful_outputs_are_preserved() {
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         for case in CASES {
             let dir = build(case, provider);
             for mode in [1, 2, 3] {

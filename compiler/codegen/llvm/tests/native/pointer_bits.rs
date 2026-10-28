@@ -17,7 +17,7 @@ const CALLER: &str =
     reason = "one native fixture on two backends and two providers"
 )]
 fn pointer_bits_are_c_uintptr_with_no_load_or_count() {
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, prepared) = prepare_with_files(
             "pointer-bits",
             SOURCE,
@@ -104,7 +104,7 @@ fn pointer_bits_are_c_uintptr_with_no_load_or_count() {
                 nts_codegen_c::NATIVE_WITNESS_NAME,
             ],
         );
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
             &[]

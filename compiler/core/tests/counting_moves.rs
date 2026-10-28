@@ -29,7 +29,7 @@ fn counted(case: &str) -> hir::Prepared {
     hir::prepare_with(
         &snapshot,
         &hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             ..hir::Options::default()
         },
     )

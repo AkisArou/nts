@@ -118,7 +118,7 @@ fn every_runtime_call_agrees_with_its_declaration() {
     let counted = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             ..hir::Options::default()
         },
     )
@@ -210,7 +210,7 @@ fn arm64_passes_an_erased_value_as_two_words() {
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let prepared = hir::prepare_with(
             &snapshot,
             &hir::Options {

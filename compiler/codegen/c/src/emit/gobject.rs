@@ -650,7 +650,7 @@ fn template(
                         origin.location,
                     )
                 })?;
-            let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
                 " nts_release((NtsHeader *)text);"
             } else {
                 ""

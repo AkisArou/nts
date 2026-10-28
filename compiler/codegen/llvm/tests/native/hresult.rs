@@ -24,7 +24,7 @@ export function run(value: Probe): number {
     let (dir, prepared) = super::prepare_with_files(
         "hresult-size",
         source,
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         &[
             ("probe.d.ts", binding),
             (

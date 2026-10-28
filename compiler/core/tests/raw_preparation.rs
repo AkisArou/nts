@@ -1,7 +1,7 @@
 //! A backend branch starts at pristine lowering, including its bookkeeping.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use nts_core::hir::{self, Options, PreparationOptions, Provider, RawProgram, native, reachable};
+use nts_core::hir::{self, Memory, Options, PreparationOptions, RawProgram, native, reachable};
 use nts_frontend_ts::Frontend;
 
 #[test]
@@ -27,11 +27,7 @@ fn independent_preparations_match_fresh_lowering_and_leave_the_raw_program_uncha
     let pristine = format!("{raw:?}");
     let names = vec!["kept".to_owned(), hir::lower::MODULE_INIT.to_owned()];
     let mut expected = Vec::new();
-    for provider in [
-        Provider::NoGc,
-        Provider::ReferenceCounting,
-        Provider::HostGc,
-    ] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting, Memory::HostGc] {
         for roots in [
             reachable::Roots::EveryExport,
             reachable::Roots::Entry(&names),

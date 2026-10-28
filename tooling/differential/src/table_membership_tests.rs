@@ -4,7 +4,7 @@
 
 use super::*;
 use nts_core::hir::{
-    Absent, Block, Callee, Func, ManagedType, Op, OpKind, Provider, Terminator, ValueId,
+    Absent, Block, Callee, Func, ManagedType, Memory, Op, OpKind, Terminator, ValueId,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -196,9 +196,9 @@ fn all_three_results_agree_on_every_backend() {
             .map(|(name, _, _)| ((*name).into(), (*name).into()))
             .collect(),
         provider: if matches!(backend, Backend::C | Backend::Llvm) {
-            Provider::NoGc
+            Memory::NoGc
         } else {
-            Provider::HostGc
+            Memory::HostGc
         },
         ..hir::Program::default()
     };

@@ -27,7 +27,7 @@ fn a_face_lists_the_owners_that_reach_it_as_a_prefix() {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = hir::Options {
-        provider: hir::Provider::NoGc,
+        provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };

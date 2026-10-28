@@ -43,7 +43,7 @@ fn prepared(name: &str) -> hir::Program {
     // prepares the program differently from every consumer of it is measuring
     // its own configuration.
     let options = hir::Options {
-        provider: hir::Provider::NoGc,
+        provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };

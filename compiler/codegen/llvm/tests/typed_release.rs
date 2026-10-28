@@ -152,7 +152,7 @@ const LLVM_ABI_QUERY: &str = "\ndefine i64 @descriptorSize() {\n\
 
 fn run_native(
     dir: &Utf8Path,
-    provider: hir::Provider,
+    provider: hir::Memory,
     input: &str,
     sources: &[std::path::PathBuf],
     expected_exit: i32,
@@ -168,7 +168,7 @@ fn run_native(
         "-Wno-override-module",
         "-I.",
     ]);
-    if provider == hir::Provider::ReferenceCounting {
+    if provider == hir::Memory::ReferenceCounting {
         cc.args([
             "-DNTS_PROVIDER_RC",
             "-DNTS_COUNT_OPERATIONS",
@@ -268,7 +268,7 @@ fn check_unwired(dir: &Utf8Path, c: &str, llvm: &str, sources: &[std::path::Path
                 ),
             )
             .unwrap();
-            run_native(dir, hir::Provider::ReferenceCounting, &input, sources, exit);
+            run_native(dir, hir::Memory::ReferenceCounting, &input, sources, exit);
         }
     }
 }
@@ -362,7 +362,7 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
     std::fs::write(dir.join("drive.c"), DRIVER).unwrap();
     let mut baseline = None;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let prepared = hir::prepare_with(
             &snapshot,
             &hir::Options {
@@ -386,7 +386,7 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
             llvm.text
                 .contains("define internal void @nts_release_fields_")
         );
-        let counted = provider == hir::Provider::ReferenceCounting;
+        let counted = provider == hir::Memory::ReferenceCounting;
         assert_eq!(
             c.writer.text().contains("static void nts_trace_fields_"),
             counted
@@ -423,7 +423,7 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
                 baseline = Some(output);
             }
         }
-        if provider == hir::Provider::ReferenceCounting {
+        if provider == hir::Memory::ReferenceCounting {
             cross_compile(&dir, &prepared.program);
             check_unwired(&dir, c.writer.text(), &llvm.text, &sources);
         }

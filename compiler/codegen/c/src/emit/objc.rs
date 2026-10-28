@@ -247,7 +247,7 @@ pub(super) fn classes(
         origin,
         "/* Objective-C classes the program declares: see `emit/objc.rs`. */",
     );
-    let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+    let counted = program.provider == nts_core::hir::Memory::ReferenceCounting;
     // `returns_object` holds for an `NSString` result too, which is what a
     // `string` one answers as.
     if counted

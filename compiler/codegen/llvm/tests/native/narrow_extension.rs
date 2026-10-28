@@ -69,7 +69,7 @@ fn narrow_integer_extensions_follow_the_platform() {
     let (dir, prepared) = prepare_with_files(
         "narrow-extension",
         SOURCE,
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         &[("narrow.d.ts", DECLARATIONS)],
     );
     assert!(

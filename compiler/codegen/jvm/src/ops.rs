@@ -1859,7 +1859,7 @@ impl Emitter<'_> {
             // matching `Release` and ignoring one without the other is not a
             // thing.
             OpKind::Retain(_) | OpKind::Release(_)
-                if self.program.provider != nts_core::hir::Provider::ReferenceCounting =>
+                if self.program.provider != nts_core::hir::Memory::ReferenceCounting =>
             {
                 Placed::Stored
             }

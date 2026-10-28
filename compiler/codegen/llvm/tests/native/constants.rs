@@ -18,7 +18,7 @@ const CALLER: &str =
     reason = "one native fixture on two backends and two providers"
 )]
 fn pointer_constants_keep_exact_bits_and_native_equality() {
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, prepared) = prepare_with_files(
             "pointer-constants",
             SOURCE,
@@ -113,7 +113,7 @@ fn pointer_constants_keep_exact_bits_and_native_equality() {
                 nts_codegen_c::NATIVE_WITNESS_NAME,
             ],
         );
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
             &[]

@@ -1,6 +1,6 @@
 //! Planning and integrity checks shared by host-managed backends.
 
-use nts_core::hir::{OpKind, Program, Provider};
+use nts_core::hir::{Memory, OpKind, Program};
 use nts_diagnostics::Diagnostic;
 
 /// Select host-owned memory, refusing a conflicting native counting request.
@@ -8,13 +8,13 @@ use nts_diagnostics::Diagnostic;
 ///
 /// # Errors
 /// Returns a named decline when reference counting was requested.
-pub fn host_gc(backend: &str, counting: bool) -> Result<Provider, String> {
+pub fn host_gc(backend: &str, counting: bool) -> Result<Memory, String> {
     if counting {
         return Err(format!(
             "NTS2001: {backend} declines --rc: managed memory belongs to the host GC"
         ));
     }
-    Ok(Provider::HostGc)
+    Ok(Memory::HostGc)
 }
 
 /// Find counting operations that survived a host-GC preparation.
@@ -25,7 +25,7 @@ pub fn host_gc(backend: &str, counting: bool) -> Result<Provider, String> {
 /// after provider lowering must still produce diagnostics at this boundary.
 #[must_use]
 pub fn host_gc_diagnostics(program: &Program, backend: &str) -> Vec<Diagnostic> {
-    if program.provider != Provider::HostGc {
+    if program.provider != Memory::HostGc {
         return Vec::new();
     }
     let mut diagnostics = Vec::new();
@@ -61,7 +61,7 @@ mod tests {
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
-    fn markers(provider: Provider) -> Program {
+    fn markers(provider: Memory) -> Program {
         let origin = Origin::source(Location {
             file: SourceId(0),
             span: Span::new(1, 2),
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn the_managed_target_refuses_counting_by_name() {
-        assert_eq!(host_gc("jvm", false), Ok(Provider::HostGc));
+        assert_eq!(host_gc("jvm", false), Ok(Memory::HostGc));
         let Err(message) = host_gc("jvm", true) else {
             panic!("counting accepted")
         };
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn surviving_counting_operations_have_source_diagnostics() {
-        let program = markers(Provider::HostGc);
+        let program = markers(Memory::HostGc);
         assert!(nts_core::hir::verify::verify(&program).is_ok());
         let diagnostics = host_gc_diagnostics(&program, "jvm");
         assert_eq!(diagnostics.len(), 2);
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn native_provider_lifetimes_are_not_reinterpreted() {
-        for provider in [Provider::NoGc, Provider::ReferenceCounting] {
+        for provider in [Memory::NoGc, Memory::ReferenceCounting] {
             assert_eq!(
                 host_gc_diagnostics(&markers(provider), "native"),
                 [] as [nts_diagnostics::Diagnostic; 0]

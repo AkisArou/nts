@@ -969,7 +969,7 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         let (foreign, foreign_table) = foreign_slots(&mut out, layout, &placed.offsets, &tag);
         let release_fields =
             reference_fields(&mut out, &tag, &references, &erased, Action::Release);
-        let trace_fields = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+        let trace_fields = if program.provider == nts_core::hir::Memory::ReferenceCounting {
             reference_fields(&mut out, &tag, &references, &erased, Action::Trace)
         } else {
             "ptr null".to_owned()
@@ -1777,7 +1777,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 if parameter + 1 >= compiled.params.len() {
                     continue;
                 }
-                let counted = program.provider == nts_core::hir::Provider::ReferenceCounting;
+                let counted = program.provider == nts_core::hir::Memory::ReferenceCounting;
                 let length = bridging.array(at).map(|array| {
                     let at = array.length_at as usize;
                     (at, signature.parameters[at].abi(platform.abi))
@@ -1858,11 +1858,11 @@ fn bridge_answer(
     compiled: &Func,
     (have, want): (&HirType, &HirType),
     (foreign, leave): (&nts_core::hir::native::Type, &str),
-    provider: nts_core::hir::Provider,
+    provider: nts_core::hir::Memory,
 ) -> Result<(), Diagnostic> {
     if nts_core::hir::native::owned_string(foreign, have) {
         let _ = writeln!(out, "  %c = call ptr @nts_string_to_owned_cstring(ptr %r)");
-        if provider == nts_core::hir::Provider::ReferenceCounting {
+        if provider == nts_core::hir::Memory::ReferenceCounting {
             let _ = writeln!(out, "  call void @nts_release(ptr %r)");
         }
         let _ = writeln!(out, "{leave}\n  ret ptr %c\n}}");
@@ -2129,7 +2129,7 @@ fn objc_classes(
                 &mut out,
                 (
                     platform,
-                    program.provider == nts_core::hir::Provider::ReferenceCounting,
+                    program.provider == nts_core::hir::Memory::ReferenceCounting,
                 ),
                 &class.name,
                 at,

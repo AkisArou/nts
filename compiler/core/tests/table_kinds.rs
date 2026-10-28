@@ -25,7 +25,7 @@ fn prepared(name: &str) -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = hir::Options {
-        provider: hir::Provider::ReferenceCounting,
+        provider: hir::Memory::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };

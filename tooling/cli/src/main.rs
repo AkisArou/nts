@@ -2642,7 +2642,7 @@ fn entry_names() -> Vec<String> {
         .collect()
 }
 
-fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
+fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Memory)> {
     let arguments: Vec<_> = std::env::args().collect();
     let backend: nts_codegen_common::Backend =
         match arguments.iter().position(|arg| arg == "--backend") {
@@ -2657,7 +2657,7 @@ fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
 }
 
 /// The memory provider a backend prepares with, under the command's flags.
-fn provider_for(backend: nts_codegen_common::Backend) -> Result<hir::Provider> {
+fn provider_for(backend: nts_codegen_common::Backend) -> Result<hir::Memory> {
     Ok(match backend {
         nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => selected_provider(),
         nts_codegen_common::Backend::Jvm => {
@@ -2681,7 +2681,7 @@ fn prepare_for_listing(
 /// [`prepare_for_listing`] for a backend the caller names, which is how
 /// `expect-ir` prepares one snapshot for each backend its facts hold on.
 fn prepare_as(
-    (backend, provider): (nts_codegen_common::Backend, hir::Provider),
+    (backend, provider): (nts_codegen_common::Backend, hir::Memory),
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
@@ -2924,7 +2924,7 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
     }
     // Counting only where the provider counts: a zero would read as "no
     // retains were needed" on a program that was never asked.
-    if matches!(program.provider, hir::Provider::ReferenceCounting) {
+    if matches!(program.provider, hir::Memory::ReferenceCounting) {
         let counting = &prepared.counting;
         println!("rc.retains {}", counting.retains);
         println!("rc.releases {}", counting.releases);
@@ -2958,7 +2958,7 @@ fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
     let mut locations = SourceLocations::new(&snapshot.sources);
     let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
     println!("{header}");
-    if !matches!(prepared.program.provider, hir::Provider::ReferenceCounting) {
+    if !matches!(prepared.program.provider, hir::Memory::ReferenceCounting) {
         println!("regions are for the counting provider: pass --rc");
         return Ok(());
     }
@@ -5115,7 +5115,7 @@ fn compile_program(
         //
         // `emit-c --rc` still prints the define instead of passing it: there
         // the caller compiles the C, and the note is that interface.
-        if selected_provider() == hir::Provider::ReferenceCounting {
+        if selected_provider() == hir::Memory::ReferenceCounting {
             arguments.push("-DNTS_PROVIDER_RC".to_owned());
         }
         arguments.extend(program_includes(out, native, napi, with.cflags));
@@ -9209,7 +9209,7 @@ fn rc_requested() -> bool {
     std::env::args().any(|arg| arg == "--rc")
 }
 
-fn selected_provider() -> hir::Provider {
+fn selected_provider() -> hir::Memory {
     // **What ships counts references.** NoGC never frees: a testing provider,
     // never a shipped one (the user, 2026-10-22). So `nts build`, which makes
     // what ships, counts unless told `--nogc`; the testing and inspection
@@ -9219,9 +9219,9 @@ fn selected_provider() -> hir::Provider {
     let counted = args.iter().any(|arg| arg == "--rc")
         || (shipping && !args.iter().any(|arg| arg == "--nogc"));
     if counted {
-        hir::Provider::ReferenceCounting
+        hir::Memory::ReferenceCounting
     } else {
-        hir::Provider::NoGc
+        hir::Memory::NoGc
     }
 }
 
@@ -9866,7 +9866,7 @@ fn write_c_output(
     // runtime without this define while the program counts references balances
     // the counts and still grows the heap, which is the quiet failure worth
     // spending two lines of output to prevent.
-    if selected_provider() == hir::Provider::ReferenceCounting {
+    if selected_provider() == hir::Memory::ReferenceCounting {
         report.out(format_args!("compile the runtime with -DNTS_PROVIDER_RC"));
     }
     Ok(Wrote {

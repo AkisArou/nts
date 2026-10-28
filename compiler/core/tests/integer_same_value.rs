@@ -33,9 +33,9 @@ fn narrowed_call_results_lose_only_the_integer_self_comparisons() {
         .snapshot(&config)
         .expect("snapshot");
     for provider in [
-        hir::Provider::NoGc,
-        hir::Provider::ReferenceCounting,
-        hir::Provider::HostGc,
+        hir::Memory::NoGc,
+        hir::Memory::ReferenceCounting,
+        hir::Memory::HostGc,
     ] {
         let prepared = hir::prepare_with(
             &snapshot,

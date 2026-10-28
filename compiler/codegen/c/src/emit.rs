@@ -3665,7 +3665,7 @@ fn emit_object_descriptors(
         let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
         let release_fields =
             emit_reference_fields(writer, origin, layout, &name, &release, Action::Release);
-        let trace_fields = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+        let trace_fields = if program.provider == nts_core::hir::Memory::ReferenceCounting {
             emit_reference_fields(writer, origin, layout, &name, &release, Action::Trace)
         } else {
             "NULL".to_owned()

@@ -318,7 +318,7 @@ fn template(
                     None => Ok("ptr null, ptr null".to_owned()),
                 };
             };
-            let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+            let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
                 "  call void @nts_release(ptr %text)\n"
             } else {
                 ""

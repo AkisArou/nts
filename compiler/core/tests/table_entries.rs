@@ -12,16 +12,16 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, Callee, OpKind, Options, Provider};
+use nts_core::hir::{self, Callee, Memory, OpKind, Options};
 use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-table-key-updated-in-place";
 
-fn prepared(provider: Provider) -> hir::Program {
+fn prepared(provider: Memory) -> hir::Program {
     prepared_with(provider, None)
 }
 
-fn prepared_with(provider: Provider, table_entries: Option<bool>) -> hir::Program {
+fn prepared_with(provider: Memory, table_entries: Option<bool>) -> hir::Program {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
         .join(PROGRAM)
@@ -63,7 +63,7 @@ fn calls(program: &hir::Program, name: &str, helper: &str) -> usize {
 
 #[test]
 fn a_read_then_a_write_of_one_key_shares_the_lookup() {
-    let program = prepared(Provider::NoGc);
+    let program = prepared(Memory::NoGc);
     // (function, entries, writes through one)
     for (name, entries, sets) in [
         ("recordCounts", 1, 1),
@@ -95,7 +95,7 @@ fn a_read_then_a_write_of_one_key_shares_the_lookup() {
 
 #[test]
 fn a_write_that_might_not_be_the_read_keeps_its_own_lookup() {
-    let program = prepared(Provider::NoGc);
+    let program = prepared(Memory::NoGc);
     for name in ["callBetween", "anotherKey", "anotherTable"] {
         assert_eq!(
             calls(&program, name, hir::entries::ENTRY),
@@ -115,9 +115,9 @@ fn a_write_that_might_not_be_the_read_keeps_its_own_lookup() {
 /// which sets it, shares exactly the lookups native preparation shares.
 #[test]
 fn a_host_heap_shares_only_where_its_backend_says_so() {
-    let plain = prepared(Provider::HostGc);
-    let shared = prepared_with(Provider::HostGc, Some(true));
-    let native = prepared(Provider::NoGc);
+    let plain = prepared(Memory::HostGc);
+    let shared = prepared_with(Memory::HostGc, Some(true));
+    let native = prepared(Memory::NoGc);
     for name in ["recordCounts", "mapCounts", "eitherArm"] {
         assert_eq!(calls(&plain, name, hir::entries::ENTRY), 0, "`{name}`");
         assert!(calls(&plain, name, "nts_map_set") > 0, "`{name}`");

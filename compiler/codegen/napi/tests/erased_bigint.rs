@@ -122,7 +122,7 @@ fn throws_primitive() -> hir::Func {
 
 fn program() -> hir::Program {
     let mut program = hir::Program {
-        provider: hir::Provider::ReferenceCounting,
+        provider: hir::Memory::ReferenceCounting,
         funcs: vec![
             function("echo", 1, Vec::new(), Some(ValueId(0))),
             function("first", 2, Vec::new(), Some(ValueId(0))),

@@ -163,7 +163,7 @@ fn com_helpers() -> String {
     text
 }
 
-fn build(provider: hir::Provider) -> ScratchDir {
+fn build(provider: hir::Memory) -> ScratchDir {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -230,7 +230,7 @@ fn build(provider: hir::Provider) -> ScratchDir {
         "-o",
         "caller",
     ]);
-    if provider == hir::Provider::ReferenceCounting {
+    if provider == hir::Memory::ReferenceCounting {
         command.arg("-DNTS_PROVIDER_RC");
     }
     let compiled = command.output().unwrap();
@@ -244,7 +244,7 @@ fn build(provider: hir::Provider) -> ScratchDir {
 
 #[test]
 fn only_successful_hresult_outputs_are_taken_and_released() {
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let dir = build(provider);
         for mode in 0..4 {
             let output = Command::new(dir.join("caller"))
@@ -275,7 +275,7 @@ fn only_successful_hresult_outputs_are_taken_and_released() {
             assert_eq!(counters["value-calls"], u32::from(success), "{text}");
             assert_eq!(
                 counters["poison-releases"],
-                u32::from(success && provider == hir::Provider::ReferenceCounting),
+                u32::from(success && provider == hir::Memory::ReferenceCounting),
                 "{text}"
             );
         }

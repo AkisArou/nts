@@ -17,7 +17,7 @@ fn prepared(name: &str) -> hir::Prepared {
     let prepared = hir::prepare_unverified(
         &snapshot,
         &hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             roots: hir::reachable::Roots::EveryExport,
             ..hir::Options::default()
         },

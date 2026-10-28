@@ -287,7 +287,7 @@ fn a_program_records_the_provider_it_was_lowered_under() {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
 
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let options = hir::Options {
             provider,
             ..hir::Options::default()

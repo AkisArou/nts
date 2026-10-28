@@ -159,7 +159,7 @@ fn compile(dir: &Utf8Path, program: &hir::Program, llvm: bool, label: &str) -> c
         "-Wno-override-module",
         "-I.",
     ]);
-    if program.provider == hir::Provider::ReferenceCounting {
+    if program.provider == hir::Memory::ReferenceCounting {
         cc.args([
             "-DNTS_PROVIDER_RC",
             "-DNTS_POISON=1",
@@ -223,7 +223,7 @@ fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let prepared = hir::prepare_with(
             &snapshot,
             &hir::Options {
@@ -237,7 +237,7 @@ fn actual_writers_and_executed_cleanup_agree_on_both_native_emitters() {
             "{:?}",
             prepared.diagnostics
         );
-        if provider == hir::Provider::NoGc {
+        if provider == hir::Memory::NoGc {
             assert!(prepared.contents.elisions.is_empty());
             for llvm in [false, true] {
                 execute(

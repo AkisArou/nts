@@ -1,6 +1,6 @@
 //! Native columns are read at each backend boundary, including host callbacks.
 use super::{counted_caller, expect, prepare, run_on_both_backends};
-use nts_core::hir::{self, Callee, OpKind, Provider};
+use nts_core::hir::{self, Callee, Memory, OpKind};
 
 // The override reserves a logical selector, but nobody calls that method.
 // The closure selector must therefore move when projected.
@@ -159,7 +159,7 @@ int main(void) {
     return 0;
 }
 "#;
-    for provider in [Provider::NoGc, Provider::ReferenceCounting] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
         let (_, outputs) =
             run_on_both_backends("dispatch-callbacks", &source, provider, &library, caller);
         for output in outputs {
@@ -216,7 +216,7 @@ export function run(n: c_int): number {{
     );
     let library =
         "int apply(int (*f)(int, void *), void *context, int n) { return f(n, context); }";
-    for provider in [Provider::NoGc, Provider::ReferenceCounting] {
+    for provider in [Memory::NoGc, Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f %.0f", run(4), run(5));"#, "run(4); run(5);");
         let (_, outputs) =
             run_on_both_backends("dispatch-context", &source, provider, library, &caller);

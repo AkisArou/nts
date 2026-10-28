@@ -74,7 +74,7 @@ fn abandoned_callback_cycles_leave_no_live_storage() {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             ..hir::Options::default()
         },
     )

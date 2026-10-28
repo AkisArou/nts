@@ -1101,7 +1101,7 @@ fn bridge_answer(
 ) -> Result<String, Diagnostic> {
     let result = signature.result.c_type();
     if nts_core::hir::native::owned_string(&signature.result, &compiled.return_type) {
-        let release = if program.provider == nts_core::hir::Provider::ReferenceCounting {
+        let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
             " nts_release((NtsHeader *)v);"
         } else {
             ""
@@ -1151,7 +1151,7 @@ fn bridge_argument(
     if let Some(converted) = bridging.converted(at) {
         let function = nts_codegen_common::symbols::c_identifier(&converted.function);
         let _ = write!(copies, " {want} q{at} = ({want}){function}({slot});");
-        if program.provider == nts_core::hir::Provider::ReferenceCounting
+        if program.provider == nts_core::hir::Memory::ReferenceCounting
             && matches!(param.ty, HirType::Managed(_))
         {
             let _ = write!(releases, " nts_release((NtsHeader *)q{at});");
@@ -1164,7 +1164,7 @@ fn bridge_argument(
             " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());",
             boxed.get_type
         );
-        if program.provider == nts_core::hir::Provider::ReferenceCounting {
+        if program.provider == nts_core::hir::Memory::ReferenceCounting {
             let _ = write!(releases, " nts_release((NtsHeader *)b{at});");
         }
         return Ok(format!("b{at}"));
@@ -1194,7 +1194,7 @@ fn bridge_argument(
             " {want} h{at} = ({want})nts_array_from_handles((void *const *){slot}, (uint32_t)a{}, &{descriptor});",
             array.length_at
         );
-        if program.provider == nts_core::hir::Provider::ReferenceCounting {
+        if program.provider == nts_core::hir::Memory::ReferenceCounting {
             let _ = write!(releases, " nts_release((NtsHeader *)h{at});");
         }
         return Ok(format!("h{at}"));

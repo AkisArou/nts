@@ -33,13 +33,13 @@ mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
-    prepare_with_provider(name, source, hir::Provider::NoGc)
+    prepare_with_provider(name, source, hir::Memory::NoGc)
 }
 
 fn prepare_with_provider(
     name: &str,
     source: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
 ) -> (ScratchDir, hir::Prepared) {
     prepare_with_files(name, source, provider, &[])
 }
@@ -47,7 +47,7 @@ fn prepare_with_provider(
 fn prepare_with_files(
     name: &str,
     source: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
     declarations: &[(&str, &str)],
 ) -> (ScratchDir, hir::Prepared) {
     let (dir, snapshot) = snapshot_of(name, source, declarations);
@@ -307,7 +307,7 @@ fn a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm() {
     let (dir, prepared) = prepare_with_files(
         "bitfields",
         include_str!("../../common/test-support/native-bitfields/main.ts"),
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         &[(
             "ip.d.ts",
             include_str!("../../common/test-support/native-bitfields/ip.d.ts"),
@@ -397,7 +397,7 @@ fn a_flexible_array_member_reaches_the_bytes_after_the_record() {
     let (dir, prepared) = prepare_with_files(
         "flexible",
         include_str!("../../common/test-support/native-flexible/main.ts"),
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         &[(
             "cmsg.d.ts",
             include_str!("../../common/test-support/native-flexible/cmsg.d.ts"),
@@ -486,7 +486,7 @@ fn a_record_named_only_by_a_typedef_is_spelled_without_the_keyword() {
     let (dir, prepared) = prepare_with_files(
         "typedef",
         include_str!("../../common/test-support/native-typedef/main.ts"),
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         &[(
             "signal.d.ts",
             include_str!("../../common/test-support/native-typedef/signal.d.ts"),
@@ -1509,8 +1509,8 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
         include_str!("../../../../tests/interop/native-closure/types/closures.d.ts"),
     )];
     for (label, provider) in [
-        ("nogc", hir::Provider::NoGc),
-        ("rc", hir::Provider::ReferenceCounting),
+        ("nogc", hir::Memory::NoGc),
+        ("rc", hir::Memory::ReferenceCounting),
     ] {
         let (dir, prepared) =
             prepare_with_files(&format!("closure-{label}"), source, provider, &declarations);
@@ -1545,7 +1545,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
         )
         .unwrap();
         std::fs::write(dir.join("cycles.c"), SIGNAL_CYCLES).unwrap();
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
             &[]
@@ -1591,7 +1591,7 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
                 "{label}/{executable}: {}",
                 String::from_utf8_lossy(&run.stdout)
             );
-            if provider != hir::Provider::ReferenceCounting {
+            if provider != hir::Memory::ReferenceCounting {
                 continue;
             }
             clang(
@@ -1753,8 +1753,8 @@ fn a_64_bit_integer_read_as_a_number_is_exact_or_a_range_error() {
     };
     let source = std::fs::read_to_string(fixture("main.ts")).unwrap();
     for (label, provider) in [
-        ("nogc", hir::Provider::NoGc),
-        ("rc", hir::Provider::ReferenceCounting),
+        ("nogc", hir::Memory::NoGc),
+        ("rc", hir::Memory::ReferenceCounting),
     ] {
         let (dir, prepared) =
             prepare_with_provider(&format!("as-number-{label}"), &source, provider);
@@ -1780,7 +1780,7 @@ fn a_64_bit_integer_read_as_a_number_is_exact_or_a_range_error() {
                 &["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-c", file],
             );
         }
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
             &[]
@@ -1972,8 +1972,8 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
         include_str!("../../../../tests/interop/native-string/types/text.d.ts"),
     )];
     for (label, provider) in [
-        ("nogc", hir::Provider::NoGc),
-        ("rc", hir::Provider::ReferenceCounting),
+        ("nogc", hir::Memory::NoGc),
+        ("rc", hir::Memory::ReferenceCounting),
     ] {
         let (dir, prepared) =
             prepare_with_files(&format!("string-{label}"), source, provider, &declarations);
@@ -2017,7 +2017,7 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
         .unwrap();
         // Both halves counted or neither: the provider decides what the
         // program emits, and the runtime has to agree with it.
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
             &[]
@@ -2107,8 +2107,8 @@ export function wide(): boolean { return wide_valid(wide_new()); }
 export function identity(c: Counter | null): Counter | null { return c; }
 "#;
     for (label, provider) in [
-        ("nogc", hir::Provider::NoGc),
-        ("rc", hir::Provider::ReferenceCounting),
+        ("nogc", hir::Memory::NoGc),
+        ("rc", hir::Memory::ReferenceCounting),
     ] {
         let (dir, prepared) = prepare_with_provider(&format!("opaque-{label}"), source, provider);
         assert!(
@@ -2454,7 +2454,7 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         "poll.d.ts",
         include_str!("../../../../tests/interop/native-poll/types/poll.d.ts"),
     )];
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, prepared) = prepare_with_files("native-poll", source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
@@ -2531,7 +2531,7 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
         "unistd.d.ts",
         include_str!("../../../../tests/interop/native-fd/types/unistd.d.ts"),
     )];
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, prepared) = prepare_with_files("native-fd", source, provider, &declarations);
         assert!(
             prepared.diagnostics.is_empty(),
@@ -2614,12 +2614,8 @@ fn a_typed_buffer_where_read_wants_void_is_refused_by_the_witness() {
          const buf = local<Uint8>(8);\n\
          return Number(read(fd, buf, 8n as Count));\n\
          }\n";
-    let (dir, prepared) = prepare_with_files(
-        "native-fd-typed",
-        source,
-        hir::Provider::NoGc,
-        &declarations,
-    );
+    let (dir, prepared) =
+        prepare_with_files("native-fd-typed", source, hir::Memory::NoGc, &declarations);
     // The point of the control: lowering is happy with the wrong declaration.
     assert!(
         prepared.diagnostics.is_empty(),
@@ -2738,7 +2734,7 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         "library.d.ts",
         include_str!("../../../../tests/interop/native-callback/types/library.d.ts"),
     )];
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, prepared) =
             prepare_with_files("native-callback", source, provider, &declarations);
         assert!(
@@ -3007,7 +3003,7 @@ fn native_header_alias_survives_an_unrelated_layout_declaration() {
 #[test]
 fn native_owned_storage_executes_on_c_and_llvm() {
     let source = include_str!("../../common/test-support/native-storage/main.ts");
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, prepared) = prepare_with_provider("native-storage", source, provider);
         assert!(
             prepared.diagnostics.is_empty(),
@@ -3234,8 +3230,8 @@ export function wire(k: number): void {
 export function tally(): number { return total; }
 "#;
     for (label, provider) in [
-        ("nogc", hir::Provider::NoGc),
-        ("rc", hir::Provider::ReferenceCounting),
+        ("nogc", hir::Memory::NoGc),
+        ("rc", hir::Memory::ReferenceCounting),
     ] {
         let (dir, prepared) = prepare_with_provider(&format!("signal-{label}"), source, provider);
         assert!(
@@ -3278,7 +3274,7 @@ int main(int argc, char **argv) {
 "#,
         )
         .unwrap();
-        let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+        let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
             &["-DNTS_PROVIDER_RC"]
         } else {
             &[]
@@ -3337,7 +3333,7 @@ int main(int argc, char **argv) {
                 50 * (7 * 3 * 2 + 1000 * 2),
                 "{label}/{executable}: the handlers did not run as connected"
             );
-            if provider != hir::Provider::ReferenceCounting {
+            if provider != hir::Memory::ReferenceCounting {
                 continue;
             }
             assert_eq!(
@@ -3460,7 +3456,7 @@ int might(int ok, int *out, struct _GError **error) {
 fn run_on_both_backends(
     name: &str,
     source: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
     library: &str,
     caller: &str,
 ) -> (String, Vec<String>) {
@@ -3473,12 +3469,12 @@ fn run_on_both_backends(
 fn run_on_both_backends_with(
     name: &str,
     source: &str,
-    provider: hir::Provider,
+    provider: hir::Memory,
     library: &str,
     caller: &str,
     files: &[(&str, &str)],
 ) -> (String, Vec<String>) {
-    let label = if provider == hir::Provider::ReferenceCounting {
+    let label = if provider == hir::Memory::ReferenceCounting {
         "rc"
     } else {
         "nogc"
@@ -3518,7 +3514,7 @@ fn run_on_both_backends_with(
             ],
         );
     }
-    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+    let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
         &["-DNTS_PROVIDER_RC"]
     } else {
         &[]
@@ -3585,8 +3581,8 @@ fn counted_caller(line: &str, repeat: &str) -> String {
 }
 
 /// The expected output, with ` leak=0` under reference counting.
-fn expect(values: &str, provider: hir::Provider) -> String {
-    if provider == hir::Provider::ReferenceCounting {
+fn expect(values: &str, provider: hir::Memory) -> String {
+    if provider == hir::Memory::ReferenceCounting {
         format!("{values} leak=0")
     } else {
         values.to_owned()
@@ -3619,7 +3615,7 @@ export function built(): number { let s = ""; for (let i = 0; i < 20; i++) s += 
 bool same(const char *a, const char *b) { return a == b && strcmp(a, b) == 0; }
 int length(const char *a) { return (int)strlen(a); }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f %.0f %.0f", ascii(), latin(), wide(), built());"#,
             "ascii(); latin(); wide(); built();",
@@ -3687,7 +3683,7 @@ export function many(): number {
     return joined(values);
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f %.0f %.0f %.0f", empty(), absent(), text(), counted(), many());"#,
             "empty(); absent(); text(); counted(); many();",
@@ -3775,7 +3771,7 @@ export function run(): number {
         + (none === null ? 9 : none.length) + (borrowed(0 as c_int) === null ? 0 : 5000000);
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (text, outputs) = run_on_both_backends(
             "returned-strings",
@@ -3839,7 +3835,7 @@ export function run(): string {
         out[1] * 100 + out[3] * 10 + out[4]].join(" ");
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             // `run` hands back a string the caller owns.
@@ -3901,7 +3897,7 @@ export function run(): string {
     return String(i32_sum(xs)) + " " + String(i32_sum(xs.subarray(1))) + " " + out.join(":");
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             "nts_release((NtsHeader *)run());",
@@ -3956,7 +3952,7 @@ export function run(): string {
         String(flags_score({ count: 5, on: true, off: false }));
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             "NtsString *s = run(); for (uint32_t i = 0; i < s->length; i++) putchar((int)nts_unit(s, i));",
             "nts_release((NtsHeader *)run());",
@@ -4020,7 +4016,7 @@ export function run(): number {
 export function started(): void { start(3 as c_int); start(4 as c_int); }
 export function fired(): void { fire_all(); }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f", run()); started(); printf(" owed=%zu", nts_closures_owed()); fired(); printf(" then=%zu", nts_closures_owed());"#,
             "run();",
@@ -4072,7 +4068,7 @@ export function run(): number {
     return total;
 }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f owed=%zu", run(), nts_closures_owed());"#,
             "run();",
@@ -4129,7 +4125,7 @@ export function held(): number {
     let library = "struct point { double x; double y; };\n\
         struct rect { struct point origin; struct point size; int tag; };\n\
         double describe(struct rect r) { return r.tag * 10000 + r.origin.x * 1000 + r.origin.y * 100 + r.size.x * 10 + r.size.y; }\n";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f %.0f %.0f", full(), partial(), ordered(), held());"#,
             "full(); partial(); ordered(); held();",
@@ -4207,7 +4203,7 @@ export function run(): number {
     return button.get_width() * 1000 + button.dup_label().length * 10 + button.count(["a", "b"]);
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (text, outputs) =
             run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller);
@@ -4258,7 +4254,7 @@ int signed_of(int sign) { return sign; }
 unsigned flipped(unsigned orientation) { return orientation ^ 1u; }
 int orient_last(int spacing, unsigned orientation) { return (int)orientation * 10 + spacing; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f", run(), defaulted());"#,
             "run(); defaulted();",
@@ -4377,7 +4373,7 @@ export function live(): number { return live_objects(); }
     let (_, outputs) = run_on_both_backends(
         "gobject",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         GOBJECT_LIBRARY,
         &caller,
     );
@@ -4495,7 +4491,7 @@ export function errors(): number { return errors_seen(); }
     let (text, outputs) = run_on_both_backends(
         "host-handle",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         HOST_LIBRARY,
         &caller,
     );
@@ -4528,7 +4524,7 @@ declare function node_at(i: c_int): Node;
 declare function node_value(n: Node): c_int;
 export function local(): number { return node_value(node_at(0 as c_int)); }
 "#;
-    let (_, prepared) = prepare_with_provider("host-handle-nogc", source, hir::Provider::NoGc);
+    let (_, prepared) = prepare_with_provider("host-handle-nogc", source, hir::Memory::NoGc);
     assert!(
         prepared
             .diagnostics
@@ -4588,7 +4584,7 @@ export function errors(): number { return errors_seen(); }
     let (text, outputs) = run_on_both_backends(
         "promised-gobject",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         GOBJECT_LIBRARY,
         &caller,
     );
@@ -4643,7 +4639,7 @@ export function errors(): number { return errors_seen(); }
     let (_, outputs) = run_on_both_backends(
         "consumed",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         GOBJECT_LIBRARY,
         &caller,
     );
@@ -4714,7 +4710,7 @@ void label_set_visible(struct _Label *self, bool visible) { self->visible = visi
 void label_set_width(struct _Label *self, int width) { self->width = width; }
 int label_width(struct _Label *self) { return self->width; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (text, outputs) = run_on_both_backends("accessors", source, provider, library, &caller);
         assert!(
@@ -4779,7 +4775,7 @@ int zero(void) { return 0; }
 int toggle(int on) { return on; }
 int ask(int (*callback)(int)) { return (callback(2) == 0) * 10 + (callback(0) == 1); }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f %.0f", run(), narrowed(), asked());"#,
             "run(); narrowed(); asked();",
@@ -4874,7 +4870,7 @@ void thing_set_width(struct _Thing *t, int width) { t->record = t->record * 10 +
 void thing_set_height(struct _Thing *t, int height) { t->record = t->record * 10 + 3 + height * 0; }
 int thing_record(struct _Thing *t) { return t->record; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (c, outputs) = run_on_both_backends("construct", source, provider, library, &caller);
         // And not by luck of the constant: the type reaches C with no double
@@ -4902,7 +4898,7 @@ int thing_record(struct _Thing *t) { return t->record; }
         "new Thing({ width: next(), label, })",
         "new Thing(({ width: next(), label } as ThingProps))",
     );
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (_, outputs) = run_on_both_backends("construct-bag", &bag, provider, library, &caller);
         for output in outputs {
@@ -4976,7 +4972,7 @@ export function run(): string {
 }
 export function total(): number { return flagged(1 as c_int) + thing_new().add(); }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", total());"#, "total();");
         let (text, outputs) =
             run_on_both_backends("defaults", source, provider, DEFAULTS_LIBRARY, &caller);
@@ -4996,7 +4992,7 @@ export function total(): number { return flagged(1 as c_int) + thing_new().add()
     let (_, outputs) = run_on_both_backends(
         "defaults-arms",
         source,
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         DEFAULTS_LIBRARY,
         caller,
     );
@@ -5101,7 +5097,7 @@ export function maybe(): number {
         "{METHODS_LIBRARY}struct _Widget *button_as_widget(void) {{ return &the.parent; }}\n\
          struct _Widget *maybe_button(int which) {{ return which ? &the.parent : NULL; }}\n"
     );
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f %.0f", run(), maybe());"#, "run(); maybe();");
         let (text, outputs) = run_on_both_backends("declared", source, provider, &library, &caller);
         // What each prototype says is the only observable here: C's two
@@ -5254,7 +5250,7 @@ export function run(): number {
     return total + describe("12").length * 10000;
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (_, outputs) =
             run_on_both_backends("throws", source, provider, THROWS_LIBRARY, &caller);
@@ -5332,7 +5328,7 @@ export function run(): number {
     return button.labelled("héllo") * 100000 + button.scaled() * 1000 + button.scaled(3 as c_int, button);
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (_, outputs) =
             run_on_both_backends("ntscall", source, provider, METHODS_LIBRARY, &caller);
@@ -5387,7 +5383,7 @@ export function run(): number {
     return (width_of(button) as number) * 1000000 + width_of(button, 3 as c_int) + width_of(button, 1 as c_int, "ab") * 0;
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (_, outputs) = run_on_both_backends(
             "ntscall-function",
@@ -5463,7 +5459,7 @@ int quotient_digits(div_t *q) { return q->quot * 10 + q->rem; }
 __sigval_t *signal_value_new(int n) { the_value.sival_int = n; return &the_value; }
 int signal_value_int(__sigval_t *v) { return v->sival_int; }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         // `program.h` asks its includer for the macro the bindings were
         // checked under, rather than setting it too late to matter.
         let caller = format!(
@@ -5551,7 +5547,7 @@ export function run(): number {
     return one() + both() * 10 + nested() * 1000 + second() * 100000;
 }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (_, outputs) = run_on_both_backends("const-read", source, provider, "", &caller);
         for output in outputs {
@@ -5615,7 +5611,7 @@ export function start(): void {
 }
 export function settled(): number { return total; }
 "#;
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"start(); nts_checkpoint(); printf("%.0f", settled());"#,
             "start(); nts_checkpoint();",
@@ -6052,7 +6048,7 @@ export function realPointer(): number { return is_null(some_address()); }
         r#"printf("%.0f %.0f %.0f %.0f", withCallback(), withNull(), nullPointer(), realPointer());"#,
         "withCallback(); withNull();",
     );
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (_, outputs) =
             run_on_both_backends("nullable-callback", source, provider, library, &caller);
         for output in outputs {
@@ -6102,7 +6098,7 @@ export function nothing(): number { return is_null(null); }
     );
     // "AB" = 65+66 = 131 over 2 units; "αβ" = 945+946 = 1891 over 2; a lone
     // high surrogate is 55296 over 1.
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (text, outputs) =
             run_on_both_backends("utf16-string", source, provider, library, &caller);
         assert!(
@@ -6173,7 +6169,7 @@ export function nothing(): number { return is_null(null); }
     );
     // 97+0+98 = 195 over 3 units; 0xE9 = 233, narrow and fresh; 0xD800 =
     // 55296, wide and fresh; "abc" immortal (2), "αβ" immortal and wide (3).
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (text, outputs) =
             run_on_both_backends("string-view", source, provider, library, &caller);
         assert!(
@@ -6238,7 +6234,7 @@ export function nulls(): number { return (maybe(0 as c_int) === null ? 10 : 0) +
         "roundTrip(); fixedUnits(); nulls();",
     );
     // 4 units: 65 + 0 + 55296 + 945.
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (text, outputs) =
             run_on_both_backends("string-view-result", source, provider, library, &caller);
         assert!(
@@ -6504,7 +6500,7 @@ void let_go(void) { if (held != NULL) { GObject *object = held; held = NULL; g_o
 int finalized(void) { return gone; }
 void collect(void) { nts_checkpoint(); }
 ";
-    let provider = hir::Provider::ReferenceCounting;
+    let provider = hir::Memory::ReferenceCounting;
     let (dir, prepared) = prepare_with_provider("gobject-cycle-rc", source, provider);
     assert!(
         prepared.diagnostics.is_empty(),
@@ -6673,7 +6669,7 @@ export function live(): number { return live_objects() as number; }
     let (c, outputs) = run_on_both_backends(
         "upcast",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         &library,
         &caller,
     );
@@ -6721,7 +6717,7 @@ int twice(int (*callback)(int), int n) { return callback(callback(n)) - n; }
 #include <stddef.h>
 size_t doubled(size_t n) { return 2 * n + 1; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.2f %.2f", run(), wide());"#, "run(); wide();");
         let (text, outputs) = run_on_both_backends("cnumber", source, provider, library, &caller);
         assert!(
@@ -6814,7 +6810,7 @@ void g_object_unref(void *o) { (void)o; }
  * answering a GObject (`hir::floating`) and this test does not link. */
 void nts_gobject_made(void *o) { (void)o; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.1f", run());"#, "run();");
         let (text, outputs) = run_on_both_backends("interface", source, provider, library, &caller);
         assert!(
@@ -6882,7 +6878,7 @@ export async function suspended(): Promise<number> {
     let library = "void fill(int *out, int value) { *out = value; }\n";
     let caller = counted_caller(r#"printf("%.0f", looped());"#, "looped();");
     let (_, outputs) =
-        run_on_both_backends("confined", source, hir::Provider::NoGc, library, &caller);
+        run_on_both_backends("confined", source, hir::Memory::NoGc, library, &caller);
     for output in outputs {
         assert_eq!(output, "100");
     }
@@ -6962,7 +6958,7 @@ export function looped(): number {
     let (_, outputs) = run_on_both_backends(
         "iteration-local",
         source,
-        hir::Provider::NoGc,
+        hir::Memory::NoGc,
         library,
         &caller,
     );
@@ -7006,7 +7002,7 @@ export function live(): number { return live_objects() as number; }
     let (c, outputs) = run_on_both_backends(
         "erased-result",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         &library,
         &caller,
     );
@@ -7053,7 +7049,7 @@ struct _Thing *thing_sized(int width) { thing.record = width; return &thing; }
 void thing_set_label(struct _Thing *t, const char *label) { t->record = t->record * 10 + (int)strlen(label); }
 int thing_record(struct _Thing *t) { return t->record; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
         let (_, outputs) =
             run_on_both_backends("construct-only", source, provider, library, &caller);
@@ -7165,7 +7161,7 @@ void name_into(char **out, int which) {
 }
 "#;
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (_, outputs) =
             run_on_both_backends("string-from-probe", source, provider, library, &caller);
         for output in outputs {
@@ -7206,7 +7202,7 @@ double byte_zero(void) { return data[0]; }
         r#"double byte_zero(void); printf("%.0f byte0=%.0f", run(), byte_zero());"#,
         "run();",
     );
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (_, outputs) =
             run_on_both_backends("bytes-from-probe", source, provider, library, &caller);
         for output in outputs {
@@ -7243,13 +7239,8 @@ struct _Thing *thing_sized(int width) { Thing *t = &things[made++ % 2]; t->recor
 int thing_record(struct _Thing *t) { return t->record; }
 ";
     let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
-    let (_, outputs) = run_on_both_backends(
-        "static-probe",
-        source,
-        hir::Provider::NoGc,
-        library,
-        &caller,
-    );
+    let (_, outputs) =
+        run_on_both_backends("static-probe", source, hir::Memory::NoGc, library, &caller);
     for output in outputs {
         assert_eq!(output, "53");
     }
@@ -7410,7 +7401,7 @@ struct NtsBorrowedString;
 const struct NtsStringView *node_get_value(struct _Node *self) { (void)self; return NULL; }
 void node_set_value(struct _Node *self, const struct NtsBorrowedString *value) { (void)self; (void)value; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(
             r#"printf("%.0f %.0f %.0f %.0f", run(), dereferenced(), caughtByTheCaller(), asserted()); nts_collect_cycles();"#,
             // A TypeError raised out of a callee is released to zero from the
@@ -7464,7 +7455,7 @@ int *slots(void) { return the; }
 double seen_i32(int32_t v) { return v; }
 double seen_u16(uint16_t v) { return v; }
 ";
-    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let caller = counted_caller(r#"printf("%.0f", run(-5));"#, "run(-5);");
         let (_, outputs) =
             run_on_both_backends("c-integer-storage", source, provider, library, &caller);
@@ -7507,7 +7498,7 @@ export function errors(): number { return errors_seen() as number; }
     let (_, outputs) = run_on_both_backends(
         "dropped-host",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         HOST_LIBRARY,
         &caller,
     );
@@ -7560,7 +7551,7 @@ export function errors(): number { return errors_seen() as number; }
     let (_, outputs) = run_on_both_backends(
         "owned-handle-loop",
         source,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         HOST_LIBRARY,
         &caller,
     );

@@ -19,7 +19,7 @@ fn a_view_lent_from_a_field_outlives_a_callback_that_overwrites_it() {
     let (dir, prepared) = prepare_with_files(
         "string-view-lend",
         SOURCE,
-        hir::Provider::ReferenceCounting,
+        hir::Memory::ReferenceCounting,
         &[("visit.d.ts", DECLARATIONS)],
     );
     assert!(

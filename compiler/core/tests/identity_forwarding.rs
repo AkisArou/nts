@@ -27,7 +27,7 @@ fn prepared() -> hir::Program {
     // The options `nts hir --prepared` uses, and verified: a decided branch
     // that strands its other arm is invalid HIR, which is a finding here.
     let options = hir::Options {
-        provider: hir::Provider::NoGc,
+        provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };

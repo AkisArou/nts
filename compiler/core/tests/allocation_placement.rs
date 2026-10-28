@@ -37,7 +37,7 @@ fn prepared(name: &str) -> hir::Program {
     // handed. `Options::default()` is a different pipeline and the placements
     // it produces are not the ones anything compiles.
     let options = hir::Options {
-        provider: hir::Provider::NoGc,
+        provider: hir::Memory::NoGc,
         roots: hir::reachable::Roots::EveryExport,
         ..hir::Options::default()
     };

@@ -14,7 +14,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, BinOp, Callee, OpKind, Options, Provider};
+use nts_core::hir::{self, BinOp, Callee, Memory, OpKind, Options};
 use nts_frontend_ts::Frontend;
 
 const PROGRAM: &str = "a-string-chain-made-with-room";
@@ -31,7 +31,7 @@ fn prepared() -> hir::Program {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     let options = Options {
-        provider: Provider::ReferenceCounting,
+        provider: Memory::ReferenceCounting,
         ..Options::default()
     };
     hir::prepare_with(&snapshot, &options)

@@ -508,9 +508,9 @@ fn prepare_check(
         }
         Backend::C | Backend::Llvm => {
             if counting() {
-                hir::Provider::ReferenceCounting
+                hir::Memory::ReferenceCounting
             } else {
-                hir::Provider::NoGc
+                hir::Memory::NoGc
             }
         }
     };
@@ -661,7 +661,7 @@ fn corpus_source(entry: &Utf8Path) -> Option<String> {
     oracle_coverage::root_and_source(entry).map(|(_, source)| source)
 }
 
-fn pool_options(backend: Backend, provider: hir::Provider) -> hir::Options<'static> {
+fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static> {
     hir::Options {
         provider,
         table_entries: backend.table_entries(),

@@ -57,8 +57,8 @@ use super::appended_results::{
     ReturnedString, appended_calls, appended_runtime_calls, returned_strings,
 };
 use super::{
-    BinOp, Block, Callee, Func, HirType, ManagedType, Op, OpKind, Param, ParamShape, Program,
-    Provider, Terminator, ValueId, reachable::Roots,
+    BinOp, Block, Callee, Func, HirType, ManagedType, Memory, Op, OpKind, Param, ParamShape,
+    Program, Terminator, ValueId, reachable::Roots,
 };
 
 const STRING: HirType = HirType::Managed(ManagedType::String);
@@ -67,8 +67,8 @@ const STRING: HirType = HirType::Managed(ManagedType::String);
 /// that appends it into the caller's string, and send those calls there,
 /// under counting only (the module note says why). Answers how many calls it
 /// rewrote.
-pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) -> usize {
-    if provider != Provider::ReferenceCounting {
+pub(super) fn pass(program: &mut Program, provider: Memory, roots: Roots<'_>) -> usize {
+    if provider != Memory::ReferenceCounting {
         return 0;
     }
     let answers: FxHashMap<String, BTreeMap<ValueId, ReturnedString>> = program

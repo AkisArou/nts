@@ -186,7 +186,7 @@ int main(void) {
 }
 "#;
 
-fn prepare(name: &str, provider: hir::Provider) -> (ScratchDir, hir::Prepared) {
+fn prepare(name: &str, provider: hir::Memory) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
         .canonicalize_utf8()
@@ -233,7 +233,7 @@ fn clang(dir: &Utf8Path, args: &[&str]) {
 }
 
 /// `(objects made, objects still alive)` after `run()`, per backend.
-fn made_and_alive(provider: hir::Provider, label: &str) -> Vec<(String, u32, u32)> {
+fn made_and_alive(provider: hir::Memory, label: &str) -> Vec<(String, u32, u32)> {
     let (dir, prepared) = prepare(label, provider);
     assert!(
         prepared.diagnostics.is_empty(),
@@ -251,7 +251,7 @@ fn made_and_alive(provider: hir::Provider, label: &str) -> Vec<(String, u32, u32
     }
     std::fs::write(dir.join("stub.c"), STUB).unwrap();
     std::fs::write(dir.join("caller.c"), CALLER).unwrap();
-    let counted: &[&str] = if provider == hir::Provider::ReferenceCounting {
+    let counted: &[&str] = if provider == hir::Memory::ReferenceCounting {
         &["-DNTS_PROVIDER_RC"]
     } else {
         &[]
@@ -310,7 +310,7 @@ fn made_and_alive(provider: hir::Provider, label: &str) -> Vec<(String, u32, u32
 
 #[test]
 fn every_object_the_program_owns_is_released_once_on_both_backends() {
-    let counted = made_and_alive(hir::Provider::ReferenceCounting, "rc");
+    let counted = made_and_alive(hir::Memory::ReferenceCounting, "rc");
     // `new`, `copy`, `child`, `alloc`, the object `init` returns, the
     // holder's and the closure's: seven. All gone, `child` with its parent.
     // No abort means no object was retained after it was freed, released
@@ -327,7 +327,7 @@ fn every_object_the_program_owns_is_released_once_on_both_backends() {
     }
     // The control: the same program with nothing counted. `alloc`'s object is
     // still consumed by `init` (the stub's `init` releases it), so six live on.
-    let uncounted = made_and_alive(hir::Provider::NoGc, "nogc");
+    let uncounted = made_and_alive(hir::Memory::NoGc, "nogc");
     for (backend, made, alive) in &uncounted {
         assert_eq!(*made, 7, "{backend}");
         assert_eq!(

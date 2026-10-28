@@ -342,7 +342,7 @@ fn optional_storage_reads_dispatch_through_their_family() {
     let program = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            provider: hir::Provider::HostGc,
+            provider: hir::Memory::HostGc,
             ..hir::Options::default()
         },
     )
@@ -361,7 +361,7 @@ fn stored_field_dispatch_is_independent_of_the_memory_provider() {
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&config)
         .unwrap();
-    for provider in [hir::Provider::NoGc, hir::Provider::HostGc] {
+    for provider in [hir::Memory::NoGc, hir::Memory::HostGc] {
         let program = hir::prepare_with(
             &snapshot,
             &hir::Options {
@@ -459,7 +459,7 @@ fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
-            provider: hir::Provider::ReferenceCounting,
+            provider: hir::Memory::ReferenceCounting,
             ..hir::Options::default()
         },
     )
