@@ -161,6 +161,30 @@ for (const name of names) {
     }
   });
 
+  test(name + " creates a private JWK key before checking pub while validating priv before native work", async () => {
+    const f = fixture();
+    const key = await f.privateKey(name);
+    const jwk = await f.settle(f.subtle.exportKey("jwk", key)) as JsonWebKeyObject;
+    for (const pub of [undefined, "AA", "?"]) {
+      const bad = { ...jwk, pub };
+      f.provider.failure = { failure: "operation" };
+      f.provider.imports = 0;
+      await assert.rejects(f.settle(f.subtle.importKey("jwk", bad, name, true, ["sign"])), dom("OperationError"));
+      assert.equal(f.provider.imports, 1);
+
+      f.provider.failure = undefined;
+      f.provider.imports = 0;
+      await assert.rejects(f.settle(f.subtle.importKey("jwk", bad, name, true, ["sign"])), dom("DataError"));
+      assert.equal(f.provider.imports, 1);
+    }
+    f.provider.failure = { failure: "operation" };
+    for (const priv of ["AA", "?"]) {
+      f.provider.imports = 0;
+      await assert.rejects(f.settle(f.subtle.importKey("jwk", { ...jwk, priv }, name, true, ["sign"])), dom("DataError"));
+      assert.equal(f.provider.imports, 0);
+    }
+  });
+
   test(name + " accepts ordinary view ranges and takes ownership at import", async () => {
     const f = fixture();
     const storage = new Uint8Array(40).fill(3);
