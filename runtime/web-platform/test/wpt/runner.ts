@@ -39,6 +39,7 @@ export interface WptManifest {
 
 export interface WptEnvironment {
   globals: Record<string, unknown>;
+  exposeSelf?: boolean;
   /** Real aliases of the fixture's VM global, for example a worker's `self`. */
   globalAliases?: readonly string[];
   close(): void | Promise<void>;
@@ -361,7 +362,9 @@ export async function executeWptFixture(
         }
       };
     }
-    harness = new WptHarness(globals, fixture.blockedTests, context.timeoutMilliseconds, environment.globalAliases);
+    harness = new WptHarness(globals, fixture.blockedTests, context.timeoutMilliseconds, {
+      exposeSelf: environment.exposeSelf, globalAliases: environment.globalAliases,
+    });
     for (const error of startupErrors) harness.reportError(error);
     for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
     const results = await harness.finish();

@@ -80,6 +80,7 @@ const hostDeadline: WptDeadlineScheduler = (callback, milliseconds) => {
 
 export interface WptHarnessOptions {
   globalAliases?: readonly string[];
+  exposeSelf?: boolean;
   deadlineScheduler?: WptDeadlineScheduler;
 }
 
@@ -155,8 +156,8 @@ class WptTest {
     };
   }
 
-  step_timeout(callback: Callback, delay: number): ReturnType<typeof setTimeout> {
-    const timer = setTimeout(this.step_func(callback), delay);
+  step_timeout(callback: Callback, delay = 0, ...args: unknown[]): ReturnType<typeof setTimeout> {
+    const timer = setTimeout(() => this.step(callback, this, ...args), delay);
     this.timers.push(timer);
     return timer;
   }
@@ -241,6 +242,7 @@ export class WptHarness {
   private registrationClosed = false;
   private readonly timeout: number;
   readonly scheduleDeadline: WptDeadlineScheduler;
+  private readonly globalTimers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(
     globals: Record<string, unknown>,
@@ -254,6 +256,25 @@ export class WptHarness {
     this.scheduleDeadline = "deadlineScheduler" in options ? options.deadlineScheduler ?? hostDeadline : hostDeadline;
     assert.equal(typeof this.scheduleDeadline, "function", "WPT deadline scheduler must be a function");
     this.context = createContext({ ...globals });
+    const fixtureGlobal = new Script("globalThis").runInContext(this.context) as object;
+    // Keep the options-object and alias-list forms used by the two drivers.
+    const aliases: readonly string[] = Array.isArray(options) ? options
+      : "globalAliases" in options ? options.globalAliases ?? [] : [];
+    const exposeSelf = "exposeSelf" in options && options.exposeSelf;
+    const globalAliases = exposeSelf && !aliases.includes("self") ? ["self", ...aliases] : aliases;
+    const harness = this;
+    function stepTimeout(this: unknown, callback: Callback, delay = 0, ...args: unknown[]): ReturnType<typeof setTimeout> {
+      assert.equal(typeof callback, "function", "step_timeout requires a callback");
+      // Upstream's global helper is non-strict and preserves its call receiver.
+      const receiver = this === undefined || this === null ? fixtureGlobal : Object(this);
+      const timer = setTimeout(() => {
+        harness.globalTimers.delete(timer);
+        try { apply(callback, receiver, args); }
+        catch (error) { harness.reportError(error); }
+      }, delay);
+      harness.globalTimers.add(timer);
+      return timer;
+    }
     const realmErrors = new Script("({ Error, TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError, AggregateError })").runInContext(
       this.context,
     ) as Record<string, unknown>;
@@ -417,6 +438,7 @@ export class WptHarness {
         if (callback !== undefined) this.checkSynchronousResult(callback.apply(undefined, []), "setup callback");
       },
       done: () => this.closeRegistration(),
+      step_timeout: stepTimeout,
     });
     // Alias the actual context global, not the host's globals dictionary. This
     // preserves self === globalThis and never exposes Node's competing Web APIs.
@@ -485,16 +507,22 @@ export class WptHarness {
       this.recordError(new Error("WPT explicit_done setup requires a call to done()"));
       this.closeRegistration();
     }, this.timeout);
-    await this.registrationDone.promise;
-    cancelRegistrationTimeout();
-    await this.promiseQueue;
-    await Promise.all(this.tests.map((test) => test.completed));
-    for (const name of Object.keys(this.blocks)) {
-      assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
+    try {
+      await this.registrationDone.promise;
+      cancelRegistrationTimeout();
+      await this.promiseQueue;
+      await Promise.all(this.tests.map((test) => test.completed));
+      for (const name of Object.keys(this.blocks)) {
+        assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
+      }
+      if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
+        throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
+      }
+      return this.tests.map((test) => test.result);
+    } finally {
+      cancelRegistrationTimeout();
+      for (const timer of this.globalTimers) clearTimeout(timer);
+      this.globalTimers.clear();
     }
-    if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
-      throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
-    }
-    return this.tests.map((test) => test.result);
   }
 }
