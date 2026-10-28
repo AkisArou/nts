@@ -604,6 +604,31 @@ export class WptHarness {
         this.checkSynchronousResult(test.step(callback, test, test), "test callback");
         test.done();
       },
+      generate_tests: (callback: Callback, rows: unknown[][], properties?: unknown) => {
+        assert.equal(typeof callback, "function", "generate_tests requires a callback");
+        assert.ok(Array.isArray(rows), "generate_tests requires an array of argument rows");
+        for (let index = 0; index < rows.length; index++) {
+          // The pinned private forEach checks own indices, so it also skips
+          // inherited rows; it does not call Array.prototype.forEach.
+          if (!Object.hasOwn(rows, index)) continue;
+          const row = rows[index]!;
+          assert.ok(Array.isArray(row), "generate_tests requires array argument rows");
+          const name = row[0];
+          assert.ok(name === undefined || typeof name === "string", "generate_tests requires string test names");
+          const settings = Array.isArray(properties) ? properties[index] : properties;
+          assert.ok(settings == null || (typeof settings === "object" && Object.keys(settings).length === 0),
+            "generate_tests does not support nonempty test properties");
+          const test = this.register(name, "sync");
+          if (test.result.status === "blocked") continue;
+          // testharness.js wraps func.apply(this, row.slice(1)) in a callback
+          // without a return statement: it preserves the test receiver and
+          // deliberately discards the generated function's return value.
+          this.checkSynchronousResult(test.step(function (this: unknown) {
+            apply(callback, this, row.slice(1));
+          }, test, test), "test callback");
+          test.done();
+        }
+      },
       async_test: (callbackOrName?: Callback | string, name?: string) => {
         const callback = typeof callbackOrName === "function" ? callbackOrName : undefined;
         const test = this.register(callback === undefined ? callbackOrName as string : name, "async");

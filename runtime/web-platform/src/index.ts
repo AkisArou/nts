@@ -1,4 +1,5 @@
 export { DOMException } from "./core/errors.ts";
+export { atob, btoa } from "./core/base64-globals.ts";
 export { Navigator } from "./navigator/navigator.ts";
 export { URLPattern } from "./urlpattern/url-pattern.ts";
 export type {

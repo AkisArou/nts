@@ -220,12 +220,68 @@ test("FileReader BinaryString keeps every byte's code-unit value", { timeout: 20
   assert.equal(reader.error, null);
 });
 
+// https://w3c.github.io/FileAPI/#readAsDataURL
+// https://w3c.github.io/FileAPI/#package-data
+test("FileReader DataURL preserves bytes, padding, and read states for lengths zero through four", async () => {
+  const bytes = new Uint8Array([0, 128, 255, 66]);
+  const encodings = ["", "AA==", "AIA=", "AID/", "AID/Qg=="];
+  for (let length = 0; length <= bytes.length; length++) {
+    const reader = new FileReader();
+    const records = recordEvents(reader);
+    const expected = "data:application/octet-stream;base64," + encodings[length];
+    const completion = completeRead(reader, () => reader.readAsDataURL(new Blob([bytes.subarray(0, length)])));
+    assert.equal(reader.readyState, FileReader.LOADING);
+    assert.equal(reader.result, null);
+    assert.equal(reader.error, null);
+    assert.equal(records.length, 0);
+    await completion;
+    assert.equal(reader.readyState, FileReader.DONE);
+    assert.equal(reader.result, expected);
+    assert.equal(reader.error, null);
+    const pending = length === 0 ? ["loadstart"] : ["loadstart", "progress"];
+    assert.deepEqual(records.map((record) => [record.type, record.state, record.result]), [
+      ...pending.map((type) => [type, FileReader.LOADING, null]),
+      ["load", FileReader.DONE, expected], ["loadend", FileReader.DONE, expected],
+    ]);
+  }
+});
+
+test("FileReader DataURL uses the Blob's private MIME type without decoding its bytes", async () => {
+  let publicReads = 0;
+  class DerivedBlob extends Blob {
+    override get type(): never { publicReads++; throw new Error("public type"); }
+  }
+  const reader = new FileReader();
+  const blob = new DerivedBlob([new Uint8Array([255])], { type: "TeXt/Plain;Charset=UTF-8" });
+  await completeRead(reader, () => reader.readAsDataURL(blob));
+  assert.equal(reader.result, "data:text/plain;charset=utf-8;base64,/w==");
+  assert.equal(reader.error, null);
+  assert.equal(publicReads, 0);
+});
+
+test("FileReader DataURL abort retires the old read when its handler starts a new one", async () => {
+  const reader = new FileReader();
+  const records = recordEvents(reader);
+  reader.onabort = () => reader.readAsDataURL(new Blob([new Uint8Array([255])]));
+  const completion = completeRead(reader, () => {
+    reader.readAsDataURL(new Blob(["discarded"]));
+    reader.abort();
+  });
+  assert.equal(reader.readyState, FileReader.LOADING);
+  assert.equal(reader.result, null);
+  assert.deepEqual(records.map((record) => record.type), ["abort"]);
+  await completion;
+  assert.equal(reader.result, "data:application/octet-stream;base64,/w==");
+  assert.equal(reader.error, null);
+  assert.deepEqual(records.map((record) => record.type), ["abort", "loadstart", "progress", "load", "loadend"]);
+});
+
 // Web IDL interface conversion precedes the File API busy-state algorithm.
 test("FileReader converts arguments before rejecting overlapping reads", { timeout: 2000 }, async () => {
   const reader = new FileReader();
   const blob = new Blob(["one"]);
   const completion = completeRead(reader, () => reader.readAsText(blob));
-  for (const read of [reader.readAsArrayBuffer, reader.readAsBinaryString, reader.readAsText]) {
+  for (const read of [reader.readAsArrayBuffer, reader.readAsBinaryString, reader.readAsDataURL, reader.readAsText]) {
     assert.throws(() => read.call(reader, blob), isDOMException("InvalidStateError"));
     assert.throws(() => read.call(reader, {} as Blob), TypeError);
     // @ts-expect-error Web IDL required-argument control.

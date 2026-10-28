@@ -578,6 +578,10 @@
         "fetch/api/response/response-stream-with-broken-then.any.js": {
           "sha256": "04b27499dc1d4f65d843401209e885f7fe17135d67e459698649656d8228e1cc",
           "gitBlob": "8fef66c8a281c6248fd36763889bc95aa899f7cc"
+        },
+        "fetch/data-urls/resources/base64.json": {
+          "sha256": "0cdb75b4fcc46e4a6caa0e3b0005157a0d0be03e00bcf7b7054a045b1267568d",
+          "gitBlob": "01f981a6502aec41351de52519c5437d6c77a609"
         }
       }
     },
@@ -597,6 +601,10 @@
     "html/webappapis": {
       "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
       "files": {
+        "html/webappapis/atob/base64.any.js": {
+          "sha256": "0297126f8867772b48a24c4d979debe38732294571d64b8d689b6506a3f53b9a",
+          "gitBlob": "fbb64042932a2890ed448e632bfa7366fcc2739f"
+        },
         "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html": {
           "sha256": "c0fb97b890aeb587d92cc632a418e8e4e7a92f447981f335571083dacf86b4f8",
           "gitBlob": "4319deee7b50163a68e556ee7f401373fab7495b"
