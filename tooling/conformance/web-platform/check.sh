@@ -73,6 +73,7 @@ node --expose-gc \
   runtime/web-platform/test/mock-agent.test.ts \
   runtime/web-platform/test/negotiated-connect.test.ts \
   runtime/web-platform/test/operations.test.ts \
+  runtime/web-platform/test/network-port.test.ts \
   runtime/web-platform/test/network.test.ts \
   runtime/web-platform/test/policy-interceptors.test.ts \
   runtime/web-platform/test/pool.test.ts \
