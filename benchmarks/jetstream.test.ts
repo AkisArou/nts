@@ -100,6 +100,23 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN REGEXP OCTANE: add with the complete recorded RegExp workload.
+{
+  const name = "jetstream-regexp-octane";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { seed, work, render } = await import("./cases/jetstream-regexp-octane/case.ts");
+    test(`${name}: all twelve blocks retain the original five checksum assertions`, () => {
+      assert.equal(seed, 1);
+      assert.deepEqual(render(2), [1666156, 1666156]);
+      assert.equal(work(0), 0);
+      assert.equal(work(1), 1666156);
+      assert.equal(work(2), 53316992);
+    });
+  }
+}
+// END REGEXP OCTANE.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
