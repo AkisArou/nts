@@ -200,3 +200,12 @@ test("an active source retains an observed composite until it aborts", async () 
   controller.abort();
   assert.equal(calls, 1);
 });
+
+// https://dom.spec.whatwg.org/#create-a-dependent-abort-signal
+// A dependent with no source signals must not become a source during composition.
+test("an empty dependent signal does not retain later observed composites", async () => {
+  const empty = AbortSignal.any([]);
+  const reference = observedComposite([empty], () => {});
+  assert.equal(await collected(reference), true);
+  assert.equal(empty.aborted, false);
+});

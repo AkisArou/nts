@@ -30,6 +30,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   // https://dom.spec.whatwg.org/#interface-abortsignal
   #isAborted = false;
   #abortReason: unknown = undefined;
+  #dependent = false;
   #firstAlgorithm: AbortAlgorithm | null = null;
   #lastAlgorithm: AbortAlgorithm | null = null;
   #runningAlgorithms = false;
@@ -150,8 +151,11 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       }
     }
 
+    // Dependency is separate from the weak source set: any([]) is dependent too.
+    // https://dom.spec.whatwg.org/#create-a-dependent-abort-signal
+    result.#dependent = true;
     for (const signal of converted) {
-      if (signal.#sourceSignals.length === 0) result.#addSourceSignal(signal);
+      if (!signal.#dependent) result.#addSourceSignal(signal);
       else {
         for (const sourceReference of signal.#sourceSignals) {
           const source = sourceReference.deref();
