@@ -3,7 +3,9 @@ import "../host/environment-shim.ts";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
-import { Request, Response } from "../src/index.ts";
+import { ReadableStream, Request, Response } from "../src/index.ts";
+import { BodyState } from "../src/fetch/body.ts";
+import { LimitError } from "../src/core/errors.ts";
 
 const runtime = createHostNodeWebPlatform();
 after(() => runtime.close());
@@ -17,6 +19,55 @@ interface BodySurface {
   blob(): Promise<{ text(): Promise<string> }>;
   formData(): Promise<{ get(name: string): unknown }>;
 }
+
+// https://streams.spec.whatwg.org/#readablestreamdefaultreader-read-all-bytes
+// A non-byte chunk invokes failure steps; it does not cancel the source.
+for (const kind of ["Response", "Request"] as const) {
+  test(`${kind} rejects a non-byte body chunk without canceling its source`, async () => {
+    let cancellations = 0;
+    let oracleCancellations = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue("invalid" as unknown as Uint8Array); },
+      cancel() { cancellations++; },
+    });
+    const oracleStream = new globalThis.ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue("invalid" as unknown as Uint8Array); },
+      cancel() { oracleCancellations++; },
+    });
+    const subject = kind === "Response" ? new Response(stream) : new Request("https://example.test/", {
+      method: "POST", body: stream, duplex: "half",
+    });
+    const oracle = kind === "Response" ? new globalThis.Response(oracleStream) : new globalThis.Request("https://example.test/", {
+      method: "POST", body: oracleStream, duplex: "half",
+    });
+    await assert.rejects(subject.text(), TypeError);
+    await assert.rejects(oracle.text(), TypeError);
+    assert.equal(oracleCancellations, 0);
+    assert.equal(cancellations, oracleCancellations);
+    assert.equal(subject.bodyUsed, oracle.bodyUsed);
+    assert.equal(stream.locked, oracleStream.locked);
+  });
+}
+
+test("the configured body consumption limit still cancels with its exact error", async () => {
+  let cancellationReason: unknown;
+  let cancellations = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new Uint8Array([1, 2])); },
+    cancel(reason) { cancellations++; cancellationReason = reason; },
+  });
+  const state = new BodyState(stream, null, null, null, {
+    maxConsumeBytes: 1,
+    maxCloneBufferBytes: Infinity,
+  });
+  let failure: unknown;
+  await assert.rejects(state.consume(), (error: unknown) => {
+    failure = error;
+    return error instanceof LimitError;
+  });
+  assert.equal(cancellations, 1);
+  assert.equal(cancellationReason, failure);
+});
 
 const bodyFactories = [
   {
