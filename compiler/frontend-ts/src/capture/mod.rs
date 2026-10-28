@@ -177,6 +177,22 @@ impl<'p, 'r> Capture<'p, 'r> {
         self.snapshot.validate()?;
         Ok(self.snapshot)
     }
+
+    /// Planning borrows this capture's syntax instead of decoding every file
+    /// again. When it adds no roots, `finish` consumes this exact arena.
+    pub(crate) fn world(&self) -> crate::planning::SourceWorld<'_> {
+        crate::planning::SourceWorld {
+            nodes: &self.snapshot.nodes,
+            sources: &self.snapshot.sources,
+            modules: &self.snapshot.modules,
+            semantics: &self.snapshot.semantics,
+            types: crate::transform::NodeTypes::captured(
+                &self.native_nodes,
+                &self.snapshot,
+                &self.nodes,
+            ),
+        }
+    }
 }
 
 fn arena_index(length: usize) -> Result<u32, SnapshotError> {

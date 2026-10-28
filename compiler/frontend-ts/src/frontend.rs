@@ -131,6 +131,32 @@ impl Frontend {
 }
 
 impl Frontend {
+    /// Select a plan inside the capture's one native checker session. With no
+    /// source roots added, finish the same syntax arena without another check.
+    /// With roots, settle exactly one complete closure and verify the final
+    /// world before finishing its semantic graph. A mismatch is an error.
+    ///
+    /// # Errors
+    /// Loading/capture/source stages fail, the planner rejects a world, or its
+    /// requested source closure is invalid.
+    pub fn snapshot_with_plan<P: crate::planning::CapturePlanner>(
+        &mut self,
+        config: &Utf8Path,
+        planner: &mut P,
+    ) -> Result<crate::planning::PlannedSnapshot<P::Plan>, P::Error> {
+        let started = Instant::now();
+        let config = if config.is_absolute() {
+            config.to_owned()
+        } else {
+            self.options.cwd.join(config)
+        };
+        let result = native::run(self.options.clone(), |session| {
+            driver::capture_with_plan(self, session, &config, planner)
+        })?;
+        self.stats = driver::stats(&result.snapshot, started.elapsed());
+        Ok(result)
+    }
+
     /// Capture the requested program through the native checker.
     ///
     /// # Errors

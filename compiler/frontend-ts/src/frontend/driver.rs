@@ -18,12 +18,23 @@ use crate::{
     generated::Complaint,
     inclusion::Inclusion,
     native_ast,
+    planning::{CapturePlanner, PlannedSnapshot, RevisionInputs},
     transform::{NodeTypes, REVISION_ROUNDS, TransformInput},
 };
 
 enum Action<'s> {
     Recheck(SourceChanges),
     Ready(Checked<'s, DiagnosticsSelected>),
+}
+
+enum Completion<R> {
+    Done(R),
+    Recheck(SourceChanges),
+}
+
+struct Observations {
+    spec: ProjectSpec,
+    revisions: Vec<RevisionInputs>,
 }
 
 enum Phase {
@@ -50,6 +61,8 @@ struct Driver {
     revision_rounds: usize,
     rewritten: Vec<Utf8PathBuf>,
     inclusion: Inclusion,
+    planned_roots: Vec<Utf8PathBuf>,
+    observations: Option<Observations>,
 }
 
 pub(super) fn inspect<R: Send, E: From<SnapshotError> + Send>(
@@ -105,7 +118,7 @@ pub(super) fn inspect_sources<R, E: From<SnapshotError>>(
     config: &camino::Utf8Path,
     mut visitor: impl FnMut(&TransformInput<'_>, &NodeTypes<'_>) -> Result<R, E>,
 ) -> Result<Vec<R>, E> {
-    run_sources(frontend, session, config, |driver, _, checked| {
+    run_sources(frontend, session, config, false, |driver, _, checked| {
         let project = checked.projects().next().ok_or_else(|| {
             E::from(SnapshotError::Project(
                 "the requested native program is missing".into(),
@@ -113,7 +126,7 @@ pub(super) fn inspect_sources<R, E: From<SnapshotError>>(
         })?;
         let results = inspect_files(project, &mut driver.inclusion, &mut visitor)?;
         let _finished = checked.finish();
-        Ok(results)
+        Ok(Completion::Done(results))
     })
 }
 
@@ -140,18 +153,111 @@ pub(super) fn capture(
     session: &mut Session,
     config: &camino::Utf8Path,
 ) -> Result<SemanticSnapshot, SnapshotError> {
-    run_sources(frontend, session, config, Driver::snapshot)
+    run_sources(
+        frontend,
+        session,
+        config,
+        false,
+        |driver, frontend, checked| driver.snapshot(frontend, checked).map(Completion::Done),
+    )
+}
+
+pub(super) fn capture_with_plan<P: CapturePlanner>(
+    frontend: &mut Frontend,
+    session: &mut Session,
+    config: &camino::Utf8Path,
+    planner: &mut P,
+) -> Result<PlannedSnapshot<P::Plan>, P::Error> {
+    let session_identity = session.cache_identity();
+    let mut selected = None;
+    run_sources(
+        frontend,
+        session,
+        config,
+        true,
+        |driver, frontend, checked| {
+            let project = checked.projects().next().ok_or_else(|| {
+                SnapshotError::Project("the requested native program is missing".into())
+            })?;
+            let files = driver.inclusion.files(project)?;
+            let capture = Capture::syntax(&driver.project_root, files, project.semantics())?;
+            let plan = if let Some(plan) = selected.take() {
+                planner.verify(&capture.world(), &plan)?;
+                plan
+            } else {
+                let decision = planner.plan(&capture.world())?;
+                let mut roots = Vec::with_capacity(decision.source_roots.len());
+                for path in decision.source_roots {
+                    if !path.is_absolute() {
+                        return Err(SnapshotError::Project(format!(
+                            "a planned source root must be absolute: {path}"
+                        ))
+                        .into());
+                    }
+                    roots.push(path.canonicalize_utf8().map_err(|error| {
+                        SnapshotError::Project(format!(
+                            "cannot resolve planned source {path}: {error}"
+                        ))
+                    })?);
+                }
+                roots.sort_unstable();
+                roots.dedup();
+                // Existing decoded sources need no revision and introduce no new
+                // semantic world. A file merely loaded as an excluded library is
+                // deliberately not enough to take this path.
+                let all_present = crate::planning::roots_present(
+                    &roots,
+                    capture
+                        .world()
+                        .sources()
+                        .iter()
+                        .map(|source| source.display_path.as_path()),
+                );
+                if !all_present {
+                    let existing_sources = capture
+                        .world()
+                        .sources()
+                        .iter()
+                        .map(|source| source.display_path.clone())
+                        .collect();
+                    drop(capture);
+                    let finished = checked.finish();
+                    driver.record_inputs(|| finished.inputs());
+                    selected = Some(decision.plan);
+                    return Ok(Completion::Recheck(driver.plan_roots(
+                        frontend,
+                        roots,
+                        existing_sources,
+                    )));
+                }
+                decision.plan
+            };
+            let snapshot = capture.finish()?;
+            let snapshot = driver.finish_snapshot(frontend, checked, snapshot)?;
+            let inputs = driver
+                .observations
+                .take()
+                .map_or_else(Vec::new, |state| state.revisions);
+            Ok(Completion::Done(PlannedSnapshot {
+                snapshot,
+                plan,
+                inputs,
+                session_identity: session_identity.clone(),
+            }))
+        },
+    )
 }
 
 fn run_sources<R, E: From<SnapshotError>>(
     frontend: &mut Frontend,
     session: &mut Session,
     config: &camino::Utf8Path,
+    observe: bool,
     mut ready: impl for<'s> FnMut(
         &mut Driver,
         &mut Frontend,
         Checked<'s, DiagnosticsSelected>,
-    ) -> Result<R, E>,
+    ) -> Result<Completion<R>, E>,
 ) -> Result<R, E> {
     let config = canonical_config(config)?;
     let project_root = config
@@ -170,6 +276,11 @@ fn run_sources<R, E: From<SnapshotError>>(
         revision_rounds: 0,
         rewritten: Vec::new(),
         inclusion: Inclusion::default(),
+        planned_roots: Vec::new(),
+        observations: observe.then(|| Observations {
+            spec: spec.clone(),
+            revisions: Vec::new(),
+        }),
     };
     let mut changes = None;
     loop {
@@ -178,19 +289,80 @@ fn run_sources<R, E: From<SnapshotError>>(
         let action = {
             let checked = match changes.take() {
                 None => session.open(spec.clone()),
-                Some(changes) => session.revise(changes),
+                Some(changes) => {
+                    driver.apply_spec(&changes);
+                    session.revise(changes)
+                }
             }
             .map_err(|error| SnapshotError::Project(error.to_string()))?;
             driver.prepare(frontend, checked)?
         };
         match action {
             Action::Recheck(next) => changes = Some(next),
-            Action::Ready(checked) => return ready(&mut driver, frontend, checked),
+            Action::Ready(checked) => match ready(&mut driver, frontend, checked)? {
+                Completion::Done(result) => return Ok(result),
+                Completion::Recheck(next) => changes = Some(next),
+            },
         }
     }
 }
 
 impl Driver {
+    fn apply_spec(&mut self, changes: &SourceChanges) {
+        if let Some(observations) = &mut self.observations {
+            for (path, text) in &changes.overlays {
+                if let Some(text) = text {
+                    observations
+                        .spec
+                        .overlays
+                        .insert(path.clone(), text.clone());
+                } else {
+                    observations.spec.overlays.remove(path);
+                }
+            }
+            if let Some(roots) = &changes.roots {
+                observations.spec.roots.clone_from(roots);
+            }
+        }
+    }
+
+    fn record_inputs(&mut self, inputs: impl FnOnce() -> Vec<native::Input>) {
+        if let Some(observations) = &mut self.observations {
+            observations.revisions.push(RevisionInputs {
+                spec: observations.spec.clone(),
+                inputs: inputs(),
+            });
+        }
+    }
+
+    fn plan_roots(
+        &mut self,
+        frontend: &Frontend,
+        roots: Vec<Utf8PathBuf>,
+        existing_sources: Vec<Utf8PathBuf>,
+    ) -> SourceChanges {
+        self.planned_roots = roots;
+        self.inclusion
+            .allow_sources(&self.planned_roots, existing_sources);
+        // SourceTransform is deterministic, not idempotent. Re-run its source
+        // stages on physical/generated inputs, never on its own prior output.
+        let overlays = self.rewritten.drain(..).map(|path| (path, None)).collect();
+        self.phase = Phase::Generated;
+        self.generation_rounds = 0;
+        self.revision_rounds = 0;
+        SourceChanges {
+            roots: Some(
+                [
+                    frontend.added.as_slice(),
+                    self.planned_roots.as_slice(),
+                    self.generated.as_deref().unwrap_or_default(),
+                ]
+                .concat(),
+            ),
+            overlays,
+        }
+    }
+
     fn prepare<'s>(
         &mut self,
         frontend: &mut Frontend,
@@ -203,6 +375,7 @@ impl Driver {
             self.original_roots = project.root_paths().map(ToString::to_string).collect();
             self.phase = Phase::Generated;
             if !frontend.added.is_empty() {
+                self.record_inputs(|| checked.inputs());
                 return Ok(Action::Recheck(SourceChanges {
                     roots: Some(frontend.added.clone()),
                     ..SourceChanges::default()
@@ -235,7 +408,9 @@ impl Driver {
                     let project = finished.projects().next().ok_or_else(|| {
                         SnapshotError::Project("the requested native program is missing".into())
                     })?;
-                    if let Some(changes) = self.generate(frontend, project)? {
+                    let changes = self.generate(frontend, project)?;
+                    self.record_inputs(|| finished.inputs());
+                    if let Some(changes) = changes {
                         return Ok(Action::Recheck(changes));
                     }
                     self.phase = Phase::Transform;
@@ -247,6 +422,7 @@ impl Driver {
                 Phase::Transform => {
                     self.phase = Phase::Revisions;
                     if let Some(changes) = self.transform(frontend, project)? {
+                        self.record_inputs(|| checked.inputs());
                         return Ok(Action::Recheck(changes));
                     }
                 }
@@ -259,7 +435,9 @@ impl Driver {
                     let project = finished.projects().next().ok_or_else(|| {
                         SnapshotError::Project("the requested native program is missing".into())
                     })?;
-                    if let Some(changes) = self.revise(frontend, project)? {
+                    let changes = self.revise(frontend, project)?;
+                    self.record_inputs(|| finished.inputs());
+                    if let Some(changes) = changes {
                         return Ok(Action::Recheck(changes));
                     }
                     self.phase = Phase::Capture;
@@ -282,8 +460,16 @@ impl Driver {
         // Resolution uses the session's explicit cwd. Serialized
         // source/module identities use the requested config's root,
         // as the frontend's URI contract requires.
-        let mut snapshot =
-            Capture::syntax(&self.project_root, files, project.semantics())?.finish()?;
+        let snapshot = Capture::syntax(&self.project_root, files, project.semantics())?.finish()?;
+        self.finish_snapshot(frontend, checked, snapshot)
+    }
+
+    fn finish_snapshot(
+        &mut self,
+        frontend: &Frontend,
+        checked: Checked<'_, DiagnosticsSelected>,
+        mut snapshot: SemanticSnapshot,
+    ) -> Result<SemanticSnapshot, SnapshotError> {
         let finished = checked.finish();
         let project = finished.projects().next().ok_or_else(|| {
             SnapshotError::Project("the requested native program is missing".into())
@@ -295,6 +481,7 @@ impl Driver {
             finished.diagnostics(),
         )?;
         self.record_transform(frontend, &mut snapshot)?;
+        self.record_inputs(|| finished.inputs());
         Ok(snapshot)
     }
 
@@ -338,7 +525,14 @@ impl Driver {
         self.generation_rounds += 1;
         self.generated = Some(files.clone());
         Ok(Some(SourceChanges {
-            roots: Some([frontend.added.as_slice(), files.as_slice()].concat()),
+            roots: Some(
+                [
+                    frontend.added.as_slice(),
+                    self.planned_roots.as_slice(),
+                    files.as_slice(),
+                ]
+                .concat(),
+            ),
             ..SourceChanges::default()
         }))
     }

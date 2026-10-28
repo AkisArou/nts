@@ -18,6 +18,7 @@ mod inclusion;
 mod link;
 mod native_ast;
 pub mod native_syntax;
+pub mod planning;
 pub mod provided;
 pub mod source;
 pub mod transform;

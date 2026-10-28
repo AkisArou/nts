@@ -64,6 +64,13 @@ pub struct TransformInput<'a> {
 pub struct NodeTypes<'a> {
     nodes: &'a [Option<nts_frontend_tsrs::Node<'a>>],
     sources: RefCell<crate::declaration::Sources>,
+    captured: Option<CapturedIdentities<'a>>,
+}
+
+#[derive(Debug)]
+struct CapturedIdentities<'a> {
+    snapshot: &'a nts_semantic_schema::SemanticSnapshot,
+    nodes: &'a rustc_hash::FxHashMap<nts_frontend_tsrs::Node<'a>, NodeId>,
 }
 
 /// Typed declaration facts for one use. Declaration identities are locators;
@@ -82,13 +89,69 @@ impl<'a> NodeTypes<'a> {
         Self {
             nodes,
             sources: RefCell::default(),
+            captured: None,
         }
+    }
+
+    #[expect(
+        clippy::mutable_key_type,
+        reason = "native Node Eq/Hash uses immutable node/file identities, never the lazy text index"
+    )]
+    pub(crate) fn captured(
+        nodes: &'a [Option<nts_frontend_tsrs::Node<'a>>],
+        snapshot: &'a nts_semantic_schema::SemanticSnapshot,
+        identities: &'a rustc_hash::FxHashMap<nts_frontend_tsrs::Node<'a>, NodeId>,
+    ) -> Self {
+        Self {
+            nodes,
+            sources: RefCell::default(),
+            captured: Some(CapturedIdentities {
+                snapshot,
+                nodes: identities,
+            }),
+        }
+    }
+
+    fn identity(
+        &self,
+        native: nts_frontend_tsrs::Node<'a>,
+    ) -> Result<Option<DeclarationIdentity>, SnapshotError> {
+        if let Some(captured) = &self.captured {
+            if let Some(&id) = captured.nodes.get(&native) {
+                if captured.snapshot.nodes[id.0 as usize]
+                    .origin
+                    .generated
+                    .is_some()
+                {
+                    return Ok(None);
+                }
+                if let Some(identity) = captured.snapshot.node_identity(id) {
+                    return Ok(Some(identity));
+                }
+            }
+            if let Some(&root) = captured.nodes.get(&native.source_file().root()) {
+                let source_id = captured.snapshot.nodes[root.0 as usize]
+                    .origin
+                    .location
+                    .file;
+                if let Some(&context) = captured.snapshot.source_contexts.get(&source_id)
+                    && let Some((span, kind)) = crate::declaration::coordinates(native)?
+                {
+                    return Ok(Some(DeclarationIdentity {
+                        source: captured.snapshot.declaration_sources[context.0 as usize].clone(),
+                        span,
+                        kind,
+                    }));
+                }
+            }
+        }
+        self.sources.borrow_mut().identity(native)
     }
 
     /// Own a checked syntax locator. Synthetic list nodes have no locator.
     pub fn identity_at(&self, node: NodeId) -> Result<Option<DeclarationIdentity>, SnapshotError> {
         match self.nodes.get(node.0 as usize).copied().flatten() {
-            Some(node) => self.sources.borrow_mut().identity(node),
+            Some(node) => self.identity(node),
             None => Ok(None),
         }
     }
@@ -102,7 +165,6 @@ impl<'a> NodeTypes<'a> {
         let Some(site) = self.identity_at(node)? else {
             return Ok(None);
         };
-        let mut sources = self.sources.borrow_mut();
         let mut declarations = Vec::new();
         let mut symbol = native.symbol();
         #[expect(
@@ -117,7 +179,7 @@ impl<'a> NodeTypes<'a> {
                 ));
             }
             for declaration in current.declarations() {
-                if let Some(identity) = sources.identity(declaration)? {
+                if let Some(identity) = self.identity(declaration)? {
                     declarations.push(identity);
                 }
             }
@@ -128,7 +190,7 @@ impl<'a> NodeTypes<'a> {
         let selected_overload = native
             .resolved_signature()
             .and_then(nts_frontend_tsrs::Signature::declaration)
-            .map(|declaration| sources.identity(declaration))
+            .map(|declaration| self.identity(declaration))
             .transpose()?
             .flatten();
         Ok(Some(NodeReferences {
