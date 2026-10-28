@@ -106,7 +106,9 @@
     "eligibleJavaScript": 43,
     "excludedJavaScript": 47,
     "eligibleDefault": 32,
-    "eligibleNondefault": 11
+    "eligibleNondefault": 11,
+    "currentLicenceClearedCandidates": 42,
+    "selectedLicenceBlocks": 1
   },
   "interpretation": [
     "The release driver, including nondefault registrations and every grouped child, is the inventory authority.",
@@ -116,9 +118,10 @@
     "Tokens inside parser/JSON inputs are inert data. Dormant host loaders are distinguished from active measured eval, Proxy, workers and browser dependencies.",
     "The released web-ssr row times cache-busted eval and is excluded even though the driver omits a startup tag. A rendering-only variant requires a separate scope decision.",
     "Plain raytrace is covered already. Its explicit public/private-class-field variants retain separate feature coverage, with the unchanged scene and original validation.",
-    "WSL uses Proxy only to check duplicate names during static test registration. A faithful checked registration adapter must preserve that validation and ordering; compiler/evaluator work uses no Proxy.",
+    "WSL retains the original Proxy test registry: one construction and 285 set traps during static registration, none during work. Its original validation and ordering are unchanged; compiler/evaluator work uses no Proxy.",
     "Approved timing policy: retain complete original inputs; if one full iteration at seed = 1 exceeds 10 ms under Node 24.20.0, document the timing exception in the PR and case README instead of shrinking the input.",
-    "The six genuine async workloads are included as draft ports with work(n): Promise<number>. Maintainers will add awaited execution/checksum support and mark them ready after it lands; the synchronous harness is not modified here."
+    "The six genuine async workloads are included as draft ports with work(n): Promise<number>. Maintainers will add awaited execution/checksum support and mark them ready after it lands; the synchronous harness is not modified here.",
+    "The original 43-row selection is retained for historical accounting. Full implementation review newly blocks babel-wtb: six exact caniuse-lite 1.0.30001731 modules carry a package-level CC-BY-4.0 grant outside the permitted list; no separate permitted grant was found. Current licence-cleared candidates number 42. See babel-license-finding.md and babel-caniuse-license-audit.json."
   ],
   "plannedOrder": [
     {
@@ -8116,7 +8119,7 @@
       "decision": "include",
       "rule": null,
       "reason": "The TypeScript 5.9.2 compiler runs entirely against the in-memory mock host and original recorded Immer source/declaration inputs. Those inputs are separately cleared; their TypeScript syntax is data, not executed JavaScript.",
-      "licenceSummary": "BSD-2-Clause, Apache-2.0, MIT",
+      "licenceSummary": "BSD-2-Clause, Apache-2.0, MIT; retained Unicode, W3C and Khronos notices; WHATWG source-code BSD-3-Clause option",
       "licences": [
         {
           "spdx": "BSD-2-Clause",
@@ -8157,8 +8160,13 @@
         }
       ],
       "licenceEvidence": [],
-      "externalLicenceEvidence": [],
-      "dualLicenceChoice": null,
+      "externalLicenceEvidence": [
+        {
+          "url": "https://github.com/AkisArou/nts/blob/chatgpt/jetstream-typescript-lib/benchmarks/cases/jetstream-typescript-lib/license-review.md",
+          "description": "Exact TypeScript third-party notice retained byte for byte, pre-release WHATWG BSD source-code option and W3C/Background Sync provenance reviewed."
+        }
+      ],
+      "dualLicenceChoice": "WHATWG source-code portions: offered BSD-3-Clause option, present since 2021 and verified before TypeScript 5.9.2. Historical notices remain.",
       "licenceAuditLimit": "For included code and actual inputs, no nonpermitted required component was found. All original data must still be retained in a faithful port.",
       "inputs": [
         {
@@ -8235,7 +8243,22 @@
       ],
       "category": "Large real programs",
       "portOrder": 40,
-      "portStatus": "in-progress-port"
+      "portStatus": "ready-for-maintainer-compilation",
+      "pullRequest": {
+        "number": 118,
+        "url": "https://github.com/AkisArou/nts/pull/118"
+      },
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/118",
+      "localValidation": {
+        "node": "24.20.0",
+        "strictTypeScript": "7.0.2: zero diagnostics",
+        "sharedTestsPassed": 7,
+        "sharedTestsFailed": 0,
+        "bestOfFiveProcessesMs": 1135.598815,
+        "seed": 1,
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/118"
+      }
     },
     {
       "name": "async-fs",
@@ -11538,8 +11561,8 @@
       ],
       "category": "Large real programs",
       "portOrder": 41,
-      "portStatus": "validated-awaiting-ordered-pull-request",
-      "portStatusEvidence": "https://github.com/AkisArou/nts/tree/chatgpt/jetstream-wsl/benchmarks/cases/jetstream-wsl",
+      "portStatus": "ready-for-maintainer-compilation",
+      "portStatusEvidence": "https://github.com/AkisArou/nts/pull/119",
       "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized.",
       "publishedBranch": "chatgpt/jetstream-wsl",
       "localValidation": {
@@ -11549,7 +11572,12 @@
         "sharedTestsFailed": 0,
         "bestOfFiveProcessesMs": 8307.094613,
         "seed": 1,
-        "completeOperationTimingException": true
+        "completeOperationTimingException": true,
+        "evidence": "https://github.com/AkisArou/nts/pull/119"
+      },
+      "pullRequest": {
+        "number": 119,
+        "url": "https://github.com/AkisArou/nts/pull/119"
       }
     },
     {
@@ -15072,7 +15100,7 @@
       "decision": "include",
       "rule": null,
       "reason": "Parses the complete Redux ESM input then transforms its AST using the original Babel options; generated source is returned as data.",
-      "licenceSummary": "BSD-3-Clause, BSD-2-Clause, MIT, ISC",
+      "licenceSummary": "BSD-3-Clause, BSD-2-Clause, MIT, ISC; caniuse-lite CC-BY-4.0 (blocking)",
       "licences": [
         {
           "spdx": "BSD-3-Clause",
@@ -15154,9 +15182,14 @@
         }
       ],
       "licenceEvidence": [],
-      "externalLicenceEvidence": [],
+      "externalLicenceEvidence": [
+        {
+          "url": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/LICENSE",
+          "description": "Exact npm gitHead licence, byte-identical to package LICENSE; package declares CC-BY-4.0 and README expressly applies it to the data. Six bundled source/data files match exactly; no separate per-file permitted grant found."
+        }
+      ],
       "dualLicenceChoice": null,
-      "licenceAuditLimit": "For included code and actual inputs, no nonpermitted required component was found. All original data must still be retained in a faithful port.",
+      "licenceAuditLimit": "The initial inventory missed caniuse-lite inside Babel standalone. Six exact package/source-map/upstream files are now verified under the package CC-BY-4.0 grant; no permitted alternative found. No Babel port PR or code upload has been made.",
       "inputs": [
         {
           "preloadKey": "redux-5.0.1.esm.js",
@@ -15283,9 +15316,25 @@
       "originalValidation": [],
       "category": "Large real programs",
       "portOrder": 42,
-      "portStatus": "in-progress-approved-unchanged-port",
-      "portStatusEvidence": "babel-wtb-model-audit.json",
-      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized."
+      "portStatus": "blocked-by-unpermitted-transitive-licence",
+      "portStatusEvidence": "babel-license-finding.md",
+      "portDecision": "The maintainer handoff explicitly authorizes retaining the audited prototype/descriptor operations unchanged. Any nts refusal is a compiler finding; no tag, forwarding, callable-metadata removal, or prototype-copy substitute is authorized. A newly verified independent licence blocker prevents submission; typing is also unfinished. Await maintainer direction without uploading the disallowed component.",
+      "postImplementationEligibility": {
+        "status": "blocked",
+        "package": "caniuse-lite",
+        "version": "1.0.30001731",
+        "licence": "CC-BY-4.0",
+        "files": 6,
+        "sourceCommit": "fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b",
+        "evidence": [
+          "babel-license-finding.md",
+          "babel-caniuse-license-audit.json"
+        ],
+        "sourceLicenceUrl": "https://github.com/browserslist/caniuse-lite/blob/fad79027ebb5bfe5cce1d34ac5e52b6fbc5e780b/LICENSE",
+        "separatePermittedGrantFound": false,
+        "strictTranscriptionComplete": false,
+        "decision": "Leave unpublished under the permitted-licence rule. Retain the unchanged-program requirement; do not strip or replace this dependency."
+      }
     },
     {
       "name": "babel-minify-wtb",
@@ -21497,7 +21546,7 @@
   ],
   "portabilityFindings": {
     "selectedByInitialInventory": 43,
-    "note": "The 43-workload selection is unchanged. WSL, Babel WTB and Lebab WTB are authorized unchanged, including their original prototype/descriptor operations. Additional completed-port audits identify retained operations in Three.js, Espree and Esprima-next; these are compiler-support findings for maintainers, not reasons to rewrite the original programs.",
+    "note": "The 43-workload selection is unchanged. WSL, Babel WTB and Lebab WTB are authorized unchanged, including their original prototype/descriptor operations. Additional completed-port audits identify retained operations in Three.js, Espree and Esprima-next; these are compiler-support findings for maintainers, not reasons to rewrite the original programs. The prototype/descriptor decision remains resolved, but Babel has a separate transitive licence blocker documented in babel-license-finding.md.",
     "unchangedOperationTargets": [
       {
         "name": "WSL",
@@ -21576,12 +21625,10 @@
   },
   "portSummary": {
     "selected": 43,
-    "openPullRequests": 39,
-    "readyForMaintainerCompilation": 33,
+    "openPullRequests": 41,
+    "readyForMaintainerCompilation": 35,
     "draftsAwaitingAwaitedHarness": 6,
     "pendingPorts": [
-      "typescript-lib",
-      "WSL",
       "babel-wtb",
       "lebab-wtb"
     ],
@@ -21593,12 +21640,14 @@
       "measurement and landing"
     ],
     "pendingImplementation": [
-      "typescript-lib",
-      "babel-wtb",
       "lebab-wtb"
     ],
-    "validatedAwaitingOrderedPullRequest": [
-      "WSL"
-    ]
+    "validatedAwaitingOrderedPullRequest": [],
+    "blockedPorts": [
+      "babel-wtb"
+    ],
+    "blockedPortReasons": {
+      "babel-wtb": "caniuse-lite 1.0.30001731 CC-BY-4.0 outside permitted list; unchanged port not submitted, strict transcription remains unfinished"
+    }
   }
 }
