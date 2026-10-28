@@ -1,5 +1,6 @@
 //! Source coordinates. Native parser offsets are bytes; snapshot spans are
-//! UTF-16 code units. A file builds its index once, then lookup is constant time.
+//! UTF-16 code units. ASCII needs no table. Mixed text stores only non-ASCII
+//! scalar checkpoints; dense Unicode uses a per-byte table when that is smaller.
 
 /// A native parser position in UTF-8 source bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,26 +19,91 @@ pub struct Utf16Span {
 
 #[derive(Debug)]
 pub(crate) struct Utf16Index {
-    positions: Box<[u32]>,
+    bytes: usize,
+    positions: Positions,
+}
+
+#[derive(Debug)]
+enum Positions {
+    Ascii,
+    Sparse(Box<[NonAscii]>),
+    Dense(Box<[u32]>),
+}
+
+#[derive(Debug)]
+struct NonAscii {
+    byte_start: u32,
+    utf16_start: u32,
+    byte_len: u8,
+    utf16_len: u8,
 }
 
 impl Utf16Index {
     pub(crate) fn new(text: &str) -> Self {
-        let mut positions = Vec::with_capacity(text.len() + 1);
-        let mut offset = 0;
-        for ch in text.chars() {
-            positions.extend(std::iter::repeat_n(offset, ch.len_utf8()));
-            offset +=
-                u32::try_from(ch.len_utf16()).expect("one character is at most two code units");
-        }
-        positions.push(offset);
+        let positions = if text.is_ascii() {
+            Positions::Ascii
+        } else {
+            let non_ascii = text.chars().filter(|ch| !ch.is_ascii()).count();
+            if non_ascii * std::mem::size_of::<NonAscii>()
+                < (text.len() + 1) * std::mem::size_of::<u32>()
+            {
+                let mut positions = Vec::with_capacity(non_ascii);
+                let mut utf16 = 0;
+                for (byte, ch) in text.char_indices() {
+                    if !ch.is_ascii() {
+                        positions.push(NonAscii {
+                            byte_start: u32::try_from(byte).expect("source offsets fit u32"),
+                            utf16_start: utf16,
+                            byte_len: u8::try_from(ch.len_utf8()).expect("at most four bytes"),
+                            utf16_len: u8::try_from(ch.len_utf16())
+                                .expect("at most two code units"),
+                        });
+                    }
+                    utf16 += u32::try_from(ch.len_utf16()).expect("at most two code units");
+                }
+                Positions::Sparse(positions.into_boxed_slice())
+            } else {
+                let mut positions = Vec::with_capacity(text.len() + 1);
+                let mut offset = 0;
+                for ch in text.chars() {
+                    positions.extend(std::iter::repeat_n(offset, ch.len_utf8()));
+                    offset += u32::try_from(ch.len_utf16()).expect("at most two code units");
+                }
+                positions.push(offset);
+                Positions::Dense(positions.into_boxed_slice())
+            }
+        };
         Self {
-            positions: positions.into_boxed_slice(),
+            bytes: text.len(),
+            positions,
         }
     }
 
     pub(crate) fn position(&self, byte: BytePos) -> Utf16Pos {
-        Utf16Pos(self.positions[byte.0 as usize])
+        assert!(
+            (byte.0 as usize) <= self.bytes,
+            "source byte position out of bounds"
+        );
+        Utf16Pos(match &self.positions {
+            Positions::Ascii => byte.0,
+            Positions::Dense(positions) => positions[byte.0 as usize],
+            Positions::Sparse(positions) => {
+                let end = positions.partition_point(|entry| entry.byte_start <= byte.0);
+                if end == 0 {
+                    return Utf16Pos(byte.0);
+                }
+                let entry = &positions[end - 1];
+                let byte_end = entry.byte_start + u32::from(entry.byte_len);
+                // Interior UTF-8 bytes map to the scalar's first code unit,
+                // exactly as the dense table does; EOF maps after the scalar.
+                entry.utf16_start
+                    + if byte.0 < byte_end {
+                        0
+                    } else {
+                        u32::from(entry.utf16_len) + byte.0 - byte_end
+                    }
+            }
+        })
     }
 
     pub(crate) fn span(&self, start: BytePos, end: BytePos) -> Utf16Span {
@@ -51,6 +117,54 @@ impl Utf16Index {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_dense_equivalence(text: &str) {
+        let mut dense = Vec::new();
+        let mut utf16 = 0;
+        for ch in text.chars() {
+            dense.extend(std::iter::repeat_n(utf16, ch.len_utf8()));
+            utf16 += u32::try_from(ch.len_utf16()).expect("at most two code units");
+        }
+        dense.push(utf16);
+        let index = Utf16Index::new(text);
+        for (byte, expected) in dense.into_iter().enumerate() {
+            assert_eq!(
+                index.position(BytePos(u32::try_from(byte).expect("fixture fits u32"))),
+                Utf16Pos(expected),
+                "byte {byte}"
+            );
+        }
+    }
+
+    #[test]
+    fn real_files_match_the_dense_reference_at_every_byte() {
+        for text in [
+            include_str!("../Cargo.toml"),
+            include_str!("../tests/fixtures/coordinates/segment-sentence-iterable.txt"),
+            include_str!("../tests/fixtures/coordinates/start-unicode-10.0.0-class.txt"),
+        ] {
+            assert_dense_equivalence(text);
+        }
+    }
+
+    #[test]
+    fn every_representation_preserves_interior_bytes_and_surrogate_pairs() {
+        for text in ["", "abc\r\n", "😀ascii😀", "ééé", "中文中文", "😀😀😀"] {
+            assert_dense_equivalence(text);
+        }
+        assert!(matches!(
+            Utf16Index::new("ascii").positions,
+            Positions::Ascii
+        ));
+        assert!(matches!(
+            Utf16Index::new("😀ascii😀").positions,
+            Positions::Sparse(_)
+        ));
+        assert!(matches!(
+            Utf16Index::new("ééé").positions,
+            Positions::Dense(_)
+        ));
+    }
 
     #[test]
     fn non_ascii_and_astral_offsets_are_utf16_code_units() {
