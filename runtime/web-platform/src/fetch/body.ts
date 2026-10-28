@@ -1,4 +1,5 @@
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
+import { TextDecoderStream } from "../core/encoding-streams.ts";
 import { LimitError } from "../core/errors.ts";
 import { coerceToUSVString } from "../core/webidl.ts";
 import { Blob } from "../file/blob.ts";
@@ -13,10 +14,19 @@ import type { RandomSource } from "../provider/primitives.ts";
 import {
   ReadableStream,
   kStreamDisturbed,
+  readableStreamClose,
   tee,
   transfer,
 } from "../streams/readable.ts";
 import type { TransportBodySource } from "./transport.ts";
+
+// Fetch's internal pipe-through operation must not invoke a script replacement
+// on the body's stream. Capture the canonical operation once, without an array
+// of call arguments on each textStream() call.
+const pipeBodyThroughDecoder: (
+  stream: ReadableStream<Uint8Array>,
+  decoder: TextDecoderStream,
+) => ReadableStream<string> = Function.prototype.call.bind(ReadableStream.prototype.pipeThrough);
 
 export type BodyInit =
   | string
@@ -290,6 +300,18 @@ export abstract class Body {
 
   async text(): Promise<string> {
     return decodeUTF8(await this.bodyState.consume());
+  }
+
+  textStream(): ReadableStream<string> {
+    if (this.bodyState.unusable) throw new TypeError("Body is already used or locked");
+    const stream = this.bodyState.stream;
+    if (stream === null) {
+      const empty = new ReadableStream<string>();
+      readableStreamClose(empty);
+      return empty;
+    }
+    // Fetch always chooses UTF-8, independently of any Content-Type charset.
+    return pipeBodyThroughDecoder(stream, new TextDecoderStream());
   }
 
   async json(): Promise<unknown> {
