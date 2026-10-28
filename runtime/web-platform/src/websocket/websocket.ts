@@ -45,12 +45,18 @@ interface PendingSend {
   value: string | Blob | Uint8Array;
 }
 
-interface WebSocketHandlerSlot<E extends Event> extends EventHandlerSlot<WebSocket, E> {
+// HTML EventHandler accepts any Event of the registered type. The public TypeScript
+// declarations describe the more specific events produced by the WebSocket protocol.
+interface WebSocketHandlerSlot extends EventHandlerSlot<WebSocket, Event> {
   value: unknown;
 }
 
 // LegacyTreatNonObjectAsNull retains non-callable objects, but invoking them does nothing.
 function ignoreNonCallableHandler(): void {}
+
+function acceptsEvent(_event: Event): _event is Event {
+  return true;
+}
 
 const webSocketConstructorKey: unique symbol = Symbol("construct NTS WebSocket");
 
@@ -95,22 +101,22 @@ export class WebSocket extends EventTarget {
   private sends: Promise<void> = Promise.resolve();
   private closeQueued = false;
   private registered = false;
-  private readonly openHandler: WebSocketHandlerSlot<Event> = {
+  private readonly openHandler: WebSocketHandlerSlot = {
     value: null,
     callback: null,
     listener: null,
   };
-  private readonly errorHandler: WebSocketHandlerSlot<Event> = {
+  private readonly errorHandler: WebSocketHandlerSlot = {
     value: null,
     callback: null,
     listener: null,
   };
-  private readonly messageHandler: WebSocketHandlerSlot<MessageEvent<WebSocketData>> = {
+  private readonly messageHandler: WebSocketHandlerSlot = {
     value: null,
     callback: null,
     listener: null,
   };
-  private readonly closeHandler: WebSocketHandlerSlot<CloseEvent> = {
+  private readonly closeHandler: WebSocketHandlerSlot = {
     value: null,
     callback: null,
     listener: null,
@@ -121,7 +127,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onopen(callback: ((this: WebSocket, event: Event) => void) | null) {
-    this.#setHandler(this.openHandler, "open", callback, (_event): _event is Event => true);
+    this.#setHandler(this.openHandler, "open", callback);
   }
 
   get onerror(): ((this: WebSocket, event: Event) => void) | null {
@@ -129,7 +135,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onerror(callback: ((this: WebSocket, event: Event) => void) | null) {
-    this.#setHandler(this.errorHandler, "error", callback, (_event): _event is Event => true);
+    this.#setHandler(this.errorHandler, "error", callback);
   }
 
   get onmessage(): ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null {
@@ -137,7 +143,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onmessage(callback: ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null) {
-    this.#setHandler(this.messageHandler, "message", callback, isSocketMessageEvent);
+    this.#setHandler(this.messageHandler, "message", callback);
   }
 
   get onclose(): ((this: WebSocket, event: CloseEvent) => void) | null {
@@ -145,24 +151,18 @@ export class WebSocket extends EventTarget {
   }
 
   set onclose(callback: ((this: WebSocket, event: CloseEvent) => void) | null) {
-    this.#setHandler(
-      this.closeHandler,
-      "close",
-      callback,
-      (event): event is CloseEvent => event instanceof CloseEvent,
-    );
+    this.#setHandler(this.closeHandler, "close", callback);
   }
 
-  #setHandler<E extends Event>(
-    slot: WebSocketHandlerSlot<E>,
+  #setHandler(
+    slot: WebSocketHandlerSlot,
     type: string,
     value: unknown,
-    accepts: (event: Event) => event is E,
   ): void {
-    let callback: ((this: WebSocket, event: E) => void) | null = null;
+    let callback: ((this: WebSocket, event: Event) => void) | null = null;
     if (typeof value === "function") {
       slot.value = value;
-      callback = value as (this: WebSocket, event: E) => void;
+      callback = value as (this: WebSocket, event: Event) => void;
     } else if (typeof value === "object" && value !== null) {
       slot.value = value;
       // A non-null value activates the handler, keeping its position among listeners.
@@ -170,7 +170,7 @@ export class WebSocket extends EventTarget {
     } else {
       slot.value = null;
     }
-    this[eventTargetSetHandler](this, slot, type, callback, accepts);
+    this[eventTargetSetHandler](this, slot, type, callback, acceptsEvent);
   }
 
   constructor(url: string, protocols?: string | readonly string[]);
@@ -434,12 +434,6 @@ Object.defineProperty(WebSocket, "length", {
   configurable: true,
 });
 
-
-function isSocketMessageEvent(event: Event): event is MessageEvent<WebSocketData> {
-  if (!(event instanceof MessageEvent)) return false;
-  const data: unknown = event.data;
-  return typeof data === "string" || data instanceof Blob || data instanceof ArrayBuffer;
-}
 
 /**
  * @internal Construct a WebSocket owned by an explicit runtime.

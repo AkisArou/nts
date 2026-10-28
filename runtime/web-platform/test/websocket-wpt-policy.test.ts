@@ -296,3 +296,30 @@ suite("WebSocket failed connection error and close events are trusted until scri
   assertScriptRedispatch(socket, events);
   assert.deepEqual(errors, []);
 });
+
+suite("WebSocket handlers receive synthetic events regardless of interface or payload", async (t) => {
+  const { socket, opened, errors } = controlledSocket(t);
+  await opened;
+  for (const name of handlerNames) {
+    const received: Event[] = [];
+    setHandlerValue(socket, name, function (this: WebSocket, event: Event): void {
+      assert.equal(this, socket);
+      received.push(event);
+    });
+    socket.dispatchEvent(new Event("unrelated"));
+    assert.deepEqual(received, []);
+
+    const synthetic = new Event(name.slice(2));
+    socket.dispatchEvent(synthetic);
+    assert.equal(received.length, 1);
+    assert.equal(received[0], synthetic);
+    if (name === "onmessage") {
+      const scriptMessage = new MessageEvent("message", { data: { arbitrary: "script payload" } });
+      socket.dispatchEvent(scriptMessage);
+      assert.equal(received.length, 2);
+      assert.equal(received[1], scriptMessage);
+    }
+    setHandlerValue(socket, name, null);
+  }
+  assert.deepEqual(errors, []);
+});
