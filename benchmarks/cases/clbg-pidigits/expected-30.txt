@@ -1,0 +1,13 @@
+/*
+ * The Computer Language Benchmarks Game — BSD-3-Clause.
+ * Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy.
+ * All rights reserved. See ../LICENSE-benchmarks-game for the licence.
+ *
+ * The Game's published pidigits output.
+ * Contributed by Denis Gribov; based on C by Ledhug; un-buffered by Isaac Gouy.
+ * https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/pidigits-node-3.html
+ * https://benchmarksgame-team.pages.debian.net/benchmarksgame/download/pidigits-output.txt
+ */
+3141592653	:10
+5897932384	:20
+6264338327	:30
