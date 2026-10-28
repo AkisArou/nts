@@ -9,7 +9,7 @@ import {
   requireDictionary,
 } from "../core/webidl.ts";
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
-import type { URLRecord } from "../provider/primitives.ts";
+import type { Scheduler, URLRecord } from "../provider/primitives.ts";
 import { ReadableStream, type ReadableStreamDefaultController } from "../streams/readable.ts";
 import { WritableStream, type WritableStreamDefaultController } from "../streams/writable.ts";
 import {
@@ -22,6 +22,7 @@ import {
 } from "./semantics.ts";
 import type {
   SocketClose,
+  SocketIncoming,
   SocketMessage,
   WebSocketSession,
   WebSocketTransport,
@@ -48,6 +49,7 @@ export interface WebSocketOpenInfo {
 }
 
 export interface WebSocketStreamContext extends WebSocketURLContext {
+  readonly scheduler: Scheduler;
   readonly transport: WebSocketTransport;
   readonly origin?: string;
   registerWebSocketStream(stream: WebSocketStream): void;
@@ -112,7 +114,14 @@ export class WebSocketStream {
   #readableController: ReadableStreamDefaultController<WebSocketStreamData> | null = null;
   #writableController: WritableStreamDefaultController<unknown> | null = null;
   #removeAbortAlgorithm: (() => void) | null = null;
+  #connectionFailure: WebSocketError | null = null;
   #readInFlight = false;
+  #readCompletion: PromiseWithResolvers<void> | null = null;
+  #readDeliversMessage = false;
+  #pendingIncoming: SocketIncoming | null = null;
+  #pendingReadFailure: WebSocketError | null = null;
+  #writeCompletion: PromiseWithResolvers<void> | null = null;
+  #pendingCloseFailure: WebSocketError | null = null;
   #readableTerminal = false;
   #writableTerminal = false;
   #closeOrigin: CloseOrigin | null = null;
@@ -120,6 +129,146 @@ export class WebSocketStream {
   #hasUnwrittenData = false;
   #terminalWriteError: unknown = null;
   #registered = false;
+
+  // Draft sections 4.1 and 4.2 use the WebSocket task source. These callbacks
+  // are allocated once per stream; the receive and write slots each hold at
+  // most one operation, without copying its payload or closing over a frame.
+  readonly #onConnected = (session: WebSocketSession): void => {
+    if (this.#state !== "connecting") {
+      session.abort();
+      return;
+    }
+    // Signal abort applies to the handshake, which is already established
+    // even though its feedback task has not published opened yet.
+    this.#removeAbortAlgorithm?.();
+    this.#removeAbortAlgorithm = null;
+    this.#session = session;
+    this.#context.scheduler.enqueue(this.#runConnectionTask);
+  };
+
+  readonly #onConnectionFailed = (reason: unknown): void => {
+    if (this.#state !== "connecting") return;
+    this.#connectionFailure = connectionError(reason);
+    this.#context.scheduler.enqueue(this.#runConnectionTask);
+  };
+
+  readonly #runConnectionTask = (): void => {
+    const error = this.#connectionFailure;
+    this.#connectionFailure = null;
+    const session = this.#session;
+    if (this.#state !== "connecting") {
+      session?.abort();
+      return;
+    }
+    if (error !== null) {
+      this.#failBeforeOpen(error);
+      return;
+    }
+    if (session === null) {
+      this.#failBeforeOpen(new WebSocketError("WebSocketStream is not connected"));
+      return;
+    }
+    this.#state = "open";
+    try {
+      this.#createStreams();
+      const readable = this.#readable;
+      const writable = this.#writable;
+      if (readable === null || writable === null) {
+        throw new Error("WebSocketStream failed to create its streams");
+      }
+      this.#openedCapability.resolve({
+        readable,
+        writable,
+        extensions: session.extensions,
+        protocol: session.protocol,
+      });
+    } catch (reason) {
+      const failure = connectionError(reason);
+      this.#openedCapability.reject(failure);
+      this.#finishFailure(failure);
+    }
+  };
+
+  readonly #onIncoming = (incoming: SocketIncoming): void => {
+    if (!this.#readInFlight) return;
+    this.#pendingIncoming = incoming;
+    this.#context.scheduler.enqueue(this.#runReadTask);
+  };
+
+  readonly #onReadFailed = (reason: unknown): void => {
+    if (!this.#readInFlight) return;
+    this.#pendingReadFailure = connectionError(reason);
+    this.#context.scheduler.enqueue(this.#runReadTask);
+  };
+
+  readonly #runReadTask = (): void => {
+    const incoming = this.#pendingIncoming;
+    const error = this.#pendingReadFailure;
+    this.#pendingIncoming = null;
+    this.#pendingReadFailure = null;
+    try {
+      if (this.#state === "closed" || !this.#readInFlight) {
+        this.#completeRead();
+      } else if (error !== null) {
+        this.#finishFailure(error);
+      } else if (incoming?.kind === "close") {
+        this.#finishFromPeer(incoming);
+        this.#completeRead();
+      } else if (incoming !== null) {
+        if (this.#readDeliversMessage && this.#state === "open" && !this.#readableTerminal) {
+          this.#readableController?.enqueue(incoming.data);
+          this.#completeRead();
+        } else {
+          this.#readDeliversMessage = false;
+          this.#requestRead();
+        }
+      }
+    } catch (reason) {
+      this.#finishFailure(connectionError(reason));
+    }
+  };
+
+  readonly #onSent = (): void => {
+    if (this.#writeCompletion !== null) this.#context.scheduler.enqueue(this.#runWriteTask);
+  };
+
+  readonly #onSendFailed = (_reason: unknown): void => {
+    if (this.#writeCompletion === null) return;
+    if (this.#terminalWriteError !== null) {
+      this.#rejectWrite(this.#terminalWriteError);
+      return;
+    }
+    const error = invalidStateError();
+    this.#terminalWriteError = error;
+    this.#hasUnwrittenData = true;
+    if (this.#state === "open") {
+      // A concurrent read is authoritative for the peer's close code. Raw
+      // transports commonly reject the write just before that read settles.
+      this.#state = "closing";
+      this.#ensureCloseDrain();
+    }
+    this.#rejectWrite(error);
+  };
+
+  readonly #runWriteTask = (): void => {
+    const completion = this.#writeCompletion;
+    if (completion === null) return;
+    this.#writeCompletion = null;
+    this.#pendingWrites--;
+    completion.resolve();
+  };
+
+  readonly #onCloseFailed = (reason: unknown): void => {
+    if (this.#state === "closed" || this.#pendingCloseFailure !== null) return;
+    this.#pendingCloseFailure = connectionError(reason);
+    this.#context.scheduler.enqueue(this.#runCloseFailureTask);
+  };
+
+  readonly #runCloseFailureTask = (): void => {
+    const error = this.#pendingCloseFailure;
+    this.#pendingCloseFailure = null;
+    if (error !== null) this.#finishFailure(error);
+  };
 
   constructor(url: string, options?: WebSocketStreamOptions | null);
   /** @internal Reached only through {@link createInternalWebSocketStream}. */ constructor(
@@ -174,9 +323,7 @@ export class WebSocketStream {
         this.#failBeforeOpen(signal.reason);
       });
     }
-    this.#connect(parsed, protocols).catch((error) => {
-      if (this.#state === "connecting") this.#failBeforeOpen(connectionError(error));
-    });
+    this.#connect(parsed, protocols);
   }
 
   close(options?: WebSocketCloseInfo | null): void {
@@ -195,32 +342,16 @@ export class WebSocketStream {
     this.#finishFailure(error);
   }
 
-  async #connect(url: URLRecord, protocols: readonly string[]): Promise<void> {
-    checkNetworkPort(url.port);
-    const session = await this.#context.transport.connect(
-      { url, protocols, origin: this.#context.origin ?? "null" },
-      this.#connectionController.signal,
-    );
-    if (this.#state !== "connecting") {
-      session.abort();
-      return;
+  #connect(url: URLRecord, protocols: readonly string[]): void {
+    try {
+      checkNetworkPort(url.port);
+      this.#context.transport.connect(
+        { url, protocols, origin: this.#context.origin ?? "null" },
+        this.#connectionController.signal,
+      ).then(this.#onConnected, this.#onConnectionFailed);
+    } catch (reason) {
+      this.#onConnectionFailed(reason);
     }
-    this.#removeAbortAlgorithm?.();
-    this.#removeAbortAlgorithm = null;
-    this.#session = session;
-    this.#state = "open";
-    this.#createStreams();
-    const readable = this.#readable;
-    const writable = this.#writable;
-    if (readable === null || writable === null) {
-      throw new Error("WebSocketStream failed to create its streams");
-    }
-    this.#openedCapability.resolve({
-      readable,
-      writable,
-      extensions: session.extensions,
-      protocol: session.protocol,
-    });
   }
 
   #createStreams(): void {
@@ -258,59 +389,71 @@ export class WebSocketStream {
     );
   }
 
-  async #pull(): Promise<void> {
+  #pull(): void | Promise<void> {
     if (this.#state !== "open" || this.#readInFlight) return;
-    await this.#receive(true);
+    return this.#receive(true);
   }
 
-  async #receive(deliverMessage: boolean): Promise<void> {
+  #receive(deliverMessage: boolean): void | Promise<void> {
     const session = this.#session;
     if (session === null || this.#state === "closed" || this.#readInFlight) return;
+    // One pull capability replaces the previous nested async pull/receive
+    // promises and stays pending until the scheduled feedback has been handled.
+    const completion = Promise.withResolvers<void>();
+    this.#readCompletion = completion;
     this.#readInFlight = true;
+    this.#readDeliversMessage = deliverMessage;
+    this.#requestRead();
+    return completion.promise;
+  }
+
+  #requestRead(): void {
+    const session = this.#session;
+    if (session === null || this.#state === "closed") {
+      this.#completeRead();
+      return;
+    }
     try {
-      while (!this.#isClosed()) {
-        const incoming = await session.next();
-        if (incoming.kind === "close") {
-          this.#finishFromPeer(incoming);
-          return;
-        }
-        if (deliverMessage && this.#state === "open" && !this.#readableTerminal) {
-          this.#readableController?.enqueue(incoming.data);
-          return;
-        }
-        deliverMessage = false;
-      }
-    } catch (error) {
-      this.#finishFailure(connectionError(error));
-    } finally {
-      this.#readInFlight = false;
-      if (this.#state === "closing") this.#ensureCloseDrain();
+      session.next().then(this.#onIncoming, this.#onReadFailed);
+    } catch (reason) {
+      this.#onReadFailed(reason);
     }
   }
 
-  async #write(value: unknown): Promise<void> {
+  #completeRead(): void {
+    const completion = this.#readCompletion;
+    this.#readCompletion = null;
+    this.#readInFlight = false;
+    this.#pendingIncoming = null;
+    this.#pendingReadFailure = null;
+    completion?.resolve();
+    if (this.#state === "closing") this.#ensureCloseDrain();
+  }
+
+  #write(value: unknown): Promise<void> {
     if (this.#state !== "open") throw invalidStateError();
     const session = this.#session;
     if (session === null) throw invalidStateError();
     const message = snapshotMessage(value);
+    // The draft's write promise is settled by the task, with no extra async
+    // wrapper or per-write continuation closure around the provider promise.
+    const completion = Promise.withResolvers<void>();
+    this.#writeCompletion = completion;
     this.#pendingWrites++;
     try {
-      await session.send(message);
-    } catch (error) {
-      if (this.#terminalWriteError !== null) throw this.#terminalWriteError;
-      const writeError = invalidStateError();
-      this.#terminalWriteError = writeError;
-      this.#hasUnwrittenData = true;
-      if (this.#state === "open") {
-        // A concurrent read is authoritative for the peer's close code. Raw
-        // transports commonly reject the write just before that read settles.
-        this.#state = "closing";
-        this.#ensureCloseDrain();
-      }
-      throw writeError;
-    } finally {
-      this.#pendingWrites--;
+      session.send(message).then(this.#onSent, this.#onSendFailed);
+    } catch (reason) {
+      this.#onSendFailed(reason);
     }
+    return completion.promise;
+  }
+
+  #rejectWrite(reason: unknown): void {
+    const completion = this.#writeCompletion;
+    if (completion === null) return;
+    this.#writeCompletion = null;
+    this.#pendingWrites--;
+    completion.reject(reason);
   }
 
   #cancelReadable(reason: unknown): Promise<void> {
@@ -354,17 +497,17 @@ export class WebSocketStream {
       return this.#closeCapability.promise;
     }
     this.#ensureCloseDrain();
-    this.#sendClose(session, close).catch((error) => this.#finishFailure(connectionError(error)));
+    try {
+      session.close(close.closeCode, close.reason).catch(this.#onCloseFailed);
+    } catch (reason) {
+      this.#onCloseFailed(reason);
+    }
     return this.#closeCapability.promise;
-  }
-
-  async #sendClose(session: WebSocketSession, close: NormalizedWebSocketClose): Promise<void> {
-    await session.close(close.closeCode, close.reason);
   }
 
   #ensureCloseDrain(): void {
     if (this.#state !== "closing" || this.#readInFlight) return;
-    ignoreRejection(this.#receive(false));
+    this.#receive(false);
   }
 
   #finishFromPeer(close: SocketClose): void {
@@ -386,6 +529,7 @@ export class WebSocketStream {
       const writeError = this.#terminalWriteError ?? invalidStateError();
       this.#terminalWriteError = writeError;
       this.#errorWritable(writeError);
+      this.#rejectWrite(writeError);
       const error = createConnectionError("WebSocket closed with unwritten data", closeInfo);
       this.#errorReadable(error);
       this.#closedCapability.reject(error);
@@ -406,6 +550,7 @@ export class WebSocketStream {
     this.#state = "closed";
     this.#removeAbortAlgorithm?.();
     this.#removeAbortAlgorithm = null;
+    this.#session?.abort();
     this.#openedCapability.reject(reason);
     this.#closedCapability.reject(reason);
     this.#closeCapability.reject(reason);
@@ -423,6 +568,8 @@ export class WebSocketStream {
     if (wasConnecting) this.#openedCapability.reject(error);
     this.#errorReadable(error);
     this.#errorWritable(error);
+    this.#rejectWrite(error);
+    this.#completeRead();
     this.#closedCapability.reject(error);
     this.#closeCapability.reject(error);
     this.#unregister();
@@ -451,10 +598,6 @@ export class WebSocketStream {
     if (!this.#registered) return;
     this.#registered = false;
     this.#context.unregisterWebSocketStream(this);
-  }
-
-  #isClosed(): boolean {
-    return this.#state === "closed";
   }
 
 }
