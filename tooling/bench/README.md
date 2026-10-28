@@ -18,7 +18,104 @@ results. Other toolchain, compilation, checksum and workload errors still fail
 the row. Library availability does not affect any nts or host-engine column.
 The runner never installs packages; references remain optional system tools.
 
-# Native layout mode
+# Layout intervals
+
+Use `layouts-interval-run.ts` for a new placement-sensitive comparison. It
+reuses the link and body checks below, samples at least 20 independent joint
+code/heap layouts per arm, and reports an empirical interval and verdict. The
+native adapter and whole-command cost adapter share `layouts-sitting.ts`;
+their counter scopes remain explicit in every raw cell.
+
+For each draw, both arms receive independent seeded function orders and heap
+padding. The linker must produce distinct actual geometries, and hot function
+bodies must match their own arm's reference. Each process starts fresh. The
+heap helper holds bounded allocations before main and each thread body, with
+their seed, requested bytes and address recorded. It wraps thread entry, with
+no malloc/free interposition. A thread receives at most 2 MiB of requested
+padding, and the helper refuses beyond 128 thread entries.
+
+This samples malloc-backed startup placement. It does not replace an allocator,
+shuffle every object or move shared-library code. Allocators outside that malloc
+domain require another placement adapter. The motivation follows
+[Curtsinger and Berger's STABILIZER](https://people.cs.umass.edu/~emery/pubs/stabilizer-asplos13.pdf);
+this sampler does not claim its runtime re-randomization or Gaussian argument.
+
+Inside a named bounded unit with the controller off CPUs 4–5, compile the helper:
+
+```sh
+clang -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared \
+  tooling/bench/layouts-heap.c -ldl -pthread -o /fresh/run/heap.so
+```
+
+Use the native link plan described below with at least 20 unique seeds and
+these additional fields:
+
+```json
+{
+  "heapLibrary": "/fresh/run/heap.so",
+  "interval": {
+    "primary": "cycles",
+    "rounds": 3,
+    "confidence": 0.99,
+    "resamples": 20000,
+    "seed": 324508639
+  }
+}
+```
+
+The primary metric is declared before sampling. Native choices are `cycles`,
+`instructions` and `nanoseconds`; all three receive intervals. Preparation
+executes no workload:
+
+```sh
+node tooling/bench/layouts-interval-run.ts check experiment.json /unused
+node tooling/bench/layouts-interval-run.ts build experiment.json /fresh/build
+node tooling/bench/layouts-interval-run.ts measure /fresh/build /fresh/sitting
+node tooling/bench/layouts-interval-run.ts record /fresh/sitting results/layout-intervals/name
+```
+
+Measurement takes the ordinary reserved-core lock. It retains rejected
+admissions and a subsequent three-second read-only task/interrupt sample.
+PID, thread name and tick deltas identify candidate offenders; last-CPU
+endpoints do not attribute every tick to that CPU. The instrument never changes
+affinity or the guard. A measurement unit must allow its children to use CPU 4
+while its controller stays off both siblings.
+
+Every layout first passes fixed-count output checks. Three or more A/B/A
+brackets then run in shuffled layout order. Each bracket uses the geometric
+mean of its A anchors, and each layout contributes one equally weighted arm
+mean. The percentile bootstrap resamples those paired layout means. Hot
+repetitions do not increase the independent sample count. No draw or outlier
+is dropped. The default uses 20,000 deterministic resamples and a nominal 99%
+interval for the ratio of arm means. An interval wholly below zero means
+`improvement`, wholly above zero `regression`, and one containing zero `noise`.
+The full arm ranges, per-layout deltas and A-repeat drift remain beside it.
+The interval describes the chosen sampler and observed sitting; it is not a
+universal bound over all placements or future machine conditions.
+
+The native adapter checks exact count, warmup, checksum and repeated-addition
+sink, and requires one numeric event at least 99% running on the pinned PMU.
+It uses the counted driver's existing FIFO control protocol. Historical
+validation drivers accept a positive ACK read; full ACK-frame validation is
+not claimed. Native heap padding occurs outside the hot window, and this
+adapter currently requires a single-thread native row. Peak RSS includes the
+live padding, so these RSS values are not unperturbed memory baselines.
+
+For command-cost experiments, import `sampleLayouts` from `layouts-sitting.ts`
+and `costAdapter` from `layouts-cost.ts`. Supply verified executable geometries,
+per-layout commands and heap seeds, and a decoder returning one canonical
+work/population signature or throwing on failure. The adapter uses
+`spawnCounted`'s optional pinned user-only events: all target threads and waited
+descendants from exec, with CPU from perf's waited user+system footer. Its
+metrics are whole-command cycles, instructions and CPU seconds. Startup and
+thread padding are included in that scope and are recorded explicitly; measure
+their overhead for the command. Unperturbed startup/P-2 rows use their ordinary
+protocol. A failed decode, missing event, bad exit, changed work signature or
+incomplete bracket retains raw data and cannot produce a verdict.
+The record command re-derives every interval from complete raw brackets and
+rejects altered summaries, signatures or populations before publishing.
+
+# Native layout range replay
 
 Use this mode when an A/B effect is smaller than the row's recorded layout
 range, or when an unexplained wall/cycle change survives flat instructions.

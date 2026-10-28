@@ -4,6 +4,13 @@ import {body,compareLayouts,layoutDeltas,orderingWarnings,spread,symbolOrder,tex
 import {readOnlyConstants} from "./layouts-elf.ts";
 import {experiment} from "./layouts-plan.ts";
 import {rangeTable} from "./layouts-record.ts";
+// The bench gate's existing entry point executes every interval contract.
+import './layouts-interval.test.ts';
+import './layouts-sitting.test.ts';
+import './layouts-native.test.ts';
+import './layouts-admission.test.ts';
+import './layouts-heap.test.ts';
+import './layouts-interval-record.test.ts';
 
 test("per-layout delta range retains both winning and losing draws",()=>{
   const deltas=layoutDeltas([0.825,0.92,0.97,1.02,1.111].map((ratio,i)=>({timeA:1000+i,timeB:(1000+i)*ratio})));

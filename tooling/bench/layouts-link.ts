@@ -6,9 +6,11 @@ import {join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {body,orderingWarnings,symbolOrder,textSymbols,type Symbol} from "./layouts.ts";
 import {readOnlyConstants} from "./layouts-elf.ts";
+import {random} from "./layouts-interval.ts";
+import {createHash} from "node:crypto";
 
 export type LinkArm={name:string;command:string;args:string[];cwd:string;hot:string[]};
-export type LinkPlan={arms:LinkArm[];seeds:number[]};
+export type LinkPlan={arms:LinkArm[];seeds:number[];independentArms?:boolean};
 
 async function admitted(out:string){
   for(;;){
@@ -53,8 +55,10 @@ export async function linkLayouts(plan:LinkPlan,out:string){
   const union=[...new Set([...references.values()].flatMap(r=>r.symbols.map(s=>s.name)))];
   const rows:any[]=[];
   for(const seed of plan.seeds){
-    const order=symbolOrder(union,seed);
-    for(const arm of plan.arms){
+    const draw=random(seed),independentSeeds=[draw(),draw()];
+    for(const [index,arm] of plan.arms.entries()){
+      const orderSeed=plan.independentArms?independentSeeds[index]:seed;
+      const order=symbolOrder(union,orderSeed);
       await admitted(out);
       const reference=references.get(arm.name)!;
       const names=new Set(reference.symbols.map(s=>s.name));
@@ -68,7 +72,7 @@ export async function linkLayouts(plan:LinkPlan,out:string){
         return found;
       });
       const warnings=orderingWarnings(readFileSync(stem+"-link.stderr","utf8"))!;
-      rows.push({arm:arm.name,seed,binary,ordering,warnings,hot,functions:actual.symbols});
+      rows.push({arm:arm.name,seed,orderSeed,binary,binarySha256:createHash('sha256').update(readFileSync(binary)).digest('hex'),ordering,warnings,hot,functions:actual.symbols});
       writeFileSync(join(out,"layouts.json"),JSON.stringify({state:"RUNNING",rows},null,2));
     }
   }
