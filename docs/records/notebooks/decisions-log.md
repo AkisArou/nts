@@ -41,6 +41,15 @@ Dates are 2026.
   `structuredClone` and `console`'s walk over a typed value are generated per
   type; UTF-8 and base64 conversions are SIMD in `runtime/c`; compression
   goes through a vendored library ([builtins](../../foundations/builtins.md#which-kind-of-provider)).
+- **Always the best architecture** (10-28): when the right design is known,
+  build it, never an interim step inside the wrong one. The coordinator had
+  staged a faster `Map` getter that kept numbers as boxed doubles, with the
+  layout change left for later. The user: "if we know that an unnecessary
+  conversion is happening, why ignore it?", then "Please follow this
+  principle from now on. always best architecture." Applied at once: maps
+  are stored by the proven layout of their values, raw int32 where the
+  values are proved int32, with boxed values only where they are genuinely
+  dynamic. The rule is now at the top of `AGENTS.md`.
 - **Apple's SDKs are used only on Apple hardware** (10-28; the user asked the
   coordinator to decide): bindings are generated on a Mac or a hosted macOS
   runner, and only nts's generated declarations reach other machines. Zig

@@ -9,6 +9,17 @@ nts compiles TypeScript ahead of time to native code, the JVM, WebAssembly and
 Node addons. The README says what it is for; [`docs/architecture.md`](docs/architecture.md)
 says how it works, and [`docs/README.md`](docs/README.md) indexes the rest.
 
+## Always the best architecture
+
+**Build the best design you know, never an interim step toward it** (user,
+2026-10-28). A profile or review sometimes shows a cost the right design
+removes: a conversion, boxing or tag dispatch the types already rule out, or
+work a known native implementation does faster. Then build that design
+directly. A smaller fix inside the wrong representation is not a step toward
+the right one; it is work to undo. nts has no users yet, so nothing is fixed:
+refactor or replace representations, runtimes and code outright. If the best
+design isn't known, measure until it is, then build it.
+
 ## Lanes
 
 Several sessions work at once, each in a lane. [`tooling/lanes/lanes.json`](tooling/lanes/lanes.json)
