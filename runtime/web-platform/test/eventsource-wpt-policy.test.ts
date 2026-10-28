@@ -169,6 +169,7 @@ for (const scheme of ["data", "blob", "file"] as const) {
     source.onopen = () => events.push("open");
     source.onerror = () => events.push("error");
     source.onmessage = (event) => {
+      assert.ok(typeof event.data === "string");
       events.push(event.data);
       source.close();
     };
@@ -195,7 +196,10 @@ for (const scheme of ["http", "https"]) {
     const errors: number[] = [];
     const messages: string[] = [];
     source.onerror = () => errors.push(source.readyState);
-    source.onmessage = (event) => messages.push(event.data);
+    source.onmessage = (event) => {
+      assert.ok(typeof event.data === "string");
+      messages.push(event.data);
+    };
     await until(clock, () => clock.nextDeadline !== null, "reconnect scheduling");
     assert.deepEqual(errors, [EventSource.CONNECTING]);
     assert.equal(requests.length, 1);
