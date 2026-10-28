@@ -20,17 +20,22 @@ for await (const path of createInterface({ input: process.stdin })) {
     // without allocations until the aggregate chooses it as the victim.
     readSync(release, released, 0, 1, null);
     closeSync(release);
-    throw new Error("idle victim was released instead of killed");
+    throw new Error(`idle victim retained ${held.length} bytes but was released instead of killed`);
   }
   if (path === "idle-trigger") {
-    const release = openSync(join(directory, "release-trigger"), constants.O_RDWR);
+    const isolated = Number(process.argv[3]) >= 2;
+    const release = isolated ? undefined : openSync(join(directory, "release-trigger"), constants.O_RDWR);
     const released = Buffer.alloc(1);
-    writeFileSync(join(directory, "trigger-ready"), "ready");
-    await deadlineWait(join(directory, "idle-reported"));
+    if (!isolated) {
+      writeFileSync(join(directory, "trigger-ready"), "ready");
+      await deadlineWait(join(directory, "idle-reported"));
+    }
     // Fits alone, but not beside the completed worker's retained 200 MiB.
     held = Buffer.alloc(650 * 2 ** 20, 1);
-    readSync(release, released, 0, 1, null);
-    closeSync(release);
+    if (release !== undefined) {
+      readSync(release, released, 0, 1, null);
+      closeSync(release);
+    }
   }
   if (path === "oom") {
     const result = testProcessResult(compileSync({ memoryCapKb: 96 * 1024 }, "python3", ["-c", "chunks=[]\nwhile True: chunks.append(bytearray(8*1024*1024))"], { encoding: "utf8", timeout: TEST_HANG_MS }), "the fixture allocation to reach its resident cap");

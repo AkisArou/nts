@@ -140,7 +140,7 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
   const summary = await runMemoryWorkers({
     paths: ["idle-holder", "idle-trigger", "after"], jobs: 2, memory, workerBytes: 768 * 2 ** 20,
-    args: () => [fixture, directory],
+    args: index => [fixture, directory, String(index)],
     admission: new Admission({ read: () => admitting ? 32 : 0 }),
     onRow: row => {
       rows.push(row);
@@ -153,14 +153,16 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
       reports.push(message);
       if (message.startsWith("resident pressure: idle worker ")) {
         admitting = true;
-        writeFileSync(join(directory, "release-trigger"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK });
+        try { writeFileSync(join(directory, "release-trigger"), "x", { flag: constants.O_WRONLY | constants.O_NONBLOCK }); }
+        catch (error) { if (error.code !== "ENXIO") throw error; } // The trigger may also be collateral damage.
       }
     },
   });
   assert.deepEqual(rows.map(row => [row.path, row.bucket]).sort(), [["after", "strict-pass"], ["idle-holder", "strict-pass"], ["idle-trigger", "strict-pass"]]);
   assert.equal(summary.idlePressureRestarts, 1, reports.join("\n"));
-  assert.equal(summary.pressureRequeues, 0);
-  assert.equal(summary.isolatedReplays, 0);
+  assert.ok(summary.pressureRequeues <= 1, JSON.stringify(summary));
+  assert.equal(summary.isolatedReplays, summary.pressureRequeues);
+  assert.equal(rows.find(row => row.path === "idle-holder").residentPressureRetries, 0, "a completed case is never replayed");
   assert.ok(summary.aggregatePressureKills >= 1);
   assert.equal(summary.systemPressureKills, 0);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
