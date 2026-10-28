@@ -1237,6 +1237,12 @@ suite("WebSocketStream close, cancel, and remote-close semantics", async (t) => 
   unwritten.session.sendWait = Promise.withResolvers();
   const writer = unwrittenInfo.writable.getWriter();
   const write = writer.write(new Uint8Array(1024));
+  // Draft section 4.1 publishes peer close in a task. Observe this write's
+  // rejection immediately, before awaiting that separate close notification.
+  const writeResult = write.then(
+    () => ({ fulfilled: true, reason: undefined }),
+    (reason: unknown) => ({ fulfilled: false, reason }),
+  );
   await tick();
   unwritten.session.push({
     kind: "close",
@@ -1251,10 +1257,10 @@ suite("WebSocketStream close, cancel, and remote-close semantics", async (t) => 
   );
   assert.ok(closedError instanceof WebSocketError);
   assert.equal(closedError.closeCode, 4567);
-  const writeError = await write.then(
-    () => assert.fail("pending write must reject"),
-    (reason) => reason,
-  );
+  const result = await writeResult;
+  assert.equal(result.fulfilled, false, "pending write must reject");
+  const writeError = result.reason;
+  assert.ok(writeError instanceof Error);
   assert.equal(writeError.name, "InvalidStateError");
   await assert.rejects(writer.write("later"), (reason) => reason === writeError);
 });
