@@ -103,3 +103,69 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+// BEGIN BIGINT NOBLE SECP256K1: complete original workload checks.
+{
+  const name = "jetstream-bigint-noble-secp256k1";
+  if (modules.has(name)) {
+    checked.add(name);
+    const { seed, work } = await import("./cases/jetstream-bigint-noble-secp256k1/case.ts");
+    const { points, runNobleBenchmark } = await import("./cases/jetstream-bigint-noble-secp256k1/benchmark.ts");
+    type BenchmarkResult = import("./cases/jetstream-bigint-noble-secp256k1/benchmark.ts").BenchmarkResult;
+    const { resetRandom } = await import("./cases/jetstream-bigint-noble-secp256k1/web-crypto-sham.ts");
+    // Original full-operation oracle; root retains absent-directory gating.
+
+
+
+
+
+    function secpHex(bytes: Uint8Array): string { return Buffer.from(bytes).toString("hex"); }
+    function secpOriginalRecord(result: BenchmarkResult) {
+      return {
+        randomPublicKey: secpHex(result.randomPublicKey), signature: secpHex(result.signature),
+        asyncSignature: secpHex(result.asyncSignature), syncSignature: secpHex(result.syncSignature),
+        verified: result.verified, recoveredSignature: secpHex(result.recoveredSignature), recovery: result.recovery,
+        recoveredPublicKey: secpHex(result.recoveredPublicKey), sharedSecret: secpHex(result.sharedSecret),
+        precomputedSharedSecret: secpHex(result.precomputedSharedSecret), parsedPoint: result.parsedPoint.toHex(),
+        parsedCoordinates: [String(result.parsedPoint.x), String(result.parsedPoint.y)],
+        schnorrSignature: secpHex(result.schnorrSignature), finalSchnorrSignature: secpHex(result.finalSchnorrSignature),
+        schnorrVerified: result.schnorrVerified
+      };
+    }
+
+    test("JetStream Noble secp256k1 retains complete original operation results", async () => {
+      assert.equal(seed, 1);
+      assert.equal(points.length, 1000);
+      resetRandom();
+      const result = await runNobleBenchmark();
+      assert.equal(result.verified, true);
+      assert.equal(result.schnorrVerified, true);
+      assert.equal(result.schnorrSignature.length, 64);
+      assert.equal(result.finalSchnorrSignature.length, 64);
+      assert.deepEqual(result.sharedSecret, result.precomputedSharedSecret);
+      assert.equal(createHash("sha256").update(JSON.stringify(secpOriginalRecord(result))).digest("hex"),
+        "9446c2e1f956865b42b290f784a2e737bd283d9d49a835ca9295bbe995862c56");
+    });
+
+    test("JetStream Noble secp256k1 awaits full seeded iterations", async () => {
+      assert.equal(await work(0), 0);
+      assert.equal(await work(1), 3639362170);
+      assert.equal(await work(2), 755033204);
+    });
+  }
+}
+// END BIGINT NOBLE SECP256K1.
+
+
+
