@@ -1745,20 +1745,21 @@ class ReadableByteStreamState {
       this.#commitDescriptor(descriptor, true);
       return result.promise;
     }
-    if (this.#queueTotalSize > 0 && this.#fillFromQueue(descriptor)) {
-      this.#commitDescriptor(descriptor, false);
-      this.#handleQueueDrain();
-      return result.promise;
-    }
-    if (
-      this.#closeRequested &&
-      this.#queueTotalSize === 0 &&
-      descriptor.bytesFilled % descriptor.elementSize !== 0
-    ) {
-      const error = new TypeError("Byte stream closed with an incomplete typed-array element");
-      result.reject(error);
-      this.stream[kStreamFail](error);
-      return result.promise;
+    if (this.#queueTotalSize > 0) {
+      if (this.#fillFromQueue(descriptor)) {
+        this.#commitDescriptor(descriptor, false);
+        this.#handleQueueDrain();
+        return result.promise;
+      }
+      // Once close is requested, a queued underfill cannot reach minimumFill,
+      // even when the bytes already form complete typed-array elements.
+      // https://streams.spec.whatwg.org/#readable-byte-stream-controller-pull-into
+      if (this.#closeRequested) {
+        const error = new TypeError("Byte stream closed before the read minimum was filled");
+        this.stream[kStreamFail](error);
+        result.reject(error);
+        return result.promise;
+      }
     }
     this.#pullIntos.enqueue(descriptor);
     this.#maybePull();
