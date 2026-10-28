@@ -303,6 +303,32 @@ test("WPT structural object assertions compare enumerable contents across realms
   assert.deepEqual((await harness.finish()).map((result) => result.status), ["pass", "fail", "fail", "fail", "fail", "pass"]);
 });
 
+test("WPT legacy object assertions preserve the pinned enumerable-only comparison", async () => {
+  const harness = new WptHarness({});
+  harness.run(`
+    test(() => assert_object_equals(
+      { value: new Uint8Array(0), done: true }, { value: undefined, done: true }
+    ), "closed BYOB result");
+    test(() => assert_object_equals({}, undefined), "empty object against undefined");
+    test(() => assert_object_equals({}, null), "empty object against null");
+    test(() => assert_object_equals({ nested: {} }, { nested: 3 }), "empty nested object against number");
+    test(() => assert_object_equals({ value: new Uint8Array([1]) }, { value: undefined }), "nonempty view");
+    test(() => assert_object_equals({ value: undefined }, { value: new Uint8Array(0) }), "comparison is asymmetric");
+    test(() => assert_object_equals(undefined, {}), "actual must be an object");
+    test(() => assert_object_equals(Object.assign(Object.create(null), { value: 1 }), { value: 1 }), "actual has no hasOwnProperty");
+    test(() => assert_object_equals({ value: 1 }, Object.assign(Object.create(null), { value: 1 })), "expected has no hasOwnProperty");
+    test(() => {
+      const reads = [];
+      const actual = { get value() { reads.push("actual"); return 1; } };
+      const expected = { get value() { reads.push("expected"); return 1; } };
+      assert_object_equals(actual, expected);
+      assert_array_equals(reads, ["actual", "actual", "expected", "expected", "actual"]);
+    }, "eager diagnostic property reads");
+  `, "legacy-object-assertion.js");
+  assert.deepEqual((await harness.finish()).map((result) => result.status),
+    ["pass", "pass", "pass", "pass", "fail", "fail", "fail", "fail", "fail", "pass"]);
+});
+
 test("WPT observes rejected promises returned from invalid synchronous callbacks", async () => {
   for (const source of [
     'test(() => Promise.reject(new Error("invalid body promise")), "invalid body");',
