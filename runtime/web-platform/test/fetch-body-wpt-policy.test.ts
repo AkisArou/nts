@@ -132,6 +132,101 @@ for (const factory of bodyFactories) {
   });
 }
 
+// https://fetch.spec.whatwg.org/#dom-body-textstream
+// This current-standard API is absent from Node 24.20.0. These controls use the
+// specification directly and require existence before checking exception paths.
+function textStreamFrom(body: Request | Response): ReadableStream<string> {
+  assert.equal(typeof body.textStream, "function", "textStream must exist");
+  return body.textStream();
+}
+
+async function readTextStream(stream: ReadableStream<string>): Promise<string> {
+  const reader = stream.getReader();
+  let text = "";
+  while (true) {
+    const result = await reader.read();
+    if (result.done) return text;
+    assert.equal(typeof result.value, "string");
+    text += result.value;
+  }
+}
+
+for (const kind of ["Response", "Request"] as const) {
+  const construct = (stream: ReadableStream<Uint8Array> | null): Request | Response => {
+    const headers = { "content-type": "text/plain;charset=utf-16le" };
+    return kind === "Response" ? new Response(stream, { headers }) : new Request("https://example.test/", {
+      method: "POST", body: stream, duplex: "half", headers,
+    });
+  };
+
+  test(`${kind}.textStream incrementally decodes UTF-8 and marks the body used immediately`, async () => {
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([0xef]));
+        controller.enqueue(new Uint8Array([0xbb, 0xbf, 0xe2]));
+        controller.enqueue(new Uint8Array([0x82, 0xac, 0x78]));
+        controller.close();
+      },
+    });
+    const body = construct(source);
+    assert.equal(body.bodyUsed, false);
+    const decoded = textStreamFrom(body);
+    assert.ok(decoded instanceof ReadableStream);
+    assert.equal(body.bodyUsed, true);
+    assert.equal(source.locked, true);
+    assert.equal(await readTextStream(decoded), "€x");
+  });
+
+  test(`${kind}.textStream returns distinct closed streams for a null body`, async () => {
+    const body = construct(null);
+    const first = textStreamFrom(body);
+    const second = textStreamFrom(body);
+    assert.notEqual(first, second);
+    assert.equal(body.bodyUsed, false);
+    assert.equal(await readTextStream(first), "");
+    assert.equal(await readTextStream(second), "");
+    assert.equal(body.bodyUsed, false);
+  });
+
+  test(`${kind}.textStream throws synchronously for locked or consumed bodies`, async () => {
+    const source = new ReadableStream<Uint8Array>({ start(controller) { controller.close(); } });
+    const body = construct(source);
+    const reader = source.getReader();
+    try {
+      assert.throws(() => textStreamFrom(body), TypeError);
+    } finally {
+      reader.releaseLock();
+    }
+    await body.text();
+    assert.throws(() => textStreamFrom(body), TypeError);
+  });
+}
+
+test("Response.textStream uses canonical piping despite a shadowed stream.pipeThrough", async () => {
+  const source = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new Uint8Array([0x61])); controller.close(); },
+  });
+  source.pipeThrough = (): never => { throw new Error("public pipeThrough was called"); };
+  assert.equal(await readTextStream(textStreamFrom(new Response(source))), "a");
+});
+
+test("Response.textStream propagates cancellation to the original byte source", async () => {
+  const reason = new Error("consumer canceled");
+  let resolveCancellation: (reason: unknown) => void = () => {};
+  const canceled = new Promise<unknown>((resolve) => { resolveCancellation = resolve; });
+  const source = new ReadableStream<Uint8Array>({ cancel(value) { resolveCancellation(value); } });
+  const decoded = textStreamFrom(new Response(source));
+  await decoded.cancel(reason);
+  assert.equal(await canceled, reason);
+});
+
+test("Response.textStream propagates the original source error to the text reader", async () => {
+  const reason = new Error("source failed");
+  const source = new ReadableStream<Uint8Array>({ start(controller) { controller.error(reason); } });
+  const decoded = textStreamFrom(new Response(source));
+  await assert.rejects(readTextStream(decoded), (error) => error === reason);
+});
+
 // https://fetch.spec.whatwg.org/#dom-response
 // Dictionary conversion precedes extraction; extraction precedes initialization.
 test("Response body extraction rejects a locked stream before checking status", () => {
