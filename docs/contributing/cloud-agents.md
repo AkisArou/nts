@@ -27,7 +27,8 @@ cryptographic primitives themselves) is built inside nts.
 Out of scope: `compiler/`, `runtime/c/`, `tooling/` (except adding a test file
 to `tooling/conformance/web-platform/check.sh`'s list), `docs/` (except a
 pointer to the specification section a change implements), and any file
-another open pull request touches.
+another open pull request touches, except the two shared files below (under
+"A pull request").
 
 ## The TypeScript nts compiles
 
@@ -46,16 +47,29 @@ does. In particular:
 - **Never what nts will not compile:** `eval` or `new Function` of a
   run-time string, `with`, sloppy-mode code, or assignment to `globalThis`.
   Globals are exposed by the package's provider bootstrap.
-- **Not without asking in the pull request:** `Proxy`, `Reflect`,
-  `Object.defineProperty`, `freeze`, `seal` and decorators. They are later
-  work for nts, and these specifications rarely need them.
+- **Not at all, for now:** `Proxy`, `Reflect`, `Object.defineProperty`,
+  `freeze`, `seal`, decorators, and reflection over prototypes and
+  descriptors (`Object.getPrototypeOf`, `Object.getOwnPropertyDescriptor`).
+  nts compiles a class to a fixed layout with no property descriptors yet,
+  so Web IDL's writable, enumerable and configurable flags are not
+  reproduced: declare members plainly (constants as `static readonly`), and
+  list a case that tests only a descriptor as left out. An nts program
+  cannot redefine an intrinsic accessor either, so `view.byteLength` and the
+  like already are the internal slot reads Web IDL asks for. Read them
+  plainly, and list a case that spoofs one by patching a prototype as left
+  out.
+- **A native capability reports failure as a value,** never by throwing: a
+  native binding cannot throw into TypeScript yet. A primitive returns a
+  result that the shared code turns into the specification's exception.
 - **Write for speed:** a `RegExp` with a literal pattern, which nts compiles
   into a generated matcher, rather than one built from a string, unless the
   specification builds the pattern at run time; typed arrays and simple
   loops on hot paths; no allocation per character or per call where the
   specification does not require one.
 - **Classes and interfaces are typed layouts:** declare every field, with its
-  type, in the class body.
+  type, in the class body. A constructor function from older JavaScript
+  becomes a `class` with the same fields: strict TypeScript refuses `new` on
+  a plain function, and no cast (`as unknown as`) may force it through.
 - **Imports stay inside the package** or go through the provider interfaces
   in `src/provider/`. Platform services (the clock, sockets, files) are
   provider capabilities, never node's modules.
@@ -86,6 +100,16 @@ a cloud environment.
 
 - **One specification area per pull request,** on a branch named
   `chatgpt/<topic>`, against `main`.
+- **Work that needs another open pull request's code stacks on it:** branch
+  from that pull request's branch and make it the new pull request's base.
+  Retarget to `main` once the first lands. Don't wait for a landing to
+  start the next item.
+- **Two shared files every pull request may touch:** `check.sh`'s test
+  list, and the shared web-platform-tests adapter
+  (`runtime/web-platform/test/wpt/harness.ts`, `runner.ts`, `tsconfig.json`).
+  Add your entries to the list in order. Keep adapter changes additive,
+  and name each one, with what it does, in the description. The
+  maintainers resolve the merges.
 - **The description names** the specification and its sections, what is
   implemented and what is not, and the test command and its output.
 - **Commit messages** say what the change does, in the present tense, as the
