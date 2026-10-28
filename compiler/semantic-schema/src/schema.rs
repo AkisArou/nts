@@ -64,7 +64,9 @@ use crate::origin::Origin;
 /// lossless JavaScript text, and removal of unused predicate-subject fields.
 /// 48: effective project settings and governed-construct lowering checks.
 /// 49: effective checker strictness options, reported without nts policy.
-pub const SCHEMA_VERSION: u32 = 49;
+/// 50: the complete native strict-option group and the native-resolved config
+/// responsible for each disabled member, for project compile policy.
+pub const SCHEMA_VERSION: u32 = 50;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -87,7 +89,7 @@ pub struct NodeId(pub u32);
 pub struct ModuleId(pub u32);
 
 /// Effective project settings used by the checker and runtime-semantic checks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "independent effective TypeScript settings"
@@ -103,8 +105,29 @@ pub struct ProjectSemantics {
     /// override it. This records checker configuration, not an nts requirement.
     pub strict: bool,
     pub strict_null_checks: bool,
+    pub no_implicit_any: bool,
+    pub strict_function_types: bool,
+    pub strict_bind_call_apply: bool,
+    pub strict_property_initialization: bool,
+    pub strict_builtin_iterator_return: bool,
+    pub no_implicit_this: bool,
+    pub use_unknown_in_catch_variables: bool,
+    /// Independent native default true; explicit false is refused at compilation.
+    pub always_strict: bool,
     pub no_unchecked_indexed_access: bool,
     pub exact_optional_property_types: bool,
+    /// The actual setting and configuration that disabled an effective strict
+    /// option. Empty for strict projects; absent provenance is never guessed.
+    pub disabled_strict_sources: Vec<StrictOptionSource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StrictOptionSource {
+    pub name: String,
+    /// Normalized workspace URI, including `..` for a configuration outside it.
+    pub configuration: String,
+    /// The individual option, or `strict` for an inherited bundle default.
+    pub setting: String,
 }
 
 impl Default for ProjectSemantics {
@@ -118,8 +141,17 @@ impl Default for ProjectSemantics {
             isolated_modules: false,
             strict: true,
             strict_null_checks: true,
+            no_implicit_any: true,
+            strict_function_types: true,
+            strict_bind_call_apply: true,
+            strict_property_initialization: true,
+            strict_builtin_iterator_return: true,
+            no_implicit_this: true,
+            use_unknown_in_catch_variables: true,
+            always_strict: true,
             no_unchecked_indexed_access: false,
             exact_optional_property_types: false,
+            disabled_strict_sources: Vec::new(),
         }
     }
 }
@@ -1511,7 +1543,7 @@ mod tests {
     #[test]
     fn checker_strictness_options_are_serialized_and_hashed_independently() {
         let baseline = snapshot(Vec::new());
-        for option in 0..4 {
+        for option in 0..12 {
             let mut changed = baseline.clone();
             let semantics = &mut changed.semantics;
             match option {
@@ -1522,6 +1554,23 @@ mod tests {
                     semantics.exact_optional_property_types =
                         !semantics.exact_optional_property_types;
                 }
+                4 => semantics.no_implicit_any = !semantics.no_implicit_any,
+                5 => semantics.strict_function_types = !semantics.strict_function_types,
+                6 => semantics.strict_bind_call_apply = !semantics.strict_bind_call_apply,
+                7 => {
+                    semantics.strict_property_initialization =
+                        !semantics.strict_property_initialization;
+                }
+                8 => {
+                    semantics.strict_builtin_iterator_return =
+                        !semantics.strict_builtin_iterator_return;
+                }
+                9 => semantics.no_implicit_this = !semantics.no_implicit_this,
+                10 => {
+                    semantics.use_unknown_in_catch_variables =
+                        !semantics.use_unknown_in_catch_variables;
+                }
+                11 => semantics.always_strict = !semantics.always_strict,
                 _ => unreachable!(),
             }
             changed.validate().unwrap();
@@ -1531,6 +1580,29 @@ mod tests {
             assert_eq!(loaded.semantics, changed.semantics);
             assert_eq!(loaded.digest().unwrap(), changed.digest().unwrap());
         }
+    }
+
+    #[test]
+    fn strict_option_provenance_is_serialized_and_hashed() {
+        let mut value = snapshot(Vec::new());
+        value.semantics.no_implicit_any = false;
+        let no_origin = value.digest().unwrap();
+        value
+            .semantics
+            .disabled_strict_sources
+            .push(StrictOptionSource {
+                name: "noImplicitAny".to_owned(),
+                configuration: "nts-workspace:///../base.json".to_owned(),
+                setting: "strict".to_owned(),
+            });
+        assert_ne!(value.digest().unwrap(), no_origin);
+        let loaded: SemanticSnapshot =
+            postcard::from_bytes(&postcard::to_allocvec(&value).unwrap()).unwrap();
+        assert_eq!(loaded.semantics, value.semantics);
+        assert_eq!(loaded.digest().unwrap(), value.digest().unwrap());
+        value.semantics.disabled_strict_sources[0].configuration =
+            "nts-workspace:///other.json".to_owned();
+        assert_ne!(loaded.digest().unwrap(), value.digest().unwrap());
     }
 
     #[test]

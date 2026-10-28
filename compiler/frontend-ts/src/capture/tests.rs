@@ -134,7 +134,20 @@ fn the_raw_checker_audit_matches_capture_with_includes_and_a_real_error() {
             .join("tests/workspace/diagnostic-audit-inputs")
             .join(config_name);
         for count in [1, 4] {
-            let (_, captured) = capture_project_and_diagnostics(config.clone(), count, 3);
+            let (snapshot, captured) = capture_project_and_diagnostics(config.clone(), count, 3);
+            assert!(
+                !snapshot.semantics.no_implicit_any,
+                "audit input remains non-strict"
+            );
+            assert!(
+                snapshot
+                    .semantics
+                    .disabled_strict_sources
+                    .iter()
+                    .any(|source| source.name == "noImplicitAny"
+                        && source.configuration.ends_with(config_name)),
+                "strict provenance is observable without changing native diagnostics"
+            );
             let mut options = SessionOptions::new(root());
             options.checker_count = NonZeroU16::new(count);
             let pristine = native::run(options, |session| {

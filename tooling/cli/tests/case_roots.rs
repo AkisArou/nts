@@ -86,6 +86,94 @@ fn frontend_reports_effective_strictness_without_imposing_a_policy() {
     }
 }
 
+#[test]
+fn compilation_requires_effective_strict_options_and_reports_the_setting_source() {
+    let base = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("strict-compile-policy-{}", std::process::id()));
+    std::fs::create_dir_all(&base).expect("strict-policy projects");
+    let required = [
+        "noImplicitAny",
+        "strictNullChecks",
+        "strictFunctionTypes",
+        "strictBindCallApply",
+        "strictPropertyInitialization",
+        "strictBuiltinIteratorReturn",
+        "noImplicitThis",
+        "useUnknownInCatchVariables",
+        "alwaysStrict",
+    ];
+    for (index, disabled) in required.into_iter().enumerate() {
+        let dir = base.join(index.to_string());
+        std::fs::create_dir_all(&dir).expect("project directory");
+        std::fs::write(
+            dir.join("base.json"),
+            serde_json::json!({"compilerOptions":{"strict":true,(disabled):false}}).to_string(),
+        )
+        .expect("inherited setting");
+        std::fs::write(
+            dir.join("tsconfig.json"),
+            r#"{"extends":"./base.json","files":["main.ts"]}"#,
+        )
+        .expect("config");
+        std::fs::write(dir.join("main.ts"), "export const value = 1;").expect("source");
+        std::fs::write(dir.join("nts.config.ts"), format!(
+            r#"import {{ defineConfig, library, target }} from "{}";
+export default defineConfig({{ products: {{ value: library.native({{ entry: "./main.ts", targets: [target.linux({{ backend: "c" }})] }}) }} }});
+"#,
+            repository().join("tooling/config/src/index.ts").display(),
+        )).expect("a valid build declaration reaches the project policy");
+        for command in ["build", "hir", "layouts", "refusals"] {
+            let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+                .arg(command)
+                .arg(dir.join("tsconfig.json"))
+                .arg("--no-acquire")
+                .env("NTS_CHECKERS", "1")
+                .output()
+                .expect("strict policy command");
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(
+                !output.status.success(),
+                "{command} accepted {disabled}: {text}"
+            );
+            assert!(
+                text.contains("NTS1006") && text.contains(disabled) && text.contains("base.json"),
+                "{command}: {text}"
+            );
+        }
+    }
+    let dir = base.join("individual");
+    std::fs::create_dir_all(&dir).expect("control directory");
+    let mut settings = serde_json::Map::new();
+    settings.insert("strict".into(), false.into());
+    for name in required {
+        settings.insert(name.into(), true.into());
+    }
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        serde_json::json!({"compilerOptions":settings,"files":["main.ts"]}).to_string(),
+    )
+    .expect("individually strict config");
+    std::fs::write(dir.join("main.ts"), "export const value = 1;").expect("control source");
+    let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["hir", "--prepared"])
+        .arg(dir.join("tsconfig.json"))
+        .arg("--no-acquire")
+        .env("NTS_CHECKERS", "1")
+        .output()
+        .expect("strict individual control");
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("NTS1006"));
+}
+
 fn assert_frontend_capture(text: &str, errors: usize) {
     let repo = repository();
     let unique = std::time::SystemTime::now()

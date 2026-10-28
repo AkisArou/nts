@@ -88,6 +88,7 @@ mod native_storage;
 /// Who owns what, and for how long: one answer per value, which the counting
 /// pass reads and does no reasoning of its own about.
 pub mod own;
+pub mod project_policy;
 pub mod rc;
 pub mod reachable;
 mod refused;

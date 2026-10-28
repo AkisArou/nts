@@ -42,7 +42,7 @@ pub use schema::{
     ImportPhase, IndexSignature, JvmAttributes, Library, LiteralValue, MemberKind, ModuleId,
     ModuleRecord, NativeAttributes, NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord,
     ProjectSemantics, PropertyKey, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId,
-    SignatureRecord, SnapshotError, SymbolFlags, SymbolId, SymbolRecord, TypeId, TypeKind,
-    TypePredicate, TypeRecord, VariableKind,
+    SignatureRecord, SnapshotError, StrictOptionSource, SymbolFlags, SymbolId, SymbolRecord,
+    TypeId, TypeKind, TypePredicate, TypeRecord, VariableKind,
 };
 pub use text::JsText;

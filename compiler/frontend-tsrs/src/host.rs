@@ -94,12 +94,20 @@ pub struct Input {
     pub fingerprint: u128,
 }
 
+#[derive(Default)]
+struct ConfigText {
+    text: Option<String>,
+    observed: bool,
+    changed: bool,
+}
+
 pub(crate) struct Host {
     cwd: String,
     base: Box<dyn FS>,
     overlays: BTreeMap<String, String>,
     directories: BTreeMap<String, Entries>,
     inputs: Mutex<BTreeMap<(InputKind, InputPath), u128>>,
+    config_texts: Mutex<BTreeMap<String, ConfigText>>,
 }
 
 impl fmt::Debug for Host {
@@ -119,6 +127,7 @@ impl Host {
             overlays: BTreeMap::new(),
             directories: BTreeMap::new(),
             inputs: Mutex::default(),
+            config_texts: Mutex::default(),
         };
         for (path, text) in overlays {
             let path = host.key(path.as_str());
@@ -142,6 +151,30 @@ impl Host {
 
     fn key(&self, path: &str) -> String {
         tspath::to_path(path, &self.cwd, self.base.use_case_sensitive_file_names()).to_string()
+    }
+
+    pub(crate) fn retain_config(&self, path: &str) -> String {
+        let path = self.key(path);
+        self.config_texts
+            .lock()
+            .expect("config text observer calls no user code")
+            .entry(path.clone())
+            .or_default();
+        path
+    }
+
+    /// Only the bytes actually read during this revision. A config that
+    /// changed between reads has no trustworthy single provenance.
+    pub(crate) fn config_text(&self, path: &str) -> Option<String> {
+        let texts = self
+            .config_texts
+            .lock()
+            .expect("config text observer calls no user code");
+        let observed = texts.get(path)?;
+        if !observed.observed || observed.changed {
+            return None;
+        }
+        observed.text.clone()
     }
 
     fn observe(&self, kind: InputKind, path: &str, answer: &[u8]) {
@@ -259,6 +292,25 @@ impl FS for Host {
             .get(&self.key(path))
             .cloned()
             .or_else(|| self.base.read_file(path));
+        if let Some(config) = self
+            .config_texts
+            .lock()
+            .expect("config text observer calls no user code")
+            .get_mut(&self.key(path))
+        {
+            if config.observed {
+                config.changed |= config.text != answer;
+            } else {
+                config.observed = true;
+                // Provenance is diagnostic work. Native resolution still
+                // receives the complete text; the observer keeps no huge copy.
+                if answer.as_ref().is_some_and(|text| text.len() > 1024 * 1024) {
+                    config.changed = true;
+                } else {
+                    config.text.clone_from(&answer);
+                }
+            }
+        }
         // Prefix distinguishes a missing file from an existing empty file.
         let mut fingerprint_input = vec![u8::from(answer.is_some())];
         if let Some(text) = &answer {

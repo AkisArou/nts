@@ -79,7 +79,7 @@ pub enum DiagnosticCategory {
 }
 
 /// Effective native checker settings and emitted-runtime settings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "independent effective compiler settings are semantic booleans"
@@ -93,8 +93,17 @@ pub struct ProjectSemantics {
     pub isolated_modules: bool,
     pub strict: bool,
     pub strict_null_checks: bool,
+    pub no_implicit_any: bool,
+    pub strict_function_types: bool,
+    pub strict_bind_call_apply: bool,
+    pub strict_property_initialization: bool,
+    pub strict_builtin_iterator_return: bool,
+    pub no_implicit_this: bool,
+    pub use_unknown_in_catch_variables: bool,
+    pub always_strict: bool,
     pub no_unchecked_indexed_access: bool,
     pub exact_optional_property_types: bool,
+    pub disabled_strict_sources: Vec<crate::StrictOptionSource>,
 }
 
 /// Files to check for diagnostics. Config, program/options and global errors
@@ -122,6 +131,7 @@ enum NativeDiagnosticScope {
 
 struct NativeProject {
     program: &'static Program,
+    disabled_strict_sources: Vec<crate::StrictOptionSource>,
     capture: RefCell<Option<Box<tsrs_checker::Checker>>>,
     capture_region: Region,
     diagnostics_task: RefCell<Option<std::thread::JoinHandle<NativeDiagnostics>>>,
@@ -324,20 +334,11 @@ impl OwnedProgram {
         let scope = region.enter();
         let loader_regions = Arc::new(ProgramRegions::default());
         let host = Arc::new(Host::new(options.cwd.as_str(), &spec.overlays));
-        let (config, diagnostics) = tsrs_tsoptions::get_parsed_command_line_of_config_file(
-            spec.config_path.as_str(),
-            None,
-            None,
-            &*host,
-            None,
-        );
-        let config = config.ok_or_else(|| LoadError::Config {
-            path: spec.config_path.clone(),
-            messages: diagnostics
-                .iter()
-                .map(|d| crate::strings::display(d.localize().as_bytes()))
-                .collect(),
-        })?;
+        let LoadedConfig {
+            config,
+            diagnostics,
+            disabled_strict_sources,
+        } = load_config(&host, spec)?;
         let mut owned = Self {
             projects: Vec::new(),
             host,
@@ -389,6 +390,7 @@ impl OwnedProgram {
             // Register ownership immediately, before any further native call.
             owned.projects.push(NativeProject {
                 program,
+                disabled_strict_sources,
                 capture: RefCell::new(None),
                 capture_region: Region::new_scratch(1 << 20),
                 diagnostics_task: RefCell::new(None),
@@ -503,6 +505,41 @@ impl OwnedProgram {
         diagnostics.dedup();
         diagnostics
     }
+}
+
+struct LoadedConfig {
+    config: ParsedCommandLine,
+    diagnostics: Vec<P<NativeDiagnostic>>,
+    disabled_strict_sources: Vec<crate::StrictOptionSource>,
+}
+
+fn load_config(host: &Host, spec: &ProjectSpec) -> Result<LoadedConfig, LoadError> {
+    let sources = crate::config_sources::ConfigSources::new(host, spec.config_path.as_str());
+    let (config, diagnostics) = tsrs_tsoptions::get_parsed_command_line_of_config_file(
+        spec.config_path.as_str(),
+        None,
+        None,
+        host,
+        Some(&sources),
+    );
+    let config = config.ok_or_else(|| LoadError::Config {
+        path: spec.config_path.clone(),
+        messages: diagnostics
+            .iter()
+            .map(|d| crate::strings::display(d.localize().as_bytes()))
+            .collect(),
+    })?;
+    let disabled_strict_sources = sources.disabled(
+        config
+            .compiler_options()
+            .expect("native parsed config owns compiler options")
+            .get(),
+    );
+    Ok(LoadedConfig {
+        config,
+        diagnostics,
+        disabled_strict_sources,
+    })
 }
 
 fn validated_roots(
@@ -842,8 +879,20 @@ impl<'s, S: ViewPhase> Project<'s, S> {
             // (CompilerOptions::get_strict_option_value), not tsconfig text.
             strict: options.get_strict_option_value(options.strict),
             strict_null_checks: options.get_strict_option_value(options.strict_null_checks),
+            no_implicit_any: options.get_strict_option_value(options.no_implicit_any),
+            strict_function_types: options.get_strict_option_value(options.strict_function_types),
+            strict_bind_call_apply: options.get_strict_option_value(options.strict_bind_call_apply),
+            strict_property_initialization: options
+                .get_strict_option_value(options.strict_property_initialization),
+            strict_builtin_iterator_return: options
+                .get_strict_option_value(options.strict_builtin_iterator_return),
+            no_implicit_this: options.get_strict_option_value(options.no_implicit_this),
+            use_unknown_in_catch_variables: options
+                .get_strict_option_value(options.use_unknown_in_catch_variables),
+            always_strict: !options.always_strict.is_false(),
             no_unchecked_indexed_access: options.no_unchecked_indexed_access.is_true(),
             exact_optional_property_types: options.exact_optional_property_types.is_true(),
+            disabled_strict_sources: self.native.disabled_strict_sources.clone(),
         }
     }
     #[must_use]
@@ -1392,6 +1441,216 @@ mod tests {
             assert!(semantics.exact_optional_property_types);
             assert_eq!(checked.diagnose_fixture_files().finish().diagnostics(), []);
         });
+    }
+
+    #[test]
+    fn disabled_strict_sources_follow_native_extends_order_and_null_resets() {
+        for (root_options, any_setting, any_config) in [
+            (
+                r#""noImplicitAny":true,"strictNullChecks":false"#,
+                None,
+                None,
+            ),
+            (
+                r#""noImplicitAny":null,"strictNullChecks":false"#,
+                Some("strict"),
+                Some("base.json"),
+            ),
+        ] {
+            run(options(1), |session| {
+                let mut spec = ProjectSpec::new("tsconfig.json");
+                for (name, text) in [
+                    ("tsconfig.json", format!(r#"{{"extends":["./first.json","./second.json"],"compilerOptions":{{{root_options}}},"files":["index.ts"]}}"#)),
+                    ("first.json", r#"{"compilerOptions":{"strict":false,"strictFunctionTypes":false}}"#.into()),
+                    ("second.json", r#"{"extends":"./base.json","compilerOptions":{"strictFunctionTypes":true,"noImplicitAny":false}}"#.into()),
+                    ("base.json", r#"{"compilerOptions":{"strict":false}}"#.into()),
+                    ("index.ts", "export const value = 1;".into()),
+                ] {
+                    spec.overlays.insert(name.into(), text);
+                }
+                let checked = session.open(spec).expect("inherited strict configuration");
+                let semantics = checked.projects().next().expect("root program").semantics();
+                assert!(
+                    semantics.strict_function_types,
+                    "the later base overrides the first one"
+                );
+                let sources = semantics.disabled_strict_sources;
+                let null = sources
+                    .iter()
+                    .find(|s| s.name == "strictNullChecks")
+                    .expect("disabled null check");
+                assert_eq!(null.setting, "strictNullChecks");
+                assert_eq!(null.configuration.file_name(), Some("tsconfig.json"));
+                let bind = sources
+                    .iter()
+                    .find(|s| s.name == "strictBindCallApply")
+                    .expect("disabled bundle member");
+                assert_eq!(bind.setting, "strict");
+                assert_eq!(bind.configuration.file_name(), Some("base.json"));
+                let any = sources.iter().find(|s| s.name == "noImplicitAny");
+                assert_eq!(any.map(|s| s.setting), any_setting);
+                assert_eq!(any.and_then(|s| s.configuration.file_name()), any_config);
+            });
+        }
+    }
+
+    #[test]
+    fn individual_strict_options_can_enable_the_whole_group_with_strict_false() {
+        run(options(1), |session| {
+            let mut spec = ProjectSpec::new("tsconfig.json");
+            let members = crate::config_sources::STRICT_OPTIONS
+                .iter()
+                .map(|(name, _)| format!("\"{name}\":true"))
+                .collect::<Vec<_>>()
+                .join(",");
+            spec.overlays.insert(
+                "tsconfig.json".into(),
+                format!(
+                    r#"{{"compilerOptions":{{"strict":false,{members}}},"files":["index.ts"]}}"#
+                ),
+            );
+            spec.overlays
+                .insert("index.ts".into(), "export const value = 1;".into());
+            let checked = session.open(spec).expect("individually strict project");
+            let semantics = checked.projects().next().expect("root program").semantics();
+            assert!(!semantics.strict);
+            assert_eq!(semantics.disabled_strict_sources, []);
+            assert!(
+                [
+                    semantics.no_implicit_any,
+                    semantics.strict_null_checks,
+                    semantics.strict_function_types,
+                    semantics.strict_bind_call_apply,
+                    semantics.strict_property_initialization,
+                    semantics.strict_builtin_iterator_return,
+                    semantics.no_implicit_this,
+                    semantics.use_unknown_in_catch_variables,
+                    semantics.always_strict,
+                ]
+                .into_iter()
+                .all(|enabled| enabled)
+            );
+        });
+    }
+
+    #[test]
+    fn always_strict_false_is_a_removed_native_option_not_a_sloppy_mode() {
+        run(options(1), |session| {
+            let mut spec = ProjectSpec::new("tsconfig.json");
+            spec.overlays.insert(
+                "tsconfig.json".into(),
+                r#"{"compilerOptions":{"alwaysStrict":false},"files":["index.ts"]}"#.into(),
+            );
+            spec.overlays
+                .insert("index.ts".into(), "export const value = 1;".into());
+            let checked = session.open(spec).expect("native config");
+            let semantics = checked.projects().next().expect("root program").semantics();
+            assert!(!semantics.always_strict);
+            let finished = checked.diagnose_fixture_files().finish();
+            assert!(
+                finished
+                    .diagnostics()
+                    .iter()
+                    .any(|d| d.message.contains("alwaysStrict") && d.message.contains("removed")),
+                "{:?}",
+                finished.diagnostics()
+            );
+        });
+    }
+
+    #[test]
+    fn always_strict_uses_its_independent_default_and_native_extends_precedence() {
+        for (local, expected) in [
+            ("", false),
+            (r#", "alwaysStrict": true"#, true),
+            (r#", "alwaysStrict": null"#, true),
+        ] {
+            run(options(1), |session| {
+                let mut spec = ProjectSpec::new("tsconfig.json");
+                spec.overlays.insert(
+                    "base.json".into(),
+                    r#"{"compilerOptions":{"alwaysStrict":false}}"#.into(),
+                );
+                spec.overlays.insert("tsconfig.json".into(), format!(r#"{{"extends":"./base.json","compilerOptions":{{"strict":false{local}}},"files":["index.ts"]}}"#));
+                spec.overlays
+                    .insert("index.ts".into(), "const value = 1;".into());
+                let checked = session.open(spec).expect("alwaysStrict inheritance");
+                let semantics = checked.projects().next().expect("root program").semantics();
+                assert_eq!(semantics.always_strict, expected, "{local}");
+                let source = semantics
+                    .disabled_strict_sources
+                    .iter()
+                    .find(|source| source.name == "alwaysStrict");
+                assert_eq!(
+                    source.map(|source| source.configuration.file_name()),
+                    if expected {
+                        None
+                    } else {
+                        Some(Some("base.json"))
+                    }
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn native_always_strict_false_survives_every_provenance_bound() {
+        for bound in ["nodes", "edges", "bytes"] {
+            run(options(1), |session| {
+                let mut spec = ProjectSpec::new("tsconfig.json");
+                let mut root = serde_json::json!({"files":["index.ts"]});
+                match bound {
+                    "nodes" => {
+                        root["extends"] = "./base-0.json".into();
+                        for i in 0..crate::config_sources::MAX_CONFIGS {
+                            let config = if i + 1 < crate::config_sources::MAX_CONFIGS {
+                                serde_json::json!({"extends":format!("./base-{}.json",i+1)})
+                            } else {
+                                serde_json::json!({"compilerOptions":{"alwaysStrict":false}})
+                            };
+                            spec.overlays
+                                .insert(format!("base-{i}.json").into(), config.to_string());
+                        }
+                    }
+                    "edges" => {
+                        root["extends"] = serde_json::json!(vec![
+                            "./base.json";
+                            crate::config_sources::MAX_EDGES
+                                + 1
+                        ]);
+                        spec.overlays.insert(
+                            "base.json".into(),
+                            r#"{"compilerOptions":{"alwaysStrict":false}}"#.into(),
+                        );
+                    }
+                    "bytes" => {
+                        root["compilerOptions"] = serde_json::json!({"alwaysStrict":false});
+                    }
+                    _ => unreachable!(),
+                }
+                let text = if bound == "bytes" {
+                    format!("/*{}*/{}", " ".repeat(1024 * 1024 + 1), root)
+                } else {
+                    root.to_string()
+                };
+                spec.overlays.insert("tsconfig.json".into(), text);
+                spec.overlays
+                    .insert("index.ts".into(), "const value = 1;".into());
+                let checked = session.open(spec).expect("native config still resolves");
+                let semantics = checked.projects().next().expect("root program").semantics();
+                assert!(
+                    !semantics.always_strict,
+                    "{bound} exhaustion must not waive actual false"
+                );
+                assert!(
+                    !semantics
+                        .disabled_strict_sources
+                        .iter()
+                        .any(|source| source.name == "alwaysStrict"),
+                    "{bound} provenance is unavailable"
+                );
+            });
+        }
     }
 
     #[test]

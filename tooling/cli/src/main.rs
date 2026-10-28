@@ -1377,8 +1377,27 @@ fn frontend_for(tsconfig: &Utf8Path) -> Result<Frontend> {
     for_project(source, tsconfig)
 }
 
-/// Capture once, then preserve dependency evidence from those same diagnostics.
+/// Compile/inspect a project under the same policy as core's raw lowering.
+/// Native-only reporting uses `capture_native_project`, so diagnostic audits
+/// retain the checker's original output even for non-strict audit inputs.
 fn capture_project(
+    source: &mut Frontend,
+    tsconfig: &Utf8Path,
+) -> Result<nts_semantic_schema::SemanticSnapshot> {
+    let snapshot = capture_native_project(source, tsconfig)?;
+    let rejected = hir::project_policy::strict_rejections(&snapshot);
+    if !rejected.is_empty() {
+        let mut locations = SourceLocations::new(&snapshot.sources);
+        for diagnostic in &rejected {
+            eprintln!("{}", locations.diagnostic_line(diagnostic));
+        }
+        bail!("the project does not meet strict compilation requirements");
+    }
+    Ok(snapshot)
+}
+
+/// Capture once, then preserve dependency evidence from those same diagnostics.
+fn capture_native_project(
     source: &mut Frontend,
     tsconfig: &Utf8Path,
 ) -> Result<nts_semantic_schema::SemanticSnapshot> {
@@ -1876,7 +1895,7 @@ impl std::error::Error for CompletedFrontendDiagnostics {}
 fn frontend(tsconfig: &Utf8Path) -> Result<()> {
     let mut source = frontend_for(tsconfig)?;
 
-    let snapshot = capture_project(&mut source, tsconfig)?;
+    let snapshot = capture_native_project(&mut source, tsconfig)?;
     let stats = source.stats();
 
     println!("frontend         tsrs (in process)");
@@ -1893,6 +1912,35 @@ fn frontend(tsconfig: &Utf8Path) -> Result<()> {
         "tsconfig.strictNullChecks {}",
         snapshot.semantics.strict_null_checks
     );
+    println!(
+        "tsconfig.noImplicitAny {}",
+        snapshot.semantics.no_implicit_any
+    );
+    println!(
+        "tsconfig.strictFunctionTypes {}",
+        snapshot.semantics.strict_function_types
+    );
+    println!(
+        "tsconfig.strictBindCallApply {}",
+        snapshot.semantics.strict_bind_call_apply
+    );
+    println!(
+        "tsconfig.strictPropertyInitialization {}",
+        snapshot.semantics.strict_property_initialization
+    );
+    println!(
+        "tsconfig.strictBuiltinIteratorReturn {}",
+        snapshot.semantics.strict_builtin_iterator_return
+    );
+    println!(
+        "tsconfig.noImplicitThis {}",
+        snapshot.semantics.no_implicit_this
+    );
+    println!(
+        "tsconfig.useUnknownInCatchVariables {}",
+        snapshot.semantics.use_unknown_in_catch_variables
+    );
+    println!("tsconfig.alwaysStrict {}", snapshot.semantics.always_strict);
     println!(
         "tsconfig.noUncheckedIndexedAccess {}",
         snapshot.semantics.no_unchecked_indexed_access

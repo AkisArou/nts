@@ -136,12 +136,24 @@ nts reads the program's `tsconfig.json` and depends on some of its settings:
 
 | Setting | What nts requires | What happens otherwise |
 |---|---|---|
-| `strict` | every flag `strict` turns on, on in effect: layouts depend on `strictNullChecks` | refused, naming each flag that is off and the file that sets it. Not built yet: today nothing is checked |
+| `strict` | every strict setting on in effect, through `strict` or individually | `NTS1006`, naming each disabled setting and its configuration file when available |
 | `useDefineForClassFields` | `true`, class fields with define semantics | ``NTS1001 class field `x` needs useDefineForClassFields: true (effective false)`` at the first emitted field |
 | `experimentalDecorators`, `emitDecoratorMetadata` | `false` | ``NTS1001 a decorator needs experimentalDecorators: false (effective true)`` at the first decorator |
 
-Each check is made at a construct whose meaning the setting changes, so a
-project with no class fields may leave `useDefineForClassFields` false. The
+Compilation requires `noImplicitAny`, `strictNullChecks`, `strictFunctionTypes`,
+`strictBindCallApply`, `strictPropertyInitialization`,
+`strictBuiltinIteratorReturn`, `noImplicitThis`, `useUnknownInCatchVariables`
+and `alwaysStrict`. The effective values decide acceptance; the `strict`
+switch itself may be false if every setting is true. The native checker
+defaults `alwaysStrict` to true independently of its strict group and reports
+an explicit false as a removed option. nts also requires its captured effective
+value to be true. Missing configuration provenance never waives a setting.
+Frontend-only inspection and diagnostic audits report the native checker's
+results without imposing this compilation policy.
+
+The class-field and decorator checks are made at a construct whose meaning the
+setting changes, so a project with no class fields may leave
+`useDefineForClassFields` false. The
 compiler also records `verbatimModuleSyntax`, `preserveConstEnums` and
 `isolatedModules`, and refuses nothing over them.
 

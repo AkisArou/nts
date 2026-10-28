@@ -7,6 +7,7 @@
 
 mod ast;
 mod cache_replay;
+mod config_sources;
 mod environment;
 mod host;
 mod phase;
@@ -16,6 +17,7 @@ mod session;
 mod strings;
 pub use ast::*;
 pub use cache_replay::{InputChanged, InputObservation};
+pub use config_sources::StrictOptionSource;
 pub use host::{Input, InputKind, InputPath};
 pub use phase::{CapturePhase, SyntaxPhase, ViewPhase};
 pub use program::{

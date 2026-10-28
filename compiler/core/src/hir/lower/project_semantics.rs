@@ -1,4 +1,4 @@
-//! Refuse a setting only at a construct whose runtime semantics it governs.
+//! Project compile policy and construct-specific emitted-runtime settings.
 
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::{
@@ -6,7 +6,11 @@ use nts_semantic_schema::{
 };
 
 pub(super) fn rejections(snapshot: &SemanticSnapshot) -> Vec<Diagnostic> {
-    let semantics = snapshot.semantics;
+    let semantics = &snapshot.semantics;
+    let strict = super::super::project_policy::strict_rejections(snapshot);
+    if !strict.is_empty() {
+        return strict;
+    }
     if semantics.use_define_for_class_fields
         && !semantics.experimental_decorators
         && !semantics.emit_decorator_metadata

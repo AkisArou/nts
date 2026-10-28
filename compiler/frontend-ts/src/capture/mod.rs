@@ -68,8 +68,27 @@ impl<'p, 'r> Capture<'p, 'r> {
                     isolated_modules: semantics.isolated_modules,
                     strict: semantics.strict,
                     strict_null_checks: semantics.strict_null_checks,
+                    no_implicit_any: semantics.no_implicit_any,
+                    strict_function_types: semantics.strict_function_types,
+                    strict_bind_call_apply: semantics.strict_bind_call_apply,
+                    strict_property_initialization: semantics.strict_property_initialization,
+                    strict_builtin_iterator_return: semantics.strict_builtin_iterator_return,
+                    no_implicit_this: semantics.no_implicit_this,
+                    use_unknown_in_catch_variables: semantics.use_unknown_in_catch_variables,
+                    always_strict: semantics.always_strict,
                     no_unchecked_indexed_access: semantics.no_unchecked_indexed_access,
                     exact_optional_property_types: semantics.exact_optional_property_types,
+                    disabled_strict_sources: semantics
+                        .disabled_strict_sources
+                        .into_iter()
+                        .map(|source| {
+                            Ok(nts_semantic_schema::StrictOptionSource {
+                                name: source.name.to_owned(),
+                                configuration: workspace_uri(project_root, &source.configuration)?,
+                                setting: source.setting.to_owned(),
+                            })
+                        })
+                        .collect::<Result<_, SnapshotError>>()?,
                 },
                 ..SemanticSnapshot::default()
             },
