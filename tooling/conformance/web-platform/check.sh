@@ -30,6 +30,10 @@ node --expose-gc \
   runtime/web-platform/test/accept-loop.test.ts \
   runtime/web-platform/test/agent.test.ts \
   runtime/web-platform/test/core.test.ts \
+  runtime/web-platform/test/wpt-harness.test.ts \
+  runtime/web-platform/test/wpt-events-abort.test.ts \
+  runtime/web-platform/test/event-wpt-policy.test.ts \
+  runtime/web-platform/test/abort-wpt-policy.test.ts \
   runtime/web-platform/test/authenticate.test.ts \
   runtime/web-platform/test/cache-storage.test.ts \
   runtime/web-platform/test/cache.test.ts \

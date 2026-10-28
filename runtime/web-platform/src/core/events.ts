@@ -3,7 +3,7 @@ import {
   currentWebPlatformRuntime,
   hasWebPlatformRuntime,
 } from "../provider/environment.ts";
-import { abortSignalBrand } from "./abort-brand.ts";
+import { isAbortSignal, isAbortSignalAborted, subscribeAbortSignal } from "./abort-brand.ts";
 import type { AbortSignalOperations } from "./abort-brand.ts";
 import { DOMException } from "./errors.ts";
 import {
@@ -14,7 +14,6 @@ import {
   toUnsignedLong,
   toUnsignedShort,
 } from "./webidl.ts";
-import { abortSignalSubscribe } from "./abort-brand.ts";
 
 export interface EventInit {
   bubbles?: boolean;
@@ -26,10 +25,10 @@ export interface EventInit {
  * Keys for the members `EventTarget` and the event subclasses need, which Web IDL does not
  * define on `Event`.
  *
- * `begin`, `end`, `stopped`, `stoppedBeforeTarget` and `setPassiveListener` are the dispatch
- * algorithm's grip on an event and are used only by `EventTarget` in this file; `initialize`
- * and `applyConvertedEventInit` are the constructor helpers every event subclass shares.
- * Symbols so none of them sit on `Event.prototype`. Never re-exported from the public barrel.
+ * Retained as internal hooks for subclasses and other package consumers. Shared algorithms
+ * in this module use private slots directly so changing an instance's prototype cannot
+ * intercept dispatch or initialization. The hooks have no string-named prototype members
+ * and are never re-exported from the public barrel.
  */
 export const eventBegin: unique symbol = Symbol("Event begin dispatch");
 export const eventEnd: unique symbol = Symbol("Event end dispatch");
@@ -39,21 +38,40 @@ export const eventSetPassiveListener: unique symbol = Symbol("Event set passive 
 export const eventInitialize: unique symbol = Symbol("Event initialize");
 export const eventApplyConvertedInit: unique symbol = Symbol("Event apply converted init");
 
+// Shared algorithms read internal slots rather than overridable public getters.
+// The closures stay module-private and the fields also brand Web IDL receivers.
+let hasEventBrand!: (value: unknown) => value is Event;
+let eventTypeForDispatch!: (event: Event) => string;
+let eventCanceledForDispatch!: (event: Event) => boolean;
+let initializeEvent!: (
+  event: Event, type: string, bubbles: boolean, cancelable: boolean,
+) => boolean;
+let applyConvertedEventInit!: (
+  event: Event, bubbles: boolean, cancelable: boolean, composed: boolean,
+) => void;
+let beginEventDispatch!: (event: Event, target: EventTarget, trusted: boolean) => void;
+let endEventDispatch!: (event: Event) => void;
+let eventPropagationStopped!: (event: Event) => boolean;
+let eventImmediatePropagationStopped!: (event: Event) => boolean;
+let setEventPassiveListener!: (event: Event, passive: boolean) => void;
+
 export class Event {
   static readonly NONE = 0;
   static readonly CAPTURING_PHASE = 1;
   static readonly AT_TARGET = 2;
   static readonly BUBBLING_PHASE = 3;
 
-  private eventType: string;
-  private eventBubbles = false;
-  private eventCancelable = false;
-  private eventComposed = false;
-  private eventTarget: EventTarget | null = null;
-  private eventCurrentTarget: EventTarget | null = null;
-  private phase = Event.NONE;
-  private trusted = false;
-  private readonly eventTimeStamp: number;
+  declare readonly isTrusted: boolean;
+
+  #eventType: string;
+  #eventBubbles = false;
+  #eventCancelable = false;
+  #eventComposed = false;
+  #eventTarget: EventTarget | null = null;
+  #eventCurrentTarget: EventTarget | null = null;
+  #phase = Event.NONE;
+  #trusted = false;
+  readonly #eventTimeStamp: number;
   /**
    * One getter function shared by every instance, not one closure each.
    *
@@ -62,26 +80,42 @@ export class Event {
    * accessor behind it is not. A per-instance arrow satisfies every other assertion
    * about this property and fails that one.
    */
-  private static readonly isTrustedGetter = function (this: Event): boolean {
-    return this.trusted;
+  static readonly #isTrustedGetter = function (this: Event): boolean {
+    return this.#trusted;
   };
-  private canceled = false;
-  private propagationStopped = false;
-  private dispatching = false;
-  private immediateStopped = false;
-  private passiveListener = false;
+  #canceled = false;
+  #propagationStopped = false;
+  #dispatching = false;
+  #immediateStopped = false;
+  #passiveListener = false;
+
+  static {
+    hasEventBrand = (value: unknown): value is Event =>
+      typeof value === "object" && value !== null && #eventType in value;
+    eventTypeForDispatch = (event): string => event.#eventType;
+    eventCanceledForDispatch = (event): boolean => event.#canceled;
+    initializeEvent = (event, type, bubbles, cancelable): boolean =>
+      event.#initialize(type, bubbles, cancelable);
+    applyConvertedEventInit = (event, bubbles, cancelable, composed): void =>
+      event.#applyConvertedInit(bubbles, cancelable, composed);
+    beginEventDispatch = (event, target, trusted): void => event.#beginDispatch(target, trusted);
+    endEventDispatch = (event): void => event.#endDispatch();
+    eventPropagationStopped = (event): boolean => event.#propagationStopped;
+    eventImmediatePropagationStopped = (event): boolean => event.#immediateStopped;
+    setEventPassiveListener = (event, passive): void => { event.#passiveListener = passive; };
+  }
 
   constructor(...args: [type: string, init?: EventInit]) {
     requireArguments(args, 1, "Event constructor");
     const type = args[0];
     const init = args[1];
     const convertedType = coerceToDOMString(type);
-    this.eventType = convertedType;
+    this.#eventType = convertedType;
     if (init !== undefined && init !== null) {
       requireDictionary(init, "Event init");
-      this.eventBubbles = init.bubbles ? true : false;
-      this.eventCancelable = init.cancelable ? true : false;
-      this.eventComposed = init.composed ? true : false;
+      this.#eventBubbles = init.bubbles ? true : false;
+      this.#eventCancelable = init.cancelable ? true : false;
+      this.#eventComposed = init.composed ? true : false;
     }
     // Captured at construction, as the standard requires.
     //
@@ -90,7 +124,7 @@ export class Event {
     // fails 41 of this lane's own tests. `File` reads the clock unguarded for
     // `lastModified` and gets away with it because nobody builds a `File` without a
     // platform; an `Event` is built by code that has no idea whether there is one.
-    this.eventTimeStamp = hasWebPlatformRuntime()
+    this.#eventTimeStamp = hasWebPlatformRuntime()
       ? currentWebPlatformRuntime().monotonicMilliseconds()
       : 0;
     // `isTrusted` is `[LegacyUnforgeable]`: an own, non-configurable accessor on every
@@ -99,35 +133,35 @@ export class Event {
     // the point of it is that a script cannot redefine or delete the flag that says
     // whether a script made the event.
     Object.defineProperty(this, "isTrusted", {
-      get: Event.isTrustedGetter,
+      get: Event.#isTrustedGetter,
       enumerable: true,
       configurable: false,
     });
   }
 
   get type(): string {
-    return this.eventType;
+    return this.#eventType;
   }
 
   get target(): EventTarget | null {
-    return this.eventTarget;
+    return this.#eventTarget;
   }
 
   get srcElement(): EventTarget | null {
-    return this.eventTarget;
+    return this.#eventTarget;
   }
 
   get currentTarget(): EventTarget | null {
-    return this.eventCurrentTarget;
+    return this.#eventCurrentTarget;
   }
 
   composedPath(): EventTarget[] {
-    if (!this.dispatching || this.eventCurrentTarget === null) return [];
-    return [this.eventCurrentTarget];
+    if (!this.#dispatching || this.#eventCurrentTarget === null) return [];
+    return [this.#eventCurrentTarget];
   }
 
   get eventPhase(): number {
-    return this.phase;
+    return this.#phase;
   }
 
 
@@ -135,71 +169,79 @@ export class Event {
 
 
   get bubbles(): boolean {
-    return this.eventBubbles;
+    return this.#eventBubbles;
   }
 
   get cancelable(): boolean {
-    return this.eventCancelable;
+    return this.#eventCancelable;
   }
 
   get returnValue(): boolean {
-    return !this.canceled;
+    return !this.#canceled;
   }
 
   set returnValue(value: boolean) {
-    if (!value) this.preventDefault();
+    // DOM sets the canceled flag directly; script can override preventDefault.
+    // Reading the slot also checks the receiver when setting true is a no-op.
+    if (this.#eventCancelable && !this.#passiveListener && !value) this.#canceled = true;
   }
 
   get defaultPrevented(): boolean {
-    return this.canceled;
+    return this.#canceled;
   }
 
   get composed(): boolean {
-    return this.eventComposed;
+    return this.#eventComposed;
   }
 
   get timeStamp(): number {
-    return this.eventTimeStamp;
+    return this.#eventTimeStamp;
   }
 
   preventDefault(): void {
-    if (this.eventCancelable && !this.passiveListener) this.canceled = true;
+    if (this.#eventCancelable && !this.#passiveListener) this.#canceled = true;
   }
 
   stopPropagation(): void {
-    this.propagationStopped = true;
+    this.#propagationStopped = true;
   }
 
   get cancelBubble(): boolean {
-    return this.propagationStopped;
+    return this.#propagationStopped;
   }
 
   set cancelBubble(value: boolean) {
-    if (value) this.propagationStopped = true;
+    this.#propagationStopped = this.#propagationStopped || !!value;
   }
 
   stopImmediatePropagation(): void {
-    this.propagationStopped = true;
-    this.immediateStopped = true;
+    this.#propagationStopped = true;
+    this.#immediateStopped = true;
   }
 
   initEvent(...args: [type: string, bubbles?: boolean, cancelable?: boolean]): void {
+    if (!(#eventType in this)) throw new TypeError("Event method called on an incompatible receiver");
     requireArguments(args, 1, "Event.initEvent");
     const type = args[0];
     const bubbles = args[1] ?? false;
     const cancelable = args[2] ?? false;
-    this[eventInitialize](coerceToDOMString(type), bubbles ? true : false, cancelable ? true : false);
+    this.#initialize(coerceToDOMString(type), bubbles ? true : false, cancelable ? true : false);
   }
 
   protected [eventInitialize](type: string, bubbles: boolean, cancelable: boolean): boolean {
-    if (this.dispatching) return false;
-    this.propagationStopped = false;
-    this.immediateStopped = false;
-    this.canceled = false;
-    this.eventTarget = null;
-    this.eventType = type;
-    this.eventBubbles = bubbles ? true : false;
-    this.eventCancelable = cancelable ? true : false;
+    return this.#initialize(type, bubbles, cancelable);
+  }
+
+  #initialize(type: string, bubbles: boolean, cancelable: boolean): boolean {
+    if (this.#dispatching) return false;
+    this.#propagationStopped = false;
+    this.#immediateStopped = false;
+    this.#canceled = false;
+    this.#trusted = false;
+    this.#eventTarget = null;
+    this.#eventType = type;
+    this.#eventBubbles = bubbles ? true : false;
+    this.#eventCancelable = cancelable ? true : false;
     return true;
   }
 
@@ -208,41 +250,53 @@ export class Event {
     cancelable: boolean,
     composed: boolean,
   ): void {
-    this.eventBubbles = bubbles;
-    this.eventCancelable = cancelable;
-    this.eventComposed = composed;
+    this.#applyConvertedInit(bubbles, cancelable, composed);
+  }
+
+  #applyConvertedInit(bubbles: boolean, cancelable: boolean, composed: boolean): void {
+    this.#eventBubbles = bubbles;
+    this.#eventCancelable = cancelable;
+    this.#eventComposed = composed;
   }
 
   [eventBegin](target: EventTarget, trusted: boolean): void {
-    if (this.dispatching) {
+    this.#beginDispatch(target, trusted);
+  }
+
+  #beginDispatch(target: EventTarget, trusted: boolean): void {
+    if (this.#dispatching) {
       throw new DOMException("Event is already dispatching or uninitialized", "InvalidStateError");
     }
-    this.dispatching = true;
-    this.trusted = trusted;
-    this.eventTarget = target;
-    this.eventCurrentTarget = target;
-    this.phase = Event.AT_TARGET;
+    this.#dispatching = true;
+    this.#trusted = trusted;
+    this.#eventTarget = target;
+    this.#eventCurrentTarget = target;
+    this.#phase = Event.AT_TARGET;
   }
 
   [eventEnd](): void {
-    this.dispatching = false;
-    this.passiveListener = false;
-    this.eventCurrentTarget = null;
-    this.phase = Event.NONE;
-    this.propagationStopped = false;
-    this.immediateStopped = false;
+    this.#endDispatch();
+  }
+
+  #endDispatch(): void {
+    this.#dispatching = false;
+    this.#passiveListener = false;
+    this.#eventCurrentTarget = null;
+    this.#phase = Event.NONE;
+    this.#propagationStopped = false;
+    this.#immediateStopped = false;
   }
 
   [eventSetPassiveListener](passive: boolean): void {
-    this.passiveListener = passive;
+    this.#passiveListener = passive;
   }
 
   get [eventStopped](): boolean {
-    return this.immediateStopped;
+    return this.#immediateStopped;
   }
 
   get [eventStoppedBeforeTarget](): boolean {
-    return this.propagationStopped;
+    return this.#propagationStopped;
   }
 }
 // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
@@ -257,12 +311,17 @@ for (const [name, value] of [
   ["AT_TARGET", 2],
   ["BUBBLING_PHASE", 3],
 ] as const) {
-  Object.defineProperty(Event.prototype, name, {
-    value,
-    writable: false,
-    enumerable: true,
-    configurable: false,
-  });
+  // TypeScript's static readonly declaration does not enforce these attributes
+  // at run time. Web IDL requires the same descriptor on both objects.
+  // https://webidl.spec.whatwg.org/#es-constants
+  for (const owner of [Event, Event.prototype]) {
+    Object.defineProperty(owner, name, {
+      value,
+      writable: false,
+      enumerable: true,
+      configurable: false,
+    });
+  }
 }
 // Web IDL member attributes. Safe now: the dispatch algorithm's grip on Event object and
 // the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
@@ -293,33 +352,43 @@ export interface CustomEventInit<T> extends EventInit {
 }
 
 export class CustomEvent<T = unknown> extends Event {
-  private customDetail: T | null;
+  #customDetail: T | null;
 
   constructor(...args: [type: string, init?: CustomEventInit<T>]) {
     requireArguments(args, 1, "CustomEvent constructor");
-    const type = args[0];
+    const type = coerceToDOMString(args[0]);
     const init = args[1];
-    super(type);
-    if (init === undefined || init === null) {
-      this.customDetail = null;
-    } else {
+    let bubbles = false;
+    let cancelable = false;
+    let composed = false;
+    let detail: T | null = null;
+    if (init !== undefined && init !== null) {
       requireDictionary(init, "CustomEvent init");
-      const bubbles = init.bubbles ? true : false;
-      const cancelable = init.cancelable ? true : false;
-      const composed = init.composed ? true : false;
-      const detail = init.detail;
-      this[eventApplyConvertedInit](bubbles, cancelable, composed);
-      this.customDetail = detail === undefined ? null : detail;
+      bubbles = init.bubbles ? true : false;
+      cancelable = init.cancelable ? true : false;
+      composed = init.composed ? true : false;
+      const suppliedDetail = init.detail;
+      detail = suppliedDetail === undefined ? null : suppliedDetail;
     }
+    // Web IDL converts the complete inherited dictionary before DOM's event
+    // construction algorithm captures the time. No dictionary getters run after super.
+    // https://dom.spec.whatwg.org/#concept-event-constructor
+    // https://webidl.spec.whatwg.org/#es-dictionary
+    super(type);
+    applyConvertedEventInit(this, bubbles, cancelable, composed);
+    this.#customDetail = detail;
   }
 
   get detail(): T | null {
-    return this.customDetail;
+    return this.#customDetail;
   }
 
   initCustomEvent(
     ...args: [type: string, bubbles?: boolean, cancelable?: boolean, detail?: T | null]
   ): void {
+    if (!(#customDetail in this)) {
+      throw new TypeError("CustomEvent method called on an incompatible receiver");
+    }
     requireArguments(args, 1, "CustomEvent.initCustomEvent");
     const type = args[0];
     const bubbles = args[1] ?? false;
@@ -328,8 +397,8 @@ export class CustomEvent<T = unknown> extends Event {
     const convertedType = coerceToDOMString(type);
     const convertedBubbles = bubbles ? true : false;
     const convertedCancelable = cancelable ? true : false;
-    if (this[eventInitialize](convertedType, convertedBubbles, convertedCancelable)) {
-      this.customDetail = detail;
+    if (initializeEvent(this, convertedType, convertedBubbles, convertedCancelable)) {
+      this.#customDetail = detail;
     }
   }
 }
@@ -364,6 +433,15 @@ export interface EventListenerObject {
 }
 
 export type EventListenerOrEventListenerObject = EventListener | EventListenerObject;
+
+// Web IDL performs Call without reading a user callback's `call` property.
+// Capture the intrinsic once, with no argument-array allocation during dispatch.
+// https://webidl.spec.whatwg.org/#call-a-user-objects-operation
+const callEventCallback: <Receiver, E extends Event>(
+  callback: (this: Receiver, event: E) => void,
+  receiver: Receiver,
+  event: E,
+) => void = Function.prototype.call.bind(Function.prototype.call);
 
 interface EventListenerCallbackObject {
   readonly handleEvent?: unknown;
@@ -487,23 +565,10 @@ function convertListenerSignal(signal: unknown): AbortSignalOperations | undefin
   if (signal === undefined) {
     return undefined;
   }
-  if (isEventListenerSignal(signal)) {
+  if (isAbortSignal(signal)) {
     return signal;
   }
   throw new TypeError("signal must be an AbortSignal");
-}
-
-function isEventListenerSignal(signal: unknown): signal is AbortSignalOperations {
-  return (
-    signal !== null &&
-    typeof signal === "object" &&
-    abortSignalBrand in signal &&
-    signal[abortSignalBrand] === true &&
-    "aborted" in signal &&
-    typeof signal.aborted === "boolean" &&
-    abortSignalSubscribe in signal &&
-    typeof signal[abortSignalSubscribe] === "function"
-  );
 }
 
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
@@ -521,11 +586,18 @@ export const eventTargetSetListenerObserver: unique symbol = Symbol("EventTarget
 export const eventTargetSetErrorReporter: unique symbol = Symbol("EventTarget set error reporter");
 export const eventTargetReportError: unique symbol = Symbol("EventTarget report error");
 
+// DOM inner invoke reports listener exceptions without throwing from dispatch.
+// Share this default across targets; provider-bound reporters may replace it.
+// https://dom.spec.whatwg.org/#concept-event-inner-invoke
+function reportEventListenerError(error: unknown): void {
+  if (hasWebPlatformRuntime()) currentWebPlatformRuntime().scheduler.reportError(error);
+}
+
 export class EventTarget {
-  private readonly listeners: ListenerRecord[] = [];
-  private listenerObserver: ListenerObserver | null = null;
-  private dispatchDepth = 0;
-  private errorReporter: (error: unknown) => void = () => {};
+  readonly #listeners: ListenerRecord[] = [];
+  #listenerObserver: ListenerObserver | null = null;
+  #dispatchDepth = 0;
+  #errorReporter: (error: unknown) => void = reportEventListenerError;
 
   static {
     registerInternal = (target, type, callback, resource, once, resist): void => {
@@ -550,7 +622,7 @@ export class EventTarget {
     resist: boolean,
   ): void {
     if (
-      this.listeners.some(
+      this.#listeners.some(
         (item) =>
           !item.removed && item.type === type && item.callback === callback && !item.capture,
       )
@@ -567,8 +639,8 @@ export class EventTarget {
       weakResource: resource === null ? null : new WeakRef(resource),
       resistStopPropagation: resist,
     };
-    this.listeners.push(listener);
-    this.listenerObserver?.(type, true);
+    this.#listeners.push(listener);
+    this.#listenerObserver?.(type, true);
     if (resource !== null) {
       weaklyHeldListeners.register(resource, { target: new WeakRef(this), listener }, listener);
     }
@@ -585,6 +657,7 @@ export class EventTarget {
       options?: ListenerOptions | boolean,
     ]
   ): void {
+    const listeners = this.#listeners;
     requireArguments(args, 2, "EventTarget.addEventListener");
     const type = args[0];
     const callback = args[1];
@@ -608,9 +681,9 @@ export class EventTarget {
       }
     }
     if (convertedCallback === null) return;
-    if (signal?.aborted) return;
+    if (signal !== undefined && isAbortSignalAborted(signal)) return;
     if (
-      this.listeners.some(
+      listeners.some(
         (item) =>
           !item.removed &&
           item.type === convertedType &&
@@ -630,10 +703,10 @@ export class EventTarget {
       weakResource: null,
       resistStopPropagation: false,
     };
-    this.listeners.push(listener);
-    this.listenerObserver?.(convertedType, true);
+    listeners.push(listener);
+    this.#listenerObserver?.(convertedType, true);
     if (signal !== undefined) {
-      listener.unsubscribeAbort = signal[abortSignalSubscribe](() => this.#removeRecord(listener));
+      listener.unsubscribeAbort = subscribeAbortSignal(signal, () => this.#removeRecord(listener));
     }
   }
 
@@ -644,6 +717,7 @@ export class EventTarget {
       options?: ListenerOptions | boolean,
     ]
   ): void {
+    const listeners = this.#listeners;
     requireArguments(args, 2, "EventTarget.removeEventListener");
     const type = args[0];
     const callback = args[1];
@@ -652,8 +726,9 @@ export class EventTarget {
     const convertedCallback = convertEventListener(callback);
     const capture = convertEventListenerOptions(options);
     if (convertedCallback === null) return;
-    for (const item of this.listeners) {
+    for (const item of listeners) {
       if (
+        !item.removed &&
         item.type === convertedType &&
         item.callback === convertedCallback &&
         item.capture === capture
@@ -665,9 +740,12 @@ export class EventTarget {
   }
 
   dispatchEvent(...args: [event: Event]): boolean {
+    if (!(#listeners in this)) {
+      throw new TypeError("EventTarget method called on an incompatible receiver");
+    }
     requireArguments(args, 1, "EventTarget.dispatchEvent");
     const event = args[0];
-    if (!(event instanceof Event)) {
+    if (!hasEventBrand(event)) {
       throw new TypeError("event must be an Event");
     }
     return this.#dispatch(event, false);
@@ -679,53 +757,64 @@ export class EventTarget {
   }
 
   #dispatch(event: Event, trusted: boolean): boolean {
-    event[eventBegin](this, trusted);
-    this.dispatchDepth++;
-    const listenerCount = this.listeners.length;
+    beginEventDispatch(event, this, trusted);
+    this.#dispatchDepth++;
     try {
-      if (!event[eventStoppedBeforeTarget]) {
-        for (let index = 0; index < listenerCount; index++) {
-          const item = this.listeners[index];
-          if (item === undefined) continue;
-          if (item.removed || item.type !== event.type) continue;
-          // `stopImmediatePropagation()` hides the rest of the list from ordinary
-          // listeners. A resisting listener is internal and is not something script
-          // registered, so script stopping propagation does not cancel it; scanning
-          // continues rather than breaking, or the resisting listener would be
-          // unreachable behind the one that stopped.
-          if (event[eventStopped] && !item.resistStopPropagation) continue;
-          // A finalization callback is not synchronous with collection, so the
-          // liveness of the resource is decided here rather than trusting that the
-          // registry has already run.
-          if (item.weakResource !== null && item.weakResource.deref() === undefined) {
-            this.#removeRecord(item);
-            continue;
-          }
-          if (item.once) this.#removeRecord(item);
-          event[eventSetPassiveListener](item.passive);
-          try {
-            if (isEventListener(item.callback)) {
-              item.callback.call(this, event);
-            } else {
-              const handleEvent = item.callback.handleEvent;
-              if (typeof handleEvent !== "function") {
-                throw new TypeError("EventListener.handleEvent must be callable");
-              }
-              handleEvent.call(item.callback, event);
-            }
-          } catch (error) {
-            this[eventTargetReportError](error);
-          } finally {
-            event[eventSetPassiveListener](false);
-          }
-        }
+      if (!eventPropagationStopped(event)) {
+        // DOM dispatch invokes even a target with no parent twice: capturing,
+        // then bubbling. Both invocations expose AT_TARGET as eventPhase.
+        // https://dom.spec.whatwg.org/#concept-event-dispatch
+        this.#invoke(event, true);
+        this.#invoke(event, false);
       }
     } finally {
-      event[eventEnd]();
-      this.dispatchDepth--;
-      if (this.dispatchDepth === 0) this.#compactListeners();
+      endEventDispatch(event);
+      this.#dispatchDepth--;
+      if (this.#dispatchDepth === 0) this.#compactListeners();
     }
-    return !event.defaultPrevented;
+    return !eventCanceledForDispatch(event);
+  }
+
+  #invoke(event: Event, capture: boolean): void {
+    // Each invocation clones the listener list. A length snapshot is equivalent
+    // while dispatchDepth prevents compaction and removals mark their records.
+    // Listeners added during capture can therefore run in the later invocation.
+    // https://dom.spec.whatwg.org/#concept-event-inner-invoke
+    const listenerCount = this.#listeners.length;
+    const propagationStopped = eventPropagationStopped(event);
+    const type = eventTypeForDispatch(event);
+    for (let index = 0; index < listenerCount; index++) {
+      const item = this.#listeners[index];
+      if (item === undefined) continue;
+      if (item.removed || item.type !== type || item.capture !== capture) continue;
+      // Internal resisting listeners remain reachable even when a script listener
+      // stops the ordinary invocation. No public option requests this behavior.
+      if ((propagationStopped || eventImmediatePropagationStopped(event)) && !item.resistStopPropagation) continue;
+      // A finalization callback is not synchronous with collection, so the
+      // liveness of the resource is decided here rather than trusting that the
+      // registry has already run.
+      if (item.weakResource !== null && item.weakResource.deref() === undefined) {
+        this.#removeRecord(item);
+        continue;
+      }
+      if (item.once) this.#removeRecord(item);
+      setEventPassiveListener(event, item.passive);
+      try {
+        if (isEventListener(item.callback)) {
+          callEventCallback(item.callback, this, event);
+        } else {
+          const handleEvent = item.callback.handleEvent;
+          if (typeof handleEvent !== "function") {
+            throw new TypeError("EventListener.handleEvent must be callable");
+          }
+          callEventCallback(handleEvent as (event: Event) => void, item.callback, event);
+        }
+      } catch (error) {
+        this.#errorReporter(error);
+      } finally {
+        setEventPassiveListener(event, false);
+      }
+    }
   }
 
   /** Property handlers occupy their registration position, just like ordinary listeners. */
@@ -742,7 +831,7 @@ export class EventTarget {
       slot.listener = null;
     } else if (slot.listener === null) {
       slot.listener = (event) => {
-        if (slot.callback !== null && accepts(event)) slot.callback.call(target, event);
+        if (slot.callback !== null && accepts(event)) callEventCallback(slot.callback, target, event);
       };
       target.addEventListener(type, slot.listener);
     }
@@ -750,17 +839,17 @@ export class EventTarget {
 
   /** Lets a specialized EventTarget account for the lifetime of its listeners. */
   protected [eventTargetSetListenerObserver](observer: ListenerObserver): void {
-    this.listenerObserver = observer;
+    this.#listenerObserver = observer;
   }
 
   /** Binds provider exception reporting without changing the public constructor. */
   protected [eventTargetSetErrorReporter](reporter: (error: unknown) => void): void {
-    this.errorReporter = reporter;
+    this.#errorReporter = reporter;
   }
 
   /** Reports an exception through the owning provider. */
   protected [eventTargetReportError](error: unknown): void {
-    this.errorReporter(error);
+    this.#errorReporter(error);
   }
 
   #removeRecord(listener: ListenerRecord): void {
@@ -773,17 +862,17 @@ export class EventTarget {
     const unsubscribe = listener.unsubscribeAbort;
     listener.unsubscribeAbort = null;
     unsubscribe?.();
-    this.listenerObserver?.(listener.type, false);
-    if (this.dispatchDepth === 0) this.#compactListeners();
+    this.#listenerObserver?.(listener.type, false);
+    if (this.#dispatchDepth === 0) this.#compactListeners();
   }
 
   #compactListeners(): void {
     let write = 0;
-    for (let read = 0; read < this.listeners.length; read++) {
-      const listener = this.listeners[read];
-      if (listener !== undefined && !listener.removed) this.listeners[write++] = listener;
+    for (let read = 0; read < this.#listeners.length; read++) {
+      const listener = this.#listeners[read];
+      if (listener !== undefined && !listener.removed) this.#listeners[write++] = listener;
     }
-    this.listeners.length = write;
+    this.#listeners.length = write;
   }
 }
 // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
@@ -939,7 +1028,7 @@ export class MessageEvent<T = unknown> extends Event {
       ) {
         throw new TypeError("MessageEvent source must be an EventTarget");
       }
-      this[eventApplyConvertedInit](bubbles, cancelable, composed);
+      applyConvertedEventInit(this, bubbles, cancelable, composed);
       this.messageData = dataValue === undefined ? null : dataValue;
       this.messageLastEventId = lastEventId;
       this.messageOrigin = origin;
@@ -998,7 +1087,7 @@ export class MessageEvent<T = unknown> extends Event {
       throw new TypeError("MessageEvent source must be an EventTarget");
     }
     const convertedPorts = convertEventTargetSequence(ports);
-    if (!this[eventInitialize](convertedType, convertedBubbles, convertedCancelable)) return;
+    if (!initializeEvent(this, convertedType, convertedBubbles, convertedCancelable)) return;
     this.messageData = data;
     this.messageOrigin = convertedOrigin;
     this.messageLastEventId = convertedLastEventId;
@@ -1060,7 +1149,7 @@ export class CloseEvent extends Event {
       const reasonValue = init.reason;
       const reason = reasonValue === undefined ? "" : coerceToUSVString(reasonValue);
       const wasClean = init.wasClean ? true : false;
-      this[eventApplyConvertedInit](bubbles, cancelable, composed);
+      applyConvertedEventInit(this, bubbles, cancelable, composed);
       this.closeCode = code;
       this.closeReason = reason;
       this.clean = wasClean;
@@ -1143,7 +1232,7 @@ export class ErrorEvent extends Event {
       const lineno = linenoValue === undefined ? 0 : toUnsignedLong(linenoValue);
       const messageValue = init.message;
       const message = messageValue === undefined ? "" : coerceToDOMString(messageValue);
-      this[eventApplyConvertedInit](bubbles, cancelable, composed);
+      applyConvertedEventInit(this, bubbles, cancelable, composed);
       this.errorColumn = colno;
       this.errorValue = errorValue;
       this.errorFilename = filename;
