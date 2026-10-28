@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 14,
+        "allowNaN": true,
+        "reason": "Bound exponential tree construction within the Node recorder's memory and CPU budgets while covering benchmark seed 12 and published depth 10."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 14,
+        "allowNaN": true,
+        "reason": "Bound exponential tree construction within the Node recorder's memory and CPU budgets while covering benchmark seed 12 and published depth 10."
+      }
+    }
+  }
+}
