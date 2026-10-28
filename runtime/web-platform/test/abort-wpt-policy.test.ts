@@ -209,3 +209,17 @@ test("an empty dependent signal does not retain later observed composites", asyn
   assert.equal(await collected(reference), true);
   assert.equal(empty.aborted, false);
 });
+
+// https://webidl.spec.whatwg.org/#es-operations
+// Optional-only argument lists give operation functions a length of zero.
+test("abort operations expose the Web IDL required-argument arity", () => {
+  assert.equal(AbortSignal.abort.length, 0);
+  assert.equal(AbortController.prototype.abort.length, 0);
+  assert.equal(AbortSignal.any.length, 1);
+  assert.equal(AbortSignal.timeout.length, 1);
+  const reason = {};
+  assert.equal(AbortSignal.abort(reason).reason, reason);
+  const controller = new AbortController();
+  controller.abort(reason);
+  assert.equal(controller.signal.reason, reason);
+});

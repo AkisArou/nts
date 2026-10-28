@@ -112,7 +112,9 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     for (const dependent of dependents) dependent.#runAbortSteps();
   }
 
-  static abort(reason?: unknown): AbortSignal {
+  // Web IDL counts required parameters in the operation function's length.
+  // https://webidl.spec.whatwg.org/#es-operations
+  static abort(reason: unknown = undefined): AbortSignal {
     const signal = new AbortSignal(abortSignalConstructorKey);
     signal[abortSignalTrigger](reason);
     return signal;
@@ -367,7 +369,7 @@ export class AbortController {
     return this.#controllerSignal;
   }
 
-  abort(reason?: unknown): void {
+  abort(reason: unknown = undefined): void {
     this.#controllerSignal[abortSignalTrigger](reason);
   }
 }
