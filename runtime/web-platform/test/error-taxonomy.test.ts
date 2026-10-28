@@ -57,6 +57,7 @@ const TAXONOMY: Readonly<Record<string, TaxonomyEntry>> = {
   ProtocolMismatchError: { build: (C: new (...args: readonly unknown[]) => Error) => new C("h2", "http/1.1"), transport: false },
   ProxyConfigurationError: { build: (C: new (...args: readonly unknown[]) => Error) => new C("bad"), transport: false },
   ProxyResponseError: { build: (C: new (...args: readonly unknown[]) => Error) => new C(502, []), transport: false },
+  QuotaExceededError: { build: (C: new (...args: readonly unknown[]) => Error) => new C("quota"), transport: false },
   ResponseError: {
     build: (C: new (...args: readonly unknown[]) => Error) => new C({ status: 500, statusText: "Server Error", headers: [] }, null),
     transport: false,
@@ -128,15 +129,19 @@ suite("exactly the declared errors are typed transport failures", () => {
   }
 });
 
-suite("the two errors with a non-Error base keep it", () => {
+suite("the errors with a specialized Error base keep it", () => {
   // `MockNotMatchedError` is a `TypeError` because an unmatched mock is a programming
   // mistake, and `WebSocketError` is a `DOMException` because the WebSockets standard
-  // says so. Both are observable through `instanceof` and neither is incidental.
+  // says so. QuotaExceededError likewise inherits DOMException as Web IDL defines.
+  // These bases are observable through `instanceof` and are not incidental.
   const mock = errorNamed("MockNotMatchedError");
   assert.ok(mock instanceof TypeError);
   const socket = errorNamed("WebSocketError");
   assert.ok(socket instanceof DOMException);
   assert.equal(socket.name, "WebSocketError");
+  const quota = errorNamed("QuotaExceededError");
+  assert.ok(quota instanceof DOMException);
+  assert.equal(quota.name, "QuotaExceededError");
 });
 
 suite("proxy failures are deliberately outside the transport set", () => {

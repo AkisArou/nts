@@ -1,4 +1,5 @@
 import { DOMException } from "../core/errors.ts";
+import { QuotaExceededError } from "../core/quota-exceeded-error.ts";
 import { requireArguments } from "../core/webidl.ts";
 import type { CryptoProvider } from "../provider/crypto.ts";
 import type { RandomSource, Scheduler } from "../provider/primitives.ts";
@@ -62,7 +63,7 @@ export class Crypto {
         throw new DOMException("Expected an integer typed array", "TypeMismatchError");
     }
     if (cryptoViewByteLength(view) > 65_536) {
-      throw new DOMException("The array exceeds 65,536 bytes", "QuotaExceededError");
+      throw new QuotaExceededError("The array exceeds 65,536 bytes");
     }
     // No backing-buffer allocation or copy. Non-Uint8 arrays need only a view
     // over the caller's exact byte range; the usual Uint8 path reuses its view.

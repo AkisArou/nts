@@ -25,6 +25,7 @@
     "./verify-versions.ts",
     "../wpt-versions.test.ts",
     "../wpt-webcrypto.test.ts",
-    "./webcrypto/report.ts"
+    "./webcrypto/report.ts",
+    "../crypto-quota.test.ts"
   ]
 }

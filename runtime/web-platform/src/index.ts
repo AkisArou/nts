@@ -1,4 +1,6 @@
 export { DOMException } from "./core/errors.ts";
+export { QuotaExceededError } from "./core/quota-exceeded-error.ts";
+export type { QuotaExceededErrorOptions } from "./core/quota-exceeded-error.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
 export type {

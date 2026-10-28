@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { btoa } from "node:buffer";
 import { createHostNodeWebPlatform } from "../../../host/node-runtime.ts";
 import {
-  Crypto, CryptoKey, DOMException, SubtleCrypto, TextDecoder, TextEncoder,
+  Crypto, CryptoKey, DOMException, QuotaExceededError, SubtleCrypto, TextDecoder, TextEncoder,
 } from "../../../src/index.ts";
 import { NodeCryptoProvider } from "../../node-crypto-provider.ts";
 import type { WptEnvironment, WptFixtureContext } from "../runner.ts";
@@ -19,7 +19,7 @@ export function createWebCryptoWptEnvironment(
   return {
     exposeSelf: true,
     globals: {
-      Crypto, CryptoKey, DOMException, SubtleCrypto, TextDecoder, TextEncoder, crypto,
+      Crypto, CryptoKey, DOMException, QuotaExceededError, SubtleCrypto, TextDecoder, TextEncoder, crypto,
       // The genuine implementation-realm constructors preserve byte inputs and
       // returned buffer identities. Literal/global realm requirements remain
       // explicit manifest limitations, as in the shared Streams WPT driver.

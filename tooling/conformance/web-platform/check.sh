@@ -61,6 +61,7 @@ node --expose-gc \
   runtime/web-platform/test/crypto-okp-wrap.test.ts \
   runtime/web-platform/test/crypto-okp.test.ts \
   runtime/web-platform/test/crypto-provider.test.ts \
+  runtime/web-platform/test/crypto-quota.test.ts \
   runtime/web-platform/test/crypto-aes.test.ts \
   runtime/web-platform/test/crypto-jwk.test.ts \
   runtime/web-platform/test/crypto-secret-key.test.ts \
