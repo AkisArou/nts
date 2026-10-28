@@ -58,10 +58,6 @@ function normalizeConvertedName(name: string): string {
   return name.toLowerCase();
 }
 
-export function normalizeValue(value: string): string {
-  return normalizeConvertedValue(coerceToByteString(value));
-}
-
 function normalizeConvertedValue(value: string): string {
   // Fetch trims HTTP whitespace (HTAB, LF, CR, SP) before validating embedded
   // newline bytes. String.trim() is wrong: it would also strip NBSP and FF.
