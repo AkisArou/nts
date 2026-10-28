@@ -73,6 +73,18 @@ test("Performance factory preserves one instance per runtime", (t) => {
   assert.throws(() => createPerformance(runtime), /already installed/);
 });
 
+test("PerformanceMark does not install an implicit capability-free Performance before bootstrap", async () => {
+  const runtime = new WebPlatformRuntime(createHostNodePrimitives());
+  installWebPlatformRuntime(runtime);
+  try {
+    assert.throws(() => new PerformanceMark("before bootstrap"), (error) => error instanceof DOMException &&
+      error.name === "NotSupportedError" && error.message.includes("bootstrap"));
+    const performance = createPerformance(runtime);
+    assert.ok(new PerformanceMark("after bootstrap").startTime >= 0);
+    assert.deepEqual(performance.getEntries(), []);
+  } finally { await runtime.close(); }
+});
+
 test("Performance argument counts and receiver brands are checked before coercion", (t) => {
   const { performance } = environment(t);
   for (const fn of [performance.mark, performance.measure, performance.getEntriesByName, performance.getEntriesByType]) {

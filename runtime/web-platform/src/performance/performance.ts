@@ -144,7 +144,11 @@ const performances = new WeakMap<WebPlatformRuntime, Performance>();
 
 function currentPerformance(): Performance {
   const runtime = currentWebPlatformRuntime();
-  return performances.get(runtime) ?? createPerformance(runtime);
+  const performance = performances.get(runtime);
+  if (performance === undefined) {
+    throw new DOMException("Performance requires provider bootstrap initialization", "NotSupportedError");
+  }
+  return performance;
 }
 
 /** Performance Timeline's immutable common entry attributes. */
