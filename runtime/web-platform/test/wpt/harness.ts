@@ -67,6 +67,99 @@ function objectEquals(actual: unknown, expected: unknown, message?: string): voi
   checkEqual(actual, expected, []);
 }
 
+// Formatting is observable in the unchanged FileAPI registration names. Follow
+// resources/testharness.js:1304-1497 at the pin above, including shared references,
+// sparse arrays, control-character spelling and the 1000-character truncation.
+const controlEscapes = [
+  "0", "x01", "x02", "x03", "x04", "x05", "x06", "x07",
+  "b", "t", "n", "v", "f", "r", "x0e", "x0f",
+  "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17",
+  "x18", "x19", "x1a", "x1b", "x1c", "x1d", "x1e", "x1f",
+] as const;
+
+function truncate(value: string, length: number): string {
+  return value.length > length ? value.substring(0, length - 3) + "..." : value;
+}
+
+function isNode(value: object): boolean {
+  try {
+    if (!("nodeType" in value && "nodeName" in value && "nodeValue" in value && "childNodes" in value)) return false;
+    void value.nodeType;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function formatValue(value: unknown, seen: unknown[] = [], nodeConstants?: Record<string, unknown>): string {
+  if (!seen) seen = [];
+  if (typeof value === "object" && value !== null) {
+    if (seen.indexOf(value) >= 0) return "[...]";
+    seen.push(value);
+  }
+  if (Array.isArray(value)) {
+    const array = value as unknown[] & { beginEllipsis?: unknown; endEllipsis?: unknown };
+    let output = "[";
+    if (array.beginEllipsis !== undefined) output += "…, ";
+    output += array.map((item) => formatValue(item, seen, nodeConstants)).join(", ");
+    if (array.endEllipsis !== undefined) output += ", …";
+    return output + "]";
+  }
+  if (typeof value === "string") {
+    return '"' + value.replace(/[\\"\u0000-\u001f\ufffd-\uffff]/g, (character) => {
+      if (character === "\\") return "\\\\";
+      if (character === '"') return '\\"';
+      const unit = character.charCodeAt(0);
+      return "\\" + (unit < 32 ? controlEscapes[unit] : "u" + unit.toString(16));
+    }) + '"';
+  }
+  if (typeof value === "boolean" || typeof value === "undefined") return String(value);
+  if (typeof value === "number") return Object.is(value, -0) ? "-0" : String(value);
+  if (typeof value === "bigint") return String(value) + "n";
+  if (value === null) return "null";
+  if (typeof value === "object" && isNode(value)) {
+    // No DOM is fabricated. These descriptions are available only if a driver
+    // explicitly supplies its real Node interface, as upstream requires.
+    if (nodeConstants === undefined) throw new ReferenceError("Node is not defined");
+    const node = value as Record<string, unknown>;
+    switch (node.nodeType) {
+      case nodeConstants.ELEMENT_NODE: {
+        let text = "<" + node.localName;
+        const attributes = node.attributes as ArrayLike<{ name: string; value: string }>;
+        for (let i = 0; i < attributes.length; i++) {
+          text += " " + attributes[i]!.name + '="' + attributes[i]!.value + '"';
+        }
+        text += ">" + node.innerHTML + "</" + node.localName + ">";
+        return "Element node " + truncate(text, 60);
+      }
+      case nodeConstants.TEXT_NODE:
+        return 'Text node "' + truncate(node.data as string, 60) + '"';
+      case nodeConstants.PROCESSING_INSTRUCTION_NODE:
+        return "ProcessingInstruction node with target " + formatValue(truncate(node.target as string, 60), undefined, nodeConstants) +
+          " and data " + formatValue(truncate(node.data as string, 60), undefined, nodeConstants);
+      case nodeConstants.COMMENT_NODE:
+        return "Comment node <!--" + truncate(node.data as string, 60) + "-->";
+      case nodeConstants.DOCUMENT_NODE: {
+        const childNodes = node.childNodes as ArrayLike<unknown>;
+        return "Document node with " + childNodes.length + (childNodes.length === 1 ? " child" : " children");
+      }
+      case nodeConstants.DOCUMENT_TYPE_NODE:
+        return "DocumentType node";
+      case nodeConstants.DOCUMENT_FRAGMENT_NODE: {
+        const childNodes = node.childNodes as ArrayLike<unknown>;
+        return "DocumentFragment node with " + childNodes.length + (childNodes.length === 1 ? " child" : " children");
+      }
+      default:
+        return "Node object of unknown type";
+    }
+  }
+  try {
+    return typeof value + ' "' + truncate(String(value), 1000) + '"';
+  } catch (error) {
+    return "[stringifying object threw " + String(error) + " with type " + String(typeof error) + "]";
+  }
+}
+
 export interface WptResult {
   name: string;
   status: "pass" | "fail" | "blocked";
@@ -91,6 +184,7 @@ export interface WptHarnessOptions {
   exposeSelf?: boolean;
   globalAliases?: readonly string[];
   deadlineScheduler?: WptDeadlineScheduler;
+  defaultTestName?: string;
 }
 
 class WptTest {
@@ -234,6 +328,83 @@ class WptTest {
   }
 }
 
+interface WatchedEvent { readonly type: string; }
+interface WatchedTarget {
+  addEventListener(type: string, callback: (event: WatchedEvent) => unknown, capture: boolean): void;
+  removeEventListener(type: string, callback: (event: WatchedEvent) => unknown, capture: boolean): void;
+}
+type WatchedResult = WatchedEvent | WatchedEvent[] | null;
+interface PendingEvents {
+  types: string[];
+  resolve(value: WatchedResult): void;
+  reject(reason: unknown): void;
+}
+
+// resources/testharness.js:956-1072 at the pin above. In particular, an event
+// arriving before wait_for(), between waits, or out of order fails immediately.
+// Do not defer events to compensate for a provider's missing task checkpoints.
+class EventWatcher {
+  private waitingFor: PendingEvents | null = null;
+  private recordedEvents: WatchedEvent[] | null = null;
+  private readonly test: WptTest;
+  private readonly timeoutPromise: (() => PromiseLike<unknown>) | undefined;
+  readonly stop_watching: () => void;
+
+  constructor(
+    test: WptTest,
+    watchedNode: WatchedTarget,
+    eventTypes: string | string[],
+    timeoutPromise?: () => PromiseLike<unknown>,
+  ) {
+    this.test = test;
+    this.timeoutPromise = timeoutPromise;
+    const types = typeof eventTypes === "string" ? [eventTypes] : eventTypes;
+    const eventHandler = test.step_func((value: unknown) => {
+      const event = value as WatchedEvent;
+      assert.ok(this.waitingFor, "Not expecting event, but got " + event.type + " event");
+      assert.equal(event.type, this.waitingFor.types[0],
+        "Expected " + this.waitingFor.types[0] + " event, but got " + event.type + " event instead");
+      if (Array.isArray(this.recordedEvents)) this.recordedEvents.push(event);
+      if (this.waitingFor.types.length > 1) {
+        this.waitingFor.types.shift();
+        return;
+      }
+      const resolve = this.waitingFor.resolve;
+      this.waitingFor = null;
+      const result = this.recordedEvents || event;
+      this.recordedEvents = null;
+      resolve(result);
+    });
+    for (let i = 0; i < types.length; i++) watchedNode.addEventListener(types[i]!, eventHandler, false);
+    this.stop_watching = () => {
+      for (let i = 0; i < types.length; i++) watchedNode.removeEventListener(types[i]!, eventHandler, false);
+    };
+    // The adapter has one FIFO cleanup list; upstream's internal _add_cleanup
+    // differs from add_cleanup only in harness diagnostic bookkeeping.
+    test.add_cleanup(this.stop_watching);
+  }
+
+  wait_for(types: string | string[], options?: { record?: unknown }): Promise<WatchedResult> {
+    if (this.waitingFor) return Promise.reject("Already waiting for an event or events");
+    const expected = typeof types === "string" ? [types] : types;
+    if (options && options.record && options.record === "all") this.recordedEvents = [];
+    return new Promise((resolve, reject) => {
+      const timeout = this.test.step_func(() => {
+        if (!this.waitingFor || this.waitingFor.resolve !== resolve) return;
+        assert.equal(this.waitingFor.types.length, 0, "Timed out waiting for " + this.waitingFor.types.join(", "));
+        const result = this.recordedEvents;
+        this.recordedEvents = null;
+        const resolveWaiting = this.waitingFor.resolve;
+        this.waitingFor = null;
+        resolveWaiting(result);
+      });
+      const timeoutPromise = this.timeoutPromise;
+      if (timeoutPromise) timeoutPromise().then(timeout);
+      this.waitingFor = { types: expected, resolve, reject };
+    });
+  }
+}
+
 /** Test-only runner; the public implementation is supplied by the host provider. */
 export class WptHarness {
   active: WptTest | null = null;
@@ -252,6 +423,8 @@ export class WptHarness {
   private readonly timeout: number;
   readonly scheduleDeadline: WptDeadlineScheduler;
   private readonly globalTimers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly defaultTestName: string | undefined;
+  private defaultNameCount = 0;
 
   constructor(
     globals: Record<string, unknown>,
@@ -260,6 +433,10 @@ export class WptHarness {
     options: WptHarnessOptions | readonly string[] = {},
   ) {
     this.blocks = blocks;
+    const defaultTestName = "defaultTestName" in options ? options.defaultTestName : undefined;
+    assert.ok(defaultTestName === undefined || typeof defaultTestName === "string",
+      "WPT defaultTestName must be a string");
+    this.defaultTestName = defaultTestName;
     assert.ok(Number.isSafeInteger(timeout) && timeout > 0, "WPT timeout must be positive integer milliseconds");
     this.timeout = timeout;
     this.scheduleDeadline = "deadlineScheduler" in options ? options.deadlineScheduler ?? hostDeadline : hostDeadline;
@@ -359,6 +536,16 @@ export class WptHarness {
         assert.equal(typeof actual, typeof expected, message);
         assert.ok(actual > (expected as number | bigint), message);
       },
+      assert_less_than: (actual: unknown, expected: unknown, message?: string) => {
+        assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
+        assert.equal(typeof actual, typeof expected, message);
+        assert.ok(actual < (expected as number | bigint), message);
+      },
+      assert_less_than_equal: (actual: unknown, expected: unknown, message?: string) => {
+        assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
+        assert.equal(typeof actual, typeof expected, message);
+        assert.ok(actual <= (expected as number | bigint), message);
+      },
       assert_greater_than_equal: (actual: unknown, expected: unknown, message?: string) => {
         assert.ok(typeof actual === "number" || typeof actual === "bigint", message);
         assert.equal(typeof actual, typeof expected, message);
@@ -369,6 +556,12 @@ export class WptHarness {
       },
       assert_true: (value: unknown, message?: string) => assert.equal(value, true, message),
       assert_false: (value: unknown, message?: string) => assert.equal(value, false, message),
+      assert_class_string: (value: unknown, classString: string, message?: string) => {
+        assert.equal(Object.prototype.toString.call(value), "[object " + classString + "]", message);
+      },
+      format_value: (value: unknown, seen?: unknown[]) =>
+        formatValue(value, seen, globals.Node as Record<string, unknown> | undefined),
+      EventWatcher,
       assert_unreached: (message?: string) => assert.fail(message),
       assert_array_equals: (actual: unknown[], expected: unknown[], message?: string) => {
         assert.ok(typeof actual === "object" && actual !== null && "length" in actual, message);
@@ -462,7 +655,14 @@ export class WptHarness {
   private register(explicitName: string | undefined, kind: TestKind): WptTest {
     assert.equal(this.registrationClosed, false, "test registered after done()");
     assert.equal(this.cleanupErrors.length, 0, "test registered after cleanup failure");
-    const name = explicitName ?? `unnamed test ${this.tests.length + 1}`;
+    let name = explicitName;
+    if (name === undefined) {
+      if (this.defaultTestName === undefined) name = `unnamed test ${this.tests.length + 1}`;
+      else {
+        name = this.defaultTestName + (this.defaultNameCount === 0 ? "" : " " + this.defaultNameCount);
+        this.defaultNameCount++;
+      }
+    }
     assert.equal(this.names.has(name), false, `duplicate WPT test name: ${name}`);
     this.names.add(name);
     const test = new WptTest(this, name, this.timeout, kind);

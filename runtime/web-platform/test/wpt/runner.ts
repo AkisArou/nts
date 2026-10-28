@@ -24,6 +24,7 @@ export interface WptFixture extends WptSource {
   timeoutCategory?: WptTimeoutCategory;
   /** Explicit, source-ordered literal importScripts requests, as WPT paths. */
   importScripts?: string[];
+  defaultTestName?: string;
 }
 
 export interface WptManifest {
@@ -340,7 +341,8 @@ export async function executeWptFixture(
       };
     }
     harness = new WptHarness(globals, fixture.blockedTests, context.timeoutMilliseconds, {
-      exposeSelf: environment.exposeSelf, globalAliases: environment.globalAliases,
+      exposeSelf: environment.exposeSelf,
+      defaultTestName: fixture.defaultTestName, globalAliases: environment.globalAliases,
     });
     for (const error of startupErrors) harness.reportError(error);
     for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
