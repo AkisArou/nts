@@ -45,21 +45,30 @@ const domExceptionAliases: Readonly<Record<string, string>> = {
   INVALID_NODE_TYPE_ERR: "InvalidNodeTypeError", DATA_CLONE_ERR: "DataCloneError",
 };
 
-function objectEquals(actual: unknown, expected: unknown, message?: string, stack: object[] = []): void {
+function objectEquals(actual: unknown, expected: unknown, message?: string): void {
   assert.ok(typeof actual === "object" && actual !== null, message);
-  assert.ok(typeof expected === "object" && expected !== null, message);
-  const left = actual as Record<string, unknown>;
-  const right = expected as Record<string, unknown>;
-  stack.push(actual);
-  for (const key in left) {
-    assert.ok(Object.hasOwn(right, key), message);
-    const value = left[key];
-    if (typeof value === "object" && value !== null) {
-      if (!stack.includes(value)) objectEquals(value, right[key], message, stack);
-    } else assert.strictEqual(value, right[key], message);
+  // Preserve the pinned legacy assertion's weakness: recursive comparison only
+  // enumerates properties, so an empty view can compare equal to undefined.
+  function checkEqual(actual: unknown, expected: unknown, stack: unknown[]): void {
+    const left = actual as Record<string, unknown>;
+    const right = expected as Record<string, unknown>;
+    stack.push(actual);
+    for (const key in left) {
+      assert.ok(right.hasOwnProperty(key), message);
+      if (typeof left[key] === "object" && left[key] !== null) {
+        if (stack.indexOf(left[key]) === -1) checkEqual(left[key], right[key], stack);
+      } else {
+        const equal = Object.is(left[key], right[key]);
+        // Upstream reads both properties again while building its diagnostic.
+        void right[key];
+        void left[key];
+        assert.ok(equal, message);
+      }
+    }
+    for (const key in right) assert.ok(left.hasOwnProperty(key), message);
+    stack.pop();
   }
-  for (const key in right) assert.ok(Object.hasOwn(left, key), message);
-  stack.pop();
+  checkEqual(actual, expected, []);
 }
 
 export interface WptResult {
