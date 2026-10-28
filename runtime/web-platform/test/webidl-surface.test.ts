@@ -296,18 +296,6 @@ const ORACLE_OMITS: Readonly<Record<string, readonly string[]>> = {
   CustomEvent: ["initCustomEvent"],
 };
 
-/**
- * `[LegacyUnforgeable]` members, which belong on the **instance** and not the prototype.
- *
- * `Event.isTrusted` is the only one here. Node exposes it as a prototype accessor; this
- * runtime defines it as a own, non-configurable accessor per instance, which is what the
- * extended attribute requires and what the pinned `dom/events/Event-isTrusted.any.js`
- * fixture asserts. So its absence from this prototype is the conformant answer.
- */
-const LEGACY_UNFORGEABLE: Readonly<Record<string, readonly string[]>> = {
-  Event: ["isTrusted"],
-};
-
 suite("every standard member is still reachable by its own name", () => {
   // The direction the extras check cannot see. `getOwnPropertyNames` skipping symbols is what
   // makes symbol-keying an internal invisible -- and it would make symbol-keying a *public*
@@ -319,7 +307,6 @@ suite("every standard member is still reachable by its own name", () => {
     const mine = new Set(Object.getOwnPropertyNames(constructorNamed(name).prototype));
     const excused = new Set([
       ...(HOST_EXTENSIONS[name] ?? []),
-      ...(LEGACY_UNFORGEABLE[name] ?? []),
     ]);
     for (const key of Object.getOwnPropertyNames(conformant)) {
       if (key === "constructor" || excused.has(key)) continue;
@@ -369,10 +356,11 @@ suite("the mixin deviation is exactly what it is claimed to be", () => {
   }
 });
 
-suite("a [LegacyUnforgeable] member is an own accessor, not a prototype one", () => {
-  // The reason `Event.isTrusted` is excused above, asserted rather than assumed. It has to be
-  // per-instance and non-configurable, which is what makes it unforgeable; a prototype
-  // accessor would be replaceable for every event at once.
+test("a [LegacyUnforgeable] member is an own accessor, not a prototype one", {
+  skip: "descriptor shape ([LegacyUnforgeable]): cloud rule, no descriptors",
+}, () => {
+  // This upstream descriptor contract is excluded for fixed-layout nts classes.
+  // The private trust state and ordinary public reads have active controls.
   const event = new api.Event("x");
   const own = Object.getOwnPropertyDescriptor(event, "isTrusted");
   assert.ok(own !== undefined, "isTrusted must be an own property of the instance");

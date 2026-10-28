@@ -292,6 +292,11 @@ function createWptContext(
 ) {
   let contextIntrinsicTypeError = TypeError;
   let promiseTestQueue = Promise.resolve();
+  let registrations = 0;
+  function registrationName(name) {
+    registrations++;
+    return name ?? `unnamed test ${registrations}`;
+  }
   // The harness runs in a `vm` context and the implementation lives in the host realm, so
   // `Object.prototype` is two different objects and every identity check has to pick one.
   // Most fixtures compare against host-realm implementation objects and need the host's.
@@ -473,7 +478,7 @@ function createWptContext(
     },
     async_test(callbackOrName, explicitName) {
       const callback = typeof callbackOrName === "function" ? callbackOrName : undefined;
-      const name = callback === undefined ? callbackOrName : explicitName;
+      const name = registrationName(callback === undefined ? callbackOrName : explicitName);
       const capability = Promise.withResolvers();
       const timer = setTimeout(
         () => capability.reject(new Error(`Upstream async test timed out: ${name}`)),
@@ -566,6 +571,7 @@ function createWptContext(
       return JSON.stringify(value);
     },
     promise_test(fn, name) {
+      name = registrationName(name);
       const reason = excludedTests[name];
       if (reason !== undefined) {
         assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);
@@ -641,6 +647,7 @@ function createWptContext(
       return assert.rejects(promise, constructor, message);
     },
     test(fn, name) {
+      name = registrationName(name);
       const reason = excludedTests[name];
       if (reason !== undefined) {
         assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);

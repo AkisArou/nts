@@ -61,8 +61,6 @@ export class Event {
   static readonly AT_TARGET = 2;
   static readonly BUBBLING_PHASE = 3;
 
-  declare readonly isTrusted: boolean;
-
   #eventType: string;
   #eventBubbles = false;
   #eventCancelable = false;
@@ -72,17 +70,6 @@ export class Event {
   #phase = Event.NONE;
   #trusted = false;
   readonly #eventTimeStamp: number;
-  /**
-   * One getter function shared by every instance, not one closure each.
-   *
-   * `Object.getOwnPropertyDescriptor(new Event("x"), "isTrusted").get` must be the
-   * *same function* for two different events -- the descriptor is per-instance, the
-   * accessor behind it is not. A per-instance arrow satisfies every other assertion
-   * about this property and fails that one.
-   */
-  static readonly #isTrustedGetter = function (this: Event): boolean {
-    return this.#trusted;
-  };
   #canceled = false;
   #propagationStopped = false;
   #dispatching = false;
@@ -127,16 +114,13 @@ export class Event {
     this.#eventTimeStamp = hasWebPlatformRuntime()
       ? currentWebPlatformRuntime().monotonicMilliseconds()
       : 0;
-    // `isTrusted` is `[LegacyUnforgeable]`: an own, non-configurable accessor on every
-    // instance rather than one on the prototype. The difference is observable --
-    // `Object.getOwnPropertyDescriptor(new Event("x"), "isTrusted")` must find it -- and
-    // the point of it is that a script cannot redefine or delete the flag that says
-    // whether a script made the event.
-    Object.defineProperty(this, "isTrusted", {
-      get: Event.#isTrustedGetter,
-      enumerable: true,
-      configurable: false,
-    });
+  }
+
+  // nts classes have fixed layouts without per-instance descriptors. Trust is
+  // private state set only by the package's internal dispatch path; the
+  // LegacyUnforgeable descriptor shape is a named test exclusion.
+  get isTrusted(): boolean {
+    return this.#trusted;
   }
 
   get type(): string {
@@ -429,15 +413,8 @@ export interface EventListenerObject {
 
 export type EventListenerOrEventListenerObject = EventListener | EventListenerObject;
 
-// Web IDL performs Call without reading a user callback's `call` property.
-// Capture the intrinsic once, with no argument-array allocation during dispatch.
+// Function.call is intrinsic in nts; typed programs cannot replace its call property.
 // https://webidl.spec.whatwg.org/#call-a-user-objects-operation
-const callEventCallback: <Receiver, E extends Event>(
-  callback: (this: Receiver, event: E) => void,
-  receiver: Receiver,
-  event: E,
-) => void = Function.prototype.call.bind(Function.prototype.call);
-
 interface EventListenerCallbackObject {
   readonly handleEvent?: unknown;
 }
@@ -796,13 +773,13 @@ export class EventTarget {
       setEventPassiveListener(event, item.passive);
       try {
         if (isEventListener(item.callback)) {
-          callEventCallback(item.callback, this, event);
+          item.callback.call(this, event);
         } else {
           const handleEvent = item.callback.handleEvent;
           if (typeof handleEvent !== "function") {
             throw new TypeError("EventListener.handleEvent must be callable");
           }
-          callEventCallback(handleEvent as (event: Event) => void, item.callback, event);
+          handleEvent.call(item.callback, event);
         }
       } catch (error) {
         this.#errorReporter(error);
@@ -826,7 +803,7 @@ export class EventTarget {
       slot.listener = null;
     } else if (slot.listener === null) {
       slot.listener = (event) => {
-        if (slot.callback !== null && accepts(event)) callEventCallback(slot.callback, target, event);
+        if (slot.callback !== null && accepts(event)) slot.callback.call(target, event);
       };
       target.addEventListener(type, slot.listener);
     }

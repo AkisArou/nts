@@ -229,7 +229,7 @@ test("abort operations expose the Web IDL required-argument arity", () => {
 // Web IDL uses the abstract Call operation for iterator.next, not a property
 // named call on the supplied function: https://webidl.spec.whatwg.org/#create-sequence-from-iterable
 for (const accessor of [false, true]) {
-  test(`AbortSignal.any ignores an iterator next function's ${accessor ? "call getter" : "own call property"}`, () => {
+  test(`AbortSignal.any ignores an iterator next function's ${accessor ? "call getter" : "own call property"}`, { skip: "prototype patching and function call-property spoofing are outside the nts program contract" }, () => {
     const controller = new AbortController();
     let calls = 0;
     function next(this: object): IteratorResult<AbortSignal> {

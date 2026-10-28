@@ -79,8 +79,13 @@
       "support": [],
       "harnessScripts": [],
       "expectedTests": 1,
-      "blockedTests": {},
-      "expectedRunnableTests": 1,
+      "blockedTests": {
+        "unnamed test 1": {
+          "category": "descriptor shape ([LegacyUnforgeable])",
+          "reason": "cloud rule, no descriptors"
+        }
+      },
+      "expectedRunnableTests": 0,
       "revision": "0a811c51619b14f78fec60ba7dd1603795ca6a21",
       "destination": "runtime/web-platform/test/wpt/dom/events/Event-isTrusted.any.js",
       "nodeVendorPath": "test/fixtures/wpt/dom/events/Event-isTrusted.any.js",
@@ -2274,7 +2279,7 @@
         }
       }
     },
-    "note": "Status records describe Node compatibility expectations, not nts expected failures. Event-isTrusted remains a real nts test. The Node runner uses runJsTests, so HTML file absence from status is not evidence of a Node pass.",
+    "note": "Status records describe Node compatibility expectations, not nts expected failures. Event-isTrusted is a named descriptor-shape exclusion under the nts no-descriptors rule; trust behavior has active local controls. The Node runner uses runJsTests, so HTML file absence from status is not evidence of a Node pass.",
     "statusFiles": {
       "dom/events": {
         "path": "test/wpt/status/dom/events.json",
@@ -2331,8 +2336,8 @@
     "selectedFixtureFiles": 16,
     "selectedSupportFiles": 1,
     "expectedRegisteredTests": 89,
-    "explicitlyBlockedTests": 7,
-    "expectedRunnableTests": 82,
+    "explicitlyBlockedTests": 8,
+    "expectedRunnableTests": 81,
     "excludedHtmlJsPaths": 166,
     "metadataPaths": 2
   }

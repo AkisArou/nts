@@ -15,10 +15,6 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
     "then" in value && typeof value.then === "function";
 }
 
-const apply = Function.prototype.call.bind(Function.prototype.apply) as (
-  callback: Callback, receiver: unknown, args: unknown[],
-) => unknown;
-
 // Names and legacy codes accepted by the pinned assert_throws_dom implementation.
 // QuotaExceededError uses a separate assertion there and is deliberately unsupported here.
 const domExceptionCodes: Readonly<Record<string, number>> = {
@@ -122,7 +118,7 @@ class WptTest {
     const previous = this.harness.active;
     this.harness.active = this;
     try {
-      return this.harness.inTest(this, () => apply(callback, target, args));
+      return this.harness.inTest(this, () => callback.apply(target, args));
     } catch (error) {
       // EventTarget catches listener exceptions. Recording here, rather than just
       // rethrowing, prevents an assertion swallowed by dispatch from becoming a pass.
@@ -386,7 +382,7 @@ export class WptHarness {
             this.explicitDone = value;
           }
         }
-        if (callback !== undefined) this.checkSynchronousResult(apply(callback, undefined, []), "setup callback");
+        if (callback !== undefined) this.checkSynchronousResult(callback.apply(undefined, []), "setup callback");
       },
       done: () => this.closeRegistration(),
     });

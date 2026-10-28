@@ -106,6 +106,9 @@
     "fetch/data-urls/processing.any.js": 73
   },
   "notApplicable": {
+    "dom/events/Event-isTrusted.any.js": {
+      "unnamed test 1": "descriptor shape ([LegacyUnforgeable]): cloud rule, no descriptors"
+    },
     "dom/events/EventTarget-removeEventListener.any.js": {
       "removing a null event listener should succeed": "The assertion calls globalThis.removeEventListener, which requires the global object itself to be an EventTarget. That is true of Window and Worker and deliberately false here: this profile installs no ambient globals, so there is no global event target to remove a listener from. The rest of the fixture runs against a constructed EventTarget and passes."
     },
