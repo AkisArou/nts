@@ -1,6 +1,6 @@
 {
-  "baseCommit": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
-  "sourceTree": "a2a34ffd90d8431b06049f82245de15b2b8d019c",
+  "baseCommit": "f2d8b957c4d0be08b9c413a6824b6fbe4701b87a",
+  "sourceTree": "448b1ff65922e9ea7cf75b0df3dcf924c8c74585",
   "node": "24.20.0",
   "wpt": {
     "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
@@ -27,10 +27,10 @@
     "descriptorOnlySkipped": 1
   },
   "fullGate": {
-    "tests": 4004,
-    "pass": 3754,
+    "tests": 4135,
+    "pass": 3824,
     "fail": 0,
-    "skipped": 250,
+    "skipped": 311,
     "upstreamPass": 2772,
     "upstreamFail": 0,
     "upstreamNotApplicable": 45,
@@ -58,6 +58,22 @@
     "b-promise-before.log": "eafc54aba90f3253dc52221a80f02a804ad967ec0d1422069a506dd121fc9cf6",
     "b-promise-after.log": "983dfce8e672f92f35f180e8c76518aaf7663d1c87ecdd3152021ba0fd8653ea",
     "b-promise-sabotage.log": "6e6026ca594435965687ecbc7270a53d2d33698032f47095fee9bb167e05b825",
-    "b-promise-full.log": "524736a840b358a1df79cd281fb3d61eeed15e6668004365c3952a998eda6f67"
-  }
+    "b-promise-full.log": "524736a840b358a1df79cd281fb3d61eeed15e6668004365c3952a998eda6f67",
+    "b-promise-stack-full.log": "49a6a8eadb5b25103956312d08a200eb38f368501b029d392c3b98e309286edf"
+  },
+  "historicalValidation": {
+    "baseCommit": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
+    "sourceTree": "a2a34ffd90d8431b06049f82245de15b2b8d019c",
+    "fullGate": {
+      "tests": 4004,
+      "pass": 3754,
+      "fail": 0,
+      "skipped": 250,
+      "upstreamPass": 2772,
+      "upstreamFail": 0,
+      "upstreamNotApplicable": 45,
+      "exitCode": 0
+    }
+  },
+  "baselineCommit": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f"
 }
