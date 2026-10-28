@@ -1,0 +1,130 @@
+{
+  "scope": "B8 minimal Navigator.userAgent source over an explicit environment-owned, infallible provider capability.",
+  "date": "2026-10-28",
+  "node": "v24.20.0",
+  "baseCommit": "5a9aef5d5f50341d09b1b76ef8b9778d303e7e8f",
+  "sourceCommit": "3c0ee305b793f56db5a71029699974a710c487ac",
+  "sourceSha256": {
+    "runtime/web-platform/src/navigator/navigator.ts": "027d957380a4b2178c108d1d7756b24791029509cbc5064a371bd45a05c8bf80",
+    "runtime/web-platform/src/provider/navigator.ts": "5c3e83b1c689604e6f71ff163bd4386aa88f08eef105298f171b043054e2599f",
+    "runtime/web-platform/test/navigator-user-agent-policy.test.ts": "a84bf617bc4ceae82fb5ece6c6e8fffb0aa5d7527dea22d5730de3e79c916a99"
+  },
+  "specification": "https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-useragent",
+  "command": "node --expose-gc --test --test-reporter=tap runtime/web-platform/test/navigator-user-agent-policy.test.ts",
+  "before": {
+    "totals": {
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "meaning": "The new test file was run before the Navigator source module existed on base #27. It fails to load with ERR_MODULE_NOT_FOUND; no per-behavior assertions ran."
+  },
+  "after": {
+    "totals": {
+      "tests": 14,
+      "pass": 14,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "tests": [
+      "Navigator has no public construction operation",
+      "Navigator rejects an unrelated internal construction key before reading the provider",
+      "Navigator subclass construction cannot bypass the public-constructor refusal",
+      "createNavigator creates the canonical branded interface without reading the environment",
+      "Navigator.userAgent returns a configured product string exactly",
+      "Navigator.userAgent returns an empty configured string without a fallback exactly",
+      "Navigator.userAgent returns the configured bytes and whitespace exactly",
+      "Navigator.userAgent performs one provider call per read and does not cache a stale value",
+      "Navigator.userAgent preserves the provider method receiver",
+      "Navigator instances read their own environment rather than shared process state",
+      "Navigator.userAgent rejects unbranded receivers before consulting a provider",
+      "a borrowed Navigator.userAgent getter uses the branded receiver's environment",
+      "Navigator.userAgent is a readonly getter",
+      "createNavigator requires an explicit provider and never supplies a platform default"
+    ]
+  },
+  "sabotage": {
+    "sourceCommit": "3c0ee305b793f56db5a71029699974a710c487ac",
+    "mutation": "Trim the provider value in the userAgent getter",
+    "sourceSha256Before": "027d957380a4b2178c108d1d7756b24791029509cbc5064a371bd45a05c8bf80",
+    "mutantSha256": "81131c0b7bffe8d0c85d214af5bd92982001bc2388f322eb8cf4faf203e9d04e",
+    "exitCode": 1,
+    "failedTests": [
+      "Navigator.userAgent returns the configured bytes and whitespace exactly"
+    ],
+    "sourceSha256Restored": "027d957380a4b2178c108d1d7756b24791029509cbc5064a371bd45a05c8bf80",
+    "restoredExactly": true,
+    "totals": {
+      "tests": 14,
+      "pass": 13,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "restored": {
+    "totals": {
+      "tests": 14,
+      "pass": 14,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0
+    }
+  },
+  "typeChecks": [
+    {
+      "command": "pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm exec tsc --project runtime/web-platform/test/wpt/tsconfig.json --pretty false",
+      "exitCode": 0
+    }
+  ],
+  "wpt": {
+    "revisionInspected": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+    "importedFiles": 0,
+    "reason": "No inspected unchanged small case directly isolates the requested minimum. Use the focused specification-derived tests without adding unrelated Navigator feature skips.",
+    "inspected": [
+      {
+        "path": "html/webappapis/system-state-and-capabilities/the-navigator-object/navigator.any.js",
+        "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+        "gitBlob": "07bccb788052e7ce2cb722558e416b5c017ed9f0",
+        "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/system-state-and-capabilities/the-navigator-object/navigator.any.js",
+        "reason": "Mixes the full NavigatorID interface with an XMLHttpRequest comparison against a network User-Agent header. Only one type assertion is independent of those extra features."
+      },
+      {
+        "path": "html/webappapis/system-state-and-capabilities/the-navigator-object/navigator_user_agent.tentative.html",
+        "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+        "gitBlob": "dd4c531070c8a21328a14709fd0357c6fba15001",
+        "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/system-state-and-capabilities/the-navigator-object/navigator_user_agent.tentative.html",
+        "reason": "Tests absence of getUserAgent in insecure contexts, not this userAgent getter."
+      },
+      {
+        "path": "html/webappapis/system-state-and-capabilities/the-navigator-object/navigator_user_agent.https.tentative.html",
+        "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+        "gitBlob": "3fbe3eaa62bd7e42b0c2cae0a6242bf319bf70fa",
+        "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/html/webappapis/system-state-and-capabilities/the-navigator-object/navigator_user_agent.https.tentative.html",
+        "reason": "Exercises User-Agent Client Hints and NavigatorUAData, outside the requested minimal attribute."
+      },
+      {
+        "path": "workers/WorkerNavigator_userAgent.htm",
+        "revision": "2b38ea1cb920a2d0f91bf140d0e1eba73db8e742",
+        "gitBlob": "8a34fb480ac5f6c6533b14f121b0f688524fbf3e",
+        "sourceURL": "https://github.com/web-platform-tests/wpt/blob/2b38ea1cb920a2d0f91bf140d0e1eba73db8e742/workers/WorkerNavigator_userAgent.htm",
+        "reason": "Requires real Worker construction and communication to compare WorkerNavigator with the parent Navigator."
+      }
+    ]
+  },
+  "nativeBinding": "not implemented: the provider must supply this environment default User-Agent value and keep it consistent with Fetch",
+  "bootstrap": "deferred to the separate provider-bootstrap PR; this change does not edit barrel exports or global exposure",
+  "compiledNts": "not verified; maintainers own the compiler and native integration gates",
+  "wholeSuite": "not run in this isolated worktree; parent integration owns the stacked full gate"
+}
