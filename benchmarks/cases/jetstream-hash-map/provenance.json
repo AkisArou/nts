@@ -1,0 +1,337 @@
+{
+  "benchmark": "hash-map",
+  "case": "jetstream-hash-map",
+  "source": {
+    "repository": "WebKit/JetStream",
+    "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+    "path": "simple/hash-map.js",
+    "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/simple/hash-map.js",
+    "bytes": 17106,
+    "sha256": "9789c4d06f12ee4e4836c669b5515a40c6caaf5e9321c08da548740225fb46fb",
+    "gitBlob": "7f4d7462d7c596d99ae29b8ebb2f99b8c764f2f4"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "headerAndEntireNoticeRetained": true,
+    "copyrightNotices": [
+      "Apache Software Foundation 2006, 2010",
+      "Intel Corporation 2005, 2005-2006, 2006",
+      "International Business Machines Corporation 1997,2004",
+      "IBM Corp. 2003",
+      "Caldera International Inc. (historical bundled NOTICE attribution)"
+    ],
+    "companionText": "../LICENSE-jetstream"
+  },
+  "originalInput": {
+    "keys": 90000,
+    "keyRange": [
+      0,
+      89999
+    ],
+    "value": 42,
+    "lookupPasses": 5,
+    "fullEntryTraversal": true,
+    "rng": null,
+    "inputChanges": false
+  },
+  "lifecycle": "The benchmark instance is created once outside work. Every original run still creates and discards its own map; only three validated numeric sums are retained by the adapter.",
+  "adapter": {
+    "seed": 1,
+    "meaning": "Complete original iterations",
+    "checksum": "For lookupSum, keySum and valueSum in that order: checksum = (checksum * 31 + value) >>> 0 after each part, for every iteration.",
+    "observationAddsNoMapTraversal": true,
+    "originalValidationRetained": true
+  },
+  "types": {
+    "declaredClasses": 9,
+    "originalPrototypeMembersRetained": 45,
+    "classFields": "declare, erased at runtime",
+    "anyAnnotations": false,
+    "assertionCasts": false,
+    "nonNullAssertions": false,
+    "forbiddenReflectionOrPrototypeMutation": false
+  },
+  "sourceBodyAudit": {
+    "originalBodiesRetained": 59,
+    "identicalAfterTypeErasure": [
+      "calculateCapacity",
+      "equals",
+      "Entry.constructor",
+      "Entry.clone",
+      "Entry.toString",
+      "Entry.key",
+      "Entry.value",
+      "AbstractMapIterator.constructor",
+      "AbstractMapIterator.hasNext",
+      "AbstractMapIterator._checkConcurrentMod",
+      "EntryIterator.next",
+      "EntrySet.constructor",
+      "EntrySet.size",
+      "EntrySet.clear",
+      "EntrySet.remove",
+      "EntrySet.contains",
+      "EntrySet.iterator",
+      "KeySet.constructor",
+      "KeySet.size",
+      "KeySet.clear",
+      "KeySet.remove",
+      "KeySet.iterator",
+      "ValueCollection.constructor",
+      "ValueCollection.contains",
+      "ValueCollection.size",
+      "ValueCollection.clear",
+      "ValueCollection.iterator",
+      "HashMap.constructor",
+      "HashMap._computeThreshold",
+      "HashMap.clear",
+      "HashMap.clone",
+      "HashMap.containsKey",
+      "HashMap.containsValue",
+      "HashMap.entrySet",
+      "HashMap.get",
+      "HashMap._getEntry",
+      "HashMap._findKeyEntry",
+      "HashMap.isEmpty",
+      "HashMap.keySet",
+      "HashMap.put",
+      "HashMap._createHashedEntry",
+      "HashMap.remove",
+      "HashMap._removeEntryForKey",
+      "HashMap.size",
+      "HashMap.values",
+      "Benchmark.runIteration"
+    ],
+    "recordedRuntimeAdaptations": [
+      "computeHashCode",
+      "AbstractMapIterator._makeNext",
+      "AbstractMapIterator.remove",
+      "EntryIterator.constructor",
+      "KeyIterator.constructor",
+      "KeyIterator.next",
+      "ValueIterator.constructor",
+      "ValueIterator.next",
+      "KeySet.contains",
+      "HashMap.putAll",
+      "HashMap._rehash",
+      "HashMap._removeEntry",
+      "run"
+    ],
+    "forbiddenExecutableFeatures": [],
+    "eagerFieldDefinitions": false
+  },
+  "adaptations": [
+    {
+      "member": "computeHashCode",
+      "original": "return key | 0;",
+      "typed": "return Number(key) | 0;",
+      "explanation": "Explicit boolean-to-number coercion retains the original bitwise conversion."
+    },
+    {
+      "member": "Entry.clone",
+      "original": "new Entry(",
+      "typed": "new Entry<K, V>(",
+      "explanation": "Type arguments only; absent _hash remains undefined."
+    },
+    {
+      "member": "AbstractMapIterator._makeNext",
+      "original": "this._currentEntry._next",
+      "typed": "requireEntry(this._currentEntry, \"_next\")._next",
+      "explanation": "Checked narrowing preserves a failed null/undefined property access."
+    },
+    {
+      "member": "AbstractMapIterator.remove",
+      "original": "this._currentEntry._origKeyHash &",
+      "typed": "(this._currentEntry._origKeyHash ?? 0) &",
+      "explanation": "Undefined hash coerces to zero in the original bitwise expression."
+    },
+    {
+      "member": "AbstractMapIterator.remove",
+      "original": "this._associatedMap._elementData[index]._next",
+      "typed": "requireEntry(this._associatedMap._elementData[index], \"_next\")._next",
+      "explanation": "Checked narrowing at the original property read."
+    },
+    {
+      "member": "EntryIterator",
+      "original": "AbstractMapIterator.call(this, map);",
+      "typed": "super(map);",
+      "explanation": "Declared class inheritance replaces constructor-function invocation."
+    },
+    {
+      "member": "KeyIterator",
+      "original": "AbstractMapIterator.call(this, map);",
+      "typed": "super(map);",
+      "explanation": "Declared class inheritance replaces constructor-function invocation."
+    },
+    {
+      "member": "KeyIterator.next",
+      "original": "this.makeNext();",
+      "typed": "if (this.makeNext === undefined)\n                throw new TypeError(\"this.makeNext is not a function\");\n            this.makeNext();",
+      "explanation": "The original misspelled method is absent and throws; do not repair it to _makeNext."
+    },
+    {
+      "member": "KeyIterator.next",
+      "original": "this._currentEntry._",
+      "typed": "requireEntry(this._currentEntry, \"_key\")._",
+      "explanation": "Checked narrowing preserves the original property-access failure if a caller supplies makeNext."
+    },
+    {
+      "member": "ValueIterator",
+      "original": "AbstractMapIterator.call(this, map);",
+      "typed": "super(map);",
+      "explanation": "Declared class inheritance replaces constructor-function invocation."
+    },
+    {
+      "member": "ValueIterator.next",
+      "original": "this.makeNext();",
+      "typed": "if (this.makeNext === undefined)\n                throw new TypeError(\"this.makeNext is not a function\");\n            this.makeNext();",
+      "explanation": "The original misspelled method is absent and throws; do not repair it to _makeNext."
+    },
+    {
+      "member": "ValueIterator.next",
+      "original": "this._currentEntry._",
+      "typed": "requireEntry(this._currentEntry, \"_value\")._",
+      "explanation": "Checked narrowing preserves the original property-access failure if a caller supplies makeNext."
+    },
+    {
+      "member": "KeySet.contains",
+      "original": "return this._associatedMap.contains(object);",
+      "typed": "if (this._associatedMap.contains === undefined)\n                throw new TypeError(\"this._associatedMap.contains is not a function\");\n            return this._associatedMap.contains(object);",
+      "explanation": "The source calls an absent contains method; preserve the failure."
+    },
+    {
+      "member": "HashMap",
+      "original": "new Array(this.capacity)",
+      "typed": "new Array<Entry<K, V> | null | undefined>(this.capacity)",
+      "explanation": "The absent capacity property is explicitly undefined, preserving new Array(undefined), a one-element array."
+    },
+    {
+      "member": "HashMap.clone",
+      "original": "new HashMap(",
+      "typed": "new HashMap<K, V>(",
+      "explanation": "Type arguments only."
+    },
+    {
+      "member": "HashMap._createHashedEntry",
+      "original": "new Entry(",
+      "typed": "new Entry<K, V>(",
+      "explanation": "Type arguments only."
+    },
+    {
+      "member": "HashMap.putAll",
+      "original": "put(entry.key, entry.value);",
+      "typed": "throw new ReferenceError(\"put is not defined\");",
+      "explanation": "The undeclared callee fails before arguments are evaluated. Preserve the original error instead of inventing the missing call."
+    },
+    {
+      "member": "HashMap._rehash",
+      "original": "new Array(length)",
+      "typed": "new Array<Entry<K, V> | null | undefined>(length)",
+      "explanation": "Element type only; preserve sparse allocation."
+    },
+    {
+      "member": "HashMap._rehash",
+      "original": "entry._origKeyHash &",
+      "typed": "(entry._origKeyHash ?? 0) &",
+      "explanation": "Undefined hash coerces to zero in the original bitwise expression."
+    },
+    {
+      "member": "HashMap._rehash",
+      "original": "var next = entry._next;",
+      "typed": "var next: Entry<K, V> | null | undefined = entry._next;",
+      "explanation": "Explicit type for the recursive entry chain."
+    },
+    {
+      "member": "HashMap._removeEntry",
+      "original": "entry._origKeyHash &",
+      "typed": "(entry._origKeyHash ?? 0) &",
+      "explanation": "Undefined hash coerces to zero in the original bitwise expression."
+    },
+    {
+      "member": "HashMap._removeEntry",
+      "original": "current._next",
+      "typed": "requireEntry(current, \"_next\")._next",
+      "explanation": "Checked narrowing preserves the original null/undefined dereference failure."
+    },
+    {
+      "member": "HashMap._removeEntryForKey",
+      "original": "var last = null;",
+      "typed": "var last: Entry<K, V> | null = null;",
+      "explanation": "Explicit type for the preceding entry; no evolving implicit type."
+    }
+  ],
+  "additionalWorkloadCoercions": [
+    "Numeric map.get(i) ?? 0 retains the original addition coercion when get returns null.",
+    "Numeric entry.value ?? 0 retains the original null-to-zero addition coercion.",
+    "Checked iterator entry reads replace nullable type assertions at the original property access.",
+    "Three module-local numbers capture the original validated sums after all native assertions."
+  ],
+  "validation": {
+    "node": "v24.20.0",
+    "strictTypeScript": {
+      "passed": true,
+      "command": "taskset -c 1,2 ./node_modules/.bin/tsc --project ../jetstream-validation/ports-air/hash-map/tsconfig.json --pretty false",
+      "exitCode": 0
+    },
+    "unchangedUpstreamFullIteration": true,
+    "nativeAssertions": "All three original 90,000-key assertions passed in unchanged upstream.",
+    "observations": {
+      "lookupSum": 18900000,
+      "keySum": 4049955000,
+      "valueSum": 3780000
+    },
+    "checksums": {
+      "work0": 0,
+      "work1": 1981364232,
+      "work2": 3067650816
+    },
+    "mixedKeyAndMutationTraceEqual": true,
+    "preservedOriginalErrorsEqual": true,
+    "traceSha256": "106f263701ce94f69555c7b1ac51d21aa2cedfb4816a4b2672023fdd096e5061"
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 5.638014125,
+    "processes": [
+      {
+        "nsPerOp": 5951064.25,
+        "bits": "41dd864e02000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 5638014.125,
+        "bits": "41dd864e02000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 8174910.8333,
+        "bits": "41dd864e02000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 5808345.4167,
+        "bits": "41dd864e02000000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 6685380.875,
+        "bits": "41dd864e02000000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "9e1634c381d90cc0b0952eb73cb4286913736f8931b2399c652f527c00d3e2fe",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": false
+  },
+  "rulesRead": {
+    "repository": "AkisArou/nts",
+    "ref": "main",
+    "path": "docs/contributing/cloud-agents.md",
+    "gitBlob": "6ad6f54854b8189fad9315c8db9aa8dab97b4525"
+  },
+  "portFile": {
+    "bytes": 20855,
+    "sha256": "9e1634c381d90cc0b0952eb73cb4286913736f8931b2399c652f527c00d3e2fe",
+    "gitBlob": "5b94549a8988a89198e3d40f9a8de80ec567ebee"
+  }
+}
