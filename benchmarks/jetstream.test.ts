@@ -103,3 +103,66 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+// BEGIN NUMBERFORMAT INTL: complete original workload checks.
+{
+  const name = "jetstream-numberformat-intl";
+  if (modules.has(name)) {
+    checked.add(name);
+    const intlNumberFormat = await import("./cases/jetstream-numberformat-intl/case.ts");
+
+
+    test("jetstream-numberformat-intl retains the complete original Intl workload", () => {
+        assert.equal(intlNumberFormat.seed, 1);
+        assert.equal(intlNumberFormat.originalIterations, 2);
+        assert.equal(intlNumberFormat.defaultEnabled, false);
+        assert.equal(intlNumberFormat.work(0), 0);
+        const snapshot = intlNumberFormat.render(1);
+        assert.equal(snapshot.iterations.length, 1);
+        assert.equal(snapshot.expectedMinLength, 40000);
+        assert.ok(snapshot.totalLength >= snapshot.expectedMinLength);
+        const counts: Record<string, number> = {};
+        for (const output of snapshot.iterations[0].outputs)
+            counts[output.kind] = (counts[output.kind] ?? 0) + 1;
+        assert.deepEqual(counts, {
+        "options": 200,
+        "format": 2000,
+        "parts": 2000
+    });
+        function fold(previous: number): number {
+            let result = (previous * 31 + snapshot.totalLength) >>> 0;
+            if (typeof snapshot.lastResult === "string") {
+                for (let i = 0; i < snapshot.lastResult.length; ++i)
+                    result = (result * 31 + snapshot.lastResult.charCodeAt(i)) >>> 0;
+            } else if (typeof snapshot.lastResult === "number") {
+                result = (result * 31 + snapshot.lastResult) >>> 0;
+            }
+            return result;
+        }
+        assert.equal(intlNumberFormat.work(1), fold(0));
+        assert.equal(intlNumberFormat.work(2), fold(fold(0)));
+        assert.equal(intlNumberFormat.work(0), 0);
+        assert.equal(intlNumberFormat.work(1), fold(0));
+        // Exact oracle text is tied to the recorded Intl data and timezone;
+        // all-host original thresholds, full call counts and repeatability above
+        // remain checked when running this test on a different host environment.
+        if (process.version === "v24.20.0" && process.versions.icu === "78.3" &&
+            Intl.DateTimeFormat().resolvedOptions().timeZone === "UTC") {
+            assert.equal(snapshot.totalLength, 40860);
+            assert.equal(fold(0), 2638717745);
+            assert.equal(createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
+                "cddb4f24a937c82cc6b94c322d449940297a74f44a532d1d027ba43d8a3eeb7c");
+        }
+    });
+  }
+}
+// END NUMBERFORMAT INTL.
+
+
+
