@@ -12,32 +12,37 @@ import { WptHarness } from "./wpt/harness.ts";
 import { executeWptFixture, loadWptFixtures, runWptFixtures } from "./wpt/runner.ts";
 import type { WptFixture, WptManifest, WptRunnerOptions, WptSource } from "./wpt/runner.ts";
 
+import type { WptVersions } from "./wpt/versions.ts";
+
 function corpus(t: TestContext): {
   root: URL;
   manifest: WptManifest;
+  versions: WptVersions;
   support(path: string, content: string | Buffer): WptSource;
   fixture(path: string, content: string | Buffer, fields?: Partial<WptFixture>): WptFixture;
 } {
   const directory = mkdtempSync(join(tmpdir(), "nts-wpt-runner-"));
   const root = pathToFileURL(directory + sep);
   t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const versions: WptVersions = { version: 1, directories: { "": "a".repeat(40) }, files: {} };
   const pin = (path: string, content: string | Buffer): WptSource => {
     const bytes = Buffer.from(content);
     const file = fileURLToPath(new URL(path, root));
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, bytes);
-    return {
-      path, revision: "adapter-control",
+    versions.files[path] = {
       sha256: createHash("sha256").update(bytes).digest("hex"),
       gitBlob: createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex"),
     };
+    writeFileSync(new URL("versions.json", root), JSON.stringify(versions));
+    return { path };
   };
   const manifest: WptManifest = {
-    revisions: { controls: "adapter-control" }, fixtures: [], support: [],
+    fixtures: [], support: [],
     license: pin("LICENSE.md", "Local adapter control, not an upstream fixture.\n"),
   };
   return {
-    root, manifest,
+    root, manifest, versions,
     support(path, content) {
       const source = pin(path, content);
       manifest.support.push(source);
@@ -79,7 +84,8 @@ test("WPT substitutions see verified originals and cannot conceal changed source
     assert.deepEqual(calls, [], "no substitution ran before original-byte verification");
     writeFileSync(file, original);
   }
-  fixture.gitBlob = "0".repeat(40);
+  files.versions.files[fixture.path]!.gitBlob = "0".repeat(40);
+  writeFileSync(new URL("versions.json", files.root), JSON.stringify(files.versions));
   assert.throws(() => loadWptFixtures(files.root, files.manifest, options), /upstream blob changed/);
 });
 

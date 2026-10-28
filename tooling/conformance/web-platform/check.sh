@@ -4,6 +4,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$root"
 
+node runtime/web-platform/test/wpt/verify-versions.ts
+
 pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false
 
 # Exports nothing mentions. Four mechanisms nothing routed through were found by hand in
@@ -35,6 +37,7 @@ node --expose-gc \
   runtime/web-platform/test/crypto-algorithms.test.ts \
   runtime/web-platform/test/wpt-harness.test.ts \
   runtime/web-platform/test/wpt-runner.test.ts \
+  runtime/web-platform/test/wpt-versions.test.ts \
   runtime/web-platform/test/wpt-events-abort.test.ts \
   runtime/web-platform/test/wpt-streams.test.ts \
   runtime/web-platform/test/streams-wpt-policy.test.ts \

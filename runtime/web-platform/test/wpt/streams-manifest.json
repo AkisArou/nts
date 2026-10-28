@@ -1,10 +1,5 @@
 {
   "repository": "https://github.com/web-platform-tests/wpt",
-  "revisions": {
-    "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb",
-    "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603",
-    "common": "dbd648158d337580885e70a54f929daf215211a0"
-  },
   "destinationRoot": "runtime/web-platform/test/wpt",
   "scope": "Streams A2: all non-IDL standalone .any.js fixtures, including byte/BYOB, piping, transform, writable, queuing and GC cases.",
   "inventoryNote": "Exact WPT commit trees were fetched into a separate scratch repository. Every streams file in Node's vendor directory matches its upstream blob; selected dependencies are checked against their own directory pins. All selected fixture bytes are retained even when every case in a file is explicitly blocked.",
@@ -92,10 +87,7 @@
   "fixtures": [
     {
       "path": "streams/piping/abort.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/abort.any.js",
-      "sha256": "18b504281afb68c7fcbf9b2de1ef7699fc14527513b0c5b4076d5300a070d9bd",
-      "gitBlob": "e813b017769c6805f7682d150f202107ceb6b438",
       "destination": "runtime/web-platform/test/wpt/streams/piping/abort.any.js",
       "format": "javascript",
       "support": [
@@ -245,10 +237,7 @@
     },
     {
       "path": "streams/piping/close-propagation-backward.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/close-propagation-backward.any.js",
-      "sha256": "4587fea2dcbda2ebe287afc2bf28ce91ebfb6b11f09681b7582338d6b9329675",
-      "gitBlob": "25bd475ed13e77d9021a5228021ab23e1b945a91",
       "destination": "runtime/web-platform/test/wpt/streams/piping/close-propagation-backward.any.js",
       "format": "javascript",
       "support": [
@@ -329,10 +318,7 @@
     },
     {
       "path": "streams/piping/close-propagation-forward.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/close-propagation-forward.any.js",
-      "sha256": "32a6de082066e439b5f70d33a7ca43d6610ec270804384e5bdde053e0aa04f95",
-      "gitBlob": "0ec94f80abf04b2093e3297a0bbb81a63bbb6a74",
       "destination": "runtime/web-platform/test/wpt/streams/piping/close-propagation-forward.any.js",
       "format": "javascript",
       "support": [
@@ -470,10 +456,7 @@
     },
     {
       "path": "streams/piping/error-propagation-backward.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/error-propagation-backward.any.js",
-      "sha256": "04d82f8a5528114d76efb2984d4050d8a5762f5cd24aa380d26b771118592467",
-      "gitBlob": "f786469d6c1d408573ea385d8fce19252f20f86f",
       "destination": "runtime/web-platform/test/wpt/streams/piping/error-propagation-backward.any.js",
       "format": "javascript",
       "support": [
@@ -631,10 +614,7 @@
     },
     {
       "path": "streams/piping/error-propagation-forward.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/error-propagation-forward.any.js",
-      "sha256": "9a1f6d64991d17b71af37d583430ee9caa54f39e66c7200b9bc68cd02510be9f",
-      "gitBlob": "e9260f9ea22c4189ce2c5344db24b706cc367063",
       "destination": "runtime/web-platform/test/wpt/streams/piping/error-propagation-forward.any.js",
       "format": "javascript",
       "support": [
@@ -780,10 +760,7 @@
     },
     {
       "path": "streams/piping/flow-control.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/flow-control.any.js",
-      "sha256": "93c5b1363a41888185d362961b3e87c50da56d7304be79731092207697dfd3d4",
-      "gitBlob": "e2318da375ab9044dc105c15613c375c9e68ae9d",
       "destination": "runtime/web-platform/test/wpt/streams/piping/flow-control.any.js",
       "format": "javascript",
       "support": [
@@ -822,10 +799,7 @@
     },
     {
       "path": "streams/piping/general-addition.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/general-addition.any.js",
-      "sha256": "0c7b7641a160ad7315d0af7f9947d7bad6327930d6bf9a92e1be2a524bc76f74",
-      "gitBlob": "cf4aa9bea6a1a45e38e00614bb15547e6a9ab33c",
       "destination": "runtime/web-platform/test/wpt/streams/piping/general-addition.any.js",
       "format": "javascript",
       "support": [],
@@ -844,10 +818,7 @@
     },
     {
       "path": "streams/piping/general.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/general.any.js",
-      "sha256": "f036c5299cef9beb9117fa5748d9ec2f90abcffda6ecaa31e2ccc7d59ff12226",
-      "gitBlob": "f051d8102c2bed7611b76616ff895e9f69809202",
       "destination": "runtime/web-platform/test/wpt/streams/piping/general.any.js",
       "format": "javascript",
       "support": [
@@ -920,10 +891,7 @@
     },
     {
       "path": "streams/piping/multiple-propagation.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/multiple-propagation.any.js",
-      "sha256": "cc76415f5a7cb98bb391225e5948c22a4320bc3c4225d5481f4f632b35023e6c",
-      "gitBlob": "9be828a23269a520c200f86a09b97cf7d4a28f1d",
       "destination": "runtime/web-platform/test/wpt/streams/piping/multiple-propagation.any.js",
       "format": "javascript",
       "support": [
@@ -977,10 +945,7 @@
     },
     {
       "path": "streams/piping/pipe-through.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/pipe-through.any.js",
-      "sha256": "773909873abda42edf6387c3a8af5e01da1c2936bc05c98b3c6ebedb1b6171ec",
-      "gitBlob": "339cee19993346f9535ba4de5a5983e354b33fa1",
       "destination": "runtime/web-platform/test/wpt/streams/piping/pipe-through.any.js",
       "format": "javascript",
       "support": [
@@ -1171,10 +1136,7 @@
     },
     {
       "path": "streams/piping/then-interception.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/then-interception.any.js",
-      "sha256": "8db4c8080ba0ae2c080177077448cb3a94db1ca1d143532b2c769a34f597d705",
-      "gitBlob": "fc48c3683114785d7187038a9d520d0c4c1039d2",
       "destination": "runtime/web-platform/test/wpt/streams/piping/then-interception.any.js",
       "format": "javascript",
       "support": [
@@ -1209,10 +1171,7 @@
     },
     {
       "path": "streams/piping/throwing-options.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/throwing-options.any.js",
-      "sha256": "3f555dbb411d53d719d3932fe06f714253d9beaf20f58a81319f1b0dd9d1c687",
-      "gitBlob": "186f8ded1968a4f1b4f25cf8dd2e5d2ccbb3bfdb",
       "destination": "runtime/web-platform/test/wpt/streams/piping/throwing-options.any.js",
       "format": "javascript",
       "support": [],
@@ -1259,10 +1218,7 @@
     },
     {
       "path": "streams/piping/transform-streams.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/piping/transform-streams.any.js",
-      "sha256": "d41669222c5492bc69632d6299eff4bab308b2e9228a9cecb591d4d08285625a",
-      "gitBlob": "e079bb637cad0da3f2bb6a28569e49b84d540c2a",
       "destination": "runtime/web-platform/test/wpt/streams/piping/transform-streams.any.js",
       "format": "javascript",
       "support": [],
@@ -1281,10 +1237,7 @@
     },
     {
       "path": "streams/queuing-strategies.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/queuing-strategies.any.js",
-      "sha256": "7f04499aeb5f46620e372e8c304d52415af4c4acf9fd9c79ae656c4752de1854",
-      "gitBlob": "9efc4570cf2ee2e2eb1525434351420ddc0d5e97",
       "destination": "runtime/web-platform/test/wpt/streams/queuing-strategies.any.js",
       "format": "javascript",
       "support": [],
@@ -1379,10 +1332,7 @@
     },
     {
       "path": "streams/readable-byte-streams/bad-buffers-and-views.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/bad-buffers-and-views.any.js",
-      "sha256": "f073b0da86fe3dd33d6c8002937296d87e5f80fcb6b03021ab9d636ad8685e88",
-      "gitBlob": "eae8dde03f6b8da8d2c8f975d8b7473401e5fef0",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/bad-buffers-and-views.any.js",
       "format": "javascript",
       "support": [],
@@ -1493,10 +1443,7 @@
     },
     {
       "path": "streams/readable-byte-streams/construct-byob-request.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/construct-byob-request.any.js",
-      "sha256": "db676edd4d31902f5a3c43f8abb3735bbb7d301e79b4d73cc3ed9a7e7246db48",
-      "gitBlob": "a26f949ee29d945a264f368dda9e890f26fa3fdc",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/construct-byob-request.any.js",
       "format": "javascript",
       "support": [
@@ -1577,10 +1524,7 @@
     },
     {
       "path": "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/crashtests/tee-locked-stream.any.js",
-      "sha256": "d0794bccbc28be6538723ae69eb3b9b50389aa9af2846111997d39a055ec8101",
-      "gitBlob": "285b427e2778623979a28de8b6c91dfc774cc4e6",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/crashtests/tee-locked-stream.any.js",
       "format": "javascript",
       "support": [],
@@ -1599,10 +1543,7 @@
     },
     {
       "path": "streams/readable-byte-streams/enqueue-with-detached-buffer.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/enqueue-with-detached-buffer.any.js",
-      "sha256": "78c5ebd0d9eb29d16e19d3e9099958bd4b1f8c564265742cd2d38a44fccdcc75",
-      "gitBlob": "92bd0a26a0ec05c2c3b8dcd25ce347964d1705d5",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/enqueue-with-detached-buffer.any.js",
       "format": "javascript",
       "support": [],
@@ -1626,10 +1567,7 @@
     },
     {
       "path": "streams/readable-byte-streams/general.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/general.any.js",
-      "sha256": "9afc175678688ba4a76d5d0c6b74db75cd5588786ff592e7b5d56898b3fa2c1d",
-      "gitBlob": "50f4f019ff220ff45e01f67e19f5e1e48242d256",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/general.any.js",
       "format": "javascript",
       "support": [
@@ -2064,10 +2002,7 @@
     },
     {
       "path": "streams/readable-byte-streams/non-transferable-buffers.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/non-transferable-buffers.any.js",
-      "sha256": "24f49bb1500b26ad377fd6af63e08aca9e9b9f6c1d89fa6283480966d9fc8244",
-      "gitBlob": "4bddaef5d647df724d218930fdee6f4c65a012ae",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/non-transferable-buffers.any.js",
       "format": "javascript",
       "support": [],
@@ -2115,10 +2050,7 @@
     },
     {
       "path": "streams/readable-byte-streams/patched-global.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/patched-global.any.js",
-      "sha256": "e38acdc2e8c99abf0e0209fd236b424fc46a029d49bbeeb22a2af85da4621732",
-      "gitBlob": "ce2e9e9993ae57eee33b15400da4c85260ab66e2",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/patched-global.any.js",
       "format": "javascript",
       "support": [
@@ -2144,10 +2076,7 @@
     },
     {
       "path": "streams/readable-byte-streams/read-min.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/read-min.any.js",
-      "sha256": "50fcd7bded2ef0abe17d96e9144929f47802829b30975f9b651b713558ee4632",
-      "gitBlob": "4010e3750ce2a84afd1686db9ecd3b9f38543806",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/read-min.any.js",
       "format": "javascript",
       "support": [
@@ -2266,10 +2195,7 @@
     },
     {
       "path": "streams/readable-byte-streams/respond-after-enqueue.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/respond-after-enqueue.any.js",
-      "sha256": "da2bc5d83696768e546e206ad4065e6f485183d05336986490e0370b25bf28d1",
-      "gitBlob": "e51efa061a6511b2c22a6df541b99209827c11be",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/respond-after-enqueue.any.js",
       "format": "javascript",
       "support": [],
@@ -2296,10 +2222,7 @@
     },
     {
       "path": "streams/readable-byte-streams/tee.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/tee.any.js",
-      "sha256": "65ff35bcb03a2bf61b818c8edf7d082814bcdab3b875019d11987c88d95be03a",
-      "gitBlob": "60d82b9cf6a1fdfb9ff89d7bbd7d304982026844",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/tee.any.js",
       "format": "javascript",
       "support": [
@@ -2475,10 +2398,7 @@
     },
     {
       "path": "streams/readable-byte-streams/templated.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-byte-streams/templated.any.js",
-      "sha256": "306288bb49012cd7de8a90d52c7938fcd31f88dd64fa9cd696dcfe8f3ef5b724",
-      "gitBlob": "e4c10f7685962e4ceff328f5c3a4076916da0df5",
       "destination": "runtime/web-platform/test/wpt/streams/readable-byte-streams/templated.any.js",
       "format": "javascript",
       "support": [
@@ -2632,10 +2552,7 @@
     },
     {
       "path": "streams/readable-streams/async-iterator.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/async-iterator.any.js",
-      "sha256": "d40c6bae143582c73dd6a4036c3a15674af464041f96cdeba117a646b4eafa53",
-      "gitBlob": "e192201b531da7c24e0bcae1834f08a00cf8757d",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/async-iterator.any.js",
       "format": "javascript",
       "support": [
@@ -2823,10 +2740,7 @@
     },
     {
       "path": "streams/readable-streams/bad-strategies.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/bad-strategies.any.js",
-      "sha256": "c6b8c13801939ced58d1283b571e30c280d85248373552a5a6d6970da1f3f6b1",
-      "gitBlob": "49fa4bdbece5b58dfa159b52d615c3505deb269c",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/bad-strategies.any.js",
       "format": "javascript",
       "support": [],
@@ -2873,10 +2787,7 @@
     },
     {
       "path": "streams/readable-streams/bad-underlying-sources.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/bad-underlying-sources.any.js",
-      "sha256": "7159ee25f1527d6f8550ed841154016d6a1e33cb0dbabf7c54c22a62451f22e2",
-      "gitBlob": "3d77b923d178a0134f3f3d0590be0f4fd836c7a5",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/bad-underlying-sources.any.js",
       "format": "javascript",
       "support": [],
@@ -2979,10 +2890,7 @@
     },
     {
       "path": "streams/readable-streams/cancel.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/cancel.any.js",
-      "sha256": "ba0daf5f83a6e70a0dcfe2ab71144759b8745720508fc12638359ea049f00d46",
-      "gitBlob": "d44222f1497f0acbf9d080b0668f9759c001d716",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/cancel.any.js",
       "format": "javascript",
       "support": [
@@ -3044,10 +2952,7 @@
     },
     {
       "path": "streams/readable-streams/constructor.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/constructor.any.js",
-      "sha256": "3b3432cd84e7376919c5c720cafb60b2188761d2dc82135e39a197f41d7120b9",
-      "gitBlob": "0b995f0cb16bde21df887a717690eaa853a988b9",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/constructor.any.js",
       "format": "javascript",
       "support": [],
@@ -3066,10 +2971,7 @@
     },
     {
       "path": "streams/readable-streams/count-queuing-strategy-integration.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/count-queuing-strategy-integration.any.js",
-      "sha256": "38a008e8c5c81383dec8a289c0f9e9cc97fc3549bff475b698e816cdb065a246",
-      "gitBlob": "a8c1b91d0068e316463400395601c995b9f89f40",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/count-queuing-strategy-integration.any.js",
       "format": "javascript",
       "support": [],
@@ -3100,10 +3002,7 @@
     },
     {
       "path": "streams/readable-streams/crashtests/garbage-collection.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/crashtests/garbage-collection.any.js",
-      "sha256": "fab6f4f58e2573a3e68a1cc921a2d3ea4ffa1125a0ced142288435c2f7110502",
-      "gitBlob": "6e9d80c41425b13800717f9e27184f64f1514752",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/crashtests/garbage-collection.any.js",
       "format": "javascript",
       "support": [
@@ -3132,10 +3031,7 @@
     },
     {
       "path": "streams/readable-streams/default-reader.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/default-reader.any.js",
-      "sha256": "3c99c20f477853818a0cf51bb20c191fc2421ee6c32cc44c58788226cd91c8a7",
-      "gitBlob": "f92862719e47c178e3bdb1ddcf2cfa12b84b4514",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/default-reader.any.js",
       "format": "javascript",
       "support": [
@@ -3268,10 +3164,7 @@
     },
     {
       "path": "streams/readable-streams/floating-point-total-queue-size.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/floating-point-total-queue-size.any.js",
-      "sha256": "761ae15a973df772cfdbc46fd7f20a406385b61079286cdbd9b8b7e5818ae73f",
-      "gitBlob": "8b88c21d7f0b531266bbec7cb6d764b51d63db66",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/floating-point-total-queue-size.any.js",
       "format": "javascript",
       "support": [],
@@ -3302,10 +3195,7 @@
     },
     {
       "path": "streams/readable-streams/from.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/from.any.js",
-      "sha256": "be18c465ab57c4206044d86ab47ad81762df6fc69aae642b250672eccd9852d6",
-      "gitBlob": "2b28a05fee398c523d049c56aff190e771eb19f2",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/from.any.js",
       "format": "javascript",
       "support": [
@@ -3514,10 +3404,7 @@
     },
     {
       "path": "streams/readable-streams/garbage-collection.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/garbage-collection.any.js",
-      "sha256": "a0a049a64f24e04c87f4b3303763d67cef07fe9cfed978270c2a5ffc9bc42213",
-      "gitBlob": "abcb4cf21b8955846a5c99b94efb5829e1e4b98d",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/garbage-collection.any.js",
       "format": "javascript",
       "support": [
@@ -3555,10 +3442,7 @@
     },
     {
       "path": "streams/readable-streams/general.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/general.any.js",
-      "sha256": "af346391a7024b0562bfde8e7db8abad7f06744d8101dabb606346ec4ad1c7f1",
-      "gitBlob": "eee3f62215eeb07e6a1c06d004defd98324b270e",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/general.any.js",
       "format": "javascript",
       "support": [
@@ -3728,10 +3612,7 @@
     },
     {
       "path": "streams/readable-streams/owning-type-message-port.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/owning-type-message-port.any.js",
-      "sha256": "db982030b4ec9db3a7c687170879130206661f565f829e1e2dcfa1eb70ad5a85",
-      "gitBlob": "282c1f411485c0e8a17beadb0fad7d14ef634046",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/owning-type-message-port.any.js",
       "format": "javascript",
       "support": [
@@ -3774,10 +3655,7 @@
     },
     {
       "path": "streams/readable-streams/owning-type-video-frame.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/owning-type-video-frame.any.js",
-      "sha256": "1dc3134e997d6fdec40ab0df328cc2e2d2f4fa7d6916ff9c1baab3e291f65730",
-      "gitBlob": "ec01fda0b3c737326e8ca7cd78101ca062eab58b",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/owning-type-video-frame.any.js",
       "format": "javascript",
       "support": [
@@ -3838,10 +3716,7 @@
     },
     {
       "path": "streams/readable-streams/owning-type.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/owning-type.any.js",
-      "sha256": "318c6baf1b49342da7190b5c994fbeb206ab7a96bf30b88165fdb2e24c6d9be6",
-      "gitBlob": "34c2a55d5134a20ef9450a338278af2ef18612de",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/owning-type.any.js",
       "format": "javascript",
       "support": [
@@ -3912,10 +3787,7 @@
     },
     {
       "path": "streams/readable-streams/patched-global.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/patched-global.any.js",
-      "sha256": "a2d052e95184b458c6c7da4a57250ae5d84b0e7b759d85a8d2f1ed14083f12c6",
-      "gitBlob": "c208824c8644695771cfbe4dd4ace71ed4b49df5",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/patched-global.any.js",
       "format": "javascript",
       "support": [],
@@ -3967,10 +3839,7 @@
     },
     {
       "path": "streams/readable-streams/reentrant-strategies.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/reentrant-strategies.any.js",
-      "sha256": "443b2ab76046b340c2306b5ecf2fcdb1fe921d7bf94507eeadb5c034739af6e8",
-      "gitBlob": "8ae7b98e8d5eefbb603157c69c2d250c79702e29",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/reentrant-strategies.any.js",
       "format": "javascript",
       "support": [
@@ -4029,10 +3898,7 @@
     },
     {
       "path": "streams/readable-streams/tee.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/tee.any.js",
-      "sha256": "ed2a1cf7ab5b2d41db27101cc1bbc6091d211fd89b3b557667533c4591211f9d",
-      "gitBlob": "c2c2e48230721163c09f4d4f6d1aee0c9a0a66fa",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/tee.any.js",
       "format": "javascript",
       "support": [
@@ -4156,10 +4022,7 @@
     },
     {
       "path": "streams/readable-streams/templated.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/readable-streams/templated.any.js",
-      "sha256": "d850060a8169f1d56b3113cfb96fc7c4a1826c0fc46e33928727e392cc3a7223",
-      "gitBlob": "4f2440c0880bb738b9755d9df2f56882c9b8188e",
       "destination": "runtime/web-platform/test/wpt/streams/readable-streams/templated.any.js",
       "format": "javascript",
       "support": [
@@ -4541,10 +4404,7 @@
     },
     {
       "path": "streams/transferable/transform-stream-members.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transferable/transform-stream-members.any.js",
-      "sha256": "ecb9d71eee7441f6b4f63c00ddff3b2703714ffc96e8be0317477391453be8a4",
-      "gitBlob": "05914e12ccbe574ffe006cb35dab0ec717828b5f",
       "destination": "runtime/web-platform/test/wpt/streams/transferable/transform-stream-members.any.js",
       "format": "javascript",
       "support": [],
@@ -4592,10 +4452,7 @@
     },
     {
       "path": "streams/transform-streams/backpressure.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/backpressure.any.js",
-      "sha256": "6e74181d417c778e0a18a327e9de45aa1ab0edf2a170f2c2e9cf436e08ea130f",
-      "gitBlob": "47a21fb7e71fed837832dd1b91b5100a3513131d",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/backpressure.any.js",
       "format": "javascript",
       "support": [
@@ -4669,10 +4526,7 @@
     },
     {
       "path": "streams/transform-streams/cancel.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/cancel.any.js",
-      "sha256": "a646f66b9348e946e3693e38d9e304c27daa7a6cc28030b30363b9853f95e052",
-      "gitBlob": "9b369bfb7c68b4c6301376eeae8701030d02357f",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/cancel.any.js",
       "format": "javascript",
       "support": [
@@ -4733,10 +4587,7 @@
     },
     {
       "path": "streams/transform-streams/errors.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/errors.any.js",
-      "sha256": "49924c085ea413141b44e3aaf5039c1471d99247907aeac9ae371faf46dcf7dd",
-      "gitBlob": "bea060b6590818f0d6c3e95309b1d1e8bcc2a9a1",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/errors.any.js",
       "format": "javascript",
       "support": [
@@ -4837,10 +4688,7 @@
     },
     {
       "path": "streams/transform-streams/flush.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/flush.any.js",
-      "sha256": "672b8ba2c0b536f55193d180fb31b0fda2539095cd80c9d002826a82e4c89b54",
-      "gitBlob": "c95d8ae1186518c507fccda83bf3d8f164f42f8c",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/flush.any.js",
       "format": "javascript",
       "support": [
@@ -4881,10 +4729,7 @@
     },
     {
       "path": "streams/transform-streams/general.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/general.any.js",
-      "sha256": "d92eb07753cb1abc7a614939fff7bd9906ae6c47e2d0a2f6fe721068d2c8272a",
-      "gitBlob": "a40ef30843ec4da7ccbe1b382a5b6132cf1e19c9",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/general.any.js",
       "format": "javascript",
       "support": [
@@ -5006,10 +4851,7 @@
     },
     {
       "path": "streams/transform-streams/lipfuzz.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/lipfuzz.any.js",
-      "sha256": "2bb3f302a7ad6526f14af5ee3a9b651b29ad8a4f2d9b657981d00a7f3c49c3b5",
-      "gitBlob": "e334705db44354cbb79c130f25cbbd65d58633ee",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/lipfuzz.any.js",
       "format": "javascript",
       "support": [],
@@ -5104,10 +4946,7 @@
     },
     {
       "path": "streams/transform-streams/patched-global.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/patched-global.any.js",
-      "sha256": "7b0632629aa67a7733a3df95720485f0c48391da9bbdbe357b182acbedd83ec2",
-      "gitBlob": "cc111eda452f0f771cd03f9f642ed7b596cc5ea0",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/patched-global.any.js",
       "format": "javascript",
       "support": [],
@@ -5139,10 +4978,7 @@
     },
     {
       "path": "streams/transform-streams/properties.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/properties.any.js",
-      "sha256": "e9df81a23a0a7059842bc65814612844b4ba5b4bd6091324dcb661500f4e0b1e",
-      "gitBlob": "dbfd1aa372b907e1647c9101212c918eec7489b8",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/properties.any.js",
       "format": "javascript",
       "support": [],
@@ -5181,10 +5017,7 @@
     },
     {
       "path": "streams/transform-streams/reentrant-strategies.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/reentrant-strategies.any.js",
-      "sha256": "9b901a7e2ef678ee0fa1eac0047e63591bf94204f3fe9c78236dad67d12776e4",
-      "gitBlob": "a6d459655856a7da4f4185b33c5e516c73f51868",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/reentrant-strategies.any.js",
       "format": "javascript",
       "support": [
@@ -5247,10 +5080,7 @@
     },
     {
       "path": "streams/transform-streams/strategies.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/strategies.any.js",
-      "sha256": "6701d1469d5579a786f7cd4a5986d960c7912573c61aad45d85d5ce7e332e279",
-      "gitBlob": "57e113e668ce2478a654a4e5ae5c9872e002c7fa",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/strategies.any.js",
       "format": "javascript",
       "support": [
@@ -5308,10 +5138,7 @@
     },
     {
       "path": "streams/transform-streams/terminate.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/transform-streams/terminate.any.js",
-      "sha256": "2310f3ca6fd3eeea7a8b6c2a9f901d1c4bd4369fbe43c044000bda132cf430e1",
-      "gitBlob": "a959e70fe693397a4a1a0f24d45fabead2cdc6f8",
       "destination": "runtime/web-platform/test/wpt/streams/transform-streams/terminate.any.js",
       "format": "javascript",
       "support": [
@@ -5353,10 +5180,7 @@
     },
     {
       "path": "streams/writable-streams/aborting.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/aborting.any.js",
-      "sha256": "f0788b1a81ea45e4a8000d05bb4c6aa39e12460e68026286af3fd707616b6239",
-      "gitBlob": "9d8e80b1de63c5ae6d8377b3d56183d6ea3fb264",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/aborting.any.js",
       "format": "javascript",
       "support": [
@@ -5641,10 +5465,7 @@
     },
     {
       "path": "streams/writable-streams/bad-strategies.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/bad-strategies.any.js",
-      "sha256": "b290d7f16fb252e37dbec15dc90f07da13e7fdcb11c80bc02cf0c16ea7d9fd5c",
-      "gitBlob": "a1ef0791168f99186925acbe869ac8449e0f4e79",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/bad-strategies.any.js",
       "format": "javascript",
       "support": [],
@@ -5687,10 +5508,7 @@
     },
     {
       "path": "streams/writable-streams/bad-underlying-sinks.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/bad-underlying-sinks.any.js",
-      "sha256": "3534a8dc22b50cd9e81ec23b89fa122b37f2f90babfbcf7a3afed9d956c07ca4",
-      "gitBlob": "3c434ffe60ccb98f6c8eb96a06d0c61af46b283d",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/bad-underlying-sinks.any.js",
       "format": "javascript",
       "support": [
@@ -5764,10 +5582,7 @@
     },
     {
       "path": "streams/writable-streams/byte-length-queuing-strategy.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/byte-length-queuing-strategy.any.js",
-      "sha256": "1e9c39cbee8137c35b330612ce5bfd9521ec63eb7a10668999e7304df9c115f1",
-      "gitBlob": "eed86ee7004ea15e288def1f3d511ba6fe39d820",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/byte-length-queuing-strategy.any.js",
       "format": "javascript",
       "support": [],
@@ -5786,10 +5601,7 @@
     },
     {
       "path": "streams/writable-streams/close.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/close.any.js",
-      "sha256": "7790eeef5c7f9d78b0a4b1613330ca50294a247374ef0405a4b1a9973a236bcd",
-      "gitBlob": "3b2c07cc3bfea1bf09a4c170f08e10c5be495848",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/close.any.js",
       "format": "javascript",
       "support": [
@@ -5911,10 +5723,7 @@
     },
     {
       "path": "streams/writable-streams/constructor.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/constructor.any.js",
-      "sha256": "4dc3e11a6e0174c18f62d8e0c1e75c56d5b4963db6cf059c4d77d53ac96c4dc2",
-      "gitBlob": "bb382a33b8e0c42ed313b53a71c569cb693e1ebc",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/constructor.any.js",
       "format": "javascript",
       "support": [],
@@ -5981,10 +5790,7 @@
     },
     {
       "path": "streams/writable-streams/count-queuing-strategy.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/count-queuing-strategy.any.js",
-      "sha256": "5ff2978d3bf5df30eaf80ba25aea9cf8c4c45bc51fc80c184e2f068d27d5e87d",
-      "gitBlob": "8211757530d3233e4bfeacd4d431861e6c7c7481",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/count-queuing-strategy.any.js",
       "format": "javascript",
       "support": [],
@@ -6011,10 +5817,7 @@
     },
     {
       "path": "streams/writable-streams/crashtests/garbage-collection.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/crashtests/garbage-collection.any.js",
-      "sha256": "4ff0aeb7102844e8c3c9c33f472a1f849ce7b9956299c19d58b008f947529079",
-      "gitBlob": "9f64e9b7a8ac7b03009d066b91a667ecb4eb57c0",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/crashtests/garbage-collection.any.js",
       "format": "javascript",
       "support": [
@@ -6051,10 +5854,7 @@
     },
     {
       "path": "streams/writable-streams/error.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/error.any.js",
-      "sha256": "58fc65459b973910a9dcb952a3bb18b3deab7167b9a743bce8f2708ee606891b",
-      "gitBlob": "d08c8a54863bb9693e76116946bd118592d6928c",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/error.any.js",
       "format": "javascript",
       "support": [],
@@ -6089,10 +5889,7 @@
     },
     {
       "path": "streams/writable-streams/floating-point-total-queue-size.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/floating-point-total-queue-size.any.js",
-      "sha256": "2a09dbe3ec9f2f2118776ad19bf5504d64f6388d630153595bd6b60f3eb2cdc6",
-      "gitBlob": "20a14fc19a51e004d16667fd78643ff48792d89c",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/floating-point-total-queue-size.any.js",
       "format": "javascript",
       "support": [],
@@ -6123,10 +5920,7 @@
     },
     {
       "path": "streams/writable-streams/garbage-collection.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/garbage-collection.any.js",
-      "sha256": "3771966cb683ca6a7882b34089680aaefe8127e831fa092888dcb20e0164fd96",
-      "gitBlob": "5e39e7c60d2c3355fafee4dc947112be7970a138",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/garbage-collection.any.js",
       "format": "javascript",
       "support": [
@@ -6147,10 +5941,7 @@
     },
     {
       "path": "streams/writable-streams/general.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/general.any.js",
-      "sha256": "b517232063acd40533069d321eac67abfa5fcd4874254b6d5b6e92801bfb84fd",
-      "gitBlob": "48f8eeb89e41eec32225b44be7c2e80132b970d4",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/general.any.js",
       "format": "javascript",
       "support": [],
@@ -6229,10 +6020,7 @@
     },
     {
       "path": "streams/writable-streams/properties.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/properties.any.js",
-      "sha256": "8cc25d638b670da8c40de6215d297a1e8f01dc8bc4310a35258bece04c583bd2",
-      "gitBlob": "ae0549f0871b4866877dffbccf8803eeaa897d06",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/properties.any.js",
       "format": "javascript",
       "support": [],
@@ -6279,10 +6067,7 @@
     },
     {
       "path": "streams/writable-streams/reentrant-strategy.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/reentrant-strategy.any.js",
-      "sha256": "25ffbe99aed5cb15d13aaa0f106f15ca5d62fa21380ac2b53f6ad27419f7ff45",
-      "gitBlob": "18ce9e84759a11bed4f4b31f5e82cf6948a2b739",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/reentrant-strategy.any.js",
       "format": "javascript",
       "support": [
@@ -6328,10 +6113,7 @@
     },
     {
       "path": "streams/writable-streams/start.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/start.any.js",
-      "sha256": "cb8084e940897958ede06bf3524504f6b8796155214c50be33e7ea4f53b5473a",
-      "gitBlob": "17972b568ceb24fee7a758a9d7a1147b26a030d6",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/start.any.js",
       "format": "javascript",
       "support": [
@@ -6381,10 +6163,7 @@
     },
     {
       "path": "streams/writable-streams/write.any.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
       "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/writable-streams/write.any.js",
-      "sha256": "5a37ddd0350dc3aacb61ef87012062090aed5349414108065786f19b83e13262",
-      "gitBlob": "20a2885bf3512ab6da3bb9aeecbc0e48022e741c",
       "destination": "runtime/web-platform/test/wpt/streams/writable-streams/write.any.js",
       "format": "javascript",
       "support": [
@@ -6456,46 +6235,28 @@
   "support": [
     {
       "path": "common/gc.js",
-      "revision": "dbd648158d337580885e70a54f929daf215211a0",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/gc.js",
-      "sha256": "186144288438fb6d520defdc16a6a86fff193184a30fe04e901fe93febe3f8c4",
-      "gitBlob": "ac43a4cfaf7735a08dfd1be177918167f815e800"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/dbd648158d337580885e70a54f929daf215211a0/common/gc.js"
     },
     {
       "path": "streams/resources/recording-streams.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/recording-streams.js",
-      "sha256": "7c90125c056643aa82b07eb00584e5d52ed39778b23adfeac82db2890a4a92ca",
-      "gitBlob": "661fe512f516c6c331025b74e6bf936e130f32c7"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/recording-streams.js"
     },
     {
       "path": "streams/resources/rs-test-templates.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/rs-test-templates.js",
-      "sha256": "7a0d0d4860ca6b397fa4aa008f802a734b99b40adff7ad60524721367d838042",
-      "gitBlob": "73ef0463768d23847186867fa68e968074b5fa8f"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/rs-test-templates.js"
     },
     {
       "path": "streams/resources/rs-utils.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/rs-utils.js",
-      "sha256": "e4ac017aecf1eb2f83b0f22ece95998fec7d42a6de1d94fa1497351369bec04b",
-      "gitBlob": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/rs-utils.js"
     },
     {
       "path": "streams/resources/test-utils.js",
-      "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
-      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/test-utils.js",
-      "sha256": "6ba682d4fa67f654de9c0d3516b6c3e0cdf1f0017085c866418cf93ced85cce7",
-      "gitBlob": "a38f78027bf0e90ae4bca4a3557982768ad402e8"
+      "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/streams/resources/test-utils.js"
     }
   ],
   "license": {
     "path": "LICENSE.md",
-    "revision": "f8f26a372f357370846226ff64db1f9cc98a1edb",
     "sourceURL": "https://github.com/web-platform-tests/wpt/blob/f8f26a372f357370846226ff64db1f9cc98a1edb/LICENSE.md",
-    "sha256": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
-    "gitBlob": "39c46d03ac2988226f949ee7ab3c7347d5481bd8",
     "identifier": "BSD-3-Clause",
     "note": "Copy upstream licence unchanged and preserve all existing fixture headers; do not add text to upstream files."
   },

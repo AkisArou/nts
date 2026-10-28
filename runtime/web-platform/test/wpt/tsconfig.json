@@ -20,6 +20,9 @@
     "../wpt-harness.test.ts",
     "../wpt-runner.test.ts",
     "../wpt-streams.test.ts",
-    "../streams-wpt-policy.test.ts"
+    "../streams-wpt-policy.test.ts",
+    "./versions.ts",
+    "./verify-versions.ts",
+    "../wpt-versions.test.ts"
   ]
 }

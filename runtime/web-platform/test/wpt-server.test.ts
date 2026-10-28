@@ -1,7 +1,6 @@
 // Server controls for the unchanged WPT resources. These are not WPT case counts:
 // the shared testharness adapter imports the API corpora in subsequent PRs.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import type { IncomingHttpHeaders } from "node:http";
@@ -12,6 +11,7 @@ import { startWptServer } from "./wpt/server/server.ts";
 import type { WptServer } from "./wpt/server/server.ts";
 import { WptServerState } from "./wpt/server/state.ts";
 import { substitute } from "./wpt/server/substitutions.ts";
+import { readWptVersions, verifiedWptSource } from "./wpt/versions.ts";
 import { createWptRuntime } from "./wpt/server/runtime.ts";
 import { AbortController as PlatformAbortController, WebSocket } from "../src/index.ts";
 
@@ -64,17 +64,17 @@ function request(
 }
 
 suite("the WPT support sources and certificates match their pinned upstream hashes", async () => {
-  interface Manifest { revision: string; files: { source: string; local: string; sha256: string }[] }
+  interface Manifest { files: { source: string; local: string }[] }
   const root = new URL("./wpt/", import.meta.url);
   const manifest = JSON.parse(await readFile(new URL("server/upstream-manifest.json", root), "utf8")) as Manifest;
-  assert.equal(manifest.revision, "a8f306ee4399724f33399dfdcac7da296f3cc05a");
+  const versions = readWptVersions(root);
   assert.equal(manifest.files.length, 75, "the complete item-1 support inventory is checked");
   const paths = new Set<string>();
   for (const file of manifest.files) {
     assert.equal(paths.has(file.local), false, "duplicate manifest path: " + file.local);
     paths.add(file.local);
-    const bytes = await readFile(new URL(file.local, root));
-    assert.equal(createHash("sha256").update(bytes).digest("hex"), file.sha256, file.source);
+    assert.equal(versions.files[file.local]?.source ?? file.local, file.source);
+    verifiedWptSource(root, file.local, versions);
   }
   const handlers = (await Promise.all(["websocket-handlers.ts", "eventsource-handlers.ts", "http-resources.ts"]
     .map((path) => readFile(new URL("server/" + path, root), "utf8")))).join("\n");

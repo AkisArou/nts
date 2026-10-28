@@ -2,8 +2,11 @@
 
 Unedited fixtures live at their original WPT paths below this directory, for
 example `dom/events/Event-constructors.any.js`. Each area owns a manifest and
-README in a separate directory such as `events-abort/`. The manifests record the
-exact revision, SHA-256 and Git blob ID of each fixture, support file and licence.
+README in a separate directory such as `events-abort/`. `versions.json` records one revision per imported WPT directory and the exact
+SHA-256 and Git blob ID of every original fixture, support file and licence.
+Area manifests record selection and expected registrations; the runner reads
+source identity only from the shared table. `check.sh` verifies the complete
+inventory, including support files no selected case loads.
 Do not patch a copied case or insert a new header into its bytes.
 
 ## Reuse from another specification area
@@ -73,8 +76,7 @@ browser/worker aggregation and other setup options are not implemented; using
 them fails explicitly. Extend the adapter with specification controls when a
 new corpus requires one, without altering that corpus's cases.
 
-Node 24.20 pins harness `resources` to
-`6a2f32237615d7ea9c1eb1e30453066b5555c603` and `common` to
-`dbd648158d337580885e70a54f929daf215211a0`. Use those revisions when importing
-helpers from those directories. The adapter is original TypeScript, not a
-modified copy of upstream `testharness.js`.
+Shared helpers exist once under their original WPT paths. Add new originals
+and their hashes to `versions.json`; use the existing directory revision, or
+re-pin the directory and rerun its consumers together. The adapter is original
+TypeScript, not a modified copy of upstream `testharness.js`.

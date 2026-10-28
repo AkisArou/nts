@@ -1,18 +1,14 @@
 // Shared, test-only fixture adapter. Every area supplies its own canonical package
 // globals; a fresh VM context never inherits Node's competing web API globals.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import type { TestContext } from "node:test";
 import { TextDecoder } from "node:util";
 import { WptHarness } from "./harness.ts";
 import type { WptBlock, WptResult } from "./harness.ts";
+import { readWptVersions, verifiedWptSource } from "./versions.ts";
 
 export interface WptSource {
-  revision: string;
   path: string;
-  sha256: string;
-  gitBlob: string;
 }
 
 export type WptTimeoutCategory = "network" | "reconnect";
@@ -31,7 +27,6 @@ export interface WptFixture extends WptSource {
 }
 
 export interface WptManifest {
-  revisions: Record<string, string>;
   fixtures: WptFixture[];
   support: WptSource[];
   license: WptSource;
@@ -101,25 +96,6 @@ interface ScriptEntry {
 const resolutionRoot = new URL("https://wpt.invalid/");
 const defaultTimeouts = { default: 10_000, long: 60_000, network: 60_000, reconnect: 120_000 };
 const harnessPaths = new Set(["/resources/testharness.js", "/resources/testharnessreport.js"]);
-
-function sourceURL(root: URL, path: string): URL {
-  const normalized = new URL(path, resolutionRoot);
-  assert.ok(path !== "" && !path.includes("\\") && !path.includes("\0") &&
-    normalized.origin === resolutionRoot.origin && normalized.pathname.slice(1) === path &&
-    normalized.search === "" && normalized.hash === "", `noncanonical WPT source path: ${path}`);
-  return new URL(path, root);
-}
-
-function verified(root: URL, source: WptSource): Buffer {
-  const bytes = readFileSync(sourceURL(root, source.path));
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), source.sha256, source.path);
-  assert.equal(
-    createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex"),
-    source.gitBlob,
-    `upstream blob changed: ${source.path}`,
-  );
-  return bytes;
-}
 
 function referenceURL(reference: string, fixtureURL: URL): URL {
   const url = new URL(reference, fixtureURL);
@@ -296,15 +272,16 @@ function scriptEntries(
 
 /** Verify all originals and declarations before exposing text to a substitution hook. */
 export function loadWptFixtures(root: URL, manifest: WptManifest, options: WptRunnerOptions = {}): WptPreparedFixture[] {
-  verified(root, manifest.license);
+  const versions = readWptVersions(root);
+  verifiedWptSource(root, manifest.license.path, versions);
   const support = new Map<string, string>();
   for (const source of manifest.support) {
     assert.ok(!support.has(source.path), `duplicate WPT support path: ${source.path}`);
-    support.set(source.path, verified(root, source).toString("utf8"));
+    support.set(source.path, verifiedWptSource(root, source.path, versions).toString("utf8"));
   }
   const prepared: { context: WptFixtureContext; entries: ScriptEntry[]; imports: ScriptEntry[] }[] = [];
   for (const fixture of manifest.fixtures) {
-    const bytes = verified(root, fixture);
+    const bytes = verifiedWptSource(root, fixture.path, versions);
     assert.ok(fixture.format === "javascript" || fixture.format === "html", "unknown WPT fixture format");
     const source = fixtureText(bytes, fixture.format);
     const meta = metadata(source, fixture.format);
