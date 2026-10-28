@@ -47,7 +47,10 @@ What this costs:
 - **Provider:** one implementation of a feature. There are three kinds:
   - **compiler:** the compiler owns the representation (`Map`, `Promise`, typed
     arrays), and each backend runs its helpers. It is available on a backend
-    only where every helper it needs exists.
+    only where every helper it needs exists. A feature whose work depends on
+    the layout of the values it is given is the compiler's: `JSON.stringify`
+    and `structuredClone` are generated per type, with a runtime helper for
+    erased values, and `MessagePort` messages are structured clones.
   - **source:** a TypeScript module of nts's whose exports carry the global's
     names. It is compiled and tree-shaken with the program, like
     `runtime/web-platform`'s `TextEncoder`.
