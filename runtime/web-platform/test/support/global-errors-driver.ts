@@ -8,7 +8,14 @@ import type { Event, EventTarget } from "../../src/core/events.ts";
 import type {
   GlobalErrorCapabilities, GlobalErrorEventType, GlobalErrorInformation,
   GlobalErrorListener, GlobalExceptionReporter, GlobalWorkerErrorOwner,
+  GlobalHandlerArguments, GlobalHandlerCallback, GlobalHandlerInvocationResult,
 } from "../../src/provider/global-errors.ts";
+
+interface HandlerInvocation {
+  readonly callback: GlobalHandlerCallback;
+  readonly receiver: object;
+  readonly args: GlobalHandlerArguments;
+}
 
 class Listener {
   readonly type: GlobalErrorEventType;
@@ -35,6 +42,9 @@ export class ErrorDriver implements GlobalErrorCapabilities {
   readonly rejections: unknown[] = [];
   readonly extractions: unknown[] = [];
   readonly reads: string[] = [];
+  readonly invocations: HandlerInvocation[] = [];
+  readonly inactiveHandlers = new WeakSet<GlobalHandlerCallback>();
+  invocationCleanup: (() => void) | undefined = undefined;
   readonly globalDestinations = new WeakMap<object, GlobalExceptionReporter>();
   readonly promises = new WeakMap<object, PromiseState>();
   readonly runtime: GlobalErrorRuntime;
@@ -58,6 +68,19 @@ export class ErrorDriver implements GlobalErrorCapabilities {
     for (const listener of this.listeners) {
       if (listener.type === type && listener.callback === callback) listener.removed = true;
     }
+  }
+  invokeGlobalHandler(
+    callback: GlobalHandlerCallback, receiver: object, args: GlobalHandlerArguments,
+  ): GlobalHandlerInvocationResult {
+    this.invocations.push({ callback, receiver, args });
+    if (this.inactiveHandlers.has(callback)) return { ok: true, value: undefined };
+    let result: GlobalHandlerInvocationResult;
+    try { result = { ok: true, value: Reflect.apply(callback, receiver, args) }; }
+    catch (error) { result = { ok: false, error }; }
+    // Deterministic test boundary only. A production provider supplies actual
+    // realm preparation, callback cleanup and its engine's checkpoint behavior.
+    this.invocationCleanup?.();
+    return result;
   }
   dispatchGlobalEvent(event: Event, reportException: (exception: unknown) => void): boolean {
     this.events.push(event);

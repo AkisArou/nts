@@ -21,8 +21,9 @@ The relevant HTML Living Standard algorithms are:
 
 `src/core/global-errors.ts` owns the reporting guard, event creation,
 cancellation rules, handler slots, rejected-promise list and outstanding weak
-set. `src/provider/global-errors.ts` describes the infallible operations it
-needs from the engine. It does not inspect `.then`, attach Node process
+set. `src/provider/global-errors.ts` describes the operations it needs from
+the engine. Native operations never throw into source; callback completions
+cross that boundary as values. It does not inspect `.then`, attach Node process
 listeners, parse an exposed stack, or read a supplied exception's properties.
 
 The source dispatcher reads the current handler through `globalThis` once for
@@ -32,6 +33,14 @@ position. A global `ErrorEvent` named `error` invokes `onerror` with five
 arguments; exactly `true` cancels. Ordinary events use one argument; exactly
 `false` cancels. Callback exceptions re-enter the reporting algorithm, whose
 per-global guard suppresses recursive error-event dispatch.
+
+The actual handler is invoked through `invokeGlobalHandler`, with its receiver
+and the typed one- or five-argument list. Web IDL callback/script cleanup must
+finish before that operation returns a success value or an exception value.
+Only then does source apply HTML's exact-boolean cancellation rule or rethrow
+the returned exception to dispatch. An inactive callback returns a successful
+undefined value without being called. Cleaning up only after the source's
+internal listener wrapper returns would apply cancellation too early.
 
 The promise policy snapshots the about-to-be-notified list at the checkpoint,
 checks the native handled state again when the queued task executes, and
@@ -50,14 +59,16 @@ Construct one `GlobalErrorRuntime` per provider global. It needs:
 | `globalObject`, `resolveGlobalReporter` | Identify the actual global or WindowProxy and resolve a borrowed global method's receiver. |
 | `extractErrorInformation` | Supply implementation-defined message, filename, line, column and the selected script's muted-errors flag without script-visible input reads or coercion. |
 | `addGlobalEventListener`, `removeGlobalEventListener` | Add and remove internal non-capture listeners in the actual global's listener list. |
-| `dispatchGlobalEvent` | Dispatch a trusted canonical event at that actual global; preserve target/currentTarget identity, callback realm, HTML callback cleanup and listener-exception reporting. Apply scripting and active-document checks when relevant. |
+| `invokeGlobalHandler` | Invoke the actual IDL handler with the supplied receiver and arguments. Apply callback-realm runnability, relevant/captured settings, and Web IDL callback/script cleanup before returning `{ ok: true, value }` or `{ ok: false, error }`. An inactive handler returns success with undefined. |
+| `dispatchGlobalEvent` | Dispatch a trusted canonical event at that actual global; preserve target/currentTarget identity, ordinary-listener callback cleanup and listener-exception reporting. Internal handler wrappers use the separate invocation boundary before processing their result. Apply scripting and active-document checks when relevant. |
 | `enqueueGlobalTask` | Queue the DOM manipulation task source; never run the task inline. |
 | `promiseIsHandled`, `promiseResult` | Read real Promise internal slots; never public properties or a thenable. |
 | Console sinks | Perform the embedder's optional reporting without throwing into source. |
 | Optional `dedicatedWorkerOwner` | Queue owner-realm dispatch at the real Worker object, including terminated/disentangled-worker rules. Source constructs the sanitized error event and performs further propagation with `omitError`. |
 
-All these operations are infallible capability operations. A provider must
-not advertise the capability until those boundaries are real. The source
+These operations must not throw from native code into source. A thrown handler
+completion is returned as a value after cleanup. A provider must not advertise
+the capability until these boundaries are real. The source
 does not use a detached `EventTarget` as a substitute for the global, and it
 does not fabricate script positions or location URLs.
 
@@ -117,8 +128,10 @@ are included in that path count; it is not a count of failed test cases.
 
 ## Results
 
-Measurements use Node `v24.20.0`. They apply to the source and adapter hashes
-recorded in `global-errors-results.json`.
+Measurements use Node `v24.20.0`. The initial measurements below apply to source
+commit `308e3cc5c8c339464afd3ea1cf201cc3fff83b3a` and its recorded adapter hashes.
+The subsequent callback-boundary fix has separate final-source hashes and
+fresh measurements in `global-errors-results.json` and the subsection below.
 
 | Per-file WPT run | Pass | Fail | Named blocks |
 | --- | ---: | ---: | ---: |
@@ -133,12 +146,12 @@ absent method also throws `TypeError`. The focused controls additionally
 require a callable with the correct name, arity and receiver behavior. The
 getter case fails in that baseline because the API is missing.
 
-The focused source-policy file passes all 34 controls, covering argument and
+The initial focused source-policy file passed all 34 controls, covering argument and
 receiver handling, value identity, synchronous dispatch, metadata
 non-observation, handler ordering and cancellation, nested errors, muting,
 worker propagation, and rejected-promise timing/retention policy. The five new
 adapter controls and all 22 unchanged adapter controls pass. The combined
-Node test command reports **68 entries: 65 pass, 0 fail, 3 skipped**. That
+Node test command reported **68 entries: 65 pass, 0 fail, 3 skipped**. That
 aggregate includes the WPT file and suite containers; the per-file table
 counts only the five upstream registrations.
 
@@ -157,6 +170,38 @@ Both strict TypeScript projects exit successfully. Compilation with nts and
 actual-global/native Promise integration are **not verified** here. The
 stacked full suite and compiled checks belong to the integration gate, and
 are not claimed by this report.
+
+### Callback-boundary review and fix
+
+Independent review found that the initial source invoked the handler directly
+and applied its cancellation result before the dispatcher could clean up the
+actual callback. The correct order follows
+[HTML event-handler processing](https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-processing-algorithm),
+[Web IDL callback invocation](https://webidl.spec.whatwg.org/#invoke-a-callback-function),
+and [HTML cleanup after running script](https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script).
+When cleanup requires a checkpoint, a queued microtask runs before the handler's
+boolean return value sets the canceled flag. Handler exceptions also leave the
+invocation boundary only after cleanup.
+
+The fix adds the explicit, result-valued `invokeGlobalHandler` capability and
+keeps cancellation in source after it returns. The deterministic driver exposes
+an injected cleanup point and inactive-handler state; these controls do not
+implement or claim a native scheduler or realm manager.
+
+Five new regression controls cover cleanup before error cancellation, handling a
+rejection during cleanup before outstanding tracking, cleanup before a thrown
+handler completion is reported, failures returned as values, and inactive
+callbacks. With the original core source temporarily restored and the same new
+controls/driver, all five failed. Restoring the fixed source byte-for-byte made
+all five pass.
+
+The complete command above was rerun on the fixed source: **39 source-policy
+controls**, **five adapter controls**, and **22 unchanged adapter controls** pass.
+The unchanged WPT file remains **2 pass / 0 fail / 3 named blocks**. The combined
+Node totals are **73 entries: 70 pass, 0 fail, 3 skipped**, including wrappers.
+Both strict TypeScript projects pass again. The original metadata-getter
+sabotage hashes remain historical evidence for their original source; they are
+not relabeled as measurements of this callback-boundary fix.
 
 ### Shared adapter changes
 

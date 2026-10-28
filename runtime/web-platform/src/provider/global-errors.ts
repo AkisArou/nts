@@ -13,6 +13,17 @@ export interface GlobalErrorInformation {
 export type GlobalErrorEventType = "error" | "unhandledrejection" | "rejectionhandled";
 export type GlobalErrorListener = (event: Event) => void;
 
+/** HTML's two argument lists for a global's event-handler IDL attributes. */
+export type GlobalHandlerArguments =
+  | [event: Event]
+  | [message: string, filename: string, lineno: number, colno: number, error: unknown];
+export type GlobalHandlerCallback = (this: object, ...args: GlobalHandlerArguments) => unknown;
+
+/** Web IDL's callback completion crosses the native binding as a value. */
+export type GlobalHandlerInvocationResult =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly error: unknown };
+
 /** A source-owned reporting destination, including one in a different realm. */
 export interface GlobalExceptionReporter {
   reportException(exception: unknown, omitError?: boolean): void;
@@ -42,9 +53,26 @@ export interface GlobalErrorCapabilities {
   removeGlobalEventListener(type: GlobalErrorEventType, callback: GlobalErrorListener): void;
 
   /**
+   * Invoke the actual IDL handler, not the source's internal listener wrapper.
+   * Apply HTML's scripting-enabled and callback-realm fully-active checks; an
+   * inactive handler returns { ok: true, value: undefined } without invocation.
+   * Use Web IDL callback preparation, the callback's relevant/captured settings,
+   * and cleanup after running callback/script before returning its completion.
+   * Cleanup includes a microtask checkpoint when HTML requires one. A thrown
+   * callback value is returned as { ok: false, error }, never thrown by native
+   * code. Source rethrows it and applies cancellation only to a normal result.
+   */
+  invokeGlobalHandler(
+    callback: GlobalHandlerCallback, receiver: object, args: GlobalHandlerArguments,
+  ): GlobalHandlerInvocationResult;
+
+  /**
    * Dispatch a trusted canonical Event at globalObject; return !canceled.
    * target/currentTarget and callback this must be the actual global. Enter its
-   * realm for script callbacks and perform HTML callback cleanup. Apply the
+   * realm for source listener wrappers. Ordinary script listeners use Web IDL
+   * callback setup/cleanup; the internal handler wrappers call the separate
+   * invokeGlobalHandler boundary before applying HTML's cancellation policy.
+   * Cleaning up only after such a wrapper returns is too late. Apply the
    * platform's scripting-enabled and fully-active Document checks, when any.
    * Listener exceptions go to reportException and never escape dispatch.
    */
