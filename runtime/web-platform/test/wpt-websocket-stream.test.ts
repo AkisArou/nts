@@ -14,6 +14,10 @@ import { startWptServer } from "./wpt/server/server.ts";
 import { substitute } from "./wpt/server/substitutions.ts";
 import { createDrainableTransport } from "./wpt/websocket-stream-conformance/drainable-transport.ts";
 
+// Node provides this intrinsic even when the host test project excludes lib.dom.
+// It is passed through unchanged; the fixture constructs its own shared memory.
+declare const WebAssembly: unknown;
+
 const root = new URL("./wpt/", import.meta.url);
 const original = JSON.parse(readFileSync(new URL("websocket-stream-conformance/manifest.json", root), "utf8")) as WptManifest;
 const filter = process.env.NTS_WPT_WEBSOCKET_STREAM_FILTER;
