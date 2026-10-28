@@ -1,0 +1,884 @@
+{
+  "specification": "https://wicg.github.io/webcrypto-modern-algos/",
+  "sections": [
+    "3.1.2",
+    "3.2.1",
+    "3.2.2",
+    "3.2.3",
+    "3.2.4",
+    "3.2.5",
+    "4",
+    "6"
+  ],
+  "wptRevision": "ec2fee39a4ca3c13afd55236795547eedd7f165d",
+  "nodeVersion": "24.20.0",
+  "isolatedBase": "02c8401ca947f251c8667985756496cc94649487",
+  "scope": "ML-KEM-512/768/1024, encapsulateKey/Bits, decapsulateKey/Bits and ML-KEM getPublicKey; hybrid KEMs remain excluded",
+  "restoredExclusions": 1611,
+  "newSpecificationDiscrepancies": 0,
+  "serializationReclassified": 6,
+  "registrationCountChanges": [],
+  "fullScopedJsonlSha256": "d23a1bbf40c7b11051ae8fd5a248fc64b46da7f762776df1cf73d1fdd44c8283",
+  "focusedTests": {
+    "total": 32,
+    "pass": 32,
+    "fail": 0,
+    "skip": 0
+  },
+  "sharedRegressionTests": {
+    "total": 179,
+    "pass": 179,
+    "fail": 0,
+    "skip": 0
+  },
+  "packageGate": "The parent integration runs the full ordered-stack gate; these are isolated-branch controls and WPT evidence.",
+  "rawAffectedFiles": [
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+      "pass": 9,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+      "pass": 120,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+      "pass": 1044,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+      "pass": 468,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+      "pass": 37,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+      "pass": 324,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "mode": "raw",
+      "path": "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+      "pass": 0,
+      "fail": 6,
+      "blocked": 0,
+      "failures": [
+        {
+          "name": "serialization test ML-KEM-512",
+          "status": "fail",
+          "error": "ReferenceError: structuredClone is not defined"
+        },
+        {
+          "name": "serialization test {name: ML-KEM-512}",
+          "status": "fail",
+          "error": "ReferenceError: structuredClone is not defined"
+        },
+        {
+          "name": "serialization test ML-KEM-768",
+          "status": "fail",
+          "error": "ReferenceError: structuredClone is not defined"
+        },
+        {
+          "name": "serialization test {name: ML-KEM-768}",
+          "status": "fail",
+          "error": "ReferenceError: structuredClone is not defined"
+        },
+        {
+          "name": "serialization test ML-KEM-1024",
+          "status": "fail",
+          "error": "ReferenceError: structuredClone is not defined"
+        },
+        {
+          "name": "serialization test {name: ML-KEM-1024}",
+          "status": "fail",
+          "error": "ReferenceError: structuredClone is not defined"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "pass": 33136,
+    "fail": 0,
+    "blocked": 3194
+  },
+  "files": [
+    {
+      "path": "WebCryptoAPI/algorithm-discards-context.https.window.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 13
+    },
+    {
+      "path": "WebCryptoAPI/crypto_key_cached_slots.https.any.js",
+      "pass": 2,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
+      "pass": 19,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js",
+      "pass": 18,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js",
+      "pass": 17,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js",
+      "pass": 16,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js",
+      "pass": 29,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+      "pass": 38,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js",
+      "pass": 31,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js",
+      "pass": 3661,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js",
+      "pass": 8632,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/digest/cshake.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 88
+    },
+    {
+      "path": "WebCryptoAPI/digest/digest.https.any.js",
+      "pass": 116,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 148
+    },
+    {
+      "path": "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 48
+    },
+    {
+      "path": "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 135
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+      "pass": 9,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+      "pass": 120,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+      "pass": 55,
+      "fail": 0,
+      "blocked": 6
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js",
+      "pass": 46,
+      "fail": 0,
+      "blocked": 6
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js",
+      "pass": 493,
+      "fail": 0,
+      "blocked": 84
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js",
+      "pass": 493,
+      "fail": 0,
+      "blocked": 84
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 276
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 28
+    },
+    {
+      "path": "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
+      "pass": 157,
+      "fail": 0,
+      "blocked": 24
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js",
+      "pass": 774,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js",
+      "pass": 516,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+      "pass": 360,
+      "fail": 0,
+      "blocked": 414
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
+      "pass": 476,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js",
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js",
+      "pass": 412,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js",
+      "pass": 412,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_HMAC.https.any.js",
+      "pass": 616,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js",
+      "pass": 516,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+      "pass": 1044,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
+      "pass": 532,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js",
+      "pass": 428,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js",
+      "pass": 428,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X25519.https.any.js",
+      "pass": 424,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js",
+      "pass": 424,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+      "pass": 360,
+      "fail": 0,
+      "blocked": 140
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
+      "pass": 360,
+      "fail": 0,
+      "blocked": 192
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js",
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js",
+      "pass": 288,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js",
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 288
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js",
+      "pass": 54,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js",
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js",
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_HMAC.https.any.js",
+      "pass": 192,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js",
+      "pass": 108,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+      "pass": 468,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
+      "pass": 156,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js",
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js",
+      "pass": 36,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X25519.https.any.js",
+      "pass": 32,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js",
+      "pass": 32,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 192
+    },
+    {
+      "path": "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 144
+    },
+    {
+      "path": "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+      "pass": 37,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/getRandomValues.any.js",
+      "pass": 39,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/historical.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 72
+    },
+    {
+      "path": "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 45
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 24
+    },
+    {
+      "path": "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 144
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
+      "pass": 180,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+      "pass": 324,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+      "pass": 180,
+      "fail": 0,
+      "blocked": 84
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js",
+      "pass": 620,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js",
+      "pass": 620,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js",
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js",
+      "pass": 72,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js",
+      "pass": 54,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js",
+      "pass": 54,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js",
+      "pass": 530,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js",
+      "pass": 530,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js",
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js",
+      "pass": 454,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
+      "pass": 8,
+      "fail": 0,
+      "blocked": 12
+    },
+    {
+      "path": "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
+      "pass": 1056,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/import_export/symmetric_importKey.https.any.js",
+      "pass": 606,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/normalize-algorithm-name.https.any.js",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/randomUUID.https.any.js",
+      "pass": 3,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 1
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-cbc.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ctr.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-gcm.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-kw.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdh.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ecdsa.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 3
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed25519.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/ed448.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/hmac.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 8
+    },
+    {
+      "path": "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 6
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mldsa.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 6
+    },
+    {
+      "path": "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 6
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-oaep.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsa-pss.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x25519.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/ecdsa.https.any.js",
+      "pass": 301,
+      "fail": 0,
+      "blocked": 24
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js",
+      "pass": 17,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+      "pass": 17,
+      "fail": 0,
+      "blocked": 2
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js",
+      "pass": 14,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/hmac.https.any.js",
+      "pass": 57,
+      "fail": 0,
+      "blocked": 8
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
+      "pass": 1,
+      "fail": 0,
+      "blocked": 102
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
+      "pass": 52,
+      "fail": 0,
+      "blocked": 6
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js",
+      "pass": 61,
+      "fail": 0,
+      "blocked": 8
+    },
+    {
+      "path": "WebCryptoAPI/sign_verify/rsa_pss.https.any.js",
+      "pass": 129,
+      "fail": 0,
+      "blocked": 16
+    },
+    {
+      "path": "WebCryptoAPI/supports-modern.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 94
+    },
+    {
+      "path": "WebCryptoAPI/supports.tentative.https.any.js",
+      "pass": 0,
+      "fail": 0,
+      "blocked": 171
+    },
+    {
+      "path": "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+      "pass": 357,
+      "fail": 0,
+      "blocked": 0
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope.",
+      "status": "not-run",
+      "pass": null,
+      "fail": null,
+      "blocked": null
+    },
+    {
+      "path": "WebCryptoAPI/idlharness.tentative.https.any.js",
+      "category": "browser-idl",
+      "reason": "Requires the browser IDL harness, generated WebIDLParser route, fetched HTML/DOM IDL, and prototype/descriptor reflection outside the cloud-agent scope.",
+      "status": "not-run",
+      "pass": null,
+      "fail": null,
+      "blocked": null
+    },
+    {
+      "path": "WebCryptoAPI/derive_bits_keys/derive_key_and_encrypt.https.any.js",
+      "category": "upstream-asynchronous-registration",
+      "reason": "Unedited define_tests starts importKeys().then(register tests) but returns a separate resolved promise; registrations arrive after its setup test completes. Initial execution reports late registration. No timer delay or fixture rewrite is used to hide the missing await.",
+      "status": "not-run",
+      "pass": null,
+      "fail": null,
+      "blocked": null
+    }
+  ]
+}

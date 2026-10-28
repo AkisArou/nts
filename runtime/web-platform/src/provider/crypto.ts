@@ -56,9 +56,10 @@ export type CryptoKeyType = "secret" | "public" | "private";
 export type CryptoNamedCurve = "P-256" | "P-384" | "P-521";
 export type CryptoOkpCurve = "Ed25519" | "X25519" | "Ed448" | "X448";
 export type CryptoMlDsaName = "ML-DSA-44" | "ML-DSA-65" | "ML-DSA-87";
-export type CryptoMlAlgorithmName = CryptoMlDsaName;
+export type CryptoMlKemName = "ML-KEM-512" | "ML-KEM-768" | "ML-KEM-1024";
+export type CryptoMlAlgorithmName = CryptoMlDsaName | CryptoMlKemName;
 
-/** FIPS 204 keys retain their original seed as well as native expanded material. */
+/** FIPS 203/204 keys retain their seed as well as native expanded material. */
 export interface CryptoMlKeyInfo {
   readonly family: "ML";
   readonly type: "public" | "private";
@@ -375,6 +376,17 @@ export interface CryptoEcdsaSignature {
 
 export type CryptoSignature = CryptoByteSignature | CryptoEcdsaSignature;
 
+/** FIPS 203 parameter set; key validation and all KEM computations stay native. */
+export interface CryptoKemParameters {
+  readonly name: CryptoMlKemName;
+}
+
+/** Independently owned complete outputs: a 32-byte shared key and ciphertext. */
+export interface CryptoEncapsulation {
+  readonly sharedKey: Uint8Array;
+  readonly ciphertext: Uint8Array;
+}
+
 export interface CryptoAgreementParameters {
   readonly name: "ECDH" | "X25519" | "X448";
   readonly publicKey: CryptoKeyHandle;
@@ -450,8 +462,10 @@ export interface CryptoProvider extends CryptoDigestProvider {
    * Report the actual type, curve, modulus and exponent in info. Mathematical
    * decoding must not strengthen the API's import requirements: in particular,
    * OKP public imports retain the supplied encoded point without imposing an
-   * on-curve, canonical-encoding or small-order test. Verification/agreement apply
-   * the requested cryptographic operation's rules when the key is used. Shared
+   * on-curve, canonical-encoding or small-order test. ML-KEM public imports also
+   * preserve the supplied encoded key: FIPS 203's encapsulation-key check belongs
+   * to encapsulation. Verification/agreement/encapsulation apply the requested
+   * cryptographic operation's rules when the key is used. Shared
    * code is responsible for any format-specific public/private consistency check.
    */
   importKey(input: CryptoKeyImport): CryptoKeyRecord | CryptoFailure;
@@ -493,6 +507,21 @@ export interface CryptoProvider extends CryptoDigestProvider {
     signature: CryptoSignature,
     data: Uint8Array,
   ): boolean | CryptoFailure;
+
+  /**
+   * FIPS 203 §7.2: check the encoded encapsulation key and perform ML-KEM.Encaps
+   * using native secure randomness. Return both complete outputs in one call.
+   * An invalid key or native failure is a failure value, never partial output.
+   */
+  encapsulate(parameters: CryptoKemParameters, key: CryptoKeyHandle): CryptoEncapsulation | CryptoFailure;
+
+  /**
+   * FIPS 203 §7.3: check the decapsulation input and perform ML-KEM.Decaps in one
+   * native call. Implicit rejection is part of this primitive: a correctly sized
+   * altered ciphertext normally yields the complete 32-byte rejection secret,
+   * not an authentication error. Input-check or native failures return a value.
+   */
+  decapsulate(parameters: CryptoKemParameters, key: CryptoKeyHandle, ciphertext: Uint8Array): Uint8Array | CryptoFailure;
 
   /**
    * Agreement returns the complete fixed-width secret; shared code applies the

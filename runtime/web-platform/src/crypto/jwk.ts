@@ -56,7 +56,9 @@ export function checkJwkPolicy(jwk: JsonWebKey, expectedUse: "sig" | "enc", extr
       }
       const signing = operation === "sign" || operation === "verify";
       const encryption = operation === "encrypt" || operation === "decrypt" || operation === "wrapKey"
-        || operation === "unwrapKey" || operation === "deriveKey" || operation === "deriveBits";
+        || operation === "unwrapKey" || operation === "deriveKey" || operation === "deriveBits"
+        || operation === "encapsulateKey" || operation === "encapsulateBits"
+        || operation === "decapsulateKey" || operation === "decapsulateBits";
       if ((jwk.use === "sig" && encryption) || (jwk.use === "enc" && signing)) {
         throw new DOMException("The JWK use and key_ops are inconsistent", "DataError");
       }
@@ -134,6 +136,7 @@ const base64url = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678
 const hexadecimal = "0123456789abcdef";
 const usageOrder: readonly KeyUsage[] = [
   "encrypt", "decrypt", "sign", "verify", "deriveKey", "deriveBits", "wrapKey", "unwrapKey",
+  "encapsulateKey", "encapsulateBits", "decapsulateKey", "decapsulateBits",
 ];
 
 function append<T>(values: T[], value: T): void {

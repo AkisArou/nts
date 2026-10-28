@@ -26,7 +26,9 @@ import { deriveOkpBits, signOkp, verifyOkp } from "./okp.ts";
 import { exportOkpKey, generateOkpKey, importOkpKey } from "./okp-key.ts";
 import { exportMlKey, generateMlKey, importMlKey } from "./ml-key.ts";
 import { signMlDsa, verifyMlDsa } from "./ml-dsa.ts";
-import { isMlAlgorithm } from "./ml-parameters.ts";
+import { encapsulateMlKem, decapsulateMlKem } from "./ml-kem.ts";
+import type { EncapsulatedBits, EncapsulatedKey } from "./ml-kem.ts";
+import { isMlAlgorithm, isMlDsaAlgorithm } from "./ml-parameters.ts";
 import { derivePublicKey, supportsPublicKey } from "./public-key.ts";
 import { decryptRsa, encryptRsa, signRsa, verifyRsa } from "./rsa.ts";
 import { exportRsaKey, generateRsaKey, importRsaKey } from "./rsa-key.ts";
@@ -112,7 +114,7 @@ function decryptBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, 
 }
 
 function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, bytes: Uint8Array): Uint8Array {
-  if (isMlAlgorithm(algorithm.name)) return signMlDsa(provider, algorithm, key, bytes);
+  if (isMlDsaAlgorithm(algorithm.name)) return signMlDsa(provider, algorithm, key, bytes);
   if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return signOkp(provider, algorithm, key, bytes);
   if (algorithm.name === "ECDSA") return signEc(provider, algorithm, key, bytes);
   if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return signKmac(provider, algorithm, key, bytes);
@@ -121,7 +123,7 @@ function signBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key
 }
 
 function verifyBytes(provider: CryptoProvider, algorithm: NormalizedAlgorithm, key: CryptoKeySlots, signature: Uint8Array, bytes: Uint8Array): boolean {
-  if (isMlAlgorithm(algorithm.name)) return verifyMlDsa(provider, algorithm, key, signature, bytes);
+  if (isMlDsaAlgorithm(algorithm.name)) return verifyMlDsa(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "Ed25519" || algorithm.name === "Ed448") return verifyOkp(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "ECDSA") return verifyEc(provider, algorithm, key, signature, bytes);
   if (algorithm.name === "KMAC128" || algorithm.name === "KMAC256") return verifyKmac(provider, algorithm, key, signature, bytes);
@@ -382,6 +384,99 @@ export class SubtleCrypto {
       if ((keyFormat === "jwk") !== dictionary) throw new TypeError("The key data does not match its format");
       const data = dictionary ? source : cryptoBytes(source);
       return cryptoTask(scheduler, () => importKeyMaterial(provider, keyFormat, data, normalized, canExport, usages));
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** Modern Algorithms §3.2.1: import the complete shared secret as raw-secret. */
+  encapsulateKey(algorithm: unknown, key: unknown, sharedKeyAlgorithm: unknown,
+    extractable: unknown, keyUsages: unknown): Promise<EncapsulatedKey> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 5, "SubtleCrypto.encapsulateKey");
+      const identifier = toAlgorithmIdentifier(algorithm);
+      const slots = getCryptoKeySlots(key);
+      const sharedIdentifier = toAlgorithmIdentifier(sharedKeyAlgorithm);
+      const canExport = coerceToBoolean(extractable);
+      const usages = toKeyUsages(keyUsages);
+      const normalized = normalizeAlgorithm(identifier, "encapsulate", true);
+      const normalizedImport = normalizeAlgorithm(sharedIdentifier, "importKey");
+      return cryptoTask(scheduler, () => {
+        requireKeyUsage(slots, normalized, "encapsulateKey");
+        const result = encapsulateMlKem(provider, normalized, slots);
+        const sharedKey = importKeyMaterial(provider, "raw-secret", result.sharedKey, normalizedImport, canExport, usages);
+        if (usages.length === 0) throw new DOMException("A shared key must have a usage", "SyntaxError");
+        return { ciphertext: result.ciphertext.buffer as ArrayBuffer, sharedKey };
+      });
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** Modern Algorithms §3.2.2: native outputs become a fresh ordinary dictionary. */
+  encapsulateBits(algorithm: unknown, key: unknown): Promise<EncapsulatedBits> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 2, "SubtleCrypto.encapsulateBits");
+      const identifier = toAlgorithmIdentifier(algorithm);
+      const slots = getCryptoKeySlots(key);
+      const normalized = normalizeAlgorithm(identifier, "encapsulate");
+      return cryptoTask(scheduler, () => {
+        requireKeyUsage(slots, normalized, "encapsulateBits");
+        const result = encapsulateMlKem(provider, normalized, slots);
+        return { ciphertext: result.ciphertext.buffer as ArrayBuffer, sharedKey: result.sharedKey.buffer as ArrayBuffer };
+      });
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** Modern Algorithms §3.2.3: normalize both algorithms before ciphertext bytes. */
+  decapsulateKey(algorithm: unknown, key: unknown, ciphertext: unknown,
+    sharedKeyAlgorithm: unknown, extractable: unknown, keyUsages: unknown): Promise<CryptoKey> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 6, "SubtleCrypto.decapsulateKey");
+      const identifier = toAlgorithmIdentifier(algorithm);
+      const slots = getCryptoKeySlots(key);
+      const source = toCryptoBufferSource(ciphertext);
+      const sharedIdentifier = toAlgorithmIdentifier(sharedKeyAlgorithm);
+      const canExport = coerceToBoolean(extractable);
+      const usages = toKeyUsages(keyUsages);
+      const normalized = normalizeAlgorithm(identifier, "decapsulate", true);
+      const normalizedImport = normalizeAlgorithm(sharedIdentifier, "importKey");
+      const bytes = cryptoBytes(source);
+      return cryptoTask(scheduler, () => {
+        requireKeyUsage(slots, normalized, "decapsulateKey");
+        const secret = decapsulateMlKem(provider, normalized, slots, bytes);
+        const sharedKey = importKeyMaterial(provider, "raw-secret", secret, normalizedImport, canExport, usages);
+        if (usages.length === 0) throw new DOMException("A shared key must have a usage", "SyntaxError");
+        return sharedKey;
+      });
+    } catch (error) {
+      return rejectedPromise(error);
+    }
+  }
+
+  /** Modern Algorithms §3.2.4: input checks precede the single native operation. */
+  decapsulateBits(algorithm: unknown, key: unknown, ciphertext: unknown): Promise<ArrayBuffer> {
+    try {
+      const provider = this.#provider;
+      const scheduler = this.#scheduler;
+      requireArguments(arguments, 3, "SubtleCrypto.decapsulateBits");
+      const identifier = toAlgorithmIdentifier(algorithm);
+      const slots = getCryptoKeySlots(key);
+      const source = toCryptoBufferSource(ciphertext);
+      const normalized = normalizeAlgorithm(identifier, "decapsulate");
+      const bytes = cryptoBytes(source);
+      return cryptoTask(scheduler, () => {
+        requireKeyUsage(slots, normalized, "decapsulateBits");
+        return decapsulateMlKem(provider, normalized, slots, bytes).buffer as ArrayBuffer;
+      });
     } catch (error) {
       return rejectedPromise(error);
     }

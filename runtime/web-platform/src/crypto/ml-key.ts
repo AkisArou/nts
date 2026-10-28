@@ -6,16 +6,24 @@ import type { CryptoKey, CryptoKeyPair, CryptoKeySlots, KeyUsage } from "./crypt
 import { parseMlDer } from "./der.ts";
 import { checkJwkPolicy, decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages } from "./jwk.ts";
 import type { KeyFormat } from "./jwk.ts";
-import { isMlAlgorithm, mlPublicKeyLength, mlSeedLength } from "./ml-parameters.ts";
+import { isMlAlgorithm, isMlKemAlgorithm, mlPublicKeyLength, mlSeedLength } from "./ml-parameters.ts";
 
 function mlName(name: string): CryptoMlAlgorithmName {
   if (isMlAlgorithm(name)) return name;
   throw new DOMException("The module-lattice algorithm is not supported", "NotSupportedError");
 }
 
-function validateUsages(type: "public" | "private" | "pair", usages: readonly KeyUsage[]): void {
+function publicUsage(name: CryptoMlAlgorithmName, usage: KeyUsage): boolean {
+  return isMlKemAlgorithm(name) ? usage === "encapsulateKey" || usage === "encapsulateBits" : usage === "verify";
+}
+
+function privateUsage(name: CryptoMlAlgorithmName, usage: KeyUsage): boolean {
+  return isMlKemAlgorithm(name) ? usage === "decapsulateKey" || usage === "decapsulateBits" : usage === "sign";
+}
+
+function validateUsages(name: CryptoMlAlgorithmName, type: "public" | "private" | "pair", usages: readonly KeyUsage[]): void {
   for (const usage of usages) {
-    if ((usage !== "sign" || type === "public") && (usage !== "verify" || type === "private")) {
+    if ((!privateUsage(name, usage) || type === "public") && (!publicUsage(name, usage) || type === "private")) {
       throw new DOMException("The requested usage is not supported by this key", "SyntaxError");
     }
   }
@@ -40,22 +48,22 @@ function componentShape(components: CryptoMlComponents, name: CryptoMlAlgorithmN
   }
 }
 
-/** Modern Algorithms §8.4.3: generate natively, then install the specified slots. */
+/** Modern Algorithms §§6.4.4, 8.4.3: generate natively, then install the specified slots. */
 export function generateMlKey(provider: CryptoProvider, algorithm: NormalizedAlgorithm,
   extractable: boolean, usages: readonly KeyUsage[]): CryptoKeyPair {
   const name = mlName(algorithm.name);
-  validateUsages("pair", usages);
+  validateUsages(name, "pair", usages);
   const pair = provider.generateKeyPair({ family: "ML", name });
   if ("failure" in pair) throw new DOMException("Module-lattice key generation failed", "OperationError");
   recordShape(pair.publicKey, name, "public");
   recordShape(pair.privateKey, name, "private");
   const selected = normalizeKeyUsages(usages);
-  const privateUsages = selected.filter(usage => usage === "sign");
+  const privateUsages = selected.filter(usage => privateUsage(name, usage));
   if (privateUsages.length === 0) throw new DOMException("A private key must have a usage", "SyntaxError");
   const keyAlgorithm = new KeyAlgorithm(name);
   return {
     privateKey: createCryptoKey("private", extractable, keyAlgorithm, privateUsages, pair.privateKey.handle),
-    publicKey: createCryptoKey("public", true, keyAlgorithm, selected.filter(usage => usage === "verify"), pair.publicKey.handle),
+    publicKey: createCryptoKey("public", true, keyAlgorithm, selected.filter(usage => publicUsage(name, usage)), pair.publicKey.handle),
   };
 }
 
@@ -66,7 +74,7 @@ function jwkBytes(value: string | undefined, length: number): Uint8Array {
   return bytes;
 }
 
-/** Modern Algorithms §8.4.4: raw seed/public, AKP JWK, exact SPKI and seed PKCS8. */
+/** Modern Algorithms §§6.4.5, 8.4.4: raw seed/public, AKP JWK, exact SPKI and seed PKCS8. */
 export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: Uint8Array | JsonWebKey,
   algorithm: NormalizedAlgorithm, extractable: boolean, usages: readonly KeyUsage[]): CryptoKey {
   const name = mlName(algorithm.name);
@@ -77,16 +85,16 @@ export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: U
   if (format === "jwk") {
     if (!(data instanceof JsonWebKey)) throw new DOMException("Expected a module-lattice JWK", "DataError");
     type = data.priv === undefined ? "public" : "private";
-    validateUsages(type, usages);
+    validateUsages(name, type, usages);
     if (data.kty !== "AKP" || data.alg !== name) throw new DOMException("The JWK algorithm does not match the key", "DataError");
-    checkJwkPolicy(data, "sig", extractable, usages);
+    checkJwkPolicy(data, isMlKemAlgorithm(name) ? "enc" : "sig", extractable, usages);
     if (type === "private") {
       bytes = jwkBytes(data.priv, mlSeedLength(name));
       expectedPublic = data.pub;
     } else bytes = jwkBytes(data.pub, mlPublicKeyLength(name));
   } else if (format === "spki" || format === "pkcs8" || format === "raw-public" || format === "raw-seed") {
     type = format === "pkcs8" || format === "raw-seed" ? "private" : "public";
-    validateUsages(type, usages);
+    validateUsages(name, type, usages);
     if (data instanceof JsonWebKey) throw new DOMException("Expected module-lattice key bytes", "DataError");
     if (format === "spki" || format === "pkcs8") {
       const parsed = parseMlDer(format, data);
@@ -109,7 +117,7 @@ export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: U
   }
   recordShape(record, name, type);
   if (format === "jwk" && type === "private") {
-    // §8.4.4 creates the seed-backed key before validating its JWK public key.
+    // §§6.4.5, 8.4.4 create the seed-backed key before validating its JWK public key.
     // A native import failure therefore precedes a missing or malformed `pub`.
     const publicBytes = jwkBytes(expectedPublic, mlPublicKeyLength(name));
     const components = provider.exportComponents(record.handle);
@@ -121,7 +129,7 @@ export function importMlKey(provider: CryptoProvider, format: KeyFormat, data: U
   return createCryptoKey(type, extractable, new KeyAlgorithm(name), normalizeKeyUsages(usages), record.handle);
 }
 
-/** Modern Algorithms §8.4.5: PKCS8 exports are seed-only and never expanded-only. */
+/** Modern Algorithms §§6.4.6, 8.4.5: PKCS8 exports are seed-only and never expanded-only. */
 export function exportMlKey(provider: CryptoProvider, format: KeyFormat, key: CryptoKeySlots): Uint8Array | JsonWebKey {
   const name = mlName(key.algorithm.name);
   if (format === "jwk") {

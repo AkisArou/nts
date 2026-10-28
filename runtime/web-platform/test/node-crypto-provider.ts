@@ -10,7 +10,9 @@ import {
   createPrivateKey,
   createPublicKey,
   createSecretKey,
+  decapsulate,
   diffieHellman,
+  encapsulate,
   ECDH,
   generateKeyPairSync,
   hkdfSync,
@@ -30,6 +32,8 @@ import type {
   CryptoDerivationParameters,
   CryptoDigestName,
   CryptoEcComponents,
+  CryptoEncapsulation,
+  CryptoKemParameters,
   CryptoFailure,
   CryptoKeyComponents,
   CryptoKeyHandle,
@@ -38,6 +42,7 @@ import type {
   CryptoKeyPairRecord,
   CryptoKeyRecord,
   CryptoMlAlgorithmName,
+  CryptoMlKemName,
   CryptoMlComponents,
   CryptoNamedCurve,
   CryptoOkpComponents,
@@ -61,6 +66,10 @@ const lengthSlot = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLen
 const call = Function.prototype.call.bind(Function.prototype.call) as
   (callback: Function, receiver: unknown, ...args: unknown[]) => unknown;
 const keyObjects = new WeakMap<CryptoKeyHandle, KeyObject>();
+// FIPS 203 checks the public encoding at encapsulation. Node's SPKI decoder
+// performs that native check earlier, so imported ML-KEM public handles retain
+// their bytes until the operation rather than strengthening Web Crypto import.
+const mlKemPublicBytes = new WeakMap<CryptoKeyHandle, { name: CryptoMlKemName; bytes: Uint8Array }>();
 const keyWrapIv = new ByteArray(8).fill(0xa6);
 const ceil = Math.ceil;
 const floor = Math.floor;
@@ -217,10 +226,17 @@ function mlKeyName(key: KeyObject): CryptoMlAlgorithmName | undefined {
   if (key.asymmetricKeyType === "ml-dsa-44") return "ML-DSA-44";
   if (key.asymmetricKeyType === "ml-dsa-65") return "ML-DSA-65";
   if (key.asymmetricKeyType === "ml-dsa-87") return "ML-DSA-87";
+  if (key.asymmetricKeyType === "ml-kem-512") return "ML-KEM-512";
+  if (key.asymmetricKeyType === "ml-kem-768") return "ML-KEM-768";
+  if (key.asymmetricKeyType === "ml-kem-1024") return "ML-KEM-1024";
   return undefined;
 }
 
 function mlOid(name: CryptoMlAlgorithmName): Uint8Array {
+  if (name === "ML-KEM-512" || name === "ML-KEM-768" || name === "ML-KEM-1024") {
+    return new ByteArray([0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x04,
+      name === "ML-KEM-512" ? 1 : name === "ML-KEM-768" ? 2 : 3]);
+  }
   return new ByteArray([0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x03,
     name === "ML-DSA-44" ? 17 : name === "ML-DSA-65" ? 18 : 19]);
 }
@@ -519,6 +535,11 @@ export class NodeCryptoProvider implements CryptoProvider {
   importKey(input: CryptoKeyImport): CryptoKeyRecord | CryptoFailure {
     try {
       if (input.format === "raw-public" || input.format === "raw-seed") {
+        if (input.format === "raw-public" && (input.name === "ML-KEM-512" || input.name === "ML-KEM-768" || input.name === "ML-KEM-1024")) {
+          const handle = {} as CryptoKeyHandle;
+          mlKemPublicBytes.set(handle, { name: input.name, bytes: owned(input.bytes) });
+          return { handle, info: { family: "ML", name: input.name, type: "public" } };
+        }
         const key = input.format === "raw-public"
           ? createPublicKey({ key: mlPublicDer(input.name, input.bytes), format: "der", type: "spki" })
           : createPrivateKey({ key: mlSeedDer(input.name, input.bytes), format: "der", type: "pkcs8" });
@@ -549,6 +570,11 @@ export class NodeCryptoProvider implements CryptoProvider {
       }
       if (input.format === "components" && input.components.family === "ML") {
         const components = input.components;
+        if (components.seed === undefined && (components.name === "ML-KEM-512" || components.name === "ML-KEM-768" || components.name === "ML-KEM-1024")) {
+          const handle = {} as CryptoKeyHandle;
+          mlKemPublicBytes.set(handle, { name: components.name, bytes: owned(components.pub) });
+          return { handle, info: { family: "ML", name: components.name, type: "public" } };
+        }
         const key = components.seed === undefined
           ? createPublicKey({ key: mlPublicDer(components.name, components.pub), format: "der", type: "spki" })
           : createPrivateKey({ key: mlSeedDer(components.name, components.seed), format: "der", type: "pkcs8" });
@@ -590,6 +616,12 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   exportKey(key: CryptoKeyHandle, format: "raw" | "raw-seed" | "spki" | "pkcs8"): Uint8Array | CryptoFailure {
     try {
+      const encoded = mlKemPublicBytes.get(key);
+      if (encoded !== undefined) {
+        if (format === "raw") return owned(encoded.bytes);
+        if (format === "spki") return owned(mlPublicDer(encoded.name, encoded.bytes));
+        return { failure: "operation" };
+      }
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
       const ml = mlKeyName(nativeKey);
@@ -623,6 +655,8 @@ export class NodeCryptoProvider implements CryptoProvider {
 
   exportComponents(key: CryptoKeyHandle): CryptoKeyComponents | CryptoFailure {
     try {
+      const encoded = mlKemPublicBytes.get(key);
+      if (encoded !== undefined) return { family: "ML", name: encoded.name, pub: owned(encoded.bytes) };
       const nativeKey = keyObjects.get(key);
       if (nativeKey === undefined) return { failure: "invalid-key" };
       if (nativeKey.type === "secret") return { family: "secret", k: owned(nativeKey.export()) };
@@ -648,6 +682,11 @@ export class NodeCryptoProvider implements CryptoProvider {
   generateKeyPair(parameters: CryptoKeyPairGeneration): CryptoKeyPairRecord | CryptoFailure {
     try {
       if (parameters.family === "ML") {
+        if (parameters.name === "ML-KEM-512" || parameters.name === "ML-KEM-768" || parameters.name === "ML-KEM-1024") {
+          const name = parameters.name === "ML-KEM-512" ? "ml-kem-512" : parameters.name === "ML-KEM-768" ? "ml-kem-768" : "ml-kem-1024";
+          const pair = generateKeyPairSync(name, {});
+          return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
+        }
         const name = parameters.name === "ML-DSA-44" ? "ml-dsa-44" : parameters.name === "ML-DSA-65" ? "ml-dsa-65" : "ml-dsa-87";
         const pair = generateKeyPairSync(name, {});
         return { publicKey: keyRecord(pair.publicKey), privateKey: keyRecord(pair.privateKey) };
@@ -880,6 +919,34 @@ export class NodeCryptoProvider implements CryptoProvider {
     } catch {
       // Modern Algorithms §§8.4.2 and 16.7.2 distinguish native errors from invalid signatures.
       return parameters.name === "KMAC128" || parameters.name === "KMAC256" || parameters.name === "ML-DSA-44" || parameters.name === "ML-DSA-65" || parameters.name === "ML-DSA-87" ? { failure: "operation" } : false;
+    }
+  }
+
+  encapsulate(parameters: CryptoKemParameters, key: CryptoKeyHandle): CryptoEncapsulation | CryptoFailure {
+    try {
+      const encoded = mlKemPublicBytes.get(key);
+      if (encoded !== undefined && encoded.name !== parameters.name) return { failure: "invalid-key" };
+      const nativeKey = encoded === undefined ? keyObjects.get(key)
+        : createPublicKey({ key: mlPublicDer(encoded.name, encoded.bytes), format: "der", type: "spki" });
+      if (nativeKey === undefined || nativeKey.type !== "public" || mlKeyName(nativeKey) !== parameters.name) {
+        return { failure: "invalid-key" };
+      }
+      const result = encapsulate(nativeKey);
+      return { sharedKey: owned(result.sharedKey), ciphertext: owned(result.ciphertext) };
+    } catch {
+      return { failure: "operation" };
+    }
+  }
+
+  decapsulate(parameters: CryptoKemParameters, key: CryptoKeyHandle, ciphertext: Uint8Array): Uint8Array | CryptoFailure {
+    try {
+      const nativeKey = keyObjects.get(key);
+      if (nativeKey === undefined || nativeKey.type !== "private" || mlKeyName(nativeKey) !== parameters.name) {
+        return { failure: "invalid-key" };
+      }
+      return owned(decapsulate(nativeKey, ciphertext));
+    } catch {
+      return { failure: "operation" };
     }
   }
 

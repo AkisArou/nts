@@ -11,7 +11,11 @@ export type KeyUsage =
   | "deriveKey"
   | "deriveBits"
   | "wrapKey"
-  | "unwrapKey";
+  | "unwrapKey"
+  | "encapsulateKey"
+  | "encapsulateBits"
+  | "decapsulateKey"
+  | "decapsulateBits";
 
 /** Web Cryptography §17. An ordinary dictionary containing two independent keys. */
 export interface CryptoKeyPair {
