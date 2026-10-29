@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
+import { unsharedLaunches } from "../jvm/launcher-audit.ts";
 const script = fileURLToPath(new URL("./run-session.ts", import.meta.url));
 const pin = "a".repeat(40),
   sha = "b".repeat(64);
@@ -74,4 +75,15 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("session toolchain discovery rejects the old bare JVM launch", () => {
+  const source = readFileSync(script, "utf8");
+  assert.deepEqual(unsharedLaunches("tooling/bench/run-session.ts", source), []);
+  const mutant = source.replace('...vmToolFlags("java"), "-version"', '"-version"');
+  assert.notEqual(mutant, source);
+  const findings = unsharedLaunches("tooling/bench/run-session.ts", mutant);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.tool, "java");
+  assert.match(findings[0]!.code, /-version/);
 });
