@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { TextDecoder } from "node:util";
-import { WptHarness } from "./harness.ts";
-import { WptHungError, reportWptHung } from "./hung.ts";
+import { WptHarness, type WptHarnessOptions } from "./harness.ts";
+import { WptHungError, recordWptHung } from "./hung.ts";
 import type { WptBlock, WptResult } from "./harness.ts";
 import { readWptVersions, verifiedWptSource } from "./versions.ts";
 
@@ -67,7 +67,10 @@ export interface WptScriptContext {
   readonly url: URL;
 }
 
+type WptExecutionOptions = Pick<WptHarnessOptions, "deadlineScheduler" | "inactivityMilliseconds">;
 export interface WptRunnerOptions {
+  /** Injected instrument for adapter controls; fixture bytes remain unchanged. */
+  execution?: WptExecutionOptions;
   /** Origin of a local resource server. WPT paths remain rooted at its origin. */
   baseURL?: string | URL | ((fixture: WptFixture) => string | URL);
   timeouts?: Partial<Record<"default" | "long" | WptTimeoutCategory, number>>;
@@ -314,16 +317,25 @@ export type WptEnvironmentFactory = (
   reportUncaughtException: (error: unknown) => void,
 ) => WptEnvironment | Promise<WptEnvironment>;
 
-/** Execute one prepared fixture, including provider cleanup, for tests or a census. */
-export async function executeWptFixture(
+export interface WptFixtureObservation {
+  results: WptResult[];
+  unfinished: string[];
+  errors: unknown[];
+  hung?: WptHungError;
+}
+
+/** Keep completed verdicts and liveness together, including errors delivered
+ * while the provider closes. Every consumer sees this same final observation. */
+export async function observeWptFixture(
   prepared: WptPreparedFixture,
   createEnvironment: WptEnvironmentFactory,
-  publish?: (results: readonly WptResult[]) => void | Promise<void>,
-): Promise<WptResult[]> {
+  options: WptExecutionOptions = {},
+): Promise<WptFixtureObservation> {
   const { context, scripts, imports } = prepared;
   const { fixture } = context;
   let harness: WptHarness | undefined;
   const startupErrors: unknown[] = [];
+  const executionErrors: unknown[] = [];
   const startupUncaught: unknown[] = [];
   const environment = await createEnvironment((error) => {
     if (harness === undefined) startupErrors.push(error);
@@ -350,6 +362,7 @@ export async function executeWptFixture(
       };
     }
     harness = new WptHarness(globals, fixture.blockedTests, Math.max(context.timeoutMilliseconds, 300000), {
+      ...options,
       exposeSelf: environment.exposeSelf,
       defaultTestName: fixture.defaultTestName, globalAliases: environment.globalAliases,
       maxTests: fixture.expectedTests,
@@ -358,17 +371,36 @@ export async function executeWptFixture(
     for (const error of startupErrors) harness.reportError(error);
     for (const error of startupUncaught) harness.reportUncaughtException(error);
     for (const script of scripts) harness.run(script.source, script.path, script.lineOffset);
-    const results = await harness.finish();
+    await harness.finish();
     assert.equal(imported, imports.length, "declared importScripts dependency was not loaded");
-    // Publish completed cases before teardown, while still awaiting and checking
-    // teardown before the fixture itself can succeed.
-    if (publish !== undefined) await publish(results);
-    return results;
+  } catch (error) {
+    const snapshot = harness?.snapshot();
+    if (!(error instanceof WptHungError)) {
+      // assertNoErrors groups exactly these stored errors. Keep their identities
+      // once rather than treating their wrapper as another failed assertion.
+      if (!(error instanceof AggregateError && snapshot !== undefined &&
+          error.errors.length === snapshot.errors.length && error.errors.every((item, index) => item === snapshot.errors[index])))
+        executionErrors.push(error);
+    }
   } finally {
-    await environment.close();
-    // A provider may report an error during close without throwing.
-    if (harness !== undefined) harness.assertNoErrors();
+    try { await environment.close(); }
+    catch (error) { executionErrors.push(error); }
   }
+  const snapshot = harness?.snapshot() ?? { results: [], unfinished: [], errors: startupErrors };
+  return { ...snapshot, errors: [...new Set([...snapshot.errors, ...executionErrors])] };
+}
+
+/** Throwing convenience for callers that require a complete, error-free file. */
+export async function executeWptFixture(
+  prepared: WptPreparedFixture,
+  createEnvironment: WptEnvironmentFactory,
+  publish?: (results: readonly WptResult[]) => void | Promise<void>,
+): Promise<WptResult[]> {
+  const observation = await observeWptFixture(prepared, createEnvironment);
+  if (publish !== undefined) await publish(observation.results);
+  if (observation.errors.length) throw new AggregateError(observation.errors, "WPT harness failed: " + observation.errors.map(String).join("; "), { cause: observation.hung });
+  if (observation.hung !== undefined) throw observation.hung;
+  return observation.results;
 }
 
 /** Execute verified classic HTML scripts in order, without emulating a DOM. */
@@ -405,24 +437,34 @@ export async function runWptFixtures(
     const { fixture } = context;
     const name = fixture.path + (fixture.variant ?? "");
     await suite.test(name, async (file) => {
-      try { await executeWptFixture(prepared, createEnvironment, async (results) => {
-        assert.equal(results.length, fixture.expectedTests, "WPT registration count changed");
-        const counts = { pass: 0, fail: 0, blocked: 0 };
-        for (const result of results) {
-          counts[result.status]++;
-          await file.test(result.name, { skip: result.reason }, () => {
-            if (result.status === "fail") throw result.error;
-          });
-        }
-        file.diagnostic(`WPT ${name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.blocked} blocked`);
-      }); } catch (error) {
-        if (!(error instanceof WptHungError)) throw error;
-        reportWptHung(error);
-        file.diagnostic(`NOT RUN (hung): ${error.observation.reason}`);
-        // This file has no WPT verdict. check.sh transports the observation as
-        // exit 124, and the gate consumes its typed operator hold.
-        file.skip("NOT RUN (hung)");
-      }
+      const observation = await observeWptFixture(prepared, createEnvironment, options.execution);
+      if (observation.hung === undefined)
+        assert.equal(observation.results.length, fixture.expectedTests, "WPT registration count changed");
+      await reportWptFixture(file, name, observation);
     });
+  }
+}
+
+/** Both complete verdicts and unfinished cases are rendered, without a file skip
+ * that would hide earlier failed children from Node's structured event stream. */
+export async function reportWptFixture(file: TestContext, name: string, observation: WptFixtureObservation): Promise<void> {
+  const { results, unfinished, errors, hung } = observation;
+  const counts = { pass: 0, fail: 0, blocked: 0 };
+  for (const result of results) {
+    counts[result.status]++;
+    await file.test(result.name, { skip: result.reason }, () => {
+      if (result.status === "fail") throw result.error;
+    });
+  }
+  for (const pending of unfinished)
+    await file.test(pending, { skip: "NOT RUN (hung)" }, () => {});
+  for (const [index, error] of errors.entries())
+    await file.test(`WPT harness/cleanup error ${index + 1}`, () => { throw error; });
+  file.diagnostic(`WPT ${name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.blocked} blocked`);
+  if (hung !== undefined) {
+    // Children have no public step capability. The host owner publishes the
+    // final shared failure count after every test event has drained.
+    recordWptHung(hung);
+    file.diagnostic(`NOT RUN (hung): ${hung.observation.reason}; ${unfinished.length} unfinished subtest(s)`);
   }
 }

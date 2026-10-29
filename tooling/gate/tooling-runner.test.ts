@@ -4,10 +4,11 @@ import {spawnSync} from "node:child_process";
 import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {pathToFileURL} from "node:url";
 import {PassThrough} from "node:stream";
 import {randomUUID} from "node:crypto";
-import {waitFor} from "./test-wait.ts";
-import {completedTestFailure,runScopedTooling} from "./tooling-runner.ts";
+import {waitFor,spawnTest} from "./test-wait.ts";
+import {completedTestFailure,readToolingCompletion,readToolingRequest,ToolingTestOwners,runScopedTooling} from "./tooling-runner.ts";
 import {readStepInstrument} from "./step-result.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice,toolingSliceArgs,toolingSlicePrefix} from "./tooling-slice.ts";
 
@@ -71,7 +72,8 @@ test("only completed assertion reports authorize ordinary pass and fail results"
   for(const [name,body,status] of [["pass","",0],["fail","throw new Error('assertion control')",1]] as const) {
     const file=join(directory,`${name}.test.mjs`);writeFileSync(file,`import {test} from 'node:test';test('${name}',()=>{${body}});\n`);
     const output=new PassThrough();output.resume();
-    assert.equal((await runScopedTooling([file],{fixture:true,output})).status,status);
+    const actual=await runScopedTooling([file],{fixture:true,output});
+    assert.equal(actual.status,status);assert.equal(actual.completedFailures,status);
   }
 });
 
@@ -111,6 +113,7 @@ test("a completed failure followed by an idle test is red while pass followed by
     const output=new PassThrough();let transcript="";output.on("data",part=>transcript+=part);
     const actual=await runScopedTooling([file],{fixture:true,idleMs:1000,output});
     assert.equal(actual.status,failed?1:2,transcript);
+    assert.equal(actual.completedFailures,failed?1:0,transcript);
     const observation=readStepInstrument(result,"tooling","mixed")!;
     assert.equal(observation.kind,"hung");assert.equal(observation.verdict,failed?"FAIL":"NOT RUN");
     assert.equal(observation.completedFailures??0,failed?1:0,transcript);
@@ -141,9 +144,112 @@ test("completed uncaught exceptions and rejections remain red before a later han
     Object.assign(process.env,{NTS_GATE_STEP_RESULT:frame,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"async"});
     const output=new PassThrough();let transcript="";output.on("data",part=>transcript+=part);
     const result=await runScopedTooling([file],{fixture:true,idleMs:1000,output});
-    assert.equal(result.status,1,transcript);
+    assert.equal(result.status,1,transcript);assert.equal(result.completedFailures,1,transcript);
     const row=readStepInstrument(frame,"tooling","async")!;
     assert.equal(row.verdict,"FAIL");assert.equal(row.completedFailures,1,transcript);
     assert.match(transcript,rejection?/definite rejection/:/definite uncaught/);
   }
+});
+
+
+test("worker completion requires nonce-bound final failure evidence",()=>{
+  const valid={version:2,nonce:"owned",status:1,completedFailures:2};
+  assert.deepEqual(readToolingCompletion(valid,"owned",1),{status:1,completedFailures:2});
+  assert.deepEqual(readToolingCompletion({...valid,status:0,completedFailures:0},"owned",0),{status:0,completedFailures:0});
+  for(const changed of [null,{}, {...valid,version:1},{...valid,nonce:"other"},
+      {...valid,completedFailures:undefined},{...valid,completedFailures:-1},
+      {...valid,completedFailures:0.5},{...valid,completedFailures:NaN},
+      {...valid,completedFailures:Number.MAX_SAFE_INTEGER+1},
+      {...valid,status:0},{...valid,status:2}])
+    assert.throws(()=>readToolingCompletion(changed,"owned",typeof changed==="object"&&changed!==null&&"status" in changed?Number(changed.status):1),/completion/);
+  assert.throws(()=>readToolingCompletion(valid,"owned",0),/completion/);
+});
+
+test("scoped runner passes explicit Node preloads into test children",async t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-preload-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const preload=join(directory,"preload.mjs"),file=join(directory,"subject.test.mjs");
+  writeFileSync(preload,"globalThis.ownedPreload=42;\n");
+  writeFileSync(file,"import {test} from 'node:test';import assert from 'node:assert/strict';test('preloaded',()=>assert.equal(globalThis.ownedPreload,42));\n");
+  const output=new PassThrough();output.resume();
+  const actual=await runScopedTooling([file],{fixture:true,output,execArgv:["--import",pathToFileURL(preload).href]});
+  assert.equal(actual.status,0);assert.equal(actual.completedFailures,0);
+  const without=await runScopedTooling([file],{fixture:true,output});
+  assert.equal(without.status,1);assert.equal(without.completedFailures,1);
+});
+
+
+test("completed failures defined in an imported helper belong to the owning stream",async t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-helper-failure-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const helper=join(directory,"helper.mjs"),file=join(directory,"subject.test.mjs");
+  writeFileSync(helper,"export async function run(file){await file.test('helper assertion',()=>{throw Error('helper failed')});}\n");
+  writeFileSync(file,"import{test}from'node:test';import{run}from'./helper.mjs';test('owner',run);\n");
+  const output=new PassThrough();output.resume();
+  const result=await runScopedTooling([file],{fixture:true,output});
+  assert.equal(result.status,1);assert.equal(result.completedFailures,1);
+});
+
+
+test("worker requests reject malformed files, arguments and idle bounds",()=>{
+  const valid={files:["subject.test.ts"],complete:"/owned/complete.json",nonce:"owned"};
+  assert.deepEqual(readToolingRequest(valid),valid);
+  for(const changed of [null,{}, {...valid,files:[]},{...valid,files:[42]}, {...valid,complete:undefined},
+      {...valid,nonce:""},{...valid,idleMs:0},{...valid,idleMs:NaN},{...valid,execArgv:[42]}])
+    assert.throws(()=>readToolingRequest(changed),/worker request/);
+});
+
+test("test identities retain their entry namespace and reject missing parents",()=>{
+  const owners=new ToolingTestOwners(["/owned/a.test.ts","/owned/b.test.ts"]);
+  for(const entryFile of ["/owned/a.test.ts","/owned/b.test.ts"]){
+    assert.equal(owners.file({entryFile,testId:1,parentId:0,file:"/helpers/shared.ts"}),entryFile);
+    assert.equal(owners.file({entryFile,testId:2,parentId:1,file:"/helpers/shared.ts"}),entryFile);
+  }
+  assert.throws(()=>owners.file({entryFile:"/unowned/test.ts",testId:3,parentId:0}),/unowned entry/);
+  assert.throws(()=>owners.file({entryFile:"/owned/a.test.ts",testId:3,parentId:99}),/parent is missing/);
+});
+
+test("active imported-helper subtests renew only their own file guard",t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-helper-activity-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const helper=join(directory,"helper.mjs"),active=join(directory,"active.test.mjs"),idle=join(directory,"idle.test.mjs"),probe=join(directory,"probe.mjs");
+  writeFileSync(helper,"export async function sequence(t){for(let i=0;i<6;i++)await t.test('active helper '+i,()=>{}); }\n");
+  writeFileSync(active,"import{test}from'node:test';import{sequence}from'./helper.mjs';test('owner',sequence);\n");
+  writeFileSync(idle,"import{test}from'node:test';test('idle',()=>new Promise(()=>{setInterval(()=>{},1000)}));\n");
+  const runner=new URL("./tooling-runner.ts",import.meta.url).href;
+  writeFileSync(probe,`
+import {runTooling} from ${JSON.stringify(runner)};
+import {PassThrough} from 'node:stream';
+const helper=${JSON.stringify(helper)},active=${JSON.stringify(active)},idle=${JSON.stringify(idle)};
+const withIdle=process.argv[2]==='idle';
+{
+  let now=0,progress=0;const scheduled=[];const output=new PassThrough();output.resume();
+  const result=await runTooling(withIdle?[active,idle]:[active],{idleMs:10,output,resultEnv:{},instrument:{
+    scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};scheduled.push(task);return()=>{task.cancelled=true};},
+    event(name,data){if(name==='test:complete'&&data.file===helper){progress++;now+=6;for(const task of [...scheduled])if(!task.cancelled&&task.at<=now){task.cancelled=true;task.callback();}}}
+  }});
+  console.log(JSON.stringify({withIdle,now,progress,...result}));
+}
+`);
+  const env:NodeJS.ProcessEnv={...process.env};
+  for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
+  const rows=[];let transcript="";
+  for(const arg of ["active","idle"]){
+    const actual=spawnTest(process.execPath,[probe,arg],{encoding:"utf8",env},"real-stream imported-helper ownership probe");
+    assert.equal(actual.status,0,actual.stderr);transcript+=actual.stderr;
+    rows.push(JSON.parse(actual.stdout.trim()));
+  }
+  assert.equal(rows[0].status,0,transcript);assert.equal(rows[0].progress,6);assert.equal(rows[0].now,36);
+  assert.equal(rows[1].status,2,transcript);assert.equal(rows[1].completedFailures,0);
+  assert.ok(transcript.includes(idle),transcript);
+  // One difference: source location is used instead of entry/test ownership.
+  const original=readFileSync(new URL("./tooling-runner.ts",import.meta.url),"utf8");
+  const expression="const fileOf=(data:TestActivity)=>owners.file(data);";
+  assert.ok(original.includes(expression));
+  const altered=original.replace(expression,"const fileOf=(data:TestActivity)=>typeof data.file==='string'?resolve(data.file):undefined;")
+    .replace(/from (["'])\.\/([^"']+)\1/g,(_whole,_quote,name)=>"from "+JSON.stringify(new URL("./"+name,import.meta.url).href));
+  const mutant=join(directory,"source-location-runner.ts"),mutantProbe=join(directory,"mutant-probe.mjs");
+  writeFileSync(mutant,altered);writeFileSync(mutantProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
+  const changed=spawnTest(process.execPath,[mutantProbe,"active"],{encoding:"utf8",env},"source-location ownership mutant");
+  assert.equal(changed.status,0,changed.stderr);const observed=JSON.parse(changed.stdout.trim());
+  assert.equal(observed.status,2,"old ownership rule must lose an active helper's progress");
+  assert.equal(observed.completedFailures,0);assert.ok(changed.stderr.includes(active),changed.stderr);
+
 });

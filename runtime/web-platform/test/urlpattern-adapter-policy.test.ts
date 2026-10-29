@@ -56,7 +56,8 @@ function runCloseControl(mode: CloseMode): { status: number | null; output: stri
 test("WPT provider errors reported after awaited close fail the fixture process", () => {
   const result = runCloseControl("reported");
   assert.equal(result.status, 1, result.output);
-  assert.match(result.output, /WPT harness failed/);
+  assert.match(result.output, /WPT harness\/cleanup error 1/);
+  assert.match(result.output, /URLPattern teardown sentinel/);
 });
 
 test("WPT clean provider teardown preserves the fixture process success", () => {

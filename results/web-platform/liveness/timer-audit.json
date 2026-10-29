@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "main": "52a3153c5",
+  "prepared": "0e1d59c530f2",
+  "scope": "all pinned modern JS/HTML and legacy fixture/support sources; original resources/testharness.js excluded because adapters replace it",
+  "source_files": 48,
+  "timer_sites": 124,
+  "timer_kinds": {
+    "step_timeout": 124
+  },
+  "parse_errors": [],
+  "crypto_compression_delta": 0,
+  "unconditional_timer_failure_watchdogs": {
+    "files": 0,
+    "subtests": 0
+  },
+  "direct_timer_assertions": {
+    "files": 4,
+    "active_subtest_runs": 7,
+    "fixtures": [
+      {
+        "path": "hr-time/basic.any.js",
+        "variant": null,
+        "case_count": 1,
+        "meaning": "clock-delta comparison after 2000 ms"
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-connecting.html",
+        "variant": "?default",
+        "case_count": 1,
+        "meaning": "checks CONNECTING then closes, after 1000 ms, against sleep_10 peer"
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-connecting.html",
+        "variant": "?wss",
+        "case_count": 1,
+        "meaning": "checks CONNECTING then closes, after 1000 ms, against sleep_10 peer"
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-multiple.html",
+        "variant": "?default",
+        "case_count": 1,
+        "meaning": "polls until first close, then checks exactly one close; 500 ms polls"
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-multiple.html",
+        "variant": "?wss",
+        "case_count": 1,
+        "meaning": "polls until first close, then checks exactly one close; 500 ms polls"
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-nested.html",
+        "variant": "?default",
+        "case_count": 1,
+        "meaning": "checks exactly one close after 50 ms"
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-nested.html",
+        "variant": "?wss",
+        "case_count": 1,
+        "meaning": "checks exactly one close after 50 ms"
+      }
+    ]
+  },
+  "nested_action_cases": {
+    "websockets/keeping-connection-open/001.html": "20 s timer sends; assertion is in later message callback",
+    "websockets/opening-handshake/006.html": "0 ms timer starts next attempt; assertions check protocol/event sequencing"
+  },
+  "scheduling": "both adapters call real Node setTimeout with the supplied delay; neither applies timeout_multiplier; scheduler injection affects adapter inactivity only",
+  "decision": "All timer assertions remain definite failures; no timing exclusions; step_timeout remains real and unscaled.",
+  "source_tool": "Acorn 8.15.0 AST inventory, followed by review of callback/helper bodies and active manifest variants"
+}

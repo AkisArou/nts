@@ -67,16 +67,30 @@ function errorDetail(error: unknown): { message: string; stack?: string } {
   return { message, ...(stack === undefined ? {} : { stack }) };
 }
 
-/** Only the execution boundary publishes: deliberate controls stay local. */
-export function reportWptHung(error: WptHungError, env: NodeJS.ProcessEnv = process.env,
+/** Test children record only local evidence; the owner publishes after drain. */
+export function recordWptHung(error: WptHungError, env: NodeJS.ProcessEnv = process.env,
   write: (text: string) => void = text => { process.stderr.write(text); }): void {
-  publishHung(error.observation.reason, env);
   const body = error.testResult;
   const testResult = body === undefined ? undefined : { ...body,
     ...(Object.hasOwn(body, "error") ? { error: errorDetail(body.error) } : {}) };
   const record = JSON.stringify({ ...error.observation, testResult });
   if (env.NTS_WPT_HUNG_RESULTS) appendFileSync(env.NTS_WPT_HUNG_RESULTS, record + "\n");
   write(`NOT RUN (hung): ${record}\n`);
+}
+
+/** A boundary with one observation may use this convenience directly. */
+export function reportWptHung(error: WptHungError, env: NodeJS.ProcessEnv = process.env,
+  write: (text: string) => void = text => { process.stderr.write(text); }, completedFailures = 0): void {
+  recordWptHung(error, env, write);
+  publishHung(error.observation.reason, env, completedFailures);
+}
+
+/** Shared owner rule for host tests and standalone census commands. */
+export function publishWptHangs(observations: readonly InstrumentResult[], completedFailures: number,
+  env: NodeJS.ProcessEnv = process.env): number {
+  if (!observations.length) return completedFailures > 0 ? 1 : 0;
+  publishHung(observations.map(row => row.reason).join("\n"), env, completedFailures);
+  return completedFailures > 0 ? 1 : 124;
 }
 
 export function readWptHungResults(path: string): InstrumentResult[] {

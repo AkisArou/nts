@@ -12,7 +12,9 @@ export function cpuList(list: string): number[] {
   const result = new Set<number>();
   for (const part of list.trim().split(",")) {
     if (!/^\d+(?:-\d+)?$/.test(part)) throw new Error(`invalid CPU list: ${list}`);
-    const [first, last = first] = part.split("-").map(Number);
+    const [lower, upper] = part.split("-");
+    if (lower === undefined) throw new Error(`invalid CPU range: ${part}`);
+    const first = Number(lower), last = Number(upper ?? lower);
     if (last < first || last > 1048575) throw new Error(`invalid CPU range: ${part}`);
     for (let cpu = first; cpu <= last; cpu++) result.add(cpu);
   }
@@ -24,8 +26,10 @@ export function formatCpus(cpus: number[]): string {
   const sorted = [...new Set(cpus)].sort((a, b) => a - b);
   for (let i = 0; i < sorted.length; i++) {
     const first = sorted[i];
-    while (sorted[i + 1] === sorted[i] + 1) i++;
-    parts.push(first === sorted[i] ? String(first) : `${first}-${sorted[i]}`);
+    if (first === undefined) throw new Error("missing CPU in sorted affinity list");
+    let last = first;
+    while (sorted[i + 1] === last + 1) { i++; last++; }
+    parts.push(first === last ? String(first) : `${first}-${last}`);
   }
   return parts.join(",");
 }
@@ -135,21 +139,26 @@ export function gateCommand(command: string, args: string[]): { command: string;
 // pinned.sh changes its own mask before starting any build, so every child
 // inherits the reservation, including a hand-started full run.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const argument = (index: number): string => {
+    const value = process.argv[index];
+    if (value === undefined || value === "") throw new Error(`affinity: missing argument ${index - 2}`);
+    return value;
+  };
   if (process.argv[2] === "--gate-cpus") {
-    if (process.platform === "linux") console.log(gateCpus(inheritedCpus(Number(process.argv[3]))));
+    if (process.platform === "linux") console.log(gateCpus(inheritedCpus(Number(argument(3)))));
   } else if (process.argv[2] === "--default-cpus") {
-    const preferred = process.argv[3];
-    console.log(process.platform === "linux" ? defaultCpus(preferred, inheritedCpus(Number(process.argv[4]))) : preferred);
+    const preferred = argument(3);
+    console.log(process.platform === "linux" ? defaultCpus(preferred, inheritedCpus(Number(argument(4)))) : preferred);
   } else if (process.argv[2] === "--scope-mechanism") {
-    const scope = gateScope(process.argv[3], Number(process.argv[4]));
+    const scope = gateScope(argument(3), Number(argument(4)));
     console.log(`${scope.kind}:${scope.reason}`);
   } else if (process.argv[2] === "--verify-ceiling") {
-    if (!verifyCeiling(process.argv[3], Number(process.argv[4]))) {
+    if (!verifyCeiling(argument(3), Number(argument(4)))) {
       console.error("gate: requested cpuset ceiling is absent on scope entry");
       process.exitCode = 75;
     }
   } else if (process.argv[2] === "--launch-scope") {
-    const cpus = process.argv[3];
+    const cpus = argument(3);
     cpuList(cpus);
     // A train can hold pinned.sh's tree lock across setup and execution.
     // Preserve that open description when entering the cpuset scope.

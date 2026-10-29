@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createContext, runInContext } from "node:vm";
 import { MessageChannel } from "node:worker_threads";
 import { UpstreamWptExecution } from "./upstream-liveness.ts";
-import { WptHungError, reportWptHung } from "../../../runtime/web-platform/test/wpt/hung.ts";
+import { WptHungError, recordWptHung, publishWptHangs } from "../../../runtime/web-platform/test/wpt/hung.ts";
 let hungFixtures = 0;
 
 // This is the deliberately small testharness.js surface required by the complete,
@@ -93,6 +93,7 @@ const { installWebPlatformRuntime } =
 
 let passed = 0;
 let failed = 0;
+const hungObservations = [];
 let notApplicable = 0;
 
 function gitBlobHash(data) {
@@ -605,14 +606,14 @@ function createWptContext(
           return () => asynchronousFailure.reject(new Error(message));
         },
       };
-      const scheduled = promiseTestQueue.then(async () => {
+      const result = promiseTestQueue.then(async () => {
         const body = Promise.resolve().then(() => fn(test));
-        await execution.settle(name, Promise.race([body, asynchronousFailure.promise]), cleanups);
+        const observation = await execution.observeSettlement(name, Promise.race([body, asynchronousFailure.promise]), cleanups);
+        if (observation.body?.status === "pass") reportPass(path, name);
+        else if (observation.body?.status === "fail") reportFailure(path, name, observation.body.error);
+        for (const error of observation.cleanupErrors) reportFailure(path, `${name} :: cleanup`, error);
+        if (observation.hung !== undefined) throw observation.hung;
       });
-      const result = scheduled.then(
-        () => reportPass(path, name),
-        (error) => reportFailure(path, name, error),
-      );
       promiseTestQueue = result;
       pending.push(result);
     },
@@ -712,8 +713,8 @@ async function runFixture(root, path, data, verifiedSupport) {
       })
     : null;
   const execution = new UpstreamWptExecution(path);
+  const pending = [];
   try {
-    const pending = [];
     const excludedTests = manifest.notApplicable?.[path] ?? {};
     const seenExcludedTests = new Set();
     const source = data.toString();
@@ -780,8 +781,12 @@ async function runFixture(root, path, data, verifiedSupport) {
     );
   } catch (error) {
     if (!(error instanceof WptHungError)) throw error;
+    // Every interrupted observer shares the same signal. Drain their completed
+    // reports before publishing at the owning boundary.
+    await Promise.allSettled(pending);
     hungFixtures++;
-    reportWptHung(error);
+    hungObservations.push(error.observation);
+    recordWptHung(error);
   } finally {
     execution.close();
     if (fixtureRuntime !== null) {
@@ -840,4 +845,4 @@ if (fixtureFilter !== undefined && fixtureFilterMatched === 0) {
   console.error(`NTS_WEB_PLATFORM_FIXTURE=${fixtureFilter} selected no fixtures.`);
   process.exit(1);
 }
-process.exit(hungFixtures ? 124 : failed === 0 ? 0 : 1);
+process.exit(publishWptHangs(hungObservations, failed));

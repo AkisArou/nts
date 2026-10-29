@@ -33,26 +33,35 @@ export class UpstreamWptExecution {
   async observe<T>(name: string, outcome: Promise<T>): Promise<T> {
     this.progress(name);
     const value = await Promise.race([outcome, this.interrupted.promise]);
-    this.progress(name);
+    if (!this.hung) this.progress(name);
     return value;
   }
-  async settle(name: string, outcome: Promise<unknown>, cleanups: (() => unknown)[]): Promise<void> {
-    let failed = false, failure: unknown;
-    try { await this.observe(name, outcome); }
+  async observeSettlement(name: string, outcome: Promise<unknown>, cleanups: (() => unknown)[]): Promise<{
+    body?: WptResult; cleanupErrors: unknown[]; hung?: WptHungError;
+  }> {
+    let body: WptResult;
+    const cleanupErrors: unknown[] = [];
+    try { await this.observe(name, outcome); body = { name, status: "pass" }; }
     catch (error) {
-      if (error instanceof WptHungError) throw error;
-      failed = true; failure = error;
+      if (error instanceof WptHungError) return { cleanupErrors, hung: error };
+      body = { name, status: "fail", error };
     }
-    const body: WptResult = { name, status: failed ? "fail" : "pass", ...(failed ? { error: failure } : {}) };
     for (let index = cleanups.length - 1; index >= 0; index--) {
-      this.progress(name, "cleanup", body);
-      try { await Promise.race([Promise.resolve(cleanups[index]!()), this.interrupted.promise]); }
-      catch (error) {
-        if (error instanceof WptHungError) throw error;
-        if (!failed) { failed = true; failure = error; }
+      try {
+        this.progress(name, "cleanup", body);
+        await Promise.race([Promise.resolve(cleanups[index]!()), this.interrupted.promise]);
+      } catch (error) {
+        if (error instanceof WptHungError) return { body, cleanupErrors, hung: error };
+        cleanupErrors.push(error);
       }
     }
-    if (failed) throw failure;
+    return { body, cleanupErrors };
+  }
+  async settle(name: string, outcome: Promise<unknown>, cleanups: (() => unknown)[]): Promise<void> {
+    const observation = await this.observeSettlement(name, outcome, cleanups);
+    if (observation.body?.status === "fail") throw observation.body.error;
+    if (observation.cleanupErrors.length) throw observation.cleanupErrors[0];
+    if (observation.hung) throw observation.hung;
   }
   vm(source: string, context: Context, filename: string): unknown {
     this.progress("<fixture script>", "registration");

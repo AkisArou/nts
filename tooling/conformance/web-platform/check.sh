@@ -26,16 +26,14 @@ done
 # The environment intrinsics are preloaded, which is what a real environment does with
 # them: they exist before the first module runs. Defining them on first import instead
 # made them arrive after any suite that reached the platform barrel first.
-# One generous hang bound covers this host invocation. Individual assertions
-# wait for their own completion; load cannot turn an eight-second pause into
-# an assertion failure. A hang remains a distinct timeout result (exit 124).
+# The shared runner drains every completed test result before classifying a
+# file's liveness observation. Definite failures outrank hangs; a hang alone
+# remains NOT RUN (exit 124). One generous outer file guard stops real hangs.
 host=0
 NTS_WPT_HUNG_RESULTS=$(mktemp "${TMPDIR:-${HOME}/.cache}/nts-wpt-hung.XXXXXXXX")
 export NTS_WPT_HUNG_RESULTS
 trap 'command rm -f "$NTS_WPT_HUNG_RESULTS"' EXIT HUP INT TERM
-timeout --kill-after=10s 900s node --expose-gc \
-  --import ./runtime/web-platform/host/environment-shim.ts \
-  --test \
+node tooling/conformance/web-platform/host-tests.ts \
   runtime/web-platform/test/accept-loop.test.ts \
   runtime/web-platform/test/agent.test.ts \
   runtime/web-platform/test/core.test.ts \
@@ -196,12 +194,6 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/wpt-websocket-stream.test.ts \
   runtime/web-platform/test/wpt-websocket.test.ts \
   runtime/web-platform/test/weak-listener.test.ts || host=$?
-if [ "$host" -eq 124 ] || [ "$host" -eq 137 ]; then
-  echo "check.sh: TIMED OUT -- host suite exceeded its outer hang bound." >&2
-  node runtime/web-platform/test/wpt/hung.ts --outer
-  exit 124
-fi
-node runtime/web-platform/test/wpt/hung.ts "$NTS_WPT_HUNG_RESULTS"
 if [ "$host" -ne 0 ]; then
   exit "$host"
 fi

@@ -818,10 +818,21 @@ export class WptHarness {
 
   /** Recheck recorded failures after awaited provider teardown, before file success. */
   assertNoErrors(): void {
-    if (this.hung) throw this.hung;
     if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
-      throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
+      throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed", { cause: this.hung });
     }
+    if (this.hung) throw this.hung;
+  }
+
+  /** Body completion and file liveness are independent evidence. A failed body
+   * remains complete even when its cleanup never settles. */
+  snapshot(): { results: WptResult[]; unfinished: string[]; errors: unknown[]; hung?: WptHungError } {
+    return {
+      results: this.tests.filter(test => test.closed).map(test => ({ ...test.result })),
+      unfinished: this.tests.filter(test => !test.closed).map(test => test.result.name),
+      errors: [...this.errors, ...this.cleanupErrors],
+      ...(this.hung === undefined ? {} : { hung: this.hung }),
+    };
   }
 
   inTest<T>(test: WptTest, callback: () => T): T {

@@ -1,7 +1,9 @@
 // Reproduce the per-file report directly from the verified, unedited corpus.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
-import { executeWptFixture, loadWptFixtures } from "../runner.ts";
+import { observeWptFixture, loadWptFixtures } from "../runner.ts";
+import { publishWptHangs, recordWptHung } from "../hung.ts";
+import type { InstrumentResult } from "../../../../../tooling/gate/step-result.ts";
 import type { WptManifest } from "../runner.ts";
 import { createCompressionEnvironment, startCompressionResourceServer } from "./environment.ts";
 
@@ -18,12 +20,16 @@ const root = new URL("../", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("manifest.json", import.meta.url), "utf8")) as CompressionManifest;
 const server = await startCompressionResourceServer();
 const files: object[] = [];
+const hangs: InstrumentResult[] = [];
 const totals = { registered: 0, pass: 0, fail: 0, blocked: 0, notRunFiles: 0, harnessFailures: 0 };
 try {
   for (const prepared of loadWptFixtures(root, manifest)) {
     const path = prepared.context.fixture.path;
     try {
-      const results = await executeWptFixture(prepared, (reportError) => createCompressionEnvironment(server, reportError));
+      const observation = await observeWptFixture(prepared, (reportError) => createCompressionEnvironment(server, reportError));
+      const { results, errors, hung } = observation;
+      if (hung !== undefined) { hangs.push(hung.observation); recordWptHung(hung); }
+      totals.harnessFailures += errors.length;
       const counts = { registered: results.length, pass: 0, fail: 0, blocked: 0 };
       for (const result of results) counts[result.status]++;
       totals.registered += counts.registered;
@@ -34,7 +40,9 @@ try {
         name: result.name, status: result.status,
         ...(result.reason === undefined ? {} : { reason: result.reason }),
         ...(result.error === undefined ? {} : { error: String(result.error) }),
-      })) });
+      })), ...(hung === undefined ? {} : { instrument: hung.observation, unfinished: observation.unfinished }),
+        ...(errors.length === 0 ? {} : { harnessErrors: errors.map(String) }),
+      });
       console.error(`${path}: ${counts.pass} pass, ${counts.fail} fail, ${counts.blocked} blocked`);
     } catch (error) {
       totals.harnessFailures++;
@@ -59,4 +67,4 @@ const report = { revision: "ae05f5cb53d3e290b91ae1e92069baa188292880", totals, f
 const json = JSON.stringify(report, null, 2) + "\n";
 if (process.argv[2] === undefined) process.stdout.write(json);
 else writeFileSync(process.argv[2], json);
-if (totals.fail !== 0 || totals.harnessFailures !== 0) process.exitCode = 1;
+process.exitCode = publishWptHangs(hangs, totals.fail + totals.harnessFailures);
