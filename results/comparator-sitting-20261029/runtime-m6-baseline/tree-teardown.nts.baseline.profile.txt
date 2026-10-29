@@ -1,0 +1,19 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cpu_core/cycles/u'
+# Event count (approx.): 2742055860
+#
+# Overhead  Command          Shared Object         Symbol                                          
+# ........  ...............  ....................  ................................................
+#
+    46.24%  tree-teardown.n  tree-teardown.nts     [.] build__region.llvm.6968825537856868742
+    27.77%  tree-teardown.n  tree-teardown.nts     [.] sum.llvm.6968825537856868742
+    25.05%  tree-teardown.n  tree-teardown.nts     [.] nts_alloc
+
+
+#
+# (Tip: To show assembler sample context control flow use perf record -b / perf report --samples 10 and then browse context)
+#

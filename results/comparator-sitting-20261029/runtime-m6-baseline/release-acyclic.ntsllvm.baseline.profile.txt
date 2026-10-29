@@ -1,0 +1,23 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 2451933247
+#
+# Overhead  Command          Shared Object            Symbol                                          
+# ........  ...............  .......................  ................................................
+#
+    40.43%  release-acyclic  release-acyclic.ntsllvm  [.] nts_destroy
+    26.87%  release-acyclic  release-acyclic.ntsllvm  [.] work
+    14.32%  release-acyclic  release-acyclic.ntsllvm  [.] nts_alloc
+    11.88%  release-acyclic  release-acyclic.ntsllvm  [.] nts_release_counted.llvm.5046907043690429144
+     2.96%  release-acyclic  release-acyclic.ntsllvm  [.] nts_release_fields_Pair
+     1.13%  release-acyclic  release-acyclic.ntsllvm  [.] nts_each_reference
+     0.71%  release-acyclic  release-acyclic.ntsllvm  [.] nts_release
+
+
+#
+# (Tip: To measure approximate function latency with Processor Trace use perf record -e intel_pt// ... ; perf script --call-ret-trace)
+#

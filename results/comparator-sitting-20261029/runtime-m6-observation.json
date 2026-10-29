@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "messageId": "1baf7010-09a4-4d53-9574-75e3dab71b72",
+  "receivedFrom": "codex:01a169fd-3585-72c2-83e0-3fd6dafa1050",
+  "sourcePin": "0a585a5205bb474e5f9087964c6dd5af0c19d7d9",
+  "instrumentedCounterCheckpoint": "2d951ed18",
+  "scope": "Separate native attribution from runtime lane; not this sitting's fastest-JVM artifact, and no cross-run time comparison",
+  "observation": "B-k M6 observation ledger (observation only; no collector mechanism selected). Source/profile inputs: instrumented counters from checkpoint 2d951ed18; clean no-diagnostics binaries built from pre-instrumentation parent 0a585a5205bb474e5f9087964c6dd5af0c19d7d9. Six baseline profiles are under ~/.cache/nts-scratch/runtime-content-m6/{cyclic-churn,release-acyclic,tree-teardown}.{nts,ntsllvm}.baseline.profile.txt; perf.data and exact stdout/stderr are alongside. They use perf record -e cpu_core/cycles/u on CPU4 inside with-lock. Quiet-core admission passed; the profile wrapper ran 14:41:54\u201314:43:36 EEST. A system one-minute load value was not retained, so I make no whole-machine-quiet claim. Earlier stats-off profiles of the instrumented binary are excluded because diagnostic hooks still sampled.\nCounters (all complete; per-collection mean; C 760 records, LLVM 764):\n- C: candidates seen 10,001.26; age buckets [9,999.34, 1.92, 0, 0, 0, 0]; nodes 30,478.79; edges 30,477.83; bytes visited 1,462,981.77; bytes reclaimed 487,583.75; prior-live node revisits 0; traversal/destruction/freeing 472.8/11.7/108.6 us.\n- LLVM: candidates seen 10,001.26; same age buckets; nodes 30,478.79; edges 30,477.83; bytes visited 1,462,981.82; bytes reclaimed 487,583.75; prior-live revisits 0; traversal/destruction/freeing 459.9/11.8/104.8 us.\nThus about one third of visited bytes are reclaimed and two thirds remain live; all roots are young. Stats instrumentation made cyclic-churn about 3.2x slower (roughly 109 us stats-off vs 347\u2013357 us stats-on), so phase times are instrumented and not a clean performance attribution. release-acyclic and tree-teardown have no collection records.\nUninstrumented flat profiles, top shares:\n- cyclic-churn C / LLVM: nts_collect_pass 45.82% / 43.05%; work 17.49% / 17.52%; nts_each_reference 11.98% / 15.39%; nts_alloc 6.96% / 6.98%; counted release 6.81% / 6.45%.\n- release-acyclic C / LLVM: nts_destroy 39.79% / 40.43%; work 26.28% / 26.87%; nts_alloc 15.97% / 14.32%; counted release 10.83% / 11.88%; typed field release 4.05% / 2.96%. No collector invocation. Main's corrected ratios remain 1.58x node / 1.88x Bun AOT.\n- tree-teardown C / LLVM: build__region 46.24% / 45.81%; nts_alloc 25.05% / 26.69%; sum 27.77% / 26.22%. No collection; this sitting's bench table reports 0.55x node and 0.21x C++ (control, not a loss).\nPlan mapping:\n1) cyclic-churn: B-k's adaptive trigger is conditional on repeated visits dominating; measured prior-live repeats are zero, so that branch is not supported. nts regions --rc --no-acquire on this row reports 0 candidates/0 sites, with 41 allocation/storage candidates all Unknown(not analysed). Source keeps 64 parent/child cycles in a ring; each survives at least 64 loop iterations, then replacement detaches an old cycle. Reset-per-iteration is therefore not safe. Planned stage 3 per-site regions may cover a proved cohort, but current analysis proves none, and nothing planned directly targets the measured fresh-young scan/live-byte ratio. This is a plan gap to record before deciding a mechanism.\n2) release-acyclic: stage 1 release-by-type has landed and the profile shows only 3\u20134% typed field-release share remaining; typed collector visitors (next stage-1 item) do not apply because this row never collects. Dominant per-object destruction/free work is explicitly assigned to stage 3 per-site regions in memory.md; there is no collector fix to choose for this row now.\n3) tree-teardown is a non-collector control: construction, allocation and checksum dominate; no current M6 or release-stage mechanism applies.\nThe earlier stats capture, stats-off bench, region output and raw counter/profile files are retained in the same scratch directory.",
+  "files": [
+    {
+      "row": "cyclic-churn",
+      "backend": "nts",
+      "source": "/home/akisarou/.cache/nts-scratch/runtime-content-m6/cyclic-churn.nts.baseline.profile.txt",
+      "record": "runtime-m6-baseline/cyclic-churn.nts.baseline.profile.txt",
+      "sha256": "71b48ffb8ab5bf184e4098bc04cfc620815f8bb78323132e49b5ed981eeab6d8"
+    },
+    {
+      "row": "cyclic-churn",
+      "backend": "ntsllvm",
+      "source": "/home/akisarou/.cache/nts-scratch/runtime-content-m6/cyclic-churn.ntsllvm.baseline.profile.txt",
+      "record": "runtime-m6-baseline/cyclic-churn.ntsllvm.baseline.profile.txt",
+      "sha256": "751f65d51d1df5dae3d65489aa3e40e8051489942478a05679b6a1160aa8d580"
+    },
+    {
+      "row": "release-acyclic",
+      "backend": "nts",
+      "source": "/home/akisarou/.cache/nts-scratch/runtime-content-m6/release-acyclic.nts.baseline.profile.txt",
+      "record": "runtime-m6-baseline/release-acyclic.nts.baseline.profile.txt",
+      "sha256": "81f47851f3137e9dce22299c045f46f86590102d8c295bc69c1528656834a217"
+    },
+    {
+      "row": "release-acyclic",
+      "backend": "ntsllvm",
+      "source": "/home/akisarou/.cache/nts-scratch/runtime-content-m6/release-acyclic.ntsllvm.baseline.profile.txt",
+      "record": "runtime-m6-baseline/release-acyclic.ntsllvm.baseline.profile.txt",
+      "sha256": "14f53428b387c221eee7997c6801bd994b7337dde5131ee2f15fb6f8329a51fb"
+    },
+    {
+      "row": "tree-teardown",
+      "backend": "nts",
+      "source": "/home/akisarou/.cache/nts-scratch/runtime-content-m6/tree-teardown.nts.baseline.profile.txt",
+      "record": "runtime-m6-baseline/tree-teardown.nts.baseline.profile.txt",
+      "sha256": "d5d258d1a0330da6b89711abed108d8f24dd4df81b1aa0e6d655d31793b740b7"
+    },
+    {
+      "row": "tree-teardown",
+      "backend": "ntsllvm",
+      "source": "/home/akisarou/.cache/nts-scratch/runtime-content-m6/tree-teardown.ntsllvm.baseline.profile.txt",
+      "record": "runtime-m6-baseline/tree-teardown.ntsllvm.baseline.profile.txt",
+      "sha256": "90bfff00b7f8a2a4447f74c32262b54512cc5f018c284a80af7e2ed05f307d0e"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_core/cycles/u'
+# Event count (approx.): 2263894917
+#
+# Overhead  Command          Shared Object         Symbol                                          
+# ........  ...............  ....................  ................................................
+#
+    45.82%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_collect_pass
+    17.49%  cyclic-churn.nt  cyclic-churn.nts      [.] work
+    11.98%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_each_reference
+     6.96%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_alloc
+     6.81%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_release_counted.llvm.5046907043690429144
+     3.73%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_trace_fields_NtsObj_Link
+     3.35%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_mark_gray_child
+     1.85%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_scan_child
+     1.76%  cyclic-churn.nt  cyclic-churn.nts      [.] nts_collect_white_child
+
+
+#
+# (Tip: To see list of saved events and attributes: perf evlist -v)
+#
