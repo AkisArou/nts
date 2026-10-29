@@ -42,11 +42,14 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
   each function is built for. C can say only part of
   this, so LLVM is where nts can pass C.
 - **Linkage follows the product:** in an executable, a definition is
-  external only if it is on the product's published entry surface (entry
-  points, names the product publishes, native callbacks and registrations,
-  functions whose address goes to native code). Everything else, a module's
-  unpublished exports included, is `internal` in LLVM and `static` in C,
-  from one decision both backends read. A library keeps its external ABI.
+  external only if something outside resolves it by name: an entry point, a
+  name the product publishes, a name the dynamic loader or a by-name
+  registry looks up, or a symbol native code links against. A function
+  native code receives only as a pointer (an Objective-C method
+  implementation, a callback registered by address) needs no symbol and
+  stays private, though it is kept. Everything else, a module's unpublished
+  exports included, is `internal` in LLVM and `static` in C, from one
+  decision both backends read. A library keeps its external ABI.
 - Both read one prepared program, emit the same symbols and ABI, and link the
   same runtime, so a program built by either links against the same C. A
   disagreement between the two is a backend bug by construction.

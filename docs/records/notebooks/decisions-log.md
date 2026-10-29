@@ -890,14 +890,19 @@ From the open-questions audit; each is the register's recommendation.
 
   Both are built: `nsw` from the exactness map, and a product-aware
   linkage rule decided by the coordinator on the compiler and runtime
-  lanes' proposal. In an executable, a definition is external only if it
-  is on the product's published entry surface: entry points, names the
-  product publishes, native callbacks and registrations, and functions
-  whose address goes to native code. Everything else, including a
-  module's exports the product does not publish (`scanNumber` is exported
-  but not public API), is `internal` in LLVM and `static` in C, from one
-  shared decision. Generic and shared outputs keep their external ABI. No
-  hidden visibility, and nothing left to link-time internalization.
+  lanes' proposal. In an executable, a definition is external only if
+  something outside resolves it by name: entry points, names the product
+  publishes, names a loader or by-name registry looks up, and symbols
+  native code links against. Everything else, including a module's exports
+  the product does not publish (`scanNumber` is exported but not public
+  API), is `internal` in LLVM and `static` in C, from one shared decision.
+  Generic and shared outputs keep their external ABI. No hidden visibility,
+  and nothing left to link-time internalization. The first wording also
+  made external every function whose address goes to native code. The
+  Objective-C snapshots caught that: the compiler lane showed that
+  `Counter__bump` and `Held__state` are reached through static shims whose
+  addresses are registered, so a pointer-only callback is kept but stays
+  private.
 
 ## Contributors and packages (10-29)
 
