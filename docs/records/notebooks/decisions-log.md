@@ -879,13 +879,26 @@ From the open-questions audit; each is the register's recommendation.
   attributed, kept under `benchmarks/`, and never linked into nts or into a
   program nts builds. Recorded in
   [cloud-agents](../../contributing/cloud-agents.md).
-- **The checker's worker-budget API stays a local patch.** The API makes the
-  vendored checker's work exact on any CPU mask. The user approved offering
-  it to oxc-project/tsrs, but approves the pull request itself before it
-  opens. Upstream's contribution guide keeps pull requests closed (bug
-  reports go to its issue tracker), so nothing was sent. The vendored copy
-  keeps the patch, and tsrs keeps its unfinished adaptation to upstream's
-  current code on a local branch, untested.
+- **The worker-budget patch is removed; tsrs stays as upstream wrote it.**
+  The patch gave the vendored checker one thread limit, set once by nts, so
+  that compile work measured the same on any CPU mask. The coordinator
+  approved it on 10-28 without checking the 10-24 rule, which allows one
+  temporary patch, for the two checker crashes only. The user approved
+  offering it to oxc-project/tsrs, with the pull request itself approved by
+  the user before it opens, but upstream's contribution guide keeps pull
+  requests closed, so nothing was sent. Asked for an alternative that leaves
+  tsrs unchanged, the coordinator found upstream already has what
+  measurement needs:
+  - the checker count and a single-threaded mode, both of which nts already
+    sets;
+  - `RAYON_NUM_THREADS` for the parsing threads, which tsrs's own benchmarks
+    set to 1 when they count instructions.
+  The user decided to remove the patch. Measured compiles run
+  single-threaded, with that variable fixed by the gate's environment, and
+  the compile-time record refuses a measurement taken otherwise. nts's
+  `--workers` option goes, or becomes what upstream lets nts control. The
+  crash patch's read-only hook for one test is the remaining addition
+  outside the rule; the user decides on it.
 
 ## Plan (10-29): the Bun and ScriptC studies
 
