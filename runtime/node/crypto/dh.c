@@ -975,6 +975,13 @@ NtsView *nts_crypto_ecdh_convert_key(NtsView *key, NtsString *curve, double form
  * theirs, for DH, EC, X25519 and X448 alike. A failure leaves its cause on
  * the queue. */
 static unsigned char *derive(EVP_PKEY *ours, EVP_PKEY *theirs, size_t *length) {
+    /* OpenSSL's provider export asserts that peer key kinds match. Reject
+     * incompatible kinds before that boundary, including on the worker path. */
+    const char *kind = EVP_PKEY_get0_type_name(ours);
+    if (kind == NULL || !EVP_PKEY_is_a(theirs, kind)) {
+        ERR_raise(ERR_LIB_EVP, EVP_R_DIFFERENT_KEY_TYPES);
+        return NULL;
+    }
     EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(ours, NULL);
     size_t size = 0;
     bool sized = ctx != NULL && EVP_PKEY_derive_init(ctx) > 0 && EVP_PKEY_derive_set_peer(ctx, theirs) > 0 &&

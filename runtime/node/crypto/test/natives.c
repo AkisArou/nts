@@ -66,18 +66,21 @@ static bool is_hex(NtsView *view, const char *digits) {
 }
 
 /* The error record's text, joined, for a substring check. */
-static bool errors_mention(const char *needle) {
+static bool errors_mention_either(const char *needle, const char *alternative) {
     NtsArray *record = nts_crypto_take_errors();
     NtsString **items = NTS_ITEMS(record, NtsString *);
     bool found = false;
     for (uint32_t i = 0; i < record->header.length && !found; i++) {
         size_t length = 0;
         char *value = nts_node_to_utf8_alloc(items[i], &length);
-        found = value != NULL && strstr(value, needle) != NULL;
+        found = value != NULL && (strstr(value, needle) != NULL ||
+                                  (alternative != NULL && strstr(value, alternative) != NULL));
         free(value);
     }
     return found;
 }
+
+static bool errors_mention(const char *needle) { return errors_mention_either(needle, NULL); }
 
 static char *string_of(NtsString *value) {
     size_t length = 0;
@@ -761,8 +764,8 @@ static void key_agreement(void) {
                        "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"));
     double ec = nts_crypto_key_parse_private(1, -1, file(KEYS "ec_p256_private.pem"), bytes("", 0), false);
     expect_true("an X25519 key and an EC key agree on nothing", nts_crypto_dh_stateless(x_private, ec) == NULL);
-    expect_true("  and OpenSSL says why", errors_mention("operation not supported for this keytype") ||
-                                              errors_mention("different"));
+    expect_true("  and OpenSSL says why",
+                errors_mention_either("operation not supported for this keytype", "different"));
     int before = jobs_done;
     nts_crypto_dh_stateless_job(x_private, x_public, &job_callback);
     uv_run(uv_default_loop(), UV_RUN_DEFAULT);
