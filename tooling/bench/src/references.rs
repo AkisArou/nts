@@ -194,9 +194,10 @@ mod tests {
     }
     #[test]
     fn only_third_party_references_relax_warning_fatality() {
+        let empty: &[&str] = &[];
         fixture(|root| {
             declare(root, "{\"kind\":\"nts-authored\"}");
-            assert_eq!(warning_flags(&root.join("ref.cpp")).unwrap(), []);
+            assert_eq!(warning_flags(&root.join("ref.cpp")).unwrap(), empty);
             declare(
                 root,
                 "{\"kind\":\"third-party\",\"upstream\":[\"https://example.com/upstream.cpp\"]}",
@@ -205,7 +206,7 @@ mod tests {
                 warning_flags(&root.join("ref.cpp")).unwrap(),
                 &["-Wno-error"]
             );
-            assert_eq!(warning_flags(&root.join("driver.cpp")).unwrap(), []);
+            assert_eq!(warning_flags(&root.join("driver.cpp")).unwrap(), empty);
         });
     }
     #[test]
