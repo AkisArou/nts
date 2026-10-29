@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-deep-binding-keeps-its-loop-and-range-facts",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-deep-binding-keeps-its-loop-and-range-facts/src/main.ts",
+      "signature": "36dea55e87c53b753a6f7458a986744a7bf8cd91c5fa0b1f4c83b650d87ec732",
+      "keys": {
+        "c": "9dc696b1489e08d3edcec516ce61689f",
+        "jvm": "dac1141af35a3b4ad9edb305f5e98f56",
+        "llvm": "6423cbce31b2227d368bc54a250e33d3"
+      },
+      "cases_sha256": "d37179e9d9f014903d58f64d8bb797b04118787d31f44d830766e8ed0714f1e5",
+      "driver_sha256": "6c3bc3590ad15650b37301bff52669d36001e8b1ce81282e496f69cc7f5af76c",
+      "populations": {
+        "inRangeControl": {
+          "count": 29,
+          "cases_sha256": "4befe8fae5a39b7c6fbca18f1d3826e1a3177e82b6c995b9dc60cfbbe7182f56"
+        },
+        "nestedBinding": {
+          "count": 29,
+          "cases_sha256": "01e46ea88e9f1e45d13b34be326d5a044e0d5bdb151d2314e9e6066531aa8f39"
+        },
+        "shallowControl": {
+          "count": 29,
+          "cases_sha256": "f187909f5beab5eb48052cb149803886b69187c57a8033d2ee0eeca7e063ffdf"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

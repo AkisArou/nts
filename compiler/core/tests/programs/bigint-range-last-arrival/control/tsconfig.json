@@ -1,0 +1,7 @@
+{
+  "extends": "../../../../../../tsconfig.fixtures.json",
+  "files": [
+    "main.ts",
+    "../../../../../../runtime/native/scalars.d.ts"
+  ]
+}
