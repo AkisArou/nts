@@ -825,6 +825,29 @@ From the open-questions audit; each is the register's recommendation.
   executes more. The LLVM IR is still to state what nts proves
   ([native](../../targets/native.md#two-backends-one-runtime)), as the design
   that lets it pass C, but not as the explanation of these rows.
+- **Two LLVM-backend causes, found and decided for building** (10-29, the
+  coordinator, on runtime's measurements at CPU 4 under the lock). The
+  layout-interval instrument (20 layouts per arm, 99% bootstrap) shows the
+  wall-time gaps are real: `awfy-sieve` +28.3%, `awfy-permute` +7.6%,
+  `array-methods` +4.5%.
+  - `awfy-sieve`: with the same instruction count, LLVM took 8.524M cycles
+    and 98.2K branch misses against C's 6.995M and 27.9K. The misses sit on
+    the data-dependent `flags[i - 1]` test. With `nsw`/`nuw` added by hand,
+    LLVM took 6.584M cycles and 29.3K misses, 5.9% under C, because the
+    no-overflow fact changes the loop's shape. The compiler lane's soundness
+    review licenses only `nsw`, from the same exactness map
+    (`core::exact`) that lets C use signed arithmetic, so the shipped
+    change carries `nsw` alone, confirmed by a sitting of its own.
+  - `json-scan`: clang's IR from nts's C marks definitions `dso_local`, so
+    link-time optimization internalized `scanNumber` and specialized it to
+    the program's one JSON text. nts's IR does not, so it stayed public and
+    generic. Marked `internal` by hand, LLVM ran 10.431M instructions
+    against C's 10.651M and its own 12.972M.
+
+  Both are built in the LLVM backend: `nsw` from the exactness map,
+  `internal` for whatever no outside code can reach, `dso_local` for the
+  rest. C gets `static` from the same reachability decision, so neither
+  backend depends on the linker to find it.
 
 ## Plan (10-29): the Bun and ScriptC studies
 

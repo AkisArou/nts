@@ -414,15 +414,21 @@ add, in order:
      `clbg-spectral-norm` on the JVM): the JVM's collector and flags, and
      the object layout, measured per row (runtime2);
    - **the LLVM backend slower than C** on the rows the 10-29 loss record
-     lists. On the four worst, adding by hand the facts nts's IR lacks
-     (`nsw` and `nuw`, `inbounds`, function attributes and the CPU,
-     `!range`, more precise TBAA) changed no instruction count. Where LLVM
-     runs the same instructions more slowly (`awfy-sieve`, `awfy-permute`,
-     `array-methods`), the cycle and branch counters, then the
-     layout-interval instrument, decide whether the cost is real. Where it
-     runs more instructions (`json-scan`), its hot code is compared with C's
-     (runtime). The LLVM backend then emits whatever closes each gap
-     (compiler), first to match C, then to pass it
+     lists. The layout-interval instrument shows the gaps are real. Two
+     causes are found by hand-editing the IR, and both are being built in
+     the LLVM backend (runtime writes it, the compiler lane reviews it):
+     - no-overflow facts: `nsw` on the signed operations the exactness
+       analysis proves, the same fact that lets C use signed arithmetic. It
+       changes `awfy-sieve`'s loop shape and its branch misses, not its
+       instruction count, and passes C there;
+     - visibility: a definition no outside code can reach is `internal`, and
+       the rest are `dso_local`, so link-time optimization can specialize
+       them as it does for C. This closes `json-scan` and passes C. C gets
+       `static` from the same decision.
+
+     Then every row where one native backend trails the other is measured
+     again, and the remaining gaps (`awfy-permute`, `array-methods`,
+     `upcast`) are attributed the same way
      ([native](targets/native.md#two-backends-one-runtime));
    - **the C backend slower than LLVM** on the rows the same record lists
      (`dispatch` the worst): the same comparison the other way, to find
