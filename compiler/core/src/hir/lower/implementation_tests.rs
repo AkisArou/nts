@@ -544,3 +544,25 @@ fn hierarchy_queries_visit_every_inherited_interface() {
         assert!(!hierarchy.implements_transitively(TypeId(depth), TypeId(depth + 1)));
     }
 }
+
+#[test]
+fn constructorless_initialization_keeps_every_ancestor() {
+    use nts_semantic_schema::TypeId;
+    let snapshot = SemanticSnapshot::default();
+    let indexed = super::LoweringSnapshot::new(&snapshot);
+    let mut probe = FuncBuilder::probe(&indexed);
+    for child in 1..=80 {
+        probe
+            .hierarchy
+            .base
+            .insert(TypeId(child), TypeId(child - 1));
+    }
+    for depth in [8, 80] {
+        assert_eq!(
+            probe.constructorless_ancestors(Some(TypeId(depth))),
+            (0..=depth).map(TypeId).collect::<Vec<_>>()
+        );
+        assert!(probe.extends(TypeId(depth), TypeId(0)));
+    }
+    assert_eq!(probe.constructorless_ancestors(None), Vec::<TypeId>::new());
+}

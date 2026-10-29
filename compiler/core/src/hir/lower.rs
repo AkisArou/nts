@@ -29887,17 +29887,12 @@ impl<'a> FuncBuilder<'a> {
         if from == to || self.extends(source, target) || self.extends(target, source) {
             return Ok(());
         }
-        let mut class = Some(target);
-        let mut methods = false;
-        for _ in 0..64 {
-            let Some(here) = class else { break };
-            methods |= self
-                .hierarchy
+        let methods = self.hierarchy.ancestors(target).any(|here| {
+            self.hierarchy
                 .declares
                 .get(&here)
-                .is_some_and(|declared| !declared.is_empty());
-            class = self.hierarchy.base.get(&here).copied();
-        }
+                .is_some_and(|declared| !declared.is_empty())
+        });
         if !methods {
             return Ok(());
         }
@@ -29916,15 +29911,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// Whether `ty` is `ancestor` or extends it, along `extends` alone.
     fn extends(&self, ty: TypeId, ancestor: TypeId) -> bool {
-        let mut at = Some(ty);
-        for _ in 0..64 {
-            let Some(here) = at else { return false };
-            if here == ancestor {
-                return true;
-            }
-            at = self.hierarchy.base.get(&here).copied();
-        }
-        false
+        self.hierarchy.descends(ty, ancestor)
     }
 
     fn not_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> Option<NotAPrefix> {
@@ -83994,17 +83981,10 @@ impl<'a> FuncBuilder<'a> {
     /// run in, and a derived initialiser is allowed to read what a base one
     /// stored.
     fn constructorless_ancestors(&self, base: Option<TypeId>) -> Vec<TypeId> {
-        let mut chain = Vec::new();
-        let mut at = base;
-        // The same bound `Hierarchy::constructor` uses, and for the same reason:
-        // a cycle in the chain is a malformed program rather than a deep one.
-        for _ in 0..64 {
-            let Some(here) = at else {
-                break;
-            };
-            chain.push(here);
-            at = self.hierarchy.base.get(&here).copied();
-        }
+        let mut chain: Vec<_> = base
+            .into_iter()
+            .flat_map(|ty| self.hierarchy.ancestors(ty))
+            .collect();
         chain.reverse();
         chain
     }
