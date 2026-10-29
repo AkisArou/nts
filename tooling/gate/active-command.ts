@@ -25,7 +25,9 @@ function groupCpu(group:number,started:number) {
   for(const name of readdirSync("/proc")){
     if(!/^\d+$/.test(name))continue;
     let record;
-    try{record=processAt(Number(name));}catch(error){if(error.code==="EACCES"||error.code==="EPERM")continue;throw error;}
+    // A disappearing unrelated /proc entry cannot invalidate this command's
+    // observer. Its own leader was checked above without suppressing errors.
+    try{record=processAt(Number(name));}catch{continue;}
     if(record?.group===group&&record.session===group)ticks+=record.cpu;
   }
   return ticks;
