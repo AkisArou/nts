@@ -37,9 +37,8 @@ use super::{BinOp, BlockId, Callee, Func, OpKind, Terminator, UnOp, ValueId};
 /// still moving without giving up on one that was going to settle.
 const WIDEN_AFTER: u32 = 3;
 
-/// A hard bound on the whole fixpoint, in case a lattice mistake makes some
-/// value oscillate rather than converge. Thresholds converge far earlier;
-/// reaching this means a bug, and looping forever would hide it.
+/// A hard bound on the whole fixpoint. A long reverse-ordered graph can need
+/// more rounds even without a loop; exhaustion discards its unfinished facts.
 const ROUND_CAP: u32 = 64;
 
 /// Blocks a back edge returns to.
@@ -456,6 +455,12 @@ pub fn analyze(func: &Func) -> Analysis {
 /// Compute what is provable, given what the rest of the program contributes.
 #[must_use]
 pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
+    solve(func, context).0
+}
+
+/// The round count is retained for solver controls; consumers receive only the
+/// completed analysis (or the conservative exhaustion result).
+fn solve(func: &Func, context: &Context) -> (Analysis, u32) {
     let tuples = local_tuples(func);
     // Start at BOTTOM and grow. A value's fact only ever widens as more paths
     // are discovered, so the fixpoint is the least one.
@@ -483,7 +488,10 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
     fields[0] = Some(Fields::default());
     let mut observed = Observed::default();
 
+    let mut converged = false;
+    let mut rounds = 0;
     for _ in 0..ROUND_CAP {
+        rounds += 1;
         let mut changed = false;
         for index in 0..func.blocks.len() {
             let Some(mut refinements) = entry[index].clone() else {
@@ -509,26 +517,19 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
                     if let (Some(earlier), Some(now)) =
                         (before.get(param).copied(), refinements.get(param).copied())
                     {
-                        refinements.insert(*param, facts::widen(earlier, now));
+                        refinements.insert(
+                            *param,
+                            capped(context.caps, *param, facts::widen(earlier, now)),
+                        );
                     }
                 }
-                // Keep the widened value, or the next round joins the narrow one
-                // back in and the bound crawls upward again.
-                entry[index] = Some(refinements.clone());
-            }
-            // What counting iterations proved, applied whether or not widening
-            // ran. Without it an accumulator's bound grows by one increment per
-            // round until widening sends it to infinity — and an infinite bound
-            // is not a whole number, so the accumulator stays a double.
-            if !context.caps.is_empty() {
-                for param in &func.blocks[index].params {
-                    if let (Some(cap), Some(current)) =
-                        (context.caps.get(param), refinements.get(param).copied())
-                    {
-                        refinements.insert(*param, current.narrow(*cap));
-                    }
+                // Persist widening in the same capped domain as incoming
+                // joins. A back edge must not undo the certified bound and
+                // manufacture the same transient change on every round.
+                if entry[index].as_ref() != Some(&refinements) {
+                    entry[index] = Some(refinements.clone());
+                    changed = true;
                 }
-                entry[index] = Some(refinements.clone());
             }
 
             previous[index] = Some(refinements.clone());
@@ -544,16 +545,74 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
             );
         }
         if !changed {
+            converged = true;
             break;
         }
     }
 
+    // This is an ascending analysis: an unfinished iteration contains only
+    // the paths seen so far. None of those partial facts may license a fold,
+    // a bounds-check removal or a storage width in any consumer.
+    if !converged {
+        return (unknown(func, context, observed), rounds);
+    }
+
+    (
+        Analysis {
+            values,
+            less_than: relations(func, &entry),
+            refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
+            growable: context.whole.growable,
+            param_lengths: context.param_lengths.to_vec(),
+            observed,
+        },
+        rounds,
+    )
+}
+
+/// Exhaustion discards every authority, including field observations whose
+/// absence would otherwise mean that a declaration's initial zero suffices.
+fn unknown(func: &Func, context: &Context, mut observed: Observed) -> Analysis {
+    for fact in observed.values_mut() {
+        *fact = Facts::TOP;
+    }
+    let object = |ty| super::HirType::Managed(super::ManagedType::Object(ty));
+    for &(ty, field) in context
+        .whole
+        .field_facts
+        .keys()
+        .chain(context.written.fields.keys())
+    {
+        observed.insert((object(ty), field), Facts::TOP);
+    }
+    // Standalone analyses can have no whole-program field map. Include every
+    // represented access too, even when its block had not been visited yet.
+    for op in &func.values {
+        match &op.kind {
+            OpKind::FieldGet { object, field } | OpKind::FieldSet { object, field, .. } => {
+                observe(func, &mut observed, *object, *field, Facts::TOP);
+            }
+            OpKind::SharedFieldGet { arms, field, .. } => {
+                for ty in arms {
+                    observed.insert((object(*ty), *field), Facts::TOP);
+                }
+            }
+            OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => {
+                for arm in arms {
+                    observed.insert((object(arm.ty), arm.field), Facts::TOP);
+                }
+            }
+            _ => {}
+        }
+    }
     Analysis {
-        values,
-        less_than: relations(func, &entry),
-        refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
-        growable: context.whole.growable,
-        param_lengths: context.param_lengths.to_vec(),
+        values: vec![Facts::TOP; func.values.len()],
+        less_than: vec![Vec::new(); func.blocks.len()],
+        // Empty maps for every block: all are conservatively reachable, with
+        // no guard refinement. There is no consumer-specific completion flag.
+        refined: vec![Refinements::default(); func.blocks.len()],
+        growable: true,
+        param_lengths: vec![Facts::TOP; func.params.len()],
         observed,
     }
 }
@@ -1473,15 +1532,23 @@ fn transfer_block(
             *slot = joined;
             changed = true;
         }
-        track(func, value, &mut held, observed, refinements, values);
+        changed |= track(func, value, &mut held, observed, refinements, values);
     }
 
     match &record.terminator {
         Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {
-            observe_all(func, &held, observed);
+            changed |= observe_all(func, &held, observed);
         }
         Terminator::Jump { target, args } => {
-            changed |= send(func, *target, args, refinements, values, entry);
+            changed |= send(
+                func,
+                *target,
+                args,
+                refinements,
+                values,
+                entry,
+                context.caps,
+            );
             changed |= send_fields(func, *target, held, fields, observed, headers);
         }
         Terminator::Branch {
@@ -1496,8 +1563,24 @@ fn transfer_block(
             let predicates = &context.written.predicates;
             let on_then = refine_edge(func, predicates, refinements, values, *cond, true);
             let on_else = refine_edge(func, predicates, refinements, values, *cond, false);
-            changed |= send(func, *then_target, then_args, &on_then, values, entry);
-            changed |= send(func, *else_target, else_args, &on_else, values, entry);
+            changed |= send(
+                func,
+                *then_target,
+                then_args,
+                &on_then,
+                values,
+                entry,
+                context.caps,
+            );
+            changed |= send(
+                func,
+                *else_target,
+                else_args,
+                &on_else,
+                values,
+                entry,
+                context.caps,
+            );
             let then_held = narrowed_by(&held, &on_then);
             let else_held = narrowed_by(&held, &on_else);
             changed |= send_fields(func, *then_target, then_held, fields, observed, headers);
@@ -1522,14 +1605,14 @@ fn track(
     observed: &mut Observed,
     refinements: &Refinements,
     values: &[Facts],
-) {
+) -> bool {
     match &func.values[value.0 as usize].kind {
         OpKind::FieldSet {
             object,
             field,
             value: stored,
         } => {
-            observe_others(func, held, observed, *object, *field, true);
+            let changed = observe_others(func, held, observed, *object, *field, true);
             held.insert(
                 (*object, *field),
                 Held {
@@ -1537,9 +1620,10 @@ fn track(
                     facts: lookup(refinements, values, *stored),
                 },
             );
+            changed
         }
         OpKind::FieldGet { object, field } => {
-            observe_others(func, held, observed, *object, *field, false);
+            let changed = observe_others(func, held, observed, *object, *field, false);
             held.insert(
                 (*object, *field),
                 Held {
@@ -1547,12 +1631,14 @@ fn track(
                     facts: values[value.0 as usize],
                 },
             );
+            changed
         }
         kind if runs_elsewhere(kind) => {
-            observe_all(func, held, observed);
+            let changed = observe_all(func, held, observed);
             held.clear();
+            changed
         }
-        _ => {}
+        _ => false,
     }
 }
 
@@ -1603,26 +1689,50 @@ fn observe_others(
     object: ValueId,
     field: u32,
     forget: bool,
-) {
+) -> bool {
+    let mut changed = false;
     held.retain(|&(other, at), now| {
         if at != field || other == object {
             return true;
         }
-        observe(func, observed, other, at, now.facts);
+        changed |= observe(func, observed, other, at, now.facts);
         !forget
     });
+    changed
 }
 
-fn observe_all(func: &Func, held: &Fields, observed: &mut Observed) {
+fn observe_all(func: &Func, held: &Fields, observed: &mut Observed) -> bool {
+    let mut changed = false;
     for (&(object, field), now) in held {
-        observe(func, observed, object, field, now.facts);
+        changed |= observe(func, observed, object, field, now.facts);
     }
+    changed
 }
 
-fn observe(func: &Func, observed: &mut Observed, object: ValueId, field: u32, facts: Facts) {
+fn observe(
+    func: &Func,
+    observed: &mut Observed,
+    object: ValueId,
+    field: u32,
+    facts: Facts,
+) -> bool {
+    use std::collections::hash_map::Entry;
     let key = (func.values[object.0 as usize].ty.clone(), field);
-    let entry = observed.entry(key).or_insert(Facts::BOTTOM);
-    *entry = entry.join(facts);
+    match observed.entry(key) {
+        Entry::Vacant(slot) => {
+            slot.insert(facts);
+            true
+        }
+        Entry::Occupied(mut slot) => {
+            let joined = slot.get().join(facts);
+            if joined == *slot.get() {
+                false
+            } else {
+                slot.insert(joined);
+                true
+            }
+        }
+    }
 }
 
 /// The fields an edge carries, narrowed by what taking it proved about the
@@ -1658,12 +1768,12 @@ fn send_fields(
 ) -> bool {
     let slot = &mut fields[target.0 as usize];
     if headers.contains(&target) {
-        observe_all(func, &incoming, observed);
+        let changed = observe_all(func, &incoming, observed);
         if slot.is_none() {
             *slot = Some(Fields::default());
             return true;
         }
-        return false;
+        return changed;
     }
     let Some(existing) = slot else {
         *slot = Some(incoming);
@@ -1688,7 +1798,7 @@ fn send_fields(
     });
     for (&(object, field), other) in &incoming {
         if !existing.contains_key(&(object, field)) {
-            observe(func, observed, object, field, other.facts);
+            changed |= observe(func, observed, object, field, other.facts);
         }
     }
     changed
@@ -1703,6 +1813,7 @@ fn send(
     refinements: &Refinements,
     values: &[Facts],
     entry: &mut [Option<Refinements>],
+    caps: &FxHashMap<ValueId, Facts>,
 ) -> bool {
     let params = &func.blocks[target.0 as usize].params;
     let slot = &mut entry[target.0 as usize];
@@ -1712,6 +1823,9 @@ fn send(
         let mut outgoing = refinements.clone();
         for (param, arg) in params.iter().zip(args) {
             outgoing.insert(*param, lookup(refinements, values, *arg));
+        }
+        for (value, facts) in &mut outgoing {
+            *facts = capped(caps, *value, *facts);
         }
         *slot = Some(outgoing);
         return true;
@@ -1732,10 +1846,16 @@ fn send(
         if params.contains(value) {
             continue;
         }
-        changed |= join_into(existing, *value, *incoming, values);
+        changed |= join_into(existing, *value, *incoming, values, caps);
     }
     for (param, arg) in params.iter().zip(args) {
-        changed |= join_into(existing, *param, lookup(refinements, values, *arg), values);
+        changed |= join_into(
+            existing,
+            *param,
+            lookup(refinements, values, *arg),
+            values,
+            caps,
+        );
     }
     changed
 }
@@ -1749,17 +1869,24 @@ fn join_into(
     value: ValueId,
     incoming: Facts,
     values: &[Facts],
+    caps: &FxHashMap<ValueId, Facts>,
 ) -> bool {
     let previous = existing
         .get(&value)
         .copied()
         .unwrap_or(values[value.0 as usize]);
-    let joined = previous.join(incoming);
+    let joined = capped(caps, value, previous.join(incoming));
     if joined == previous {
         return false;
     }
     existing.insert(value, joined);
     true
+}
+
+/// A cap belongs to the destination SSA key. In particular, the source
+/// argument of a back edge may be one increment wider than its target phi.
+fn capped(caps: &FxHashMap<ValueId, Facts>, key: ValueId, facts: Facts) -> Facts {
+    caps.get(&key).map_or(facts, |cap| facts.narrow(*cap))
 }
 
 /// What a value holds here: what an edge refined it to, or its own definition.
@@ -2240,6 +2367,172 @@ mod tests {
         }
     }
 
+    /// Each round reaches just one more reverse-numbered block. The false
+    /// branch reaches the return immediately; the true branch arrives later.
+    fn reverse_merge(depth: u32) -> Func {
+        let mut blocks = vec![
+            block(
+                Vec::new(),
+                vec![ValueId(0), ValueId(1), ValueId(2)],
+                Terminator::Branch {
+                    cond: ValueId(2),
+                    then_target: BlockId(depth - 1),
+                    then_args: Vec::new(),
+                    else_target: BlockId(1),
+                    else_args: Vec::new(),
+                },
+            ),
+            block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(0)))),
+        ];
+        blocks.extend((2..depth).map(|at| {
+            block(
+                Vec::new(),
+                Vec::new(),
+                Terminator::Jump {
+                    target: BlockId(at - 1),
+                    args: Vec::new(),
+                },
+            )
+        }));
+        func(
+            vec![
+                op(OpKind::Param(0)),
+                op(OpKind::ConstFloat(7.0)),
+                op(Op_binary(BinOp::Lt, 0, 1)),
+            ],
+            blocks,
+            1,
+        )
+    }
+
+    #[test]
+    fn fixpoint_exhaustion_discards_scalar_and_guard_authority() {
+        let params = [Facts::constant(0.0).join(Facts::constant(10.0))];
+        let whole = Whole::default();
+        let written = Written::default();
+        let context = Context {
+            params: &params,
+            caps: &FxHashMap::default(),
+            param_lengths: &[Facts::constant(3.0)],
+            whole: &whole,
+            written: &written,
+        };
+        for depth in [8, 70] {
+            let body = reverse_merge(depth);
+            let analysis = analyze_with(&body, &context);
+            if depth == 8 {
+                assert_eq!(analysis.get(ValueId(1)), Facts::constant(7.0));
+                assert_eq!(analysis.get_at(BlockId(1), ValueId(0)), params[0]);
+                assert!(analysis.get_at(BlockId(depth - 1), ValueId(0)).hi < 7.0);
+                assert!(analysis.guarded_by(BlockId(depth - 1), ValueId(0), |v| v == ValueId(1)));
+                assert!(!analysis.growable());
+                assert_eq!(analysis.param_length(0), Facts::constant(3.0));
+                continue;
+            }
+            assert!(
+                analysis.growable(),
+                "an unfinished graph cannot close length writers"
+            );
+            assert_eq!(analysis.param_length(0), Facts::TOP);
+            for value in [ValueId(0), ValueId(1), ValueId(2)] {
+                assert_eq!(analysis.get(value), Facts::TOP, "{value:?}");
+                assert!(!analysis.is_integral_within(value, -100.0, 100.0));
+                for at in 0..depth {
+                    assert_eq!(analysis.get_at(BlockId(at), value), Facts::TOP);
+                    assert!(!analysis.guarded_by(BlockId(at), value, |_| true));
+                }
+            }
+            assert!(analysis.refined.iter().all(Refinements::is_empty));
+        }
+    }
+
+    #[test]
+    fn fixpoint_exhaustion_publishes_unknown_field_observations() {
+        use crate::hir::{FieldArm, ManagedType, TypeId};
+        let object = |ty| HirType::Managed(ManagedType::Object(TypeId(ty)));
+        let mut body = reverse_merge(70);
+        let mut receiver = op(OpKind::Param(1));
+        receiver.ty = object(123);
+        body.params.push(Param {
+            ty: object(123),
+            ..body.params[0].clone()
+        });
+        body.values.extend([
+            receiver,
+            op(OpKind::FieldSet {
+                object: ValueId(3),
+                field: 0,
+                value: ValueId(1),
+            }),
+            op(OpKind::FieldGet {
+                object: ValueId(3),
+                field: 1,
+            }),
+            op(OpKind::SharedFieldGet {
+                value: ValueId(3),
+                arms: vec![TypeId(124)],
+                field: 2,
+            }),
+            op(OpKind::OpenFieldGet {
+                object: ValueId(3),
+                arms: vec![FieldArm {
+                    ty: TypeId(125),
+                    field: 3,
+                }],
+            }),
+            op(OpKind::OpenFieldSet {
+                object: ValueId(3),
+                arms: vec![FieldArm {
+                    ty: TypeId(126),
+                    field: 4,
+                }],
+                value: ValueId(1),
+            }),
+        ]);
+        body.blocks[0].ops.extend([ValueId(3), ValueId(4)]);
+        // These accesses have not run when the round cap is reached. Their
+        // absent observations must not mean that the fields only held zero.
+        body.blocks[2].ops.extend((5..9).map(ValueId));
+        let whole = Whole {
+            field_facts: [((TypeId(127), 5), Facts::constant(2.0))]
+                .into_iter()
+                .collect(),
+            ..Whole::default()
+        };
+        let written = Written {
+            fields: [((TypeId(128), 6), Facts::constant(3.0))]
+                .into_iter()
+                .collect(),
+            ..Written::default()
+        };
+        let analysis = analyze_with(
+            &body,
+            &Context {
+                params: &[],
+                caps: &FxHashMap::default(),
+                param_lengths: &[],
+                whole: &whole,
+                written: &written,
+            },
+        );
+        for (ty, field) in [
+            (123, 0),
+            (123, 1),
+            (124, 2),
+            (125, 3),
+            (126, 4),
+            (127, 5),
+            (128, 6),
+        ] {
+            assert_eq!(
+                analysis.observed().get(&(object(ty), field)),
+                Some(&Facts::TOP),
+                "{ty}:{field}"
+            );
+        }
+        assert!(analysis.observed().values().all(|fact| *fact == Facts::TOP));
+    }
+
     #[test]
     fn checked_element_facts_survive_storage_width_clamps() {
         let byte = HirType::Int {
@@ -2386,6 +2679,136 @@ mod tests {
             ],
             0,
         )
+    }
+
+    #[test]
+    fn a_capped_accumulator_settles_without_capping_its_backedge_expression() {
+        // i and total advance together ten times. The interval transfer alone
+        // sees total + 1 as [1, 11]; the independently proved loop count caps
+        // the header's total phi at [0, 10], not that source expression.
+        let mut body = counted_loop(10.0);
+        body.values.push(op(OpKind::BlockParam(1))); // %6 total
+        body.values.push(op(Op_binary(BinOp::Add, 6, 4))); // %7 total + 1
+        body.blocks[0].terminator = Terminator::Jump {
+            target: BlockId(1),
+            args: vec![ValueId(0), ValueId(0)],
+        };
+        body.blocks[1].params.push(ValueId(6));
+        body.blocks[2].ops.push(ValueId(7));
+        body.blocks[2].terminator = Terminator::Jump {
+            target: BlockId(1),
+            args: vec![ValueId(5), ValueId(7)],
+        };
+        body.blocks[3].terminator = Terminator::Return(Some(ValueId(6)));
+        let caps = [(ValueId(6), Facts::new(0.0, 10.0, false, true, true))]
+            .into_iter()
+            .collect();
+        let whole = Whole::default();
+        let written = Written::default();
+        let context = Context {
+            params: &[],
+            caps: &caps,
+            param_lengths: &[],
+            whole: &whole,
+            written: &written,
+        };
+        let (analysis, rounds) = solve(&body, &context);
+        assert!(
+            rounds < 12,
+            "a capped join must settle, not burn {rounds} rounds"
+        );
+        assert_eq!(
+            analysis.get(ValueId(6)),
+            Facts::new(0.0, 10.0, true, false, false)
+        );
+        assert_eq!(
+            analysis.get(ValueId(7)),
+            Facts::new(1.0, 11.0, true, false, false)
+        );
+    }
+
+    #[test]
+    fn edge_caps_follow_the_rebound_target_and_keep_their_flags() {
+        let body = counted_loop(10.0);
+        let cap = Facts::new(0.0, 10.0, false, true, true);
+        let caps = [(ValueId(1), cap)].into_iter().collect();
+        let mut values = vec![Facts::TOP; body.values.len()];
+        values[5] = Facts::new(-1.0, 11.0, false, true, true);
+        let before = values.clone();
+        let mut entry = vec![None; body.blocks.len()];
+        let refinements = Refinements::default();
+        assert!(send(
+            &body,
+            BlockId(1),
+            &[ValueId(5)],
+            &refinements,
+            &values,
+            &mut entry,
+            &caps
+        ));
+        assert_eq!(
+            entry[1]
+                .as_ref()
+                .expect("the incoming edge created its target entry")[&ValueId(1)],
+            cap
+        );
+        assert!(!send(
+            &body,
+            BlockId(1),
+            &[ValueId(5)],
+            &refinements,
+            &values,
+            &mut entry,
+            &caps
+        ));
+        assert_eq!(
+            entry[1]
+                .as_ref()
+                .expect("the incoming edge created its target entry")[&ValueId(1)],
+            cap
+        );
+        assert_eq!(
+            values, before,
+            "a phi cap is not a licence to narrow its argument"
+        );
+    }
+
+    #[test]
+    fn observations_report_only_real_delta_including_first_insertion() {
+        let mut body = counted_loop(10.0);
+        body.values[0].ty =
+            HirType::Managed(super::super::ManagedType::Object(super::super::TypeId(0)));
+        let mut observed = Observed::default();
+        assert!(observe(&body, &mut observed, ValueId(0), 0, Facts::BOTTOM));
+        assert!(!observe(&body, &mut observed, ValueId(0), 0, Facts::BOTTOM));
+        assert!(observe(
+            &body,
+            &mut observed,
+            ValueId(0),
+            0,
+            Facts::constant(1.0)
+        ));
+        assert!(!observe(
+            &body,
+            &mut observed,
+            ValueId(0),
+            0,
+            Facts::constant(1.0)
+        ));
+        assert!(observe(
+            &body,
+            &mut observed,
+            ValueId(0),
+            0,
+            Facts::constant(2.0)
+        ));
+        assert!(!observe(
+            &body,
+            &mut observed,
+            ValueId(0),
+            0,
+            Facts::constant(1.0)
+        ));
     }
 
     #[allow(non_snake_case)]
