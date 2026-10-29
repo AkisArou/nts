@@ -13298,18 +13298,20 @@ fn signals_of_type(
         snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
     };
     let mut instance = instance;
-    // Bounded: a chain of constraints is as long as the generics written.
-    for _ in 0..8 {
+    let mut seen = rustc_hash::FxHashSet::default();
+    loop {
+        if !seen.insert(instance) {
+            return Err(
+                "a cyclic type-parameter constraint while discovering C signals".to_owned(),
+            );
+        }
         match kind(instance) {
             Some(TypeKind::TypeParameter {
                 constraint: Some(constraint),
                 ..
-            }) => instance = *constraint,
-            #[expect(
-                clippy::match_same_arms,
-                reason = "keep audited semantic type variants explicit"
-            )]
-            Some(TypeKind::NonPrimitive | TypeKind::UniqueSymbol) => break,
+            }) => {
+                instance = *constraint;
+            }
             _ => break,
         }
     }
@@ -27376,15 +27378,23 @@ impl<'a> FuncBuilder<'a> {
             .collect()
     }
 
+    /// Every distinct native base, nearest first. A finite base chain has no
+    /// depth cutoff; a malformed cycle visits all of its members once.
+    fn native_bases(&self, class: NodeId) -> impl Iterator<Item = NodeId> + '_ {
+        let mut seen = rustc_hash::FxHashSet::default();
+        std::iter::successors(super::native::superclass(self.snapshot, class), |base| {
+            super::native::superclass(self.snapshot, *base)
+        })
+        .take_while(move |base| seen.insert(*base))
+    }
+
     /// The selector of the method a class the program writes overrides: the
     /// nearest superclass's instance method of `name` taking `arity`
     /// arguments, as its binding tags it. Swift's names are not selectors --
     /// `draw(_:)` is `drawRect:`, `value(forKey:)` is `valueForKey:` -- so an
     /// override answers the runtime by the selector it replaces.
     fn overridden_selector(&self, class: NodeId, name: &str, arity: usize) -> Option<String> {
-        let mut base = super::native::superclass(self.snapshot, class);
-        for _ in 0..64 {
-            let here = base?;
+        for here in self.native_bases(class) {
             let found = self.children(here).into_iter().find_map(|member| {
                 let arguments = self
                     .children(member)
@@ -27406,7 +27416,6 @@ impl<'a> FuncBuilder<'a> {
             if found.is_some() {
                 return found;
             }
-            base = super::native::superclass(self.snapshot, here);
         }
         None
     }
@@ -75718,9 +75727,7 @@ impl<'a> FuncBuilder<'a> {
     /// the program's class overrides: its accessor, or its field.
     fn overridden_property(&self, declaration: NodeId, name: &str) -> Option<NodeId> {
         let class = self.enclosing_class(declaration)?;
-        let mut base = super::native::superclass(self.snapshot, class);
-        for _ in 0..64 {
-            let here = base?;
+        for here in self.native_bases(class) {
             if let Some(found) = self.children(here).into_iter().find(|member| {
                 matches!(
                     self.kind_of(*member),
@@ -75732,7 +75739,6 @@ impl<'a> FuncBuilder<'a> {
             }) {
                 return Some(found);
             }
-            base = super::native::superclass(self.snapshot, here);
         }
         None
     }
@@ -88015,6 +88021,9 @@ mod carried_reference_tests;
 
 #[cfg(test)]
 mod binding_ancestry_tests;
+
+#[cfg(test)]
+mod native_lookup_tests;
 
 #[cfg(test)]
 mod tests {
