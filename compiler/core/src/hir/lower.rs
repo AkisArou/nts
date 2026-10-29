@@ -769,67 +769,18 @@ impl Hierarchy {
         })
     }
 
-    /// Whether `ty` is `ancestor` or extends it, by the base chain alone: a
-    /// class's subclasses, and nothing that merely implements an interface.
-    fn descends(&self, ty: TypeId, ancestor: TypeId) -> bool {
-        let mut at = Some(ty);
-        for _ in 0..64 {
-            let Some(here) = at else { return false };
-            if here == ancestor {
-                return true;
-            }
-            at = self.base.get(&here).copied();
-        }
-        false
+    /// The complete base chain, with each class visited once. A malformed cycle
+    /// cannot turn a valid long hierarchy into a truncated search.
+    fn ancestors(&self, ty: TypeId) -> impl Iterator<Item = TypeId> + '_ {
+        let mut seen = rustc_hash::FxHashSet::default();
+        std::iter::successors(Some(ty), |here| self.base.get(here).copied())
+            .take_while(move |here| seen.insert(*here))
     }
 
-    /// Whether `ty` is a provided error or a class whose chain reaches one: the
-    /// `Error` family, whose instances print by `Error.prototype.toString`.
-    fn is_an_error(&self, ty: TypeId) -> bool {
-        let mut at = Some(ty);
-        for _ in 0..64 {
-            let Some(here) = at else { return false };
-            if self.provided_errors.contains_key(&here) {
-                return true;
-            }
-            at = self.base.get(&here).copied();
-        }
-        false
-    }
-
-    /// The nearest class at or above `ty` that declares `member`.
-    fn declaring(&self, ty: TypeId, member: &super::member_key::MemberKey) -> Option<TypeId> {
-        let mut at = Some(ty);
-        // Bounded, because a hierarchy that contains a cycle is not one and
-        // walking it would not stop.
-        for _ in 0..64 {
-            let Some(here) = at else { break };
-            if self.declares_itself(here, member) {
-                return Some(here);
-            }
-            at = self.base.get(&here).copied();
-        }
-        // Nothing on the base chain declares it, so the only remaining source
-        // is an interface: `ty` is one and the member is inherited from an
-        // interface it extends -- `tagged.label()` where `Tagged extends
-        // Named` and `Named` declares `label`, refused as "no declaration in
-        // the hierarchy" through `Tagged` and through a `Named` it was
-        // assigned to alike. A class that inherits the obligation without
-        // implementing it is not a program TypeScript accepts.
-        self.declaring_above(ty, member)
-    }
-
-    /// The nearest interface above the interface `ty`, breadth first through
-    /// the interfaces it extends (its `implements` edges), that declares
-    /// `member`. Where two do, TypeScript requires the declarations to agree,
-    /// and the first named is the one the slot belongs to. Only for an
-    /// interface: the interfaces a class implements contribute no
-    /// implementation, which `declaring` exists to find.
-    fn declaring_above(&self, ty: TypeId, member: &super::member_key::MemberKey) -> Option<TypeId> {
-        if !self.faces.contains(&ty) {
-            return None;
-        }
-        let mut pending: std::collections::VecDeque<TypeId> = self
+    /// Interfaces above `ty`, breadth first and once each, preserving written
+    /// edge order for the nearest-declaration query.
+    fn inherited_interfaces(&self, ty: TypeId) -> impl Iterator<Item = TypeId> + '_ {
+        let mut pending: std::collections::VecDeque<_> = self
             .implements
             .get(&ty)
             .into_iter()
@@ -837,17 +788,47 @@ impl Hierarchy {
             .copied()
             .collect();
         let mut seen = rustc_hash::FxHashSet::default();
-        // Bounded like the base walk: a cycle is not a hierarchy.
-        while let Some(here) = pending.pop_front() {
-            if !seen.insert(here) || seen.len() > 64 {
-                continue;
+        std::iter::from_fn(move || {
+            while let Some(here) = pending.pop_front() {
+                if seen.insert(here) {
+                    pending.extend(self.implements.get(&here).into_iter().flatten().copied());
+                    return Some(here);
+                }
             }
-            if self.declares_itself(here, member) {
-                return Some(here);
-            }
-            pending.extend(self.implements.get(&here).into_iter().flatten().copied());
+            None
+        })
+    }
+
+    /// Whether `ty` is `ancestor` or extends it, by the base chain alone: a
+    /// class's subclasses, and nothing that merely implements an interface.
+    fn descends(&self, ty: TypeId, ancestor: TypeId) -> bool {
+        self.ancestors(ty).any(|here| here == ancestor)
+    }
+
+    /// Whether `ty` is a provided error or a class whose chain reaches one: the
+    /// `Error` family, whose instances print by `Error.prototype.toString`.
+    fn is_an_error(&self, ty: TypeId) -> bool {
+        self.ancestors(ty)
+            .any(|here| self.provided_errors.contains_key(&here))
+    }
+
+    /// The nearest class at or above `ty` that declares `member`.
+    fn declaring(&self, ty: TypeId, member: &super::member_key::MemberKey) -> Option<TypeId> {
+        self.ancestors(ty)
+            .find(|here| self.declares_itself(*here, member))
+            // An interface inherits declarations from its written superinterfaces.
+            // A class's implemented interfaces contribute no implementation.
+            .or_else(|| self.declaring_above(ty, member))
+    }
+
+    /// The nearest interface above the interface `ty` that declares `member`.
+    /// Equal declarations follow written edge order, as TypeScript requires.
+    fn declaring_above(&self, ty: TypeId, member: &super::member_key::MemberKey) -> Option<TypeId> {
+        if !self.faces.contains(&ty) {
+            return None;
         }
-        None
+        self.inherited_interfaces(ty)
+            .find(|here| self.declares_itself(*here, member))
     }
 
     /// The highest class at or above `ty` that declares `member`.
@@ -873,15 +854,10 @@ impl Hierarchy {
     /// which the slot loop never numbered `label` against; the slot is
     /// `Named`'s, found by the one walk `declaring` also falls back to.
     fn root_declaring(&self, ty: TypeId, member: &super::member_key::MemberKey) -> Option<TypeId> {
-        let mut found = None;
-        let mut at = Some(ty);
-        for _ in 0..64 {
-            let Some(here) = at else { break };
-            if self.declares_itself(here, member) {
-                found = Some(here);
-            }
-            at = self.base.get(&here).copied();
-        }
+        let found = self
+            .ancestors(ty)
+            .filter(|here| self.declares_itself(*here, member))
+            .last();
         // A member an interface inherits from one it extends: the slot is the
         // one the slot loop numbered against the interface that declares it
         // (`Self::declaring_above`), asked the same question.
@@ -921,15 +897,8 @@ impl Hierarchy {
 
     /// The nearest class at or above `ty` that declares a constructor.
     fn constructor(&self, ty: TypeId) -> Option<TypeId> {
-        let mut at = Some(ty);
-        for _ in 0..64 {
-            let here = at?;
-            if self.constructs.contains(&here) {
-                return Some(here);
-            }
-            at = self.base.get(&here).copied();
-        }
-        None
+        self.ancestors(ty)
+            .find(|here| self.constructs.contains(here))
     }
 
     /// The dispatch slot a call on `ty` would use, if it needs one.
@@ -945,76 +914,27 @@ impl Hierarchy {
 
     /// Whether `ty` is `ancestor` or descends from it.
     fn descends_from(&self, ty: TypeId, ancestor: TypeId) -> bool {
-        let mut at = Some(ty);
-        for _ in 0..64 {
-            let Some(here) = at else { return false };
-            if here == ancestor {
-                return true;
-            }
-            if let (Some(child), Some(parent)) = (
-                self.provided_errors.get(&here),
-                self.provided_errors.get(&ancestor),
-            ) && (*parent == 0 || child == parent)
-            {
-                return true;
-            }
-            // An interface reached from this class, or from one above it.
-            // Checked at every step of the base chain rather than only at the
-            // bottom, because a subclass inherits what its parent implements.
-            if self.implements_transitively(here, ancestor, 0) {
-                return true;
-            }
-            at = self.base.get(&here).copied();
-        }
-        false
+        self.ancestors(ty).any(|here| {
+            here == ancestor
+                || matches!(
+                    (self.provided_errors.get(&here), self.provided_errors.get(&ancestor)),
+                    (Some(child), Some(parent)) if *parent == 0 || child == parent
+                )
+                || self.implements_transitively(here, ancestor)
+        })
     }
 
     /// Every interface `ty` implements, transitively and in a stable order.
-    ///
-    /// The list a class file needs. `implements` holds the written edges; this
-    /// is their closure, because `interface Reporting extends Closable` makes
-    /// an implementer of `Reporting` an implementer of `Closable` too and no
-    /// backend should have to walk that at a call site.
     fn interfaces_of(&self, ty: TypeId) -> Vec<TypeId> {
-        let mut found: Vec<TypeId> = Vec::new();
-        let mut wave: Vec<TypeId> = vec![ty];
-        // Bounded rather than cycle-detected: an interface graph with a cycle
-        // is not one, and the bound keeps a malformed snapshot from hanging the
-        // compiler rather than refusing a program.
-        for _ in 0..16 {
-            let mut next: Vec<TypeId> = Vec::new();
-            for at in wave.drain(..) {
-                for face in self.implements.get(&at).into_iter().flatten() {
-                    if !found.contains(face) {
-                        found.push(*face);
-                        next.push(*face);
-                    }
-                }
-            }
-            if next.is_empty() {
-                break;
-            }
-            wave = next;
-        }
+        let mut found: Vec<_> = self.inherited_interfaces(ty).collect();
         found.sort_unstable_by_key(|face| face.0);
         found
     }
 
     /// Whether `ty` implements `wanted`, directly or through an interface that
-    /// extends it.
-    ///
-    /// Depth-bounded rather than cycle-detected: an interface graph with a
-    /// cycle is not one, and the bound is what keeps a malformed snapshot from
-    /// hanging the compiler rather than refusing a program.
-    fn implements_transitively(&self, ty: TypeId, wanted: TypeId, depth: u32) -> bool {
-        if depth > 16 {
-            return false;
-        }
-        self.implements.get(&ty).is_some_and(|faces| {
-            faces.iter().any(|face| {
-                *face == wanted || self.implements_transitively(*face, wanted, depth + 1)
-            })
-        })
+    /// extends it. The finite worklist visits every reachable interface once.
+    fn implements_transitively(&self, ty: TypeId, wanted: TypeId) -> bool {
+        self.inherited_interfaces(ty).any(|face| face == wanted)
     }
 
     /// Whether a call on a receiver of type `ty` could reach more than one

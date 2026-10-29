@@ -457,3 +457,90 @@ fn a_const_function_chain_longer_than_eight_hops_keeps_its_body() {
         assert_eq!(super::function_behind_const(&probe, previous.0), None);
     }
 }
+
+#[test]
+fn hierarchy_queries_visit_the_full_base_chain() {
+    use super::super::member_key::MemberKey;
+    use nts_semantic_schema::TypeId;
+    for depth in [8, 80] {
+        let mut hierarchy = super::Hierarchy::default();
+        for child in 1..=depth {
+            hierarchy.base.insert(TypeId(child), TypeId(child - 1));
+        }
+        let member = MemberKey::named("m");
+        hierarchy.declares.insert(TypeId(0), vec![member.clone()]);
+        hierarchy
+            .declares
+            .insert(TypeId(depth), vec![member.clone()]);
+        hierarchy.constructs.insert(TypeId(0));
+        hierarchy.provided_errors.insert(TypeId(0), 0);
+        hierarchy
+            .slots
+            .insert((TypeId(0), member.clone(), false), 7);
+        assert!(hierarchy.descends(TypeId(depth), TypeId(0)), "{depth}");
+        assert!(hierarchy.descends_from(TypeId(depth), TypeId(0)), "{depth}");
+        assert!(hierarchy.is_an_error(TypeId(depth)), "{depth}");
+        assert_eq!(
+            hierarchy.declaring(TypeId(depth), &member),
+            Some(TypeId(depth))
+        );
+        assert_eq!(
+            hierarchy.root_declaring(TypeId(depth), &member),
+            Some(TypeId(0))
+        );
+        assert_eq!(hierarchy.slot_for(TypeId(depth), &member, false), Some(7));
+        assert_eq!(hierarchy.constructor(TypeId(depth)), Some(TypeId(0)));
+        assert!(!hierarchy.descends(TypeId(0), TypeId(depth)));
+        assert_eq!(
+            hierarchy.declaring(TypeId(depth), &MemberKey::named("absent")),
+            None
+        );
+        // A malformed cycle visits each distinct node once instead of hanging.
+        hierarchy.base.insert(TypeId(0), TypeId(depth));
+        assert_eq!(
+            hierarchy.ancestors(TypeId(depth)).count(),
+            depth as usize + 1
+        );
+        assert!(!hierarchy.descends(TypeId(depth), TypeId(depth + 1)));
+    }
+}
+
+#[test]
+fn hierarchy_queries_visit_every_inherited_interface() {
+    use super::super::member_key::MemberKey;
+    use nts_semantic_schema::TypeId;
+    for depth in [8, 80] {
+        let mut hierarchy = super::Hierarchy::default();
+        for child in 1..=depth {
+            hierarchy
+                .implements
+                .insert(TypeId(child), vec![TypeId(child - 1)]);
+        }
+        hierarchy.faces.extend((0..=depth).map(TypeId));
+        let member = MemberKey::named("m");
+        hierarchy.declares.insert(TypeId(0), vec![member.clone()]);
+        assert!(
+            hierarchy.implements_transitively(TypeId(depth), TypeId(0)),
+            "{depth}"
+        );
+        assert!(hierarchy.descends_from(TypeId(depth), TypeId(0)), "{depth}");
+        assert_eq!(
+            hierarchy.declaring_above(TypeId(depth), &member),
+            Some(TypeId(0))
+        );
+        assert_eq!(
+            hierarchy.root_declaring(TypeId(depth), &member),
+            Some(TypeId(0))
+        );
+        assert_eq!(
+            hierarchy.interfaces_of(TypeId(depth)),
+            (0..depth).map(TypeId).collect::<Vec<_>>()
+        );
+        hierarchy.implements.insert(TypeId(0), vec![TypeId(depth)]);
+        assert_eq!(
+            hierarchy.interfaces_of(TypeId(depth)).len(),
+            depth as usize + 1
+        );
+        assert!(!hierarchy.implements_transitively(TypeId(depth), TypeId(depth + 1)));
+    }
+}
