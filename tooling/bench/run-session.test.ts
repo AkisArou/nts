@@ -62,7 +62,8 @@ test("actual session CLI renders a header and a typed row, and rejects the old m
     assert.match(row.stdout, /1\.000× SHORT/);
     const mutant = join(root, "run-session.ts");
     const source = readFileSync(script, "utf8"),
-      changed = source.replace(/\bconsoleHeader,\s*/g, "").replace(/\bconsoleRow,\s*/g, "");
+      changed = source.replace(/\bconsoleHeader,\s*/g, "").replace(/\bconsoleRow,\s*/g, "")
+        .replace('from "../jvm/vm-flags.ts"', "from " + JSON.stringify(new URL("../jvm/vm-flags.ts", import.meta.url).href));
     assert.notEqual(changed, source);
     writeFileSync(mutant, changed);
     for (const name of ["run-record.ts", "run-producers.ts", "comparator-pins.ts"])

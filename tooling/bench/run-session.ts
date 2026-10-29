@@ -1,6 +1,7 @@
 /** Official nts-bench bridge to the shared immutable record authority. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { vmToolFlags } from "../jvm/vm-flags.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -107,7 +108,7 @@ export function begin(root: string, binary: string, compilerCommit: string): Met
       pins: pins.declaration,
       toolchain: {
         clang: command(root, "clang", ["--version"]),
-        java: spawnSync("java", ["-version"], { encoding: "utf8" }).stderr,
+        java: spawnSync("java", [...vmToolFlags("java"), "-version"], { encoding: "utf8" }).stderr,
       },
     },
   };
