@@ -236,6 +236,42 @@ const COMPARE = [
  * than dropped.
  */
 export const RULES = [
+  { name: "shared ignored-input policy", when: p => p === ".gitignore", full: true, steps: [], arms: [] },
+  {
+    name: "the bundled Node native dependencies",
+    when: p => /^build\/node-deps\//.test(p)
+      || /^tooling\/bootstrap\/node(?:\.test)?\.ts$/.test(p)
+      || p === "tooling/bootstrap/node_recipe.py"
+      || /^tooling\/conformance\/(?:node-deps\.(?:ts|mjs)|c-tests\.sh)$/.test(p)
+      || /^runtime\/node\/.*\.[ch]$/.test(p),
+    steps: ["tests", "tooling", "licenses", "addons"],
+    arms: [{ kind: "valid", asks: "do runtime and program ELFs avoid system Node dependency libraries", run: "the tests step runs CLI ELF/poisoned-discovery controls and every native Node C fixture; addon builds check their ELFs" }],
+  },
+  {
+    name: "direct native probe links",
+    when: p => /^runtime\/react\/upstream-compile\/tools\/(?:host-native-test|representation-probe)\.sh$/.test(p)
+      || p === "tooling/sweep/probe.sh",
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does the standalone native wrapper still run its real fixture", run: "run the changed React native wrapper or tooling/sweep/probe.sh with one focused program from the committed tree" }],
+  },
+  {
+    name: "the bundled dependency cost recorder",
+    when: p => /^tooling\/census\/node-deps-(?:target-)?cost\.ts$/.test(p),
+    steps: ["tooling"],
+    settled: true, // Standalone measured sitting, not a gate entry point.
+    arms: [
+      { kind: "valid", asks: "does the retained crypto cost sitting execute and validate its real native program", run: "nice -n 19 taskset -c 0-3,6-31 node tooling/census/node-deps-cost.ts <release nts> <baseline release nts> <fresh directory>" },
+      { kind: "valid", asks: "does the retained cross-target cost sitting build and inspect its real native programs", run: "nice -n 19 taskset -c 0-3,6-31 node tooling/census/node-deps-target-cost.ts <release nts> <baseline release nts> <fresh directory>" },
+    ],
+  },
+  {
+    name: "standalone native conformance probes",
+    when: p => /^tooling\/conformance\/(?:agreement\.mjs|binding-probe\.sh|fuzz-runtime\.mjs|reference-boundary\.sh|native-link\.mjs)$/.test(p),
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does the affected probe still build and run through the shared native plan", run: "run its focused fixture or module mode from the committed tree; retain its status and stdout" }],
+  },
   {
     // This is a standalone validation driver, not an input to a gate step.
     // Its command policy is covered by the tracked-launch tooling audit;

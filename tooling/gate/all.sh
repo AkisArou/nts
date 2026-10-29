@@ -282,7 +282,8 @@ format() {
 # cargo's exact argv, directory and environment. 315 s serially, of which one
 # binary is 120 s.
 tests() {
-  node "$root/tooling/gate/tests.mjs"
+  node "$root/tooling/gate/tests.mjs" || return $?
+  bash "$root/tooling/conformance/c-tests.sh"
 }
 step "doctests" node tooling/gate/doctests.ts
 step "audit" node tooling/census/audit.ts --metadata-only

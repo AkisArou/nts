@@ -33,6 +33,18 @@ const superset = (got, want, what) => {
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
 
+test("bundled native dependencies owe their executed ELF and algorithm guards", () => {
+  for (const path of ["build/node-deps/recipes.json", "tooling/bootstrap/node.ts", "tooling/bootstrap/node_recipe.py", "runtime/node/crypto/dh.c", "tooling/conformance/c-tests.sh"]) {
+    const rules = owed([{path,added:true}]);
+    superset(gateSteps(rules), ["tests", "tooling", "licenses"], path);
+    assert.ok(!rules.some(rule => rule.full), `${path} has an explicit dependency rule`);
+  }
+  assert.ok(!owed([{path:"tooling/conformance/node-deps.mjs",added:true}]).some(rule => rule.full), "shared plan has actual gate readers");
+  const standalone = owed([{path:"tooling/conformance/native-link.mjs",added:true}]);
+  assert.ok(!standalone.some(rule => rule.full), "standalone link wrapper has a focused witness obligation");
+  assert.ok(standalone.some(rule => rule.name === "standalone native conformance probes"));
+});
+
 test("a failed Cargo metadata prerequisite is named instead of losing crate reach", t => {
   const directory = mkdtempSync(join(tmpdir(), "owed-cargo-failure-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
