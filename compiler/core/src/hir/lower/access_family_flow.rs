@@ -71,10 +71,7 @@ impl Bound {
             }
         }
         for owner in owners {
-            let mut class = Some(*owner);
-            // The base chain is short; the bound only guards a malformed one.
-            for _ in 0..64 {
-                let Some(here) = class else { break };
+            for here in hierarchy.ancestors(*owner) {
                 for this in this_of.get(&here).into_iter().flatten() {
                     graph.connect(*owner, *this);
                 }
@@ -82,7 +79,6 @@ impl Bound {
                 // made before any base was recorded, so a subclass reached
                 // only its own `this` and never the one its inherited method
                 // pushes.
-                class = hierarchy.base.get(&here).copied();
             }
         }
         let literal_owner: FxHashMap<_, _> = literals
@@ -638,4 +634,60 @@ fn identity_type(kind: &TypeKind) -> bool {
             | TypeKind::TypeParameter { .. }
             | TypeKind::Unsupported { .. }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nts_semantic_schema::{SemanticSnapshot, SymbolId, TypeRecord};
+
+    #[test]
+    fn an_owner_reaches_this_of_every_base_after_64_levels() {
+        for depth in [8, 80] {
+            let mut snapshot = SemanticSnapshot {
+                types: (0..=depth)
+                    .map(|_| TypeRecord {
+                        kind: TypeKind::Object {
+                            properties: Vec::new(),
+                        },
+                        symbol: None,
+                    })
+                    .collect(),
+                ..SemanticSnapshot::default()
+            };
+            snapshot.types[0].symbol = Some(SymbolId(0));
+            snapshot.types[depth as usize].symbol = Some(SymbolId(1));
+            for (class, symbol) in [(0, 0), (depth, 1)] {
+                snapshot.types.push(TypeRecord {
+                    kind: TypeKind::TypeParameter {
+                        name: "this".into(),
+                        is_this: true,
+                        constraint: Some(TypeId(class)),
+                    },
+                    symbol: Some(SymbolId(symbol)),
+                });
+            }
+            let indexed = super::super::LoweringSnapshot::new(&snapshot);
+            let probe = FuncBuilder::probe(&indexed);
+            let mut hierarchy = Hierarchy::default();
+            for child in 1..=depth {
+                hierarchy.base.insert(TypeId(child), TypeId(child - 1));
+            }
+            let bound = Bound::collect(
+                &probe,
+                &hierarchy,
+                &[TypeId(depth)],
+                &std::collections::BTreeMap::default(),
+            );
+            assert!(bound.reaches(TypeId(depth), TypeId(depth + 2)), "own this");
+            assert!(
+                bound.reaches(TypeId(depth), TypeId(depth + 1)),
+                "root this at depth {depth}"
+            );
+            assert!(
+                !bound.reaches(TypeId(0), TypeId(depth + 1)),
+                "an unallocated base is not a supplier"
+            );
+        }
+    }
 }
