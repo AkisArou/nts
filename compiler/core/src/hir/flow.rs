@@ -1842,6 +1842,19 @@ fn send(
     // an argument overrides whatever a back edge refined the parameter to --
     // which is what the copy expressed by inserting over it.
     let mut changed = false;
+    // Absence on this predecessor means the value's global fact, not the
+    // bound retained from a different predecessor. Visit that half of the
+    // key union too. Target parameters are rebound from args below instead.
+    for (&value, existing_fact) in existing.iter_mut() {
+        if params.contains(&value) || refinements.contains_key(&value) {
+            continue;
+        }
+        let joined = capped(caps, value, existing_fact.join(values[value.0 as usize]));
+        if joined != *existing_fact {
+            *existing_fact = joined;
+            changed = true;
+        }
+    }
     for (value, incoming) in refinements {
         if params.contains(value) {
             continue;
@@ -2771,6 +2784,136 @@ mod tests {
             values, before,
             "a phi cap is not a licence to narrow its argument"
         );
+    }
+
+    #[test]
+    fn a_missing_incoming_refinement_joins_the_global_fact_in_both_orders() {
+        let body = func(
+            vec![op(OpKind::Param(0))],
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0)],
+                Terminator::Return(Some(ValueId(0))),
+            )],
+            1,
+        );
+        let global = Facts::new(0.0, 10.0, true, false, false);
+        let values = [global];
+        let refined = [(ValueId(0), Facts::new(0.0, 6.0, true, false, false))]
+            .into_iter()
+            .collect();
+        let unrefined = Refinements::default();
+        for with_cap in [false, true] {
+            let caps = if with_cap {
+                [(ValueId(0), Facts::new(0.0, 9.0, false, true, true))]
+                    .into_iter()
+                    .collect()
+            } else {
+                FxHashMap::default()
+            };
+            let expected = capped(&caps, ValueId(0), global);
+            for refined_first in [false, true] {
+                let mut entry = vec![None];
+                let (first, second) = if refined_first {
+                    (&refined, &unrefined)
+                } else {
+                    (&unrefined, &refined)
+                };
+                assert!(send(
+                    &body,
+                    BlockId(0),
+                    &[],
+                    first,
+                    &values,
+                    &mut entry,
+                    &caps
+                ));
+                send(&body, BlockId(0), &[], second, &values, &mut entry, &caps);
+                assert_eq!(
+                    lookup(
+                        entry[0]
+                            .as_ref()
+                            .expect("the incoming edge created its target entry"),
+                        &values,
+                        ValueId(0)
+                    ),
+                    expected,
+                    "with_cap={with_cap}, refined_first={refined_first}"
+                );
+                assert!(!send(
+                    &body,
+                    BlockId(0),
+                    &[],
+                    &unrefined,
+                    &values,
+                    &mut entry,
+                    &caps
+                ));
+                assert_eq!(
+                    values,
+                    [global],
+                    "a missing refinement cannot change its source fact"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_repeated_target_param_uses_its_argument_instead_of_the_global_phi() {
+        let body = func(
+            vec![op(OpKind::ConstFloat(7.0)), op(OpKind::BlockParam(0))],
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(0)],
+                    },
+                ),
+                block(
+                    vec![ValueId(1)],
+                    Vec::new(),
+                    Terminator::Return(Some(ValueId(1))),
+                ),
+            ],
+            0,
+        );
+        let values = [Facts::constant(7.0), Facts::TOP];
+        let refinements = Refinements::default();
+        let caps = FxHashMap::default();
+        let mut entry = vec![None; 2];
+        assert!(send(
+            &body,
+            BlockId(1),
+            &[ValueId(0)],
+            &refinements,
+            &values,
+            &mut entry,
+            &caps
+        ));
+        assert_eq!(
+            entry[1]
+                .as_ref()
+                .expect("the incoming edge created its target entry")[&ValueId(1)],
+            Facts::constant(7.0)
+        );
+        assert!(!send(
+            &body,
+            BlockId(1),
+            &[ValueId(0)],
+            &refinements,
+            &values,
+            &mut entry,
+            &caps
+        ));
+        assert_eq!(
+            entry[1]
+                .as_ref()
+                .expect("the incoming edge created its target entry")[&ValueId(1)],
+            Facts::constant(7.0)
+        );
+        assert_eq!(values[1], Facts::TOP);
     }
 
     #[test]
