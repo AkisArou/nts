@@ -1,0 +1,22 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 382  of event 'cpu_core/cycles/u'
+# Event count (approx.): 1925067676
+#
+# Overhead  Shared Object            Symbol                                              IPC   [IPC Coverage]
+# ........  .......................  ..................................................  ....................
+#
+    92.84%  case-convert-latin1.nts  [.] nts_case_pass                                   -      -            
+     2.40%  case-convert-latin1.nts  [.] nts_str_alloc                                   -      -            
+     1.28%  case-convert-latin1.nts  [.] nts_str_case_convert.llvm.16620845057807551856  -      -            
+     1.07%  case-convert-latin1.nts  [.] convert                                         -      -            
+     1.07%  libc.so.6                [.] malloc                                          -      -            
+     0.68%  case-convert-latin1.nts  [.] nts_release_counted.llvm.8573239398112711433    -      -            
+
+
+#
+# (Tip: For a higher level overview, try: perf report --sort comm,dso)
+#

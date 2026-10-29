@@ -1,0 +1,17 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 426  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2159934730
+#
+# Overhead  Shared Object         Symbol                                            IPC   [IPC Coverage]
+# ........  ....................  ................................................  ....................
+#
+    99.46%  dispatch.ntsllvm      [.] run                                           -      -            
+
+
+#
+# (Tip: Show current config key-value pairs: perf config --list)
+#

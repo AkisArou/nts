@@ -1,0 +1,19 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 531  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2690572823
+#
+# Overhead  Shared Object          Symbol                                                             IPC   [IPC Coverage]
+# ........  .....................  .................................................................  ....................
+#
+    48.85%  tree-teardown.ntsllvm  [.] build__region.llvm.1288846849807192069                         -      -            
+    26.43%  tree-teardown.ntsllvm  [.] sum.llvm.1288846849807192069                                   -      -            
+    23.84%  tree-teardown.ntsllvm  [.] nts_alloc                                                      -      -            
+
+
+#
+# (Tip: Sample related events with: perf record -e '{cycles,instructions}:S')
+#

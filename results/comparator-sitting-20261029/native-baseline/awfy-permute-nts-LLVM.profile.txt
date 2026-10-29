@@ -1,0 +1,17 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 511  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2597236974
+#
+# Overhead  Shared Object         Symbol                  IPC   [IPC Coverage]
+# ........  ....................  ......................  ....................
+#
+    99.74%  awfy-permute.ntsllvm  [.] Permute__permute    -      -            
+
+
+#
+# (Tip: To analyze particular parallelism levels, try: perf report --latency --parallelism=32-64)
+#

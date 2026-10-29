@@ -1,0 +1,18 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 439  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2219806953
+#
+# Overhead  Shared Object         Symbol                  IPC   [IPC Coverage]
+# ........  ....................  ......................  ....................
+#
+    86.04%  json-scan.ntsllvm     [.] scanNumber          -      -            
+    13.64%  json-scan.ntsllvm     [.] work                -      -            
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

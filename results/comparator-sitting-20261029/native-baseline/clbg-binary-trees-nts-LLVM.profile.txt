@@ -1,0 +1,21 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 506  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2563044884
+#
+# Overhead  Shared Object              Symbol                                              IPC   [IPC Coverage]
+# ........  .........................  ..................................................  ....................
+#
+    41.63%  clbg-binary-trees.ntsllvm  [.] itemCheck.llvm.14430179502060072086             -      -            
+    29.22%  clbg-binary-trees.ntsllvm  [.] bottomUpTree__region.llvm.14430179502060072086  -      -            
+    25.50%  clbg-binary-trees.ntsllvm  [.] nts_alloc                                       -      -            
+     2.20%  clbg-binary-trees.ntsllvm  [.] nts_destroy                                     -      -            
+     0.80%  clbg-binary-trees.ntsllvm  [.] nts_region_open                                 -      -            
+
+
+#
+# (Tip: To set sample time separation other than 100ms with --sort time use --time-quantum)
+#

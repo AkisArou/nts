@@ -1,0 +1,23 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 396  of event 'cpu_core/cycles/u'
+# Event count (approx.): 1968823614
+#
+# Overhead  Shared Object         Symbol                                            IPC   [IPC Coverage]
+# ........  ....................  ................................................  ....................
+#
+    51.05%  printer-erased.nts    [.] work                                          -      -            
+    16.57%  printer-erased.nts    [.] nts_number_to_string                          -      -            
+    16.03%  printer-erased.nts    [.] nts_value_to_string                           -      -            
+     7.19%  printer-erased.nts    [.] nts_alloc                                     -      -            
+     5.72%  printer-erased.nts    [.] nts_release_counted.llvm.8573239398112711433  -      -            
+     1.55%  printer-erased.nts    [.] RightPrinter__toString____raises              -      -            
+     1.54%  printer-erased.nts    [.] LeftPrinter__toString____raises               -      -            
+
+
+#
+# (Tip: Order by the overhead of source file name and line number: perf report -s srcline)
+#

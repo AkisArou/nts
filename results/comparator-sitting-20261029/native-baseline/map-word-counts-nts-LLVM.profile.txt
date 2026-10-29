@@ -1,0 +1,21 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 382  of event 'cpu_core/cycles/u'
+# Event count (approx.): 1911255828
+#
+# Overhead  Shared Object            Symbol                                       IPC   [IPC Coverage]
+# ........  .......................  ...........................................  ....................
+#
+    92.99%  map-word-counts.ntsllvm  [.] mapWordCounts                            -      -            
+     2.13%  map-word-counts.ntsllvm  [.] nts_map_rehash.llvm.8573239398112711433  -      -            
+     1.86%  map-word-counts.ntsllvm  [.] nts_release_foreign                      -      -            
+     1.31%  map-word-counts.ntsllvm  [.] nts_release                              -      -            
+     0.80%  map-word-counts.ntsllvm  [.] nts_each_reference                       -      -            
+
+
+#
+# (Tip: To only collect call graph on one event use perf record -e cpu/cpu-cycles,callgraph=1/,branches ; perf report --show-ref-call-graph)
+#

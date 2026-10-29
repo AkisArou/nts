@@ -2,7 +2,7 @@
 
 Source/compiler 0a072536bf5f477247bd3339a9bb7cdf71701bf9; harness daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619. This record covers the corrected 104-row sitting, including its clean json-stringify-typed disturbance retry. The 76-row first pass remains a pre-correction observation and contributes no final ratios. Every supplied comparator was attempted; unavailable, refused, aborted and CPU-budget cells remain observations rather than timings.
 
-The final table is in the sitting's final-report.md until the approved immutable results store carries it. Ratios are within this sitting only. node/Bun JIT are won at ≤0.80×; faster values above that are SHORT and slower values are LOSS. Bun AOT/ScriptC are won below 0.95× and tied through 1 plus max(5%, observed spread minus 1). A wide tie band is uncertainty, not proof of equivalent performance.
+The final table is rendered from the [immutable corrected run](../../results/benchmarks/runs/2026-10-29-0a072536bf5f-corrected.json). Ratios are within this sitting only. node/Bun JIT are won at ≤0.80×; faster values above that are SHORT and slower values are LOSS. Bun AOT/ScriptC are won below 0.95× and tied through 1 plus max(5%, observed spread minus 1). A wide tie band is uncertainty, not proof of equivalent performance.
 
 There are 59 rows below at least one bar or without an nts timing. Every measurable one has a flat cpu_core/cycles/u profile on CPU 4 under with-lock, at 999 Hz, with no call graph. Profiling used the kept measured artifacts, not current main. Profiles cover whole process execution, including warmup and the timer; JVM runs add a profile-only 2 s warmup and a symbol map at exit. These are localization leads, not measured counterfactual speedups. A hot inlined work function does not by itself establish why another engine is faster. Unknown finer mechanisms are stated as such rather than assigned to boxing, a leak or a dispatch defect.
 
@@ -92,3 +92,33 @@ Plan mapping:
 The earlier stats capture, stats-off bench, region output and raw counter/profile files are retained in the same scratch directory.
 
 The native cyclic-churn work scheduled in plan.md, From the Bun and ScriptC studies, item 2, is specifically fresh-young traversal/live-byte cost: measured prior-live revisits are zero, so repeated old-candidate visits do not justify an adaptive schedule. Per-object destruction in release-acyclic remains assigned to memory stage 3; typed collector visitors cannot move a row with no collection. Tree-teardown is the non-collector control, not an added loss.
+
+## Native lanes considered independently
+
+C and LLVM each face every comparator separately. The earlier table localized the fastest nts backend; those observations remain above, and the native records now retain their own gaps. Ten row/comparator verdicts are worse on LLVM than on C. The additional 18 flat profiles use the same kept artifacts, CPU 4, the ordinary measurement lock and cpu_core/cycles/u; their durable reports and exact artifact hashes are in the ledger JSON. Whole-process samples include warmup and timer work. These profiles do not replace sitting timings.
+
+| Row | Comparator | C | LLVM | LLVM/comparator |
+|---|---|---|---|---|
+| awfy-permute | node | SHORT | LOSS | 1.08× |
+| fib | Bun AOT | WON | TIE | 0.9664× |
+| awfy-list | Bun JIT | WON | SHORT | 0.8001× |
+| clbg-mandelbrot | Bun JIT | SHORT | LOSS | 1.0136× |
+| json-scan | node | WON | SHORT | 0.8203× |
+| json-scan | Bun JIT | WON | SHORT | 0.8039× |
+| json-scan | Bun AOT | WON | TIE | 1.0865× |
+| map-word-counts | Bun AOT | WON | TIE | 0.9608× |
+| number-format | Bun JIT | WON | SHORT | 0.8088× |
+| tree-teardown | Bun AOT | WON | TIE | 0.974× |
+
+For json-scan against Bun AOT, the LLVM ratio is above 1.05 but within its observed spread, so policy v1 records TIE rather than LOSS. A broad tie band is uncertainty, not evidence of equal speed.
+
+Six further rows fall below at least one native bar even where the JVM kept the fastest-backend summary above it:
+
+| Row | Native top costs | Cause | Coverage |
+|---|---|---|---|
+| case-convert-latin1 | nts C: 92.84% nts_case_pass, 2.4% nts_str_alloc, 1.28% nts_str_case_convert.llvm.16620845057807551856; nts LLVM: 90.86% nts_case_pass, 3.93% nts_str_alloc, 1.74% malloc | The Unicode case pass accounts for more than 90% of native cycles; the flat sample does not isolate a narrower cause. | strings.md Unicode stage 1; find-first-change and generated Unicode conversion |
+| awfy-permute | nts C: 99.56% Permute__permute; nts LLVM: 99.74% Permute__permute | The recursive permute body accounts for more than 99% of native cycles; an instruction-level comparison is needed to attribute the recursion cost. | plan.md From the Bun and ScriptC studies, item 2: the LLVM backend slower than C; runtime hand-edited IR arms |
+| clbg-binary-trees | nts C: 37.84% itemCheck, 31.57% nts_alloc, 26.96% bottomUpTree__region; nts LLVM: 41.63% itemCheck.llvm.14430179502060072086, 29.22% bottomUpTree__region.llvm.14430179502060072086, 25.5% nts_alloc | Tree traversal, construction and allocation dominate both native lanes; the profile alone does not separate their implementation costs. | memory.md stage 3 per-site regions; allocation and traversal attribution still needs an artifact experiment |
+| dispatch | nts C: 99.89% run; nts LLVM: 99.46% run | The compiled dispatch loop accounts for more than 99% of native cycles; this flat sample does not prove an indirect-call or boxing mechanism. | plan.md From the Bun and ScriptC studies, item 2: the C backend slower than LLVM; follows the LLVM IR arms |
+| json-scan | nts C: 83.86% scanNumber, 16.06% work; nts LLVM: 86.04% scanNumber, 13.64% work | The numeric scanner accounts for 84–86% of native cycles, with the caller taking the rest; the C/LLVM instruction difference needs direct attribution. | plan.md From the Bun and ScriptC studies, item 2: the LLVM backend slower than C; runtime hand-edited IR arms |
+| printer-erased | nts C: 51.05% work, 16.57% nts_number_to_string, 16.03% nts_value_to_string; nts LLVM: 55.25% work, 15.32% nts_number_to_string, 15% nts_value_to_string | The work loop, value-to-string and number formatting dominate; this sample localizes formatting and dispatch without proving a single removable operation. | memory.md stage 0 helper contracts and strings.md formatting; experiment under plan.md From the Bun and ScriptC studies, item 2 |

@@ -1,0 +1,18 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 509  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2586387079
+#
+# Overhead  Shared Object            Symbol                        IPC   [IPC Coverage]
+# ........  .......................  ............................  ....................
+#
+    98.13%  clbg-mandelbrot.ntsllvm  [.] render                    -      -            
+     1.19%  clbg-mandelbrot.ntsllvm  [.] nts_str_append_char_code  -      -            
+
+
+#
+# (Tip: To show IPC for sampling periods use perf record -e '{cycles,instructions}:S' and then browse context)
+#

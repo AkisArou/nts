@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "sourcePin": "0a072536bf5f477247bd3339a9bb7cdf71701bf9",
   "harnessIdentity": "daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619",
   "conditions": {
@@ -105,7 +105,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/array-predicates/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.3739873031068663,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.3920046988057309,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "awfy-list",
@@ -168,6 +185,88 @@
             "sha256": "c7ebfdd450d6d68189f8c129bff99ce7038a4fee8d5f88d29ce7cf0a0e24e4ed"
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/awfy-list/nts-C/report.txt"
+        }
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.578098640664883,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.0675112386059167,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8001044386633283,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.6835431108523662,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1388395789728787,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "awfy-list",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/awfy-list.ntsllvm",
+              "sha256": "851eeb0c608c40caf4206042f47c0c881bdf3f451f734272a47281590bbb55f5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:51.732Z",
+            "end": "2026-10-29T13:28:52.286Z",
+            "cpu5Before": "cpu5 64687 32197 276068 12680502 610880 33681 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276068 12680547 610891 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 97.88,
+              "dso": "awfy-list.ntsllvm",
+              "symbol": "List__tail"
+            },
+            {
+              "percent": 0.82,
+              "dso": "awfy-list.ntsllvm",
+              "symbol": "List__makeList__region.llvm.6928641531801619662"
+            },
+            {
+              "percent": 0.62,
+              "dso": "awfy-list.ntsllvm",
+              "symbol": "nts_destroy"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-list/nts-LLVM/perf.data",
+            "sha256": "7bf7950b1b84fce29a8677496bc2192abb94b44bb584a2037777e0b205800e2c"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-list/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/awfy-list-nts-LLVM.profile.txt",
+            "sha256": "a352371b5eebc9e18c9863ad3ba2f4debbf731e0897fe8fc3e91a61f25ac444d"
+          }
         }
       ]
     },
@@ -246,7 +345,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/awfy-mandelbrot/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.008707848458544,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.019376487780088,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.008547179022544,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0192141190173052,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "awfy-nbody",
@@ -310,7 +436,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/awfy-nbody/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.0639792783088555,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1441738341885948,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.0825803431783467,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1641769039340362,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "awfy-towers",
@@ -382,7 +535,39 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/awfy-towers/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9494949630530702,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.5323025496361458,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2702047937126437,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9152195197758334,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.4769885657106896,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "bytes",
@@ -437,7 +622,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/bytes/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8108151806942194,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8112330648176029,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "case-convert-cjk",
@@ -519,7 +721,44 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/case-convert-cjk/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 5.582554931275151,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 4.901010089294675,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 4.3911361366527135,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 5.6247835322422555,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 4.938083221927389,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 4.424352385841431,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "case-convert-greek",
@@ -637,7 +876,54 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/case-convert-greek/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 4.150906227579494,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 3.454027450220922,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 3.3368233463027748,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1672767636968004,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 4.197945601997634,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 3.4931695752349623,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 3.37463727756218,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1805047109754714,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "case-convert-unchanged",
@@ -746,7 +1032,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/case-convert-unchanged/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1932429691869437,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.3242081829285524,
+            "tolerance": 1.1671627125718913
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1921638161766446,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.3230105867274669,
+            "tolerance": 1.1671627125718913
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "checksum",
@@ -801,7 +1114,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/checksum/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8691097691969901,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8697079643846871,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "clbg-fannkuch-redux",
@@ -1263,7 +1593,54 @@
             }
           }
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "clbg-fasta",
@@ -1436,7 +1813,44 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/clbg-fasta/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.160679665437075,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.2186982130835922,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.4316166108838004,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.1706612309006919,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.2291787240777312,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.4439281687975483,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "clbg-mandelbrot",
@@ -1507,6 +1921,78 @@
             "sha256": "0752c88b086000bca5a4dc9409bc5a03f42fa13dac5cef50bddf0541966d6cac"
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/clbg-mandelbrot/nts-JVM/report.txt"
+        }
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8484253581552943,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9979002868960716,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8618025944358063,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0136343144023028,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "clbg-mandelbrot",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/clbg-mandelbrot.ntsllvm",
+              "sha256": "5abfc1b5f530508c1f883cb4e5f72988947511fe78f44724cea7501b6fe301f4"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:52.317Z",
+            "end": "2026-10-29T13:28:52.913Z",
+            "cpu5Before": "cpu5 64687 32197 276068 12680550 610891 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276071 12680594 610904 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 98.13,
+              "dso": "clbg-mandelbrot.ntsllvm",
+              "symbol": "render"
+            },
+            {
+              "percent": 1.19,
+              "dso": "clbg-mandelbrot.ntsllvm",
+              "symbol": "nts_str_append_char_code"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-mandelbrot/nts-LLVM/perf.data",
+            "sha256": "dc0e8df9229a9da75829da2b821c8b36aecaf2bca3c61ea9026f8fca988d08d3"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-mandelbrot/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/clbg-mandelbrot-nts-LLVM.profile.txt",
+            "sha256": "febf9b9f58fe8b1828b2db09a1688d712995e0f8d3b34a3e4711b398a697fe20"
+          }
         }
       ]
     },
@@ -1961,7 +2447,54 @@
             }
           }
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "clbg-spectral-norm",
@@ -2074,7 +2607,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/clbg-spectral-norm/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9594887642239692,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9630902819905723,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "cyclic-churn",
@@ -2185,7 +2735,54 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/cyclic-churn/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 9.503256365705116,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 9.023696693003966,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 11.225134004823861,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.807748991250035,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 9.321094231010747,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 8.850726945669347,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 11.009966246125039,
+            "tolerance": 1.065374506988034
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.7730973515840702,
+            "tolerance": 1.065374506988034
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "erasure-stored-typed",
@@ -2240,7 +2837,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/erasure-stored-typed/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9928484069728108,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9931270316132637,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "erasure-stored-unknown",
@@ -2304,7 +2918,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/erasure-stored-unknown/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9835743347494221,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9801152919384234,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9856033846542411,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9821372060628153,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "erasure-typed",
@@ -2368,7 +3009,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/erasure-typed/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9997356948369966,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9997448002268697,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9997570957624554,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9997662013472439,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "erasure-unknown",
@@ -2450,7 +3118,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/erasure-unknown/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0001308380863982,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0001427423707214,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0002175163865203,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0002294217025516,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "face-fields",
@@ -2505,7 +3200,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/face-fields/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.139623315825043,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1684361477587053,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "fib",
@@ -2568,6 +3280,63 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/fib/nts-JVM/report.txt"
         }
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.5703521550058845,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.6250536358858036,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "fib",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.ntsllvm",
+              "sha256": "ec99b4429c27c952b0f8d03bacfc80b21d2d02a97afbb4b13367f2f62d09c51c"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:51.144Z",
+            "end": "2026-10-29T13:28:51.709Z",
+            "cpu5Before": "cpu5 64687 32197 276067 12680462 610863 33681 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276068 12680502 610879 33681 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.73,
+              "dso": "fib.ntsllvm",
+              "symbol": "fib__whole.llvm.921173458891235101"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/fib/nts-LLVM/perf.data",
+            "sha256": "3f5dfecd843fa061099fc095c6d253f01bd403194655578008fec6695b6935c2"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/fib/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/fib-nts-LLVM.profile.txt",
+            "sha256": "c77ecf8e7fff07ae9c887dc8e2c1e23cfb90cf8f08278cf9fe75d635dac6eb8e"
+          }
+        }
       ]
     },
     {
@@ -2623,7 +3392,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/generator/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.166265867313884,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1761788338756285,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "generator-dispatched",
@@ -2678,7 +3464,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/generator-dispatched/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3110655343884132,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2928222067083954,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "immutable-update",
@@ -2704,7 +3507,7 @@
         }
       },
       "cause": "Update work plus object destruction is the measured cost, matching the planned placement/helper-contract investigation.",
-      "coverage": "plan.md immutable-update experiment; foundations/memory.md stages 0–3",
+      "coverage": "plan.md immutable-update experiment; foundations/memory.md stages 0\u20133",
       "attribution": "Flat-profile localization and source/artifact inspection; no causal A/B optimization claim",
       "profiles": [
         {
@@ -2767,7 +3570,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/immutable-update/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1269192331910898,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 2.1776378483384953,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1284366097712883,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 2.180569998730379,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-build-append",
@@ -2887,7 +3717,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-build-append/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1223008118862228,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1159309791493555,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-build-join",
@@ -3047,7 +3894,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-build-join/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8514490397855936,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.84468345524267,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-parse",
@@ -3174,7 +4038,44 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-parse/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.4529155389364803,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1640241917379843,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.8621099249307593,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.5657692314837988,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.2544385515074425,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.006747362776094,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-serialize",
@@ -3294,7 +4195,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-serialize/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9921175893806912,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9917775621586896,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-stringify-builtin",
@@ -3413,7 +4331,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-stringify-builtin/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.374145541492847,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.2868237113000185,
+            "tolerance": 1.0703128296828006
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.332353853236814,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.2172748747660593,
+            "tolerance": 1.0703128296828006
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-stringify-doc",
@@ -3538,7 +4483,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-stringify-doc/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1358846299520264,
+            "tolerance": 1.0601848209583105
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2031216891235568,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "json-stringify-fused",
@@ -3643,7 +4605,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/json-stringify-fused/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.0735818468936325,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1123176023624641,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "loop",
@@ -3707,7 +4686,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/loop/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.970068759626146,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9076142553130865,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9705621497657777,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9080758802440173,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "map-and-set",
@@ -3776,7 +4782,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/map-and-set/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8853213959754209,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1049970762776062,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8793105221365408,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.097494718322597,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "map-entries-top-k",
@@ -3793,7 +4826,7 @@
         }
       },
       "cause": "Word/table/ranking work dominates, with object destruction, release and allocation still visible.",
-      "coverage": "plan.md Typed containers; foundations/memory.md stages 0–3",
+      "coverage": "plan.md Typed containers; foundations/memory.md stages 0\u20133",
       "attribution": "Flat-profile localization and source/artifact inspection; no causal A/B optimization claim",
       "profiles": [
         {
@@ -3871,7 +4904,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/map-entries-top-k/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.2549203073529462,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.2802356467754221,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "map-literal-keys",
@@ -3926,7 +4976,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/map-literal-keys/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 2.42806347656745,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 2.5488182709594787,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "map-word-counts",
@@ -3990,6 +5057,83 @@
             "sha256": "ba3fb03c9570b03dce777f920c4325b546655ae9f473a92b15f37182a623ca11"
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/map-word-counts/nts-C/report.txt"
+        }
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8203223440589757,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8296628937429217,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "map-word-counts",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/map-word-counts.ntsllvm",
+              "sha256": "51fb29096a98ef896717469bcf4ee80e6dcad3d4455cc3821c61179df342596b"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:52.932Z",
+            "end": "2026-10-29T13:28:53.431Z",
+            "cpu5Before": "cpu5 64687 32197 276071 12680594 610905 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276071 12680643 610906 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 92.99,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "mapWordCounts"
+            },
+            {
+              "percent": 2.13,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_map_rehash.llvm.8573239398112711433"
+            },
+            {
+              "percent": 1.86,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_release_foreign"
+            },
+            {
+              "percent": 1.31,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_release"
+            },
+            {
+              "percent": 0.8,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_each_reference"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/map-word-counts/nts-LLVM/perf.data",
+            "sha256": "48a583e51f836187ae3ec656e60a0f13492a097e6dbffb40951f4dedd7ca6348"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/map-word-counts/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/map-word-counts-nts-LLVM.profile.txt",
+            "sha256": "93761018dbab387d5436415a6fa07e903781e90abdcfe2545eb7caa8904a893f"
+          }
         }
       ]
     },
@@ -4075,7 +5219,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/node-utf8/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8516562148733131,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.077680470810719,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8287297533658741,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0486694691883847,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "number-format",
@@ -4129,6 +5300,68 @@
             "sha256": "861aa10c7d8573a6cf1bfa3bf407d3367ed96a130e4be66474b628aed9498251"
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/number-format/nts-C/report.txt"
+        }
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.1375672124568839,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8088202882996794,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2160323671454842,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "number-format",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/number-format.ntsllvm",
+              "sha256": "b6358f3dd12c00e0172793f8c043a9676bd2f9541edd6f711f571b7c4a615318"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:53.448Z",
+            "end": "2026-10-29T13:28:53.919Z",
+            "cpu5Before": "cpu5 64687 32197 276071 12680645 610906 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276076 12680688 610906 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.86,
+              "dso": "number-format.ntsllvm",
+              "symbol": "format"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/number-format/nts-LLVM/perf.data",
+            "sha256": "27d1d27926f1501b911250c57b42c598180dac0832265b425c768bed28ca51d8"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/number-format/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/number-format-nts-LLVM.profile.txt",
+            "sha256": "0589565f4065e9696b436538f8107769494f8915335493e2ab61aef2e3950525"
+          }
         }
       ]
     },
@@ -4230,7 +5463,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/number-format-double/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9691329718036602,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9702002719915672,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "pipeline",
@@ -4290,7 +5540,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/pipeline/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.12347405811149,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1232796566650711,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "record-word-counts",
@@ -4360,7 +5627,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/record-word-counts/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1818260581148634,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1608055485298425,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "release-acyclic",
@@ -4475,7 +5759,54 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/release-acyclic/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 3.0382479434331784,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 2.6004648213118133,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 3.6190009659875457,
+            "tolerance": 1.408955325480616
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 2.493639704123592,
+            "tolerance": 1.062338958937591
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 3.0616801068849218,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 2.6205206290924754,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 3.6469121252299392,
+            "tolerance": 1.408955325480616
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 2.5128716345732034,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "sort-objects",
@@ -4573,7 +5904,44 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/sort-objects/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.1831497181653652,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.8569286514188106,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3868753250769195,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.295280582481826,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 2.0329156896276888,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.5183139135432968,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-append-length",
@@ -4691,7 +6059,44 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-append-length/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.3885583665993921,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1904880469577037,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.9811309546095097,
+            "tolerance": 1.0684572511191952
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.4570963109530004,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.2492494252898563,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.078917728569017,
+            "tolerance": 1.0684572511191952
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-append-loop",
@@ -4806,7 +6211,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-append-loop/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.282996082710367,
+            "tolerance": 1.063252725712813
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.272358168413495,
+            "tolerance": 1.063252725712813
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-compare",
@@ -4874,7 +6296,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-compare/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0538136162189384,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.6128020440599882,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0360292969121914,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.5855841507924389,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-equal",
@@ -5029,7 +6478,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-equal/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9216924893159553,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.930192610635685,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-index-of",
@@ -5101,7 +6567,54 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-index-of/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9573333847436761,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.5703558154665904,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.090310181634358,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.3217816453799627,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9597968460961628,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.5743967388509665,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.0956890793404526,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.325182924445031,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-join",
@@ -5221,7 +6734,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-join/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2471540993923635,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2853617477955672,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-map-keys",
@@ -5355,7 +6885,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-map-keys/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.315205631955393,
+            "tolerance": 1.0563817191608627
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.175675474265967,
+            "tolerance": 1.0563817191608627
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3204834075963487,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.1803933307204932,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-slice-keep",
@@ -5449,7 +7006,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-slice-keep/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0379000334838626,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.683314846010788,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.02002653222424,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.6543267652227713,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-split",
@@ -5536,7 +7120,54 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-split/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0525542898267646,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8391216551907666,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.1132099240323403,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 2.2309874285353457,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0682140531898419,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8516059960747736,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.1446499814875235,
+            "tolerance": 1.05
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 2.264179764108472,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "str-to-number",
@@ -5610,7 +7241,34 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/str-to-number/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0216139668546034,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2823613067397495,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.0525151129029182,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3211493767073879,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "symbol-keyed-map",
@@ -5678,7 +7336,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/symbol-keyed-map/nts-JVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.77804091230608,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.9709783653523152,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "uniform-callback",
@@ -5753,7 +7428,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/uniform-callback/nts-LLVM/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.072947567319989,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.072022497180465,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "uniform-callback-default",
@@ -5818,7 +7510,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/uniform-callback-default/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.347526015344347,
+            "tolerance": 1.0523273872204966
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3521235912033753,
+            "tolerance": 1.0523273872204966
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "upcast",
@@ -5888,7 +7597,24 @@
           },
           "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/loss-profiles/upcast/nts-C/report.txt"
         }
-      ]
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.0807904035798392,
+            "tolerance": 1.0872057336791228
+          }
+        },
+        "nts LLVM": {
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 2.5185971057798686,
+            "tolerance": 1.0872057336791228
+          }
+        }
+      },
+      "nativeProfiles": []
     },
     {
       "name": "utf8-encode",
@@ -6332,6 +8058,1678 @@
             }
           },
           "reason": "No kept nts executable can be profiled; refusal/abort is the finding"
+        }
+      ],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": []
+    },
+    {
+      "name": "case-convert-latin1",
+      "cause": "The Unicode case pass accounts for more than 90% of native cycles; the flat sample does not isolate a narrower cause.",
+      "coverage": "strings.md Unicode stage 1; find-first-change and generated Unicode conversion",
+      "attribution": "Flat profile only; no causal A/B mechanism claim",
+      "profiles": [],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 2.032049958292863,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.8717671761311792,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.799850069647264,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 2.016030835257564,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.8570115995935486,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.785661432407758,
+            "tolerance": 1.0601309401177017
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "case-convert-latin1",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/case-convert-latin1.nts",
+              "sha256": "58d72c8a0949466732b501f6a30dfae295941044418c0c54c0e4bc488d7f0ca4"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:43.564Z",
+            "end": "2026-10-29T13:28:44.221Z",
+            "cpu5Before": "cpu5 64686 32197 276042 12679845 610745 33679 12089 0 0 0",
+            "cpu5After": "cpu5 64686 32197 276046 12679892 610760 33679 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 92.84,
+              "dso": "case-convert-latin1.nts",
+              "symbol": "nts_case_pass"
+            },
+            {
+              "percent": 2.4,
+              "dso": "case-convert-latin1.nts",
+              "symbol": "nts_str_alloc"
+            },
+            {
+              "percent": 1.28,
+              "dso": "case-convert-latin1.nts",
+              "symbol": "nts_str_case_convert.llvm.16620845057807551856"
+            },
+            {
+              "percent": 1.07,
+              "dso": "case-convert-latin1.nts",
+              "symbol": "convert"
+            },
+            {
+              "percent": 1.07,
+              "dso": "libc.so.6",
+              "symbol": "malloc"
+            },
+            {
+              "percent": 0.68,
+              "dso": "case-convert-latin1.nts",
+              "symbol": "nts_release_counted.llvm.8573239398112711433"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/case-convert-latin1/nts-C/perf.data",
+            "sha256": "27b1a883d385fe9ac6173dcfc36de2d43dcbd7fc30be6703a9c9b4cbaeea0696"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/case-convert-latin1/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/case-convert-latin1-nts-C.profile.txt",
+            "sha256": "ff25f966a03e37a3a0008b4c6263e917861e7447c44ccd10959b427dcf9ae251"
+          }
+        },
+        {
+          "name": "case-convert-latin1",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/case-convert-latin1.ntsllvm",
+              "sha256": "4c90e80f615592a9441385908bb20d4e28dd572b8deb85f2e90191ce75f16311"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:44.249Z",
+            "end": "2026-10-29T13:28:44.867Z",
+            "cpu5Before": "cpu5 64686 32197 276046 12679895 610760 33679 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276052 12679946 610763 33679 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 90.86,
+              "dso": "case-convert-latin1.ntsllvm",
+              "symbol": "nts_case_pass"
+            },
+            {
+              "percent": 3.93,
+              "dso": "case-convert-latin1.ntsllvm",
+              "symbol": "nts_str_alloc"
+            },
+            {
+              "percent": 1.74,
+              "dso": "libc.so.6",
+              "symbol": "malloc"
+            },
+            {
+              "percent": 1.42,
+              "dso": "case-convert-latin1.ntsllvm",
+              "symbol": "convert"
+            },
+            {
+              "percent": 0.87,
+              "dso": "case-convert-latin1.ntsllvm",
+              "symbol": "nts_alloc"
+            },
+            {
+              "percent": 0.87,
+              "dso": "case-convert-latin1.ntsllvm",
+              "symbol": "nts_str_case_convert.llvm.16620845057807551856"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/case-convert-latin1/nts-LLVM/perf.data",
+            "sha256": "a5135982823ab935570251083a48a3eec08f5b701b5012fcb2a42ffde9e33be9"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/case-convert-latin1/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/case-convert-latin1-nts-LLVM.profile.txt",
+            "sha256": "2340a209ee4063a9259f8d52723dbcce9702ff7cc30dcb6268d9605cbc46b894"
+          }
+        }
+      ]
+    },
+    {
+      "name": "awfy-permute",
+      "cause": "The recursive permute body accounts for more than 99% of native cycles; an instruction-level comparison is needed to attribute the recursion cost.",
+      "coverage": "plan.md From the Bun and ScriptC studies, item 2: the LLVM backend slower than C; runtime hand-edited IR arms",
+      "attribution": "Flat profile only; no causal A/B mechanism claim",
+      "profiles": [],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.9491690922635212,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1006724716199678,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.2026634659746198,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "LOSS",
+            "ratio": 1.0800193227159172,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.2524086035041435,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3684598377298067,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "awfy-permute",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/awfy-permute.nts",
+              "sha256": "2799e500603fb12ce5cd429ab327de83adf331d745bce7cb4a5d8c3f4dc04699"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:44.884Z",
+            "end": "2026-10-29T13:28:45.543Z",
+            "cpu5Before": "cpu5 64687 32197 276052 12679948 610763 33679 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276055 12679996 610779 33679 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.56,
+              "dso": "awfy-permute.nts",
+              "symbol": "Permute__permute"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-C/perf.data",
+            "sha256": "70cc3771a246a9665fbf5f249368660de5f400a5d848e1686a114f2edabcfd18"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/awfy-permute-nts-C.profile.txt",
+            "sha256": "f5bc6833d05571a3c5b6ea556cc7bef0e6acd077139047c11db4d7bd21984432"
+          }
+        },
+        {
+          "name": "awfy-permute",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/awfy-permute.ntsllvm",
+              "sha256": "f6d5b6dd9d0bdc9bad96fd020aaeab66e96021043d60dfc8a41c95601cb2e008"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:45.557Z",
+            "end": "2026-10-29T13:28:46.223Z",
+            "cpu5Before": "cpu5 64687 32197 276055 12679998 610779 33679 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276059 12680051 610788 33680 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.74,
+              "dso": "awfy-permute.ntsllvm",
+              "symbol": "Permute__permute"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-LLVM/perf.data",
+            "sha256": "de967273944616c8698de836742db0dec9cda898f50ef30662b35a90b0777a5d"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/awfy-permute-nts-LLVM.profile.txt",
+            "sha256": "819334e1a66558f235d4cceefa7d1fc73a4145c409e1940ec10ee1228e7f47f4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "clbg-binary-trees",
+      "cause": "Tree traversal, construction and allocation dominate both native lanes; the profile alone does not separate their implementation costs.",
+      "coverage": "memory.md stage 3 per-site regions; allocation and traversal attribution still needs an artifact experiment",
+      "attribution": "Flat profile only; no causal A/B mechanism claim",
+      "profiles": [],
+      "nativeGaps": {
+        "nts C": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8313237377173501,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9437975961267121,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.398329310963914,
+            "tolerance": 1.0834961739471387
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.4659503125271713,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8173503474647701,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.9279336774969648,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "LOSS",
+            "ratio": 1.3748253494177523,
+            "tolerance": 1.0834961739471387
+          },
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.4413097364453675,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "clbg-binary-trees",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/clbg-binary-trees.nts",
+              "sha256": "a87ce27c97b3ec8dec2763e8786a137086067aa040212367da26fb471156131e"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:46.240Z",
+            "end": "2026-10-29T13:28:46.877Z",
+            "cpu5Before": "cpu5 64687 32197 276059 12680051 610790 33680 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276060 12680103 610800 33680 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 37.84,
+              "dso": "clbg-binary-trees.nts",
+              "symbol": "itemCheck"
+            },
+            {
+              "percent": 31.57,
+              "dso": "clbg-binary-trees.nts",
+              "symbol": "nts_alloc"
+            },
+            {
+              "percent": 26.96,
+              "dso": "clbg-binary-trees.nts",
+              "symbol": "bottomUpTree__region"
+            },
+            {
+              "percent": 1.39,
+              "dso": "clbg-binary-trees.nts",
+              "symbol": "render"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-binary-trees/nts-C/perf.data",
+            "sha256": "df2f89ccc129abf2239e4b5c1feb3be5bdce2cb61fb16486372e148adade642b"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-binary-trees/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/clbg-binary-trees-nts-C.profile.txt",
+            "sha256": "438282c3281c32a29c42f22fe0c4b0ddd41ff1da1e912a5db7c35dccacfd158a"
+          }
+        },
+        {
+          "name": "clbg-binary-trees",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/clbg-binary-trees.ntsllvm",
+              "sha256": "713dacfe7224ca9a1146b51f8b5cf8560f86c6a87d46284358266bc6e7245344"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:46.895Z",
+            "end": "2026-10-29T13:28:47.529Z",
+            "cpu5Before": "cpu5 64687 32197 276060 12680105 610800 33680 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276061 12680168 610800 33680 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 41.63,
+              "dso": "clbg-binary-trees.ntsllvm",
+              "symbol": "itemCheck.llvm.14430179502060072086"
+            },
+            {
+              "percent": 29.22,
+              "dso": "clbg-binary-trees.ntsllvm",
+              "symbol": "bottomUpTree__region.llvm.14430179502060072086"
+            },
+            {
+              "percent": 25.5,
+              "dso": "clbg-binary-trees.ntsllvm",
+              "symbol": "nts_alloc"
+            },
+            {
+              "percent": 2.2,
+              "dso": "clbg-binary-trees.ntsllvm",
+              "symbol": "nts_destroy"
+            },
+            {
+              "percent": 0.8,
+              "dso": "clbg-binary-trees.ntsllvm",
+              "symbol": "nts_region_open"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-binary-trees/nts-LLVM/perf.data",
+            "sha256": "fd12ddb89851e4c18b586be86597bd04f3dfb1ddd7594e387a4101776f6d9c0f"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-binary-trees/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/clbg-binary-trees-nts-LLVM.profile.txt",
+            "sha256": "1a5b6e3525fa03c035ece055fe00ab355f17d5cab7aa7ae849e0db58d2567191"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dispatch",
+      "cause": "The compiled dispatch loop accounts for more than 99% of native cycles; this flat sample does not prove an indirect-call or boxing mechanism.",
+      "coverage": "plan.md From the Bun and ScriptC studies, item 2: the C backend slower than LLVM; follows the LLVM IR arms",
+      "attribution": "Flat profile only; no causal A/B mechanism claim",
+      "profiles": [],
+      "nativeGaps": {
+        "nts C": {
+          "Bun JIT": {
+            "kind": "LOSS",
+            "ratio": 1.1243367186170865,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {}
+      },
+      "nativeProfiles": [
+        {
+          "name": "dispatch",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/dispatch.nts",
+              "sha256": "20f1cb8c4e29a552fc05dc547da24123bd7fce1f5c5673ce8354cb5144a32f36"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:47.551Z",
+            "end": "2026-10-29T13:28:48.165Z",
+            "cpu5Before": "cpu5 64687 32197 276061 12680170 610800 33680 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276064 12680208 610821 33680 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.89,
+              "dso": "dispatch.nts",
+              "symbol": "run"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/dispatch/nts-C/perf.data",
+            "sha256": "b1c76fd145c6c9e0194e4f99d8974882078be1ad435d6ac40758f0f16028adc4"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/dispatch/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/dispatch-nts-C.profile.txt",
+            "sha256": "4b40100c408bfd79b2d297987a0c60e19372386303decb09527ca7ddb3aff26d"
+          }
+        },
+        {
+          "name": "dispatch",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/dispatch.ntsllvm",
+              "sha256": "697dd715f22b3986851f40613921449fe09410e743d760b4dba21e336754d7fd"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:48.182Z",
+            "end": "2026-10-29T13:28:48.748Z",
+            "cpu5Before": "cpu5 64687 32197 276064 12680210 610821 33680 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276065 12680249 610837 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.46,
+              "dso": "dispatch.ntsllvm",
+              "symbol": "run"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/dispatch/nts-LLVM/perf.data",
+            "sha256": "82f0ed60d32665bf4e86f2033c01506466b964a5f7b4a323bee5410792e69a69"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/dispatch/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/dispatch-nts-LLVM.profile.txt",
+            "sha256": "3622f20912392959e328792232d5a710ea857fe577d6e9d102da0bc925682290"
+          }
+        }
+      ]
+    },
+    {
+      "name": "json-scan",
+      "cause": "The numeric scanner accounts for 84\u201386% of native cycles, with the caller taking the rest; the C/LLVM instruction difference needs direct attribution.",
+      "coverage": "plan.md From the Bun and ScriptC studies, item 2: the LLVM backend slower than C; runtime hand-edited IR arms",
+      "attribution": "Flat profile only; no causal A/B mechanism claim",
+      "profiles": [],
+      "nativeGaps": {
+        "nts C": {},
+        "nts LLVM": {
+          "node": {
+            "kind": "SHORT",
+            "ratio": 0.8203458619434986,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "SHORT",
+            "ratio": 0.8039426933834638,
+            "tolerance": null
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "json-scan",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.nts",
+              "sha256": "b23012e25b7c6870635b5ca91604cac742c95cd2fbcbe747b632fcd39b59bde2"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:48.770Z",
+            "end": "2026-10-29T13:28:49.348Z",
+            "cpu5Before": "cpu5 64687 32197 276065 12680251 610837 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680300 610846 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 83.86,
+              "dso": "json-scan.nts",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 16.06,
+              "dso": "json-scan.nts",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/perf.data",
+            "sha256": "fbca0304408d13987c344a3b90473c35574828bc79958a8fdae1fb2823edbceb"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-C.profile.txt",
+            "sha256": "c3f222886a054163707bfe8d609959d27c2a7f19aa587023b9a323c0b6e61a71"
+          }
+        },
+        {
+          "name": "json-scan",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.ntsllvm",
+              "sha256": "0cba85f47d7635a47b1187078604b390e2ccd83630785ed9a24093f98508aac5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:49.368Z",
+            "end": "2026-10-29T13:28:49.921Z",
+            "cpu5Before": "cpu5 64687 32197 276066 12680302 610846 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680340 610863 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 86.04,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 13.64,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/perf.data",
+            "sha256": "1fea05185b0a4c51df679f2e9d858b52da03854957c5e676d842156bd7a906aa"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-LLVM.profile.txt",
+            "sha256": "409f009c7ce64c6f42af7849d6ea9708e6093834dfa17ce6955bcd26f05b1c36"
+          }
+        }
+      ]
+    },
+    {
+      "name": "printer-erased",
+      "cause": "The work loop, value-to-string and number formatting dominate; this sample localizes formatting and dispatch without proving a single removable operation.",
+      "coverage": "memory.md stage 0 helper contracts and strings.md formatting; experiment under plan.md From the Bun and ScriptC studies, item 2",
+      "attribution": "Flat profile only; no causal A/B mechanism claim",
+      "profiles": [],
+      "nativeGaps": {
+        "nts C": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.5225780363907062,
+            "tolerance": 1.05
+          }
+        },
+        "nts LLVM": {
+          "ScriptC": {
+            "kind": "LOSS",
+            "ratio": 1.650870440955151,
+            "tolerance": 1.05
+          }
+        }
+      },
+      "nativeProfiles": [
+        {
+          "name": "printer-erased",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/printer-erased.nts",
+              "sha256": "508f6cb4a5b2429038401ca88ccb067a4e5f7097541d1cec7d213eb66c2df1d5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:49.939Z",
+            "end": "2026-10-29T13:28:50.496Z",
+            "cpu5Before": "cpu5 64687 32197 276066 12680342 610863 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276067 12680397 610863 33681 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 51.05,
+              "dso": "printer-erased.nts",
+              "symbol": "work"
+            },
+            {
+              "percent": 16.57,
+              "dso": "printer-erased.nts",
+              "symbol": "nts_number_to_string"
+            },
+            {
+              "percent": 16.03,
+              "dso": "printer-erased.nts",
+              "symbol": "nts_value_to_string"
+            },
+            {
+              "percent": 7.19,
+              "dso": "printer-erased.nts",
+              "symbol": "nts_alloc"
+            },
+            {
+              "percent": 5.72,
+              "dso": "printer-erased.nts",
+              "symbol": "nts_release_counted.llvm.8573239398112711433"
+            },
+            {
+              "percent": 1.55,
+              "dso": "printer-erased.nts",
+              "symbol": "RightPrinter__toString____raises"
+            },
+            {
+              "percent": 1.54,
+              "dso": "printer-erased.nts",
+              "symbol": "LeftPrinter__toString____raises"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/printer-erased/nts-C/perf.data",
+            "sha256": "29d16b35479c4d28c5b1b6717eddb9ccf5cbc04b13b533bed3d82692661ac58a"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/printer-erased/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/printer-erased-nts-C.profile.txt",
+            "sha256": "953340787e78bd2efe34e3713feaed651c85b1137870edb7e6876a22f53ce9ed"
+          }
+        },
+        {
+          "name": "printer-erased",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/printer-erased.ntsllvm",
+              "sha256": "9deb102b3ea12f9a39450d11d00439cfc81647a34dfa8164c56db2a1a7641490"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:50.512Z",
+            "end": "2026-10-29T13:28:51.125Z",
+            "cpu5Before": "cpu5 64687 32197 276067 12680399 610863 33681 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276067 12680460 610863 33681 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 55.25,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "work"
+            },
+            {
+              "percent": 15.32,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "nts_number_to_string"
+            },
+            {
+              "percent": 15,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "nts_value_to_string"
+            },
+            {
+              "percent": 7.5,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "nts_alloc"
+            },
+            {
+              "percent": 4.06,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "nts_release_counted.llvm.8573239398112711433"
+            },
+            {
+              "percent": 1.62,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "LeftPrinter__toString____raises"
+            },
+            {
+              "percent": 1.03,
+              "dso": "printer-erased.ntsllvm",
+              "symbol": "RightPrinter__toString____raises"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/printer-erased/nts-LLVM/perf.data",
+            "sha256": "889846a6856c33c8e8e0c0fe462cee47d6827b4de51b1bd0f36c96cda40ef273"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/printer-erased/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/printer-erased-nts-LLVM.profile.txt",
+            "sha256": "126891633972e06e9fc739b3ba919e8066623bbcad3cd3dff55b39de1d2d1bf1"
+          }
+        }
+      ]
+    }
+  ],
+  "verdictPolicy": {
+    "version": 1,
+    "authority": "docs/README.md#the-bar",
+    "scope": "each native backend independently"
+  },
+  "runRecord": "results/benchmarks/runs/2026-10-29-0a072536bf5f-corrected.json",
+  "nativeVerdictWorsenings": [
+    {
+      "name": "awfy-permute",
+      "comparator": "node",
+      "c": {
+        "kind": "SHORT",
+        "ratio": 0.9491690922635212,
+        "tolerance": null
+      },
+      "llvm": {
+        "kind": "LOSS",
+        "ratio": 1.0800193227159172,
+        "tolerance": null
+      },
+      "profiles": [
+        {
+          "name": "awfy-permute",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/awfy-permute.nts",
+              "sha256": "2799e500603fb12ce5cd429ab327de83adf331d745bce7cb4a5d8c3f4dc04699"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:44.884Z",
+            "end": "2026-10-29T13:28:45.543Z",
+            "cpu5Before": "cpu5 64687 32197 276052 12679948 610763 33679 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276055 12679996 610779 33679 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.56,
+              "dso": "awfy-permute.nts",
+              "symbol": "Permute__permute"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-C/perf.data",
+            "sha256": "70cc3771a246a9665fbf5f249368660de5f400a5d848e1686a114f2edabcfd18"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/awfy-permute-nts-C.profile.txt",
+            "sha256": "f5bc6833d05571a3c5b6ea556cc7bef0e6acd077139047c11db4d7bd21984432"
+          }
+        },
+        {
+          "name": "awfy-permute",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/awfy-permute.ntsllvm",
+              "sha256": "f6d5b6dd9d0bdc9bad96fd020aaeab66e96021043d60dfc8a41c95601cb2e008"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:45.557Z",
+            "end": "2026-10-29T13:28:46.223Z",
+            "cpu5Before": "cpu5 64687 32197 276055 12679998 610779 33679 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276059 12680051 610788 33680 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.74,
+              "dso": "awfy-permute.ntsllvm",
+              "symbol": "Permute__permute"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-LLVM/perf.data",
+            "sha256": "de967273944616c8698de836742db0dec9cda898f50ef30662b35a90b0777a5d"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-permute/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/awfy-permute-nts-LLVM.profile.txt",
+            "sha256": "819334e1a66558f235d4cceefa7d1fc73a4145c409e1940ec10ee1228e7f47f4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "fib",
+      "comparator": "Bun AOT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.9338257267295783,
+        "tolerance": 1.05
+      },
+      "llvm": {
+        "kind": "TIE",
+        "ratio": 0.9663545133288384,
+        "tolerance": 1.05
+      },
+      "profiles": [
+        {
+          "name": "fib",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.ntsllvm",
+              "sha256": "ec99b4429c27c952b0f8d03bacfc80b21d2d02a97afbb4b13367f2f62d09c51c"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:51.144Z",
+            "end": "2026-10-29T13:28:51.709Z",
+            "cpu5Before": "cpu5 64687 32197 276067 12680462 610863 33681 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276068 12680502 610879 33681 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.73,
+              "dso": "fib.ntsllvm",
+              "symbol": "fib__whole.llvm.921173458891235101"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/fib/nts-LLVM/perf.data",
+            "sha256": "3f5dfecd843fa061099fc095c6d253f01bd403194655578008fec6695b6935c2"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/fib/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/fib-nts-LLVM.profile.txt",
+            "sha256": "c77ecf8e7fff07ae9c887dc8e2c1e23cfb90cf8f08278cf9fe75d635dac6eb8e"
+          }
+        }
+      ]
+    },
+    {
+      "name": "awfy-list",
+      "comparator": "Bun JIT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.7499919181786023,
+        "tolerance": null
+      },
+      "llvm": {
+        "kind": "SHORT",
+        "ratio": 0.8001044386633283,
+        "tolerance": null
+      },
+      "profiles": [
+        {
+          "name": "awfy-list",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/awfy-list.ntsllvm",
+              "sha256": "851eeb0c608c40caf4206042f47c0c881bdf3f451f734272a47281590bbb55f5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:51.732Z",
+            "end": "2026-10-29T13:28:52.286Z",
+            "cpu5Before": "cpu5 64687 32197 276068 12680502 610880 33681 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276068 12680547 610891 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 97.88,
+              "dso": "awfy-list.ntsllvm",
+              "symbol": "List__tail"
+            },
+            {
+              "percent": 0.82,
+              "dso": "awfy-list.ntsllvm",
+              "symbol": "List__makeList__region.llvm.6928641531801619662"
+            },
+            {
+              "percent": 0.62,
+              "dso": "awfy-list.ntsllvm",
+              "symbol": "nts_destroy"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-list/nts-LLVM/perf.data",
+            "sha256": "7bf7950b1b84fce29a8677496bc2192abb94b44bb584a2037777e0b205800e2c"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/awfy-list/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/awfy-list-nts-LLVM.profile.txt",
+            "sha256": "a352371b5eebc9e18c9863ad3ba2f4debbf731e0897fe8fc3e91a61f25ac444d"
+          }
+        }
+      ]
+    },
+    {
+      "name": "clbg-mandelbrot",
+      "comparator": "Bun JIT",
+      "c": {
+        "kind": "SHORT",
+        "ratio": 0.9979002868960716,
+        "tolerance": null
+      },
+      "llvm": {
+        "kind": "LOSS",
+        "ratio": 1.0136343144023028,
+        "tolerance": null
+      },
+      "profiles": [
+        {
+          "name": "clbg-mandelbrot",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/clbg-mandelbrot.ntsllvm",
+              "sha256": "5abfc1b5f530508c1f883cb4e5f72988947511fe78f44724cea7501b6fe301f4"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:52.317Z",
+            "end": "2026-10-29T13:28:52.913Z",
+            "cpu5Before": "cpu5 64687 32197 276068 12680550 610891 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276071 12680594 610904 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 98.13,
+              "dso": "clbg-mandelbrot.ntsllvm",
+              "symbol": "render"
+            },
+            {
+              "percent": 1.19,
+              "dso": "clbg-mandelbrot.ntsllvm",
+              "symbol": "nts_str_append_char_code"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-mandelbrot/nts-LLVM/perf.data",
+            "sha256": "dc0e8df9229a9da75829da2b821c8b36aecaf2bca3c61ea9026f8fca988d08d3"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/clbg-mandelbrot/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/clbg-mandelbrot-nts-LLVM.profile.txt",
+            "sha256": "febf9b9f58fe8b1828b2db09a1688d712995e0f8d3b34a3e4711b398a697fe20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "json-scan",
+      "comparator": "node",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.633752910096666,
+        "tolerance": null
+      },
+      "llvm": {
+        "kind": "SHORT",
+        "ratio": 0.8203458619434986,
+        "tolerance": null
+      },
+      "profiles": [
+        {
+          "name": "json-scan",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.nts",
+              "sha256": "b23012e25b7c6870635b5ca91604cac742c95cd2fbcbe747b632fcd39b59bde2"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:48.770Z",
+            "end": "2026-10-29T13:28:49.348Z",
+            "cpu5Before": "cpu5 64687 32197 276065 12680251 610837 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680300 610846 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 83.86,
+              "dso": "json-scan.nts",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 16.06,
+              "dso": "json-scan.nts",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/perf.data",
+            "sha256": "fbca0304408d13987c344a3b90473c35574828bc79958a8fdae1fb2823edbceb"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-C.profile.txt",
+            "sha256": "c3f222886a054163707bfe8d609959d27c2a7f19aa587023b9a323c0b6e61a71"
+          }
+        },
+        {
+          "name": "json-scan",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.ntsllvm",
+              "sha256": "0cba85f47d7635a47b1187078604b390e2ccd83630785ed9a24093f98508aac5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:49.368Z",
+            "end": "2026-10-29T13:28:49.921Z",
+            "cpu5Before": "cpu5 64687 32197 276066 12680302 610846 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680340 610863 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 86.04,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 13.64,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/perf.data",
+            "sha256": "1fea05185b0a4c51df679f2e9d858b52da03854957c5e676d842156bd7a906aa"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-LLVM.profile.txt",
+            "sha256": "409f009c7ce64c6f42af7849d6ea9708e6093834dfa17ce6955bcd26f05b1c36"
+          }
+        }
+      ]
+    },
+    {
+      "name": "json-scan",
+      "comparator": "Bun JIT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.6210807479124139,
+        "tolerance": null
+      },
+      "llvm": {
+        "kind": "SHORT",
+        "ratio": 0.8039426933834638,
+        "tolerance": null
+      },
+      "profiles": [
+        {
+          "name": "json-scan",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.nts",
+              "sha256": "b23012e25b7c6870635b5ca91604cac742c95cd2fbcbe747b632fcd39b59bde2"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:48.770Z",
+            "end": "2026-10-29T13:28:49.348Z",
+            "cpu5Before": "cpu5 64687 32197 276065 12680251 610837 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680300 610846 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 83.86,
+              "dso": "json-scan.nts",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 16.06,
+              "dso": "json-scan.nts",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/perf.data",
+            "sha256": "fbca0304408d13987c344a3b90473c35574828bc79958a8fdae1fb2823edbceb"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-C.profile.txt",
+            "sha256": "c3f222886a054163707bfe8d609959d27c2a7f19aa587023b9a323c0b6e61a71"
+          }
+        },
+        {
+          "name": "json-scan",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.ntsllvm",
+              "sha256": "0cba85f47d7635a47b1187078604b390e2ccd83630785ed9a24093f98508aac5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:49.368Z",
+            "end": "2026-10-29T13:28:49.921Z",
+            "cpu5Before": "cpu5 64687 32197 276066 12680302 610846 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680340 610863 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 86.04,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 13.64,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/perf.data",
+            "sha256": "1fea05185b0a4c51df679f2e9d858b52da03854957c5e676d842156bd7a906aa"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-LLVM.profile.txt",
+            "sha256": "409f009c7ce64c6f42af7849d6ea9708e6093834dfa17ce6955bcd26f05b1c36"
+          }
+        }
+      ]
+    },
+    {
+      "name": "json-scan",
+      "comparator": "Bun AOT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.839404722993843,
+        "tolerance": 1.05
+      },
+      "llvm": {
+        "kind": "TIE",
+        "ratio": 1.086546791396659,
+        "tolerance": 1.094625661733793
+      },
+      "profiles": [
+        {
+          "name": "json-scan",
+          "backend": "nts C",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.nts",
+              "sha256": "b23012e25b7c6870635b5ca91604cac742c95cd2fbcbe747b632fcd39b59bde2"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:48.770Z",
+            "end": "2026-10-29T13:28:49.348Z",
+            "cpu5Before": "cpu5 64687 32197 276065 12680251 610837 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680300 610846 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 83.86,
+              "dso": "json-scan.nts",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 16.06,
+              "dso": "json-scan.nts",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/perf.data",
+            "sha256": "fbca0304408d13987c344a3b90473c35574828bc79958a8fdae1fb2823edbceb"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-C/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-C.profile.txt",
+            "sha256": "c3f222886a054163707bfe8d609959d27c2a7f19aa587023b9a323c0b6e61a71"
+          }
+        },
+        {
+          "name": "json-scan",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/json-scan.ntsllvm",
+              "sha256": "0cba85f47d7635a47b1187078604b390e2ccd83630785ed9a24093f98508aac5"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:49.368Z",
+            "end": "2026-10-29T13:28:49.921Z",
+            "cpu5Before": "cpu5 64687 32197 276066 12680302 610846 33681 12090 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276066 12680340 610863 33681 12090 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 86.04,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "scanNumber"
+            },
+            {
+              "percent": 13.64,
+              "dso": "json-scan.ntsllvm",
+              "symbol": "work"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/perf.data",
+            "sha256": "1fea05185b0a4c51df679f2e9d858b52da03854957c5e676d842156bd7a906aa"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/json-scan/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/json-scan-nts-LLVM.profile.txt",
+            "sha256": "409f009c7ce64c6f42af7849d6ea9708e6093834dfa17ce6955bcd26f05b1c36"
+          }
+        }
+      ]
+    },
+    {
+      "name": "map-word-counts",
+      "comparator": "Bun AOT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.9499662018676739,
+        "tolerance": 1.0756928449540788
+      },
+      "llvm": {
+        "kind": "TIE",
+        "ratio": 0.9607829333280283,
+        "tolerance": 1.0907856385383714
+      },
+      "profiles": [
+        {
+          "name": "map-word-counts",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/map-word-counts.ntsllvm",
+              "sha256": "51fb29096a98ef896717469bcf4ee80e6dcad3d4455cc3821c61179df342596b"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:52.932Z",
+            "end": "2026-10-29T13:28:53.431Z",
+            "cpu5Before": "cpu5 64687 32197 276071 12680594 610905 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276071 12680643 610906 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 92.99,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "mapWordCounts"
+            },
+            {
+              "percent": 2.13,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_map_rehash.llvm.8573239398112711433"
+            },
+            {
+              "percent": 1.86,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_release_foreign"
+            },
+            {
+              "percent": 1.31,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_release"
+            },
+            {
+              "percent": 0.8,
+              "dso": "map-word-counts.ntsllvm",
+              "symbol": "nts_each_reference"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/map-word-counts/nts-LLVM/perf.data",
+            "sha256": "48a583e51f836187ae3ec656e60a0f13492a097e6dbffb40951f4dedd7ca6348"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/map-word-counts/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/map-word-counts-nts-LLVM.profile.txt",
+            "sha256": "93761018dbab387d5436415a6fa07e903781e90abdcfe2545eb7caa8904a893f"
+          }
+        }
+      ]
+    },
+    {
+      "name": "number-format",
+      "comparator": "Bun JIT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.7566307160881366,
+        "tolerance": null
+      },
+      "llvm": {
+        "kind": "SHORT",
+        "ratio": 0.8088202882996794,
+        "tolerance": null
+      },
+      "profiles": [
+        {
+          "name": "number-format",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/number-format.ntsllvm",
+              "sha256": "b6358f3dd12c00e0172793f8c043a9676bd2f9541edd6f711f571b7c4a615318"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:53.448Z",
+            "end": "2026-10-29T13:28:53.919Z",
+            "cpu5Before": "cpu5 64687 32197 276071 12680645 610906 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276076 12680688 610906 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 99.86,
+              "dso": "number-format.ntsllvm",
+              "symbol": "format"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/number-format/nts-LLVM/perf.data",
+            "sha256": "27d1d27926f1501b911250c57b42c598180dac0832265b425c768bed28ca51d8"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/number-format/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/number-format-nts-LLVM.profile.txt",
+            "sha256": "0589565f4065e9696b436538f8107769494f8915335493e2ab61aef2e3950525"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tree-teardown",
+      "comparator": "Bun AOT",
+      "c": {
+        "kind": "WON",
+        "ratio": 0.919135506815388,
+        "tolerance": 1.1907708256161995
+      },
+      "llvm": {
+        "kind": "TIE",
+        "ratio": 0.9740275423922847,
+        "tolerance": 1.1214184102303821
+      },
+      "profiles": [
+        {
+          "name": "tree-teardown",
+          "backend": "nts LLVM",
+          "status": "MEASURED",
+          "event": "cpu_core/cycles/u",
+          "frequency": 999,
+          "callGraphs": false,
+          "scope": "Exact kept measured program; whole process, including warmup and timer. JVM uses 2 s warmup and exit perf map for symbolization; profile-only settings never replace the sitting timings.",
+          "binaryHashes": [
+            {
+              "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/tree-teardown.ntsllvm",
+              "sha256": "c9b6b97535973533a0385ce1e67fa219acdfb3b966a5240d9021ce10571526fd"
+            }
+          ],
+          "recorded": {
+            "status": 0,
+            "signal": null,
+            "start": "2026-10-29T13:28:53.944Z",
+            "end": "2026-10-29T13:28:54.570Z",
+            "cpu5Before": "cpu5 64687 32197 276078 12680688 610906 33682 12091 0 0 0",
+            "cpu5After": "cpu5 64687 32197 276078 12680743 610913 33682 12091 0 0 0"
+          },
+          "top": [
+            {
+              "percent": 48.85,
+              "dso": "tree-teardown.ntsllvm",
+              "symbol": "build__region.llvm.1288846849807192069"
+            },
+            {
+              "percent": 26.43,
+              "dso": "tree-teardown.ntsllvm",
+              "symbol": "sum.llvm.1288846849807192069"
+            },
+            {
+              "percent": 23.84,
+              "dso": "tree-teardown.ntsllvm",
+              "symbol": "nts_alloc"
+            }
+          ],
+          "data": {
+            "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/tree-teardown/nts-LLVM/perf.data",
+            "sha256": "929eb6af658016b5bcd86cd3aa0c1df81043de5b2cfdc2155a3401cc2e5d2fc3"
+          },
+          "report": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/native-loss-profiles/tree-teardown/nts-LLVM/report.txt",
+          "durableReport": {
+            "path": "results/comparator-sitting-20261029/native-baseline/tree-teardown-nts-LLVM.profile.txt",
+            "sha256": "7fe652d1394d6d6b3323695f6849c91751d5ceffd684a5058ef051d11be7db37"
+          }
         }
       ]
     }

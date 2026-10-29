@@ -1,0 +1,23 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 497  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2474038216
+#
+# Overhead  Shared Object           Symbol                                            IPC   [IPC Coverage]
+# ........  ......................  ................................................  ....................
+#
+    55.25%  printer-erased.ntsllvm  [.] work                                          -      -            
+    15.32%  printer-erased.ntsllvm  [.] nts_number_to_string                          -      -            
+    15.00%  printer-erased.ntsllvm  [.] nts_value_to_string                           -      -            
+     7.50%  printer-erased.ntsllvm  [.] nts_alloc                                     -      -            
+     4.06%  printer-erased.ntsllvm  [.] nts_release_counted.llvm.8573239398112711433  -      -            
+     1.62%  printer-erased.ntsllvm  [.] LeftPrinter__toString____raises               -      -            
+     1.03%  printer-erased.ntsllvm  [.] RightPrinter__toString____raises              -      -            
+
+
+#
+# (Tip: If you prefer Intel style assembly, try: perf annotate -M intel)
+#

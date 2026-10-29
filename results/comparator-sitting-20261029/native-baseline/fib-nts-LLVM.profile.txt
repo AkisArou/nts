@@ -1,0 +1,17 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 482  of event 'cpu_core/cycles/u'
+# Event count (approx.): 2454777831
+#
+# Overhead  Shared Object         Symbol                                  IPC   [IPC Coverage]
+# ........  ....................  ......................................  ....................
+#
+    99.73%  fib.ntsllvm           [.] fib__whole.llvm.921173458891235101  -      -            
+
+
+#
+# (Tip: If you prefer Intel style assembly, try: perf annotate -M intel)
+#
