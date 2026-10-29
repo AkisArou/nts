@@ -484,44 +484,10 @@ impl Program {
     }
 }
 
-// Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
-// worker threads get large stacks. The pool has at most PARSE_THREAD_CAP threads: with the heap on 4 KiB pages
-// (mimalloc `no_thp`, notes/mem-no-thp.md) the parallel parse is bound by page-fault contention, not threads (vscode
-// on 64 vCPUs: 0.124 s at 32 threads, 0.131 s at 64), and every allocating thread keeps its own partly filled
-// allocator pages and arena chunk tail (64 -> 32 threads: -0.09 GiB peak). RAYON_NUM_THREADS still sets the count
-// exactly, as before (single-threaded runs with `node bench/bench.mjs count` use 1).
-const PARSE_THREAD_CAP: usize = 32;
-
-/// Runs worker jobs on the calling thread for threadless targets.
-///
-/// `tsrs_core::NO_THREADS` targets: a one-thread pool on the calling thread (`use_current_thread`), on which
-/// `install`, `par_iter`, `broadcast` and nested scopes run inline. It must be the first rayon use on that
-/// thread: once rayon's global pool has started there, building it fails with "The current thread is already
-/// part of another thread pool", so an embedder calls `worker_pool()` before anything else.
+/// The VFS and compiler share one budgeted pool, including configuration reads
+/// that run before the first native program is created.
 pub fn worker_pool() -> &'static rayon::ThreadPool {
-    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
-    POOL.get_or_init(|| {
-        let budget = tsrs_core::runslots::start_worker_pool();
-        if tsrs_core::NO_THREADS {
-            return rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .use_current_thread()
-                .build()
-                .unwrap();
-        }
-        let threads = budget.map(std::num::NonZero::get).unwrap_or_else(|| {
-            std::env::var("RAYON_NUM_THREADS")
-                .ok()
-                .and_then(|v| v.parse::<usize>().ok())
-                .filter(|&n| n > 0)
-                .unwrap_or_else(|| {
-                    std::thread::available_parallelism()
-                        .map_or(1, std::num::NonZero::get)
-                        .min(PARSE_THREAD_CAP)
-                })
-        });
-        rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
-    })
+    tsrs_vfs::worker_pool()
 }
 
 // program.go:305

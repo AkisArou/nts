@@ -1004,7 +1004,14 @@ fn match_files(
         .map(|base_path| tspath::combine_paths(&current_directory, &[base_path]))
         .collect();
     let extension_strs: Vec<&str> = extensions.iter().map(AsRef::as_ref).collect();
-    v.prefetch_listings(host, &extension_strs, &absolute_base_paths, depth);
+    // Config expansion can be the first native work. Freeze the same budget
+    // before any Rayon use; an explicit serial budget needs no worker thread.
+    let budget = tsrs_core::runslots::start_worker_pool();
+    if !tsrs_core::NO_THREADS && !budget.is_some_and(|limit| limit.get() == 1) {
+        crate::worker_pool().install(|| {
+            v.prefetch_listings(host, &extension_strs, &absolute_base_paths, depth);
+        });
+    }
     for (base_path, abs) in base_paths.iter().zip(&absolute_base_paths) {
         v.visit(host, extensions, base_path, abs, depth, "");
     }

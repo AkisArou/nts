@@ -39,8 +39,8 @@
       "id": "compiler-worker-budget",
       "base": "a0db53eabe483062205717f067a49b6ccb3fc868",
       "path": "patches/compiler-worker-budget.patch",
-      "sha256": "0a03b5a5f974c5a1f238039c717304b76676902e0b841e2d6ac8ee1ce0467ad4",
-      "rationale": "Expose one process-wide compiler worker budget configured once before first use. Parsing, binding, checker work and request execution slots use the same limit, independent of visible CPUs and pool-specific environment variables.",
+      "sha256": "39727da246263eb8bbed776d8473f30bbc2a707c63a7b2068f79891e02ebfdce",
+      "rationale": "Expose one process-wide compiler worker budget configured once before first use. VFS discovery, parsing and binding share one private pool; checker work and request execution slots use the same limit, independent of visible CPUs and pool-specific environment variables.",
       "remove_when": "Remove when an official upstream revision provides an equivalent pre-initialization compiler worker budget with duplicate/late configuration errors and coverage of every compiler pool; re-pin and pass the permanent pool, diagnostic, listing and CPU-mask invariance controls before removing this patch."
     }
   ]

@@ -72,4 +72,76 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+
+    #[test]
+    fn vfs_first_use_freezes_the_budget_and_shares_the_compiler_pool() {
+        if let Ok(mode) = std::env::var("NTS_VFS_WORKER_CONTROL") {
+            let count = match mode.as_str() {
+                "one" => Some(NonZeroU16::MIN),
+                "two" => NonZeroU16::new(2),
+                "default" => None,
+                _ => panic!("unknown VFS worker control"),
+            };
+            if let Some(count) = count {
+                configure_worker_budget(count).unwrap();
+            }
+            #[cfg(target_os = "linux")]
+            let before = std::fs::read_dir("/proc/self/task").unwrap().count();
+            let host = tsrs_vfs::vfstest::from_map(
+                [
+                    ("/dev/a.ts", ""),
+                    ("/dev/sub/b.ts", ""),
+                    ("/dev/skip.js", ""),
+                ],
+                true,
+            );
+            let files = tsrs_vfs::vfsmatch::read_directory(
+                &host,
+                "/dev",
+                "/dev",
+                &[".ts"],
+                &[] as &[&str],
+                &["**/*"],
+                tsrs_vfs::vfsmatch::UNLIMITED_DEPTH,
+            );
+            assert_eq!(files, ["/dev/a.ts", "/dev/sub/b.ts"]);
+            assert_eq!(
+                configure_worker_budget(NonZeroU16::MIN),
+                Err(WorkerBudgetError::WorkAlreadyStarted)
+            );
+            #[cfg(target_os = "linux")]
+            if mode == "one" {
+                assert_eq!(
+                    std::fs::read_dir("/proc/self/task").unwrap().count(),
+                    before,
+                    "serial VFS discovery must not start Rayon's global workers"
+                );
+            }
+            let pool = tsrs_vfs::worker_pool();
+            assert_eq!(
+                pool.current_num_threads(),
+                usize::from(count.map_or(8, NonZeroU16::get))
+            );
+            assert!(std::ptr::eq(pool, tsrs_compiler::worker_pool()));
+            return;
+        }
+        for mode in ["one", "two", "default"] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "workers::tests::vfs_first_use_freezes_the_budget_and_shares_the_compiler_pool",
+                    "--nocapture",
+                ])
+                .env("NTS_VFS_WORKER_CONTROL", mode)
+                .env("RAYON_NUM_THREADS", "8")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{mode}: {}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 }
