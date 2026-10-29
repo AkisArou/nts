@@ -105,6 +105,7 @@ pub(crate) const COMMANDS: &[Command] = &[
         ],
     ),
     command("check", " [project]", &[PROJECT, PROVIDER]),
+    command("node-deps", " <request.json>", &[]),
     command(
         "bind-c",
         "",

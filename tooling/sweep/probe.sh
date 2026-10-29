@@ -36,7 +36,9 @@
 # check that coarse is how a probe sweep comes back clean about nothing.
 set -e
 D="$1"; label="$2"; body="$3"
-HERE=$(dirname "$0")
+HERE=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$HERE/../.." && pwd)
+compiler=$(realpath "${NTS_BIN:-./target/release/nts}")
 mkdir -p "$D/src"
 [ -f "$D/tsconfig.json" ] || cat > "$D/tsconfig.json" <<'J'
 {
@@ -55,7 +57,7 @@ J
 node --experimental-strip-types "$D/src/main.ts" >/dev/null 2>"$D/node.txt" && ns=0 || ns=$?
 nmsg=$(grep -o "message: '[^']*'" "$D/node.txt" | head -1 | cut -d"'" -f2)
 rm -rf "$D/out"
-"${NTS_BIN:-./target/release/nts}" emit-c "$D/tsconfig.json" \
+"$compiler" emit-c "$D/tsconfig.json" \
   --out "$D/out" --main >/dev/null 2>"$D/r.txt" && es=0 || es=$?
 # **The compiler crashing is its own outcome.** It was reported as `C DID NOT
 # COMPILE` -- the output directory is simply absent, and `cc` fails the same way
@@ -113,7 +115,8 @@ fi
 #
 # A hardcoded list is a second derivation of "what does the emitter produce",
 # and the emitter is the one that knows. `*.c` asks it.
-( cd "$D/out" && cc -std=c11 -O2 -I. *.c -luv -lm -o program ) 2>/dev/null || true
+( cd "$D/out" && node "$root/tooling/conformance/native-link.mjs" "$compiler" cc \
+  -std=c11 -O2 -I. *.c -lm -o program ) 2>/dev/null || true
 if [ ! -f "$D/out/program.c" ]; then
   printf '  %-34s node=%s  NO C WAS WRITTEN\n' "$label" "$ns"
   exit 0

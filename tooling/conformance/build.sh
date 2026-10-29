@@ -161,16 +161,13 @@ shared_c=()
 while IFS= read -r -d '' source; do
   shared_c+=("$source")
 done < <(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' -print0)
-# Where node's vendored compression headers live, for the sibling compile and the
-# link both. `zlib.c` includes <zlib.h>, <brotli/*.h>, <zstd.h> and <zstd_errors.h>
-# and would otherwise resolve every one of them against /usr/include.
-node_deps="$root/third_party/node/deps"
-vendored_includes=(
-  -I"$node_deps/zlib"
-  -I"$node_deps/brotli/c/include"
-  -I"$node_deps/zstd/lib"
-)
-
+# Headers and archives come from the compiler's embedded dependency plan.
+# Sibling native objects can use any of these headers; lazy archive linking still
+# selects only the objects whose symbols are reached by this module.
+node "$root/tooling/conformance/node-deps.ts" "$compiler" "$work/node-deps.json"
+mapfile -d '' -t vendored_includes < "$work/node-deps.json.include_flags"
+mapfile -d '' -t bundled_libraries < "$work/node-deps.json.link_flags"
+node_deps="$root/third_party/node-source/deps"
 
 # And every *other* module's C, because a module's TypeScript imports other
 # modules' TypeScript and inherits their `declare function`s with it.
@@ -259,40 +256,14 @@ for header in "${binding_headers[@]}"; do
   binding_header_flags+=(-include "$header")
 done
 
-# **Node's compression libraries, not the machine's.** `process.versions` names
-# a zlib, a brotli and a zstd, and node vendors all three under `deps`. This
-# linked the system copies: zlib 1.3.2 against node's `1.3.2.1-motley` (Chromium's
-# fork), and whatever `-lbrotlienc`/`-lzstd` happened to be installed.
-#
-# It matters here more than it usually would, because the `zlib` corpus compares
-# **compressed bytes** byte-for-byte against node's output, deliberately -- two
-# correct implementations can disagree on bytes. It reported 0 divergences, so
-# the versions agreed at the settings exercised; that was incidental parity
-# between two builds, not a property of this one, and a system package bump would
-# have produced divergences that were nobody's defect.
-#
-# Compiled from source rather than linked, because node ships no prebuilt object.
+# The shared bundled plan supplies OpenSSL, compression and libuv archives.
+# The remaining module-local source dependency here is Node's c-ares.
 module_libraries=()
 module_extra_c=()
 module_extra_flags=()
 
-# Relative `.c` paths from a gyp source list. Node maintains these lists as it
-# bumps each dependency, so deriving them beats copying them: `zstd.gyp` names 26
-# of the 40 `.c` files under `lib` -- `legacy`, `deprecated` and `dictBuilder`
-# are present in the tree and not built -- and `brotli.gyp` names 35 of 36,
-# leaving out `c/tools/brotli.c`, which is a command-line program with a `main`.
-# Both files quote their sources and quote nothing else ending in `.c`, so this
-# needs no gyp parser; a `.gyp` that grew one would show up as a link error
-# naming a symbol, not as silence.
-#
-# `sort -u` is not tidiness. A `.gyp` declares several *targets*, and this reads
-# the file rather than a target, so a file listed by two of them arrives twice.
-# `nghttp2.gyp` is exactly that -- `lib/sfparse.c` belongs to both the `nghttp2`
-# target and an `sfparse` target -- and without the dedup the link fails with
-# `multiple definition of sfparse_parser_init` and eleven more like it. Found by
-# probe-building nghttp2, not by anything zlib does: brotli and zstd each declare
-# one target, so this line changes nothing for them and would have waited to fail
-# until the next dependency was vendored.
+# c-ares's C list has no actions or per-source settings. The five bundled
+# dependencies use the committed graph resolved by Node's GYP evaluator.
 gyp_sources() { grep -oE "'[^']+\.c'" "$1" | tr -d "'" | sort -u; }
 
 add_vendored() {
@@ -302,42 +273,6 @@ add_vendored() {
 }
 
 case "$module" in
-  zlib)
-    if [ -f "$node_deps/zlib/deflate.c" ] \
-      && [ -f "$node_deps/brotli/brotli.gyp" ] \
-      && [ -f "$node_deps/zstd/zstd.gyp" ]; then
-      # zlib has no gyp source list in the checkout; every `.c` at its top level
-      # is built. The SIMD translation units are guarded by defines this build
-      # does not set, so they compile to nothing, and `deflate.c` calls
-      # `cpu_check_features()` unconditionally, so `cpu_features.c` is required.
-      while IFS= read -r -d '' zsrc; do module_extra_c+=("$zsrc"); done \
-        < <(find "$node_deps/zlib" -maxdepth 1 -name '*.c' -print0)
-      add_vendored "$node_deps/brotli"
-      add_vendored "$node_deps/zstd"
-      # Node's own defines, from the two gyp files, carried across because node
-      # sets them rather than because each was shown to be required here.
-      # `XXH_NAMESPACE` was *tested*: node's zstd sources build and round-trip
-      # with it, without it, and with an unrelated define in its place, so it is
-      # symbol hygiene -- it keeps zstd's xxhash from colliding with another
-      # copy in the same binary -- and not a correctness requirement. A comment
-      # here first claimed the opposite. `ZSTD_DISABLE_ASM` is node's choice
-      # too, with a TODO beside it: `huf_decompress_amd64.S` is in the tree and
-      # node does not assemble it.
-      module_extra_flags=(
-        -DOS_LINUX
-        -DXXH_NAMESPACE=ZSTD_
-        -DZSTD_MULTITHREAD
-        -DZSTD_DISABLE_ASM
-      )
-      module_libraries=(-lm -pthread)
-    else
-      # Named rather than silently falling back: a missing vendored tree would
-      # otherwise link the machine's libraries again and the parity would go
-      # back to being about this machine.
-      echo "note: $node_deps is missing a vendored tree -- linking the system compression libraries instead" >&2
-      module_libraries=(-lz -lbrotlienc -lbrotlidec -lzstd)
-    fi
-    ;;
   dns)
     # **Node's c-ares, for the same reason as its compression libraries.**
     # `dns.resolve*` answers are c-ares's parse of the wire, so which c-ares it
@@ -364,26 +299,11 @@ case "$module" in
         -I"$node_deps/cares/config/$cares_config"
       )
     else
-      echo "note: $node_deps/cares is missing -- linking the system c-ares instead" >&2
-      module_libraries=(-lcares)
-    fi
-    ;;
-  crypto)
-    # **The machine's OpenSSL, because this checkout does not carry node's.**
-    # Node vendors `deps/openssl` and builds it from a generated per-arch
-    # config; that tree is not in `third_party/node/deps`, so the choice is the
-    # system libcrypto or none. Digests, MACs and KDFs are specified functions
-    # and do not differ between OpenSSL 3 releases; what can differ is the set
-    # `getHashes()` lists and the wording of an OpenSSL error string, which
-    # `nts_crypto.h` says beside the code that reads them.
-    if pkg-config --exists 'libcrypto >= 3.0'; then
-      read -r -a module_extra_flags <<< "$(pkg-config --cflags libcrypto)"
-      read -r -a module_libraries <<< "$(pkg-config --libs libcrypto)"
-    else
-      echo "crypto needs OpenSSL 3's libcrypto, and pkg-config finds none" >&2
+      echo "pinned c-ares sources missing from $node_deps; run the Node bootstrap" >&2
       exit 2
     fi
     ;;
+
 esac
 
 # Everything the compiler emitted, rather than the three files it used to
@@ -437,6 +357,7 @@ clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
   "${generated_c[@]}" \
   "${module_c[@]}" "${shared_c[@]}" "${sibling_archive[@]}" \
   "${module_extra_c[@]}" \
-  "${module_libraries[@]}" -luv -lm
+  "${module_libraries[@]}" "${bundled_libraries[@]}" -lm
 
+node "$root/tooling/gate/node-deps-elf.ts" "$out/$module.node"
 echo "$out/$module.node: $(stat -c%s "$out/$module.node") bytes"

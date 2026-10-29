@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { caseRoot, environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
 import { jvmRun } from "../jvm/launch.ts";
 import { compileSync } from "./worker-memory.ts";
+import { bundledDependencies } from "../conformance/node-deps.mjs";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
@@ -301,7 +302,12 @@ function linkC(stdout, out, tools) {
   let args = printed;
   let objects;
   try {
-    ({ args, objects } = withCachedObjects(printed, out, tools));
+    const bundled = printed.includes("-luv") ? bundledDependencies(tools.nts, ["uv"], [cc]) : null;
+    const inputs = bundled
+      ? [...bundled.include_flags, ...printed.filter(part => part !== "-luv")]
+      : printed;
+    ({ args, objects } = withCachedObjects(inputs, out, tools));
+    if (bundled) args.push(...bundled.link_flags);
     execFileSync(cc, args, {
       cwd: out,
       encoding: "utf8",

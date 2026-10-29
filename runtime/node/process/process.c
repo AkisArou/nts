@@ -4,6 +4,7 @@
 #endif
 
 /* Native operations specific to `node:process`. */
+#include "../internal/nts_node.h"
 #include "process.h"
 
 #include <errno.h>
@@ -18,6 +19,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <uv.h>
+#include "nts_node_deps_versions.h"
 
 #include "../internal/shared.h"
 
@@ -74,7 +76,7 @@ NtsArray *nts_process_exec_argv(void) {
     return nts_array_new(&nts_desc_ref, 0);
 }
 
-NtsString *nts_process_version(void) { return utf8("v24.20.0"); }
+NtsString *nts_process_version(void) { return utf8("v" NTS_NODE_VERSION_NODE); }
 
 static const char *const VERSION_NAMES[] = {
     "node", "acorn", "ada", "amaro", "ares", "brotli", "cldr", "icu",
@@ -84,11 +86,11 @@ static const char *const VERSION_NAMES[] = {
 };
 
 static const char *const VERSION_VALUES[] = {
-    "24.20.0", "8.18.0", "4.0.0", "1.1.11", "1.34.8", "1.2.0", "48.0",
+    NTS_NODE_VERSION_NODE, "8.18.0", "4.0.0", "1.1.11", "1.34.8", NTS_NODE_VERSION_BROTLI, "48.0",
     "78.3", "9.4.3", "1.2.2", "137", "10", "0.1.4", "0.0.1", "1.70.0",
-    "", "", "3.5.7", "4.6.6", "6.4.0", "3.53.4", "2026c", "7.29.0",
-    "17.0", "1.52.1", "0.0.23", "13.6.233.17-node.53",
-    "1.3.2.1-motley-42c2f19", "1.5.7",
+    "", "", NTS_NODE_VERSION_OPENSSL, "4.6.6", "6.4.0", "3.53.4", "2026c", "7.29.0",
+    "17.0", NTS_NODE_VERSION_UV, "0.0.23", "13.6.233.17-node.53",
+    NTS_NODE_VERSION_ZLIB, NTS_NODE_VERSION_ZSTD,
 };
 
 static const char *const ALLOWED_ENV_FLAGS[] = {
@@ -980,7 +982,7 @@ double nts_process_signal_start(NtsString *name) {
     SignalEntry *entry = calloc(1, sizeof(SignalEntry));
     if (entry == NULL) return UV_ENOMEM;
     entry->number = number;
-    int status = uv_signal_init(uv_default_loop(), &entry->handle);
+    int status = uv_signal_init(nts_node_loop(), &entry->handle);
     if (status == 0) status = uv_signal_start(&entry->handle, on_signal, number);
     if (status != 0) {
         free(entry);
@@ -1067,7 +1069,7 @@ static void collect_handle(uv_handle_t *handle, void *argument) {
 
 NtsArray *nts_process_active_resources(void) {
     WalkState state = {NULL, 0, 0};
-    uv_walk(uv_default_loop(), collect_handle, &state);
+    uv_walk(nts_node_loop(), collect_handle, &state);
     NtsArray *result = nts_array_new(&nts_desc_ref, (double)state.count);
     void **items = NTS_ITEMS(result, void *);
     for (size_t i = 0; i < state.count; i++) {

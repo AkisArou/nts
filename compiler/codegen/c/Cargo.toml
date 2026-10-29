@@ -17,6 +17,7 @@ nts-semantic-schema.workspace = true
 workspace = true
 
 [dev-dependencies]
+nts-build.workspace = true
 nts-frontend-ts.workspace = true
 camino.workspace = true
 

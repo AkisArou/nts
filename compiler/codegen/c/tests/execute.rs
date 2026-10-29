@@ -17,6 +17,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
+#[path = "support/node_deps.rs"]
+mod node_deps;
+
 /// Compile an example to C, link it with a harness, run it.
 ///
 /// Returns `None` when the toolchain is unavailable, so a machine without clang
@@ -381,6 +384,7 @@ fn build_and_run_transformed(
         hir::Memory::HostGc => panic!("C execution tests require a native memory provider"),
     };
 
+    let bundled = (host_kind == Host::Libuv).then(node_deps::get);
     let compile = std::process::Command::new("clang")
         // `--gc-sections` is reachability's other half: the compiler drops what
         // no export reaches, and the linker drops what survives compilation and
@@ -406,11 +410,8 @@ fn build_and_run_transformed(
         } else {
             vec![host.as_path()]
         })
-        .args(if host_kind == Host::Libuv {
-            vec!["-luv"]
-        } else {
-            Vec::new()
-        })
+        .args(bundled.iter().flat_map(|a| &a.include_flags))
+        .args(bundled.iter().flat_map(|a| &a.link_flags))
         .arg("-I")
         .arg(&dir)
         // The generated prelude uses fmod and trunc for JavaScript's integer

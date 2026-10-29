@@ -9,6 +9,7 @@
  * Errors are reported as libuv's negative errno through `nts_errno`, and the
  * TypeScript builds the exception. Keeping the message construction upstairs
  * means there is one copy of it and it is the one node's tests read. */
+#include "../internal/nts_node.h"
 #include "fs.h"
 #include "../internal/shared.h"
 #include <fcntl.h>
@@ -1540,7 +1541,7 @@ double nts_fs_watch_start(NtsString *path, bool recursive, bool persistent,
         free(native);
         return (double)UV_ENOMEM;
     }
-    int status = uv_fs_event_init(uv_default_loop(), &entry->h.event);
+    int status = uv_fs_event_init(nts_node_loop(), &entry->h.event);
     if (status == 0) {
         entry->h.any.data = entry;
         entry->callback = callback;
@@ -1569,7 +1570,7 @@ double nts_fs_watchfile_start(NtsString *path, double interval, bool persistent,
         free(native);
         return (double)UV_ENOMEM;
     }
-    int status = uv_fs_poll_init(uv_default_loop(), &entry->h.poll);
+    int status = uv_fs_poll_init(nts_node_loop(), &entry->h.poll);
     if (status == 0) {
         entry->h.any.data = entry;
         entry->callback = callback;
@@ -1870,7 +1871,7 @@ static void async_fail(NtsHeader *callback, AsyncShape shape, double errno_value
     }
 }
 
-static uv_loop_t *fs_loop(void) { return uv_default_loop(); }
+static uv_loop_t *fs_loop(void) { return nts_node_loop(); }
 
 /* One macro's worth of shape repeated by hand, because the bodies differ in
  * which `uv_fs_*` they call and in how many arguments it takes, and a macro

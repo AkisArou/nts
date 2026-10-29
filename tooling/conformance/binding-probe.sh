@@ -35,7 +35,7 @@ src="$root/runtime/node/$module"
 [ -d "$src" ] || { echo "no such module: $module" >&2; exit 2; }
 [ -f "$declarations" ] || { echo "no declarations at $declarations" >&2; exit 2; }
 
-compiler="${NTS_COMPILER:-$root/target/release/nts}"
+compiler="${NTS_COMPILER:-${NTS_BIN:-$root/target/release/nts}}"
 [ -x "$compiler" ] || { echo "no compiler at $compiler" >&2; exit 2; }
 
 napi="${NTS_NAPI_INCLUDE:-$root/third_party/node/src}"
@@ -62,8 +62,9 @@ includes=(-include "$root/runtime/node/internal/nts_node.h"
 while IFS= read -r -d '' header; do includes+=(-include "$header"); done \
   < <(find "$src" -maxdepth 1 -name '*.h' -print0)
 
-module_libraries=()
-[ "$module" = "zlib" ] && module_libraries=(-lz -lbrotlienc -lbrotlidec -lzstd)
+node "$root/tooling/conformance/node-deps.ts" "$compiler" "$work/node-deps.json"
+mapfile -d '' -t bundled_includes < "$work/node-deps.json.include_flags"
+mapfile -d '' -t bundled_libraries < "$work/node-deps.json.link_flags"
 
 module_c=()
 while IFS= read -r -d '' c; do module_c+=("$c"); done \
@@ -76,7 +77,7 @@ while IFS= read -r -d '' c; do module_c+=("$c"); done \
 # name: the next module to keep a file under `internal/` would hit this too, and
 # a name check would not catch it.
 link_c=("${module_c[@]}")
-for support in "$root/runtime/node/internal/shared.c" "$root/runtime/node/internal/process.c"; do
+for support in "$root/runtime/node/internal/shared.c" "$root/runtime/node/internal/process.c" "$root/runtime/node/internal/loop.c"; do
   duplicate=0
   for existing in "${module_c[@]}"; do
     if [ "$(realpath "$existing")" = "$(realpath "$support")" ]; then duplicate=1; break; fi
@@ -86,10 +87,12 @@ done
 
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared \
   "${includes[@]}" \
+  "${bundled_includes[@]}" \
   -I"$work/out" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
   -o "$work/$module-probe.node" \
   "$work/out"/*.c \
   "${link_c[@]}" \
-  "${module_libraries[@]}" -luv -lm
+  "${bundled_libraries[@]}" -lm
 
+node "$root/tooling/gate/node-deps-elf.ts" "$work/$module-probe.node" >&2
 echo "$work/$module-probe.node"

@@ -1,3 +1,4 @@
+// nts-test-link: -Wl,--wrap=uv_fs_read
 /* Observe the offset delivered to libuv, without filesystem size limits.
  * Link with --wrap=uv_fs_read; fs.c and this caller compile separately against
  * fs.h. A conversion through double must fail on 2^53 + 1. */

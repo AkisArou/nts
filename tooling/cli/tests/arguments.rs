@@ -387,6 +387,9 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
     let source = include_str!("../src/multi_emit.rs");
     let before_tests = source.split("#[cfg(test)]").next().unwrap();
     consumed.insert("emit", flags(&tokens(before_tests)));
+    let native = tokens(include_str!("../src/node_dependencies.rs"));
+    let (start, end) = functions(&native)["command"][0];
+    consumed.insert("node-deps", flags(&native[start..end]));
     let differential = tokens(include_str!("../../differential/src/lib.rs"));
     let (start, end) = functions(&differential)["counting"][0];
     consumed.insert("counting", flags(&differential[start..end]));
@@ -420,6 +423,7 @@ fn declarations_match_the_options_the_legacy_command_readers_consume() {
             "erasure" => &["project", "erasure"],
             "receivers" => &["project", "receivers"],
             "deps" => &["deps"],
+            "node-deps" => &["node-deps"],
             "help" | "version" | "emit-wasm" => &[],
             other => panic!("audit the new command's readers: {other}"),
         };

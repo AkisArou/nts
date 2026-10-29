@@ -11,6 +11,7 @@
  * it. That last one is not taste: a callback that cancels or replaces the
  * servers would otherwise re-enter c-ares from its own callback. */
 #define CARES_NO_DEPRECATED
+#include "../internal/nts_node.h"
 #include <ares.h>
 #include <arpa/nameser.h>
 #include <stdlib.h>
@@ -42,7 +43,7 @@ enum {
 
 /* ------------------------------------------------------------------ helpers */
 
-static uv_loop_t *loop(void) { return uv_default_loop(); }
+static uv_loop_t *loop(void) { return nts_node_loop(); }
 
 static char *cstring(const NtsString *value) {
     if (value == NULL) return NULL;

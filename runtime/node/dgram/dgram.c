@@ -1,4 +1,5 @@
 /* The native half of `node:dgram`, over libuv. See `nts_dgram.h`. */
+#include "../internal/nts_node.h"
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -22,7 +23,7 @@ typedef struct {
 static Socket *sockets = NULL;
 static size_t socket_capacity = 0;
 
-static uv_loop_t *loop(void) { return uv_default_loop(); }
+static uv_loop_t *loop(void) { return nts_node_loop(); }
 
 static Socket *at(double handle) {
     if (!(handle >= 1.0)) return NULL;

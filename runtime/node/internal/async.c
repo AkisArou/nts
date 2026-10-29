@@ -193,7 +193,7 @@ void nts_schedule_unreferenced_immediate(NtsHeader *callback) {
     immediates_tail = entry;
 
     if (!immediate_handles_ready) {
-        uv_loop_t *loop = uv_default_loop();
+        uv_loop_t *loop = nts_node_loop();
         uv_check_init(loop, &immediate_check);
         uv_idle_init(loop, &immediate_pump);
         /* Unreferenced once, here. `uv_unref` on a handle that has never been

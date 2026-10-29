@@ -1,4 +1,5 @@
 /* The native half of `node:net`, over libuv. See `nts_net.h`. */
+#include "../internal/nts_node.h"
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -43,7 +44,7 @@ typedef struct {
 static Entry *entries = NULL;
 static size_t capacity = 0;
 
-static uv_loop_t *loop(void) { return uv_default_loop(); }
+static uv_loop_t *loop(void) { return nts_node_loop(); }
 
 static Entry *at(double handle, Kind kind) {
     if (!(handle >= 1.0)) return NULL;

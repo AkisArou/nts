@@ -23,11 +23,12 @@ mkdir -p "$compiler_tmp"
   cargo run -q -p nts-cli -- emit-c "$project" --out "$c_output"
 )
 
-TMPDIR="$compiler_tmp" cc -std=c11 -O3 -fno-lto -Wno-attributes -I"$c_output" \
+TMPDIR="$compiler_tmp" node "$workspace_root/tooling/conformance/native-link.mjs" \
+  "${NTS_BIN:-$workspace_root/target/debug/nts}" cc -std=c11 -O3 -fno-lto -Wno-attributes -I"$c_output" \
   "$c_output/program.c" \
   "$c_output/nts_runtime.c" \
   "$experiment_root/experiments/representation/bench.c" \
-  -luv -lm -o "$output/bench"
+  -lm -o "$output/bench"
 TMPDIR="$compiler_tmp" cc -std=c11 -O3 -fno-lto -Wno-attributes -I"$c_output" -S \
   "$c_output/program.c" -o "$output/program.s"
 "$output/bench" >"$output/bench.csv"

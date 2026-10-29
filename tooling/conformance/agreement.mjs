@@ -1,3 +1,4 @@
+import {bundledDependencies} from './node-deps.mjs';
 // A compiled program that answers differently from node.
 //
 //   NTS_BIN=<a pinned copy> node tooling/conformance/agreement.mjs
@@ -115,13 +116,14 @@ for (const name of names) {
   const addon = join(out, "case.node");
   const internal = readdirSync(join(ROOT, "runtime/node/internal"))
     .filter((f) => f.endsWith(".c")).map((f) => join(ROOT, "runtime/node/internal", f));
+  const bundled = bundledDependencies(compiler);
   const link = spawnSync("clang", [
     "-std=c11", "-O0", "-D_GNU_SOURCE", "-fPIC", "-shared", "-fvisibility=hidden",
     "-I", out,
     "-I", join(ROOT, "third_party/node/src"),
-    "-I", join(ROOT, "third_party/node/deps/uv/include"),
+    ...bundled.include_flags,
     "-I", join(ROOT, "runtime/node/internal"),
-    "-o", addon, ...sources, ...internal, "-luv", "-lm",
+    "-o", addon, ...sources, ...internal, ...bundled.link_flags, "-lm",
   ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
   if (link.status !== 0) {
     console.log(`  DID NOT LINK    ${name}`);

@@ -18,6 +18,9 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "support/node_deps.rs"]
+mod node_deps;
+
 fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
@@ -64,6 +67,10 @@ fn run_source_suite(
     let out = std::env::temp_dir().join(format!("nts-{name}{flavour}-{}", std::process::id()));
     std::fs::create_dir_all(&out).expect("a build directory");
     let binary = out.join(name);
+    let bundled = link
+        .iter()
+        .any(|flag| nts_build::node_deps::owned_library(flag))
+        .then(node_deps::get);
 
     let compile = std::process::Command::new("clang")
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-O1"])
@@ -76,7 +83,12 @@ fn run_source_suite(
         .args(sources.iter().map(|source| runtime.join(source)))
         .arg(runtime.join("nts_runtime.c"))
         .arg("-lm")
-        .args(link)
+        .args(bundled.iter().flat_map(|a| &a.include_flags))
+        .args(bundled.iter().flat_map(|a| &a.link_flags))
+        .args(
+            link.iter()
+                .filter(|flag| !nts_build::node_deps::owned_library(flag)),
+        )
         .output()
         .expect("clang should run");
     assert!(

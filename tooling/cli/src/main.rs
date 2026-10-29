@@ -24,6 +24,7 @@ mod gir_surface;
 mod jar_resources;
 mod multi_emit;
 mod native_paths;
+mod node_dependencies;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
@@ -635,6 +636,7 @@ BINDINGS
   bind-winmd   generate TypeScript declarations from Windows (Win32) metadata
   bind         generate declarations and a binding table from class files
   deps         acquire the TypeScript behind this project's dependencies
+  node-deps    prepare bundled native libraries from an explicit build request
 
 INSPECTING
   frontend     what the frontend answered, before lowering
@@ -791,6 +793,7 @@ fn run_command() -> Result<()> {
             frontend(&tsconfig)
         }
         Some("build") => build(&args.collect::<Vec<String>>()),
+        Some("node-deps") => node_dependencies::command(&args.collect::<Vec<String>>()),
         Some("check") => check(&args.collect::<Vec<String>>()),
         // `bind-c`, not `bind`: `bind` is the Java binding generator below, and
         // an arm added above it silently shadowed that command. Named for what
@@ -3999,7 +4002,7 @@ fn write_standalone(
             nts_codegen_c::LoopHost::Glib => " $(pkg-config --cflags --libs glib-2.0)",
             nts_codegen_c::LoopHost::CoreFoundation => " -lobjc -framework CoreFoundation",
             // user32 for the message window; libuv's own system libraries
-            // are the rest of `WINDOWS_UV_LIBS`, which a Windows `-luv` needs
+            // come from the selected Node recipe when a Windows build needs libuv
             // whichever host runs it.
             nts_codegen_c::LoopHost::Win32 => " -luser32",
         };
@@ -4994,102 +4997,9 @@ fn build_c(
     Ok(wrote.omissions)
 }
 
-/// libuv is the *program's* dependency, and a cross build rarely has one.
-///
-/// A program that awaits anything links the libuv host, and libuv is a system
-/// library rather than something this repository vendors. On the host that is
-/// fine -- every machine building this has one. Cross-compiling to Windows with
-/// `zig cc` does not: zig bundles a libc for the target and nothing else, so
-/// the build died on `fatal error: 'uv.h' file not found`, which names a file
-/// rather than a dependency and says nothing about what to do.
-///
-/// **Asked rather than assumed, because the triple does not answer it.** A
-/// machine *with* a Windows libuv on its include path should build, and a rule
-/// keyed on "is this a cross build" would refuse it. So this compiles a
-/// two-line translation unit and reports what the target's own compiler says --
-/// the same shape as the measurement that produced the Apple refusal above.
-///
-/// Only on a cross build: a host missing libuv fails at `-luv` with a message
-/// that already names it, and a probe on every build would be a compile nobody
-/// asked for.
-fn refuse_without_libuv(
-    name: &str,
-    out: &Utf8Path,
-    tools: &Toolchain,
-    target: &nts_build::config::Target,
-    native: &[NativeSource],
-    napi: Option<&Utf8Path>,
-    cflags: &[String],
-) -> Result<()> {
-    if is_host(target) {
-        return Ok(());
-    }
-    let probe = out.join("nts_libuv_probe.c");
-    std::fs::write(
-        &probe,
-        "#include <uv.h>\nint nts_libuv_probe(void) { return 0; }\n",
-    )
-    .with_context(|| format!("writing {probe}"))?;
-    let object = out.join("nts_libuv_probe.o");
-    let mut command = tools.command();
-    // **The same include path the compile will use**, or this asks a narrower
-    // question than the one that matters and refuses a build that would have
-    // worked.
-    command.args(program_includes(out, native, napi, cflags));
-    // **A real compile, not `-fsyntax-only`.** `zig cc` does not honour that
-    // flag -- it reports `error: FileNotFound` against line 1 column 1 whatever
-    // the file says, so the probe failed identically whether or not `uv.h` was
-    // reachable. A check whose answer does not depend on its input is not a
-    // check, and this one was written for the toolchain it does not work under:
-    // every cross build reaching it was refused, and the test could not see it
-    // because a test asserting a refusal passes for a probe that always
-    // refuses. Compiling a two-line unit to an object costs the same and
-    // discriminates.
-    command.args(["-c", probe.as_str(), "-o", object.as_str()]);
-    let asked = command.output().with_context(|| {
-        format!(
-            "asking the compiler for {} whether libuv is available",
-            target.id
-        )
-    })?;
-    let _ = std::fs::remove_file(&probe);
-    let _ = std::fs::remove_file(&object);
-    if asked.status.success() {
-        return Ok(());
-    }
-    // **Says what it measured.** It said "libuv is not available", and what it
-    // established is that `uv.h` is not reachable. The distinction earns its
-    // words: a header without a library fails later at `-luv`, and the advice
-    // below -- install one, put its headers on the path -- is wrong in its first
-    // clause for that case. Two failure modes with two messages is the right
-    // answer rather than a compromise, provided a reader can tell them apart.
-    bail!(
-        "product `{name}` targets {} and is built as an executable, so it links the \
-         libuv host -- and `uv.h` is not reachable when compiling for {}. libuv is the \
-         program's dependency rather than this compiler's: install one built for {}, \
-         put its headers on the include path, declare it as a `dependencies` claim, or \
-         set CC to a cross compiler that has one. Building on {} itself needs none of \
-         that.",
-        target.id,
-        target.id,
-        target.id,
-        target.os
-    )
-}
-
-/// Everywhere a translation unit of the generated program looks for a header.
-///
-/// **One derivation, because a guard computing its own was the bug.**
-/// `refuse_without_libuv` probed for `uv.h` with a bare command while the real
-/// compile added the output directory, every native root, the Node-API headers
-/// and a dependency's `--cflags` -- so a libuv arriving through any of those was
-/// invisible to the probe, and it would have refused a build that was going to
-/// work. That is exactly the case its own comment says it exists to permit.
-///
-/// The output directory first: the emitter writes `nts_uv_host.h` and the
-/// program's own headers there. Then the package's headers, because the
-/// *generated* program includes them too -- a binding over `point.h` lowers to
-/// `#include "point.h"`.
+/// Header paths shared by generated program compilation and binding witnesses.
+/// The output directory contains generated headers; native roots and selected
+/// dependency settings supply the remaining declared inputs.
 fn program_includes(
     out: &Utf8Path,
     native: &[NativeSource],
@@ -6713,7 +6623,13 @@ fn host_arch() -> &'static str {
 
 /// Whether a target is the machine we are standing on.
 fn is_host(target: &nts_build::config::Target) -> bool {
-    target.os == host_os() && target.arch.as_deref().unwrap_or(host_arch()) == host_arch()
+    target.os == host_os()
+        && target.arch.as_deref().unwrap_or(host_arch()) == host_arch()
+        && match target.id.as_str() {
+            "linux-musl" => cfg!(target_env = "musl"),
+            "linux-gnu" => !cfg!(target_env = "musl"),
+            _ => true,
+        }
 }
 
 /// The LLVM triple `zig cc -target` takes for a target.
@@ -6725,6 +6641,7 @@ fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
     // `win32` reached here and matched nothing -- reported as "no cross
     // compiler configured for that pair" about an ordinary pair.
     let rest = match target.os.as_str() {
+        "linux" if target.id == "linux-musl" => "linux-musl",
         "linux" => "linux-gnu",
         "windows" => "windows-gnu",
         _ => return None,
@@ -6817,7 +6734,7 @@ impl Toolchain {
     }
 
     /// `command`, for a link.
-    fn link_command(&self, directory: &Utf8Path) -> Result<std::process::Command> {
+    fn link_command(&self, directory: &Utf8Path, shared: bool) -> Result<std::process::Command> {
         let mut command = match self.linker.as_deref() {
             Some([program, leading @ ..]) => {
                 let mut command = std::process::Command::new(native_paths::program(program)?);
@@ -6828,7 +6745,15 @@ impl Toolchain {
             }
             _ => self.command_in(directory)?,
         };
-        command.args(native_paths::arguments(&self.link, directory)?);
+        // An automatic static-executable default cannot turn a requested
+        // shared library into a static link. Explicit driver argv stays intact.
+        let link: Vec<_> = self
+            .link
+            .iter()
+            .filter(|flag| !shared || flag.as_str() != "-static")
+            .cloned()
+            .collect();
+        command.args(native_paths::arguments(&link, directory)?);
         Ok(command)
     }
 
@@ -6926,6 +6851,9 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
     if target.os == "ios" {
         return ios_toolchain(name, target);
     }
+    if target.os == "linux" {
+        return linux_toolchain(name, target);
+    }
     let Some(triple) = zig_triple(target) else {
         bail!(
             "product `{name}` targets {} and this is a {} machine, and there is no \
@@ -6958,8 +6886,57 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
     })
 }
 
+/// Clang checks and compiles against Zig's target libc headers; Zig supplies
+/// that same libc's CRT and linker. Keep the native dependency plan in this
+/// toolchain too, so neither a shell wrapper nor a lane libuv build is needed.
+fn linux_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
+    let arch = target.arch.as_deref().unwrap_or(host_arch());
+    let triple = zig_triple(target).context("Linux target triple")?;
+    let zig = zig_lib_dir().with_context(|| {
+        format!("product `{name}` needs Zig's libc for {triple}, but zig env did not answer")
+    })?;
+    let libc = if target.id == "linux-musl" {
+        "musl"
+    } else {
+        "gnu"
+    };
+    let generic = if libc == "musl" {
+        "generic-musl"
+    } else {
+        "generic-glibc"
+    };
+    let headers = zig.join("libc/include");
+    let mut leading = vec![format!("--target={triple}"), "-nostdlibinc".to_owned()];
+    for directory in [
+        format!("{arch}-linux-{libc}"),
+        generic.to_owned(),
+        format!("{arch}-linux-any"),
+        "any-linux-any".to_owned(),
+    ] {
+        leading.extend(["-isystem".to_owned(), headers.join(directory).to_string()]);
+    }
+    Ok(Toolchain {
+        program: "clang".to_owned(),
+        leading,
+        link: if libc == "musl" {
+            vec!["-static".to_owned()]
+        } else {
+            Vec::new()
+        },
+        linker: Some(vec![
+            "zig".to_owned(),
+            "cc".to_owned(),
+            "-target".to_owned(),
+            triple,
+        ]),
+        lto: false,
+        cpu: Vec::new(),
+        cpu_at_link: Vec::new(),
+    })
+}
+
 /// Where the Apple lane keeps what a macOS build needs and this box does not
-/// ship: a sysroot and a libuv per arch. `tooling/apple/*.sh` fills it.
+/// ship: a sysroot. `tooling/apple/*.sh` fills it.
 fn apple_root() -> Utf8PathBuf {
     if let Ok(root) = std::env::var("NTS_APPLE_ROOT") {
         return Utf8PathBuf::from(root);
@@ -6980,9 +6957,7 @@ fn apple_root() -> Utf8PathBuf {
 /// sysroot (`tooling/apple/zig-sdk.sh`), which reaches every program that
 /// needs nothing beyond libSystem. The SDK only changes `-isysroot`.
 ///
-/// libuv, which every executable links, comes from `<root>/<arch>` when
-/// `tooling/apple/build-libuv.sh` has put one there; otherwise the usual
-/// refusal about `uv.h` says what is missing.
+/// The selected Node recipe supplies libuv independently of the SDK.
 fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
     let arch = target.arch.as_deref().unwrap_or(host_arch());
     // Apple and LLVM spell it `arm64`; the config spells it as Linux does.
@@ -7003,18 +6978,13 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
             host_os()
         )
     }
-    let mut leading = vec![
+    let leading = vec![
         "-target".to_owned(),
         format!("{apple_arch}-apple-macos{minimum}"),
         "-isysroot".to_owned(),
         sdk.to_string(),
     ];
-    let mut link = vec!["-fuse-ld=lld".to_owned()];
-    let uv = root.join(arch);
-    if uv.join("include/uv.h").is_file() {
-        leading.push(format!("-I{}", uv.join("include")));
-        link.push(format!("-L{}", uv.join("lib")));
-    }
+    let link = vec!["-fuse-ld=lld".to_owned()];
     Ok(Toolchain {
         program: "clang".to_owned(),
         leading,
@@ -7028,8 +6998,8 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
 
 /// The iOS simulator on an Intel Mac, which is what `x86_64` iOS can only be:
 /// the macOS toolchain's command line with the simulator's triple and SDK
-/// (`tooling/apple/sync-sdk.sh iphonesimulator`), and its libuv
-/// (`tooling/apple/build-libuv.sh x86_64-ios-simulator`). An `aarch64` iOS
+/// (`tooling/apple/sync-sdk.sh iphonesimulator`). Its libuv comes from the
+/// selected Node recipe. An `aarch64` iOS
 /// target is a device, or Apple silicon's simulator, and a device's binary
 /// has to be signed, which nothing here does.
 fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
@@ -7052,18 +7022,13 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
              at {sdk}. Run `tooling/apple/sync-sdk.sh iphonesimulator`, or set NTS_IOS_SIMULATOR_SDK"
         );
     }
-    let mut leading = vec![
+    let leading = vec![
         "-target".to_owned(),
         format!("x86_64-apple-ios{minimum}-simulator"),
         "-isysroot".to_owned(),
         sdk.to_string(),
     ];
-    let mut link = vec!["-fuse-ld=lld".to_owned()];
-    let uv = root.join("x86_64-ios-simulator");
-    if uv.join("include/uv.h").is_file() {
-        leading.push(format!("-I{}", uv.join("include")));
-        link.push(format!("-L{}", uv.join("lib")));
-    }
+    let link = vec!["-fuse-ld=lld".to_owned()];
     Ok(Toolchain {
         program: "clang".to_owned(),
         leading,
@@ -7075,8 +7040,8 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
     })
 }
 
-/// Where the Windows lane keeps what a Windows build needs and this box does not
-/// ship: a libuv per arch. `tooling/windows/build-libuv.sh` fills it.
+/// The Windows SDK metadata root used by the `WinRT` binder. Native dependency
+/// headers and archives come from the embedded Node recipes instead.
 fn windows_root() -> Utf8PathBuf {
     if let Ok(root) = std::env::var("NTS_WINDOWS_ROOT") {
         return Utf8PathBuf::from(root);
@@ -7105,9 +7070,7 @@ fn windows_root() -> Utf8PathBuf {
 /// Bitfields need no flag: both default to MS layout for this triple
 /// (measured: `struct { char a:4; int b:4; }` is 8 bytes under each).
 ///
-/// libuv, which every executable links, comes from `<root>/<arch>` when
-/// `tooling/windows/build-libuv.sh` has put one there. Otherwise the usual
-/// refusal about `uv.h` says what is missing.
+/// The selected Node recipe supplies libuv and its Windows system libraries.
 fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
     let arch = target.arch.as_deref().unwrap_or(host_arch());
     let Some(zig) = zig_lib_dir() else {
@@ -7119,13 +7082,8 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
             host_os()
         )
     };
-    let mut leading = windows_compile_flags(arch, &zig);
-    let mut link = Vec::new();
-    let uv = windows_root().join(arch);
-    if uv.join("include/uv.h").is_file() {
-        leading.push(format!("-I{}", uv.join("include")));
-        link.push(format!("-L{}", uv.join("lib")));
-    }
+    let leading = windows_compile_flags(arch, &zig);
+    let link = Vec::new();
     let linker = vec![
         "zig".to_owned(),
         "cc".to_owned(),
@@ -7310,6 +7268,17 @@ fn link_c(
     if product.kind == "static-library" {
         tools.lto = false;
     }
+    let bundled_node = node_dependencies::for_build(target, &tools, wrote, needs)?;
+    let mut effective_needs = needs.clone();
+    if let Some(artifacts) = &bundled_node {
+        let mut includes = artifacts.include_flags.clone();
+        includes.extend(effective_needs.cflags);
+        effective_needs.cflags = includes;
+        effective_needs
+            .libs
+            .retain(|flag| !nts_build::node_deps::owned_library(flag));
+    }
+    let needs = &effective_needs;
     check_witness(name, out, native, &tools, &needs.cflags)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
@@ -7390,23 +7359,6 @@ fn link_c(
         append_library_initialiser(out, &sources)?;
     }
 
-    // **Before anything is compiled**, because the alternative is what this
-    // replaced: a raw `fatal error: 'uv.h' file not found` out of clang, forty
-    // lines into a build, about a library the reader never named.
-    if sources
-        .iter()
-        .any(|source| source == nts_codegen_c::UV_HOST_SOURCE_NAME)
-    {
-        refuse_without_libuv(
-            name,
-            out,
-            &tools,
-            target,
-            native,
-            napi.as_deref(),
-            &needs.cflags,
-        )?;
-    }
     let cache = ObjectCache::new(cache_dir, &tools);
     let mut objects = Vec::new();
     let with = Compiling {
@@ -7441,7 +7393,7 @@ fn link_c(
         }
     } else {
         {
-            let mut command = tools.link_command(out)?;
+            let mut command = tools.link_command(out, shared)?;
             if tools.lto {
                 command.args(lto_flags()).args(&tools.cpu_at_link);
             }
@@ -7483,8 +7435,19 @@ fn link_c(
             // that reads as "the dependency did not work" rather than as an
             // ordering rule.
             command.args(native_paths::arguments(&needs.libs, out)?);
-            command.args(binding_link_flags(wrote));
-            command.args(loop_host_link_flags(&sources, format));
+            command.args(
+                binding_link_flags(wrote)
+                    .into_iter()
+                    .filter(|flag| !nts_build::node_deps::owned_library(flag)),
+            );
+            command.args(
+                loop_host_link_flags(&sources)
+                    .into_iter()
+                    .filter(|flag| !nts_build::node_deps::owned_library(flag)),
+            );
+            if let Some(artifacts) = &bundled_node {
+                node_dependencies::link(&mut command, artifacts, &tools, &product.kind, out)?;
+            }
             // Swift's runtime, which the Swift objects name through their
             // autolink entries: its stubs in the SDK, and the OS's copy at
             // run time, where every macOS and iOS these targets reach has it.
@@ -7516,6 +7479,12 @@ fn link_c(
                 refuse_unresolved(name, &artifact)?;
             }
         }
+    }
+    if let Some(artifacts) = &bundled_node {
+        if product.kind == "static-library" {
+            node_dependencies::merge(artifacts, &artifact)?;
+        }
+        node_dependencies::notices(artifacts, out)?;
     }
     ship_vendored(&vendored_frameworks(needs, target)?, out)?;
     // The Windows App SDK's bootstrapper, which the runtime loads from beside
@@ -7622,12 +7591,6 @@ fn llvm_platform(os: &str, arch: &str) -> nts_codegen_llvm::Platform {
     nts_codegen_llvm::Platform { abi, arch, darwin }
 }
 
-/// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`
-/// list for `WIN32`, which `tooling/windows/build-libuv.sh` builds from.
-const WINDOWS_UV_LIBS: [&str; 9] = [
-    "psapi", "user32", "advapi32", "iphlpapi", "userenv", "ws2_32", "dbghelp", "ole32", "shell32",
-];
-
 /// Refused before anything compiles. A `.node` off ELF resolves `napi_*` from
 /// its host a way this link does not write -- `-undefined dynamic_lookup` on a
 /// Mac, an import library for `node.exe` on Windows -- and the
@@ -7675,18 +7638,13 @@ fn refuse_what_this_linker_cannot(
 /// The libuv host is a translation unit like any other, so its presence in what
 /// was written is the question -- not the product kind, and not a flag somebody
 /// remembers. The same rule gives the run-loop adapter its framework.
-fn loop_host_link_flags(sources: &[String], format: ObjectFormat) -> Vec<String> {
+fn loop_host_link_flags(sources: &[String]) -> Vec<String> {
     let mut flags = Vec::new();
     if sources
         .iter()
         .any(|s| s == nts_codegen_c::UV_HOST_SOURCE_NAME)
     {
         flags.push("-luv".to_owned());
-        // A static libuv brings its dependencies' names, not the libraries:
-        // on Windows, its `CMakeLists.txt` list for `WIN32`.
-        if format == ObjectFormat::Coff {
-            flags.extend(WINDOWS_UV_LIBS.iter().map(|lib| format!("-l{lib}")));
-        }
     }
     if sources
         .iter()
@@ -8102,7 +8060,7 @@ mod module_cache_tests {
                 String::from_utf8_lossy(&compiled.stderr)
             );
             let linked = tools
-                .link_command(&build)
+                .link_command(&build, false)
                 .unwrap()
                 .arg("main.c")
                 .args(super::native_paths::arguments(&[dependency.to_string()], &build).unwrap())

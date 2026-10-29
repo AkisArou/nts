@@ -1,3 +1,4 @@
+import {bundledDependencies} from './node-deps.mjs';
 // The machinery a generative differential needs, minus the grammar.
 //
 // `fuzz-expressions.mjs` was the first of these and carried all of it inline.
@@ -12,7 +13,7 @@
 // grammar and the way it assembles a program, because those are the things
 // that differ.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -174,12 +175,13 @@ export function compileAndRun(dir, source) {
   // when re-run on its own.
   //
   // The first error line goes into the verdict, so the two name themselves.
+  const bundled = bundledDependencies(NTS, ["uv"], ["cc"]);
   const build = spawnSync(
     "cc",
     [
-      "-std=c11", "-O2", "-I.",
+      "-std=c11", "-O2", "-I.", ...bundled.include_flags,
       ...readdirSync(join(dir, "out")).filter((f) => f.endsWith(".c")),
-      "-luv", "-lm", "-o", "program",
+      ...bundled.link_flags, "-lm", "-o", "program",
     ],
     { cwd: join(dir, "out"), encoding: "utf8" },
   );
@@ -192,12 +194,7 @@ export function compileAndRun(dir, source) {
       const kept = join(process.env.NTS_FUZZ_KEEP, `cc-failed-${Date.now()}.ts`);
       try {
         writeFileSync(kept, source);
-        const log = execFileSync(
-          "sh",
-          ["-c", `cd ${join(dir, "out")} && cc -std=c11 -O2 -I. *.c -luv -lm -o program 2>&1 | head -5`],
-          { encoding: "utf8" },
-        );
-        console.error(`kept ${kept}\n${log}`);
+        console.error(`kept ${kept}\n${build.stderr ?? ""}`);
       } catch {}
     }
     return { kind: "cc-failed", detail };

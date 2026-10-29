@@ -77,6 +77,7 @@ export type TargetId =
   | `macos-${number}`
   | `node-api-${number}`
   | "linux-gnu"
+  | "linux-musl"
   | "windows";
 
 /** A resolved compilation target. */
@@ -218,9 +219,9 @@ export const target = {
   }),
 
   linux: (
-    o: { readonly arch?: Arch; readonly backend?: NativeBackend; readonly cpu?: "baseline" } = {},
+    o: { readonly arch?: Arch; readonly backend?: NativeBackend; readonly cpu?: "baseline"; readonly libc?: "gnu" | "musl" } = {},
   ): Target => ({
-    id: "linux-gnu",
+    id: `linux-${o.libc ?? "gnu"}`,
     os: "linux",
     arch: o.arch ?? "x86_64",
     backend: o.backend ?? NATIVE_DEFAULT,

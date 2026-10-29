@@ -336,10 +336,13 @@ fn pkg_config(id: &str, claim: &Dependencies) -> Result<Resolution> {
              write `packages: [\"libnotify\"]`"
         )
     };
-    if Command::new("pkg-config")
-        .arg("--version")
-        .output()
-        .is_err()
+    if packages
+        .iter()
+        .any(|name| crate::node_deps::package_library(name).is_none())
+        && Command::new("pkg-config")
+            .arg("--version")
+            .output()
+            .is_err()
     {
         bail!(
             "`dependencies.{id}` needs pkg-config, which is not installed. \
@@ -367,6 +370,9 @@ fn pkg_config(id: &str, claim: &Dependencies) -> Result<Resolution> {
 
 /// Whether pkg-config knows `package` on this machine.
 fn installed(package: &str) -> Result<bool> {
+    if crate::node_deps::package_library(package).is_some() {
+        return Ok(true);
+    }
     Ok(Command::new("pkg-config")
         .args(["--exists", package])
         .status()
@@ -382,9 +388,25 @@ fn installed(package: &str) -> Result<bool> {
 /// offers no machine-readable output to do better with, and a path with a space
 /// in a `-I` has not been seen in this tree.
 fn flags(what: &str, packages: &[String]) -> Result<Vec<String>> {
+    let mut result = if what == "--libs" {
+        packages
+            .iter()
+            .filter_map(|name| crate::node_deps::package_library(name))
+            .map(str::to_owned)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let external: Vec<_> = packages
+        .iter()
+        .filter(|name| crate::node_deps::package_library(name).is_none())
+        .collect();
+    if external.is_empty() {
+        return Ok(result);
+    }
     let output = Command::new("pkg-config")
         .arg(what)
-        .args(packages)
+        .args(external)
         .output()
         .with_context(|| format!("running pkg-config {what}"))?;
     if !output.status.success() {
@@ -394,10 +416,12 @@ fn flags(what: &str, packages: &[String]) -> Result<Vec<String>> {
             String::from_utf8_lossy(&output.stderr).trim()
         )
     }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .map(ToOwned::to_owned)
-        .collect())
+    result.extend(
+        String::from_utf8_lossy(&output.stdout)
+            .split_whitespace()
+            .map(ToOwned::to_owned),
+    );
+    Ok(result)
 }
 
 /// npm, which resolves packages this build neither links nor ships.

@@ -5,6 +5,7 @@
  * at most one TypeScript stream chunk per operation. Async writes run in
  * libuv's worker pool; only their completion allocates managed objects or
  * settles a promise, back on the owner thread. */
+#include "../internal/nts_node.h"
 #include "nts_zlib.h"
 
 #include <brotli/decode.h>
@@ -1147,7 +1148,7 @@ NtsPromise *nts_zlib_write(double handle, double flush, NtsView *input,
   work->output = output;
   work->output_limit = limit;
   engine->busy = true;
-  int queued = uv_queue_work(uv_default_loop(), &work->request,
+  int queued = uv_queue_work(nts_node_loop(), &work->request,
                              nts_zlib_work_run, nts_zlib_work_after);
   if (queued != 0) {
     engine->busy = false;

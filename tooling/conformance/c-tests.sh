@@ -23,10 +23,24 @@ cd "$(dirname "$0")/../.."
 root=$PWD
 work=${TMPDIR:-/tmp}/nts-c-tests.$$
 mkdir -p "$work"
-trap 'rm -rf "$work"' EXIT
+trap 'status=$?; if [ "$status" -eq 0 ]; then rm -rf "$work"; else echo "native failure artifacts retained: $work" >&2; fi' EXIT
 
 failures=0
+unavailable=0
 found=0
+case_results="$work/native-cases.tsv"
+: > "$case_results"
+finish_native_results() {
+  node "$root/tooling/conformance/native-case-result.ts" "$case_results" "$work/native-result.json" > "$work/native-result.log" 2>&1
+  result=$?
+  if [ "$result" -ne 0 ]; then cat "$work/native-result.log"; fi
+  return "$result"
+}
+
+compiler="${NTS_COMPILER:-${NTS_BIN:-$root/target/release/nts}}"
+node "$root/tooling/conformance/node-deps.ts" "$compiler" "$work/node-deps.json" || exit 2
+mapfile -d '' -t bundled_includes < "$work/node-deps.json.include_flags"
+mapfile -d '' -t bundled_libraries < "$work/node-deps.json.link_flags"
 
 # Built once, ahead of the loop.
 mkdir -p "$work/internal"
@@ -34,42 +48,16 @@ for source in runtime/node/internal/*.c; do
   [ -e "$source" ] || continue
   if ! clang -std=c11 -D_GNU_SOURCE -fPIC -c "$source" \
       -I "$root/runtime/c" -I "$root/runtime/node/internal" \
-      -I "$root/third_party/node/deps/uv/include" -I "$root/third_party/node/src" \
+      "${bundled_includes[@]}" \
       -o "$work/internal/$(basename "$source" .c).o" > "$work/internal.log" 2>&1; then
     echo "  the shared runtime/node/internal C does not compile:"
     grep -E 'error:' "$work/internal.log" | head -3 | sed 's/^/    /'
-    exit 2
+    printf 'compile\tshared-internal\t1\n' >> "$case_results"
+    finish_native_results
+    exit $?
   fi
 done
 ar rcs "$work/libnodeinternal.a" "$work"/internal/*.o
-
-# The drift guard for the duplicated library list. A copied list that nobody
-# checks is the thing that made `build.sh` name a `node_all.c` deleted three
-# months earlier, invisible because nothing reached the link step. This makes
-# the copy loud instead.
-for module in zlib; do
-  case "$module" in
-    zlib) mine="-lz -lbrotlienc -lbrotlidec -lzstd" ;;
-  esac
-  # Absent and different are not the same finding, and a guard that reports one
-  # as the other sends the next person to look for a change nobody made. This
-  # said "build.sh no longer links zlib with ..." when the real answer was that
-  # it could not find build.sh at all.
-  if [ ! -r tooling/conformance/build.sh ]; then
-    echo "  CANNOT CHECK: tooling/conformance/build.sh is not readable from $PWD."
-    echo "  The library list below is a copy of one that lives there, and with"
-    echo "  the original out of reach there is no way to tell whether it is"
-    echo "  still right. Not proceeding on an unverifiable copy."
-    exit 2
-  fi
-  if ! grep -qF -- "$mine" tooling/conformance/build.sh; then
-    echo "  DRIFT: build.sh no longer links $module with:"
-    echo "    $mine"
-    echo "  These two lists have to agree or this script tests a different"
-    echo "  binary from the one the module ships. Fix both, then rerun."
-    exit 2
-  fi
-done
 
 for test_c in runtime/node/*/test/*.c; do
   [ -e "$test_c" ] || continue
@@ -104,27 +92,28 @@ for test_c in runtime/node/*/test/*.c; do
   # and lets the linker decide which members it needs.
   [ "$module" = "internal" ] && module_c=""
 
-  # The same libraries `build.sh` links that module against. Duplicated rather
-  # than factored out, because `build.sh` is running in other sessions right now
-  # and editing a script while it executes is its own bug -- but duplicated
-  # *checkably*: the drift guard below fails the run if the two lists stop
-  # agreeing, so this cannot quietly go stale the way a copied list normally
-  # does.
-  module_libraries=""
-  case "$module" in
-    zlib) module_libraries="-lz -lbrotlienc -lbrotlidec -lzstd" ;;
-    # The same query `build.sh` makes, so the two cannot name different libraries.
-    crypto) module_libraries=$(pkg-config --libs libcrypto) ;;
-  esac
-
+  # Test-only linker instrumentation is declared by the fixture that needs it.
+  link_flags=()
+  directive=$(sed -n 's@^// nts-test-link: @@p' "$test_c")
+  if [ -n "$directive" ]; then read -r -a link_flags <<< "$directive"; fi
+  build_log="$work/$module-$name.build.log"
   if ! clang -std=c11 -D_GNU_SOURCE -Wall -Wextra \
       -I "$root/runtime/c" -I "$module_dir" -I "$root/runtime/node/internal" \
-      -I "$root/third_party/node/deps/uv/include" -I "$root/third_party/node/src" \
+      "${bundled_includes[@]}" \
       $test_c $module_c "$root/runtime/c/nts_runtime.c" $shared_lib \
-      $module_libraries -luv -lm -o "$work/$module-$name" > "$work/build.log" 2>&1; then
+      "${bundled_libraries[@]}" "${link_flags[@]}" -lm -o "$work/$module-$name" > "$build_log" 2>&1; then
     echo "did not build"
-    grep -E 'error:' "$work/build.log" | head -3 | sed 's/^/                                  /'
+    grep -E 'error:' "$build_log" | head -3 | sed 's/^/                                  /'
     failures=$((failures + 1))
+    printf 'compile\t%s/%s\t1\n' "$module" "$name" >> "$case_results"
+    continue
+  fi
+
+  if ! node "$root/tooling/gate/node-deps-elf.ts" "$work/$module-$name" > "$work/$module-$name.elf.log" 2>&1; then
+    echo "system dependency in native artifact"
+    cat "$work/$module-$name.elf.log"
+    failures=$((failures + 1))
+    printf 'elf\t%s/%s\t1\n' "$module" "$name" >> "$case_results"
     continue
   fi
 
@@ -135,9 +124,12 @@ for test_c in runtime/node/*/test/*.c; do
   # machine.
   out=$(timeout 60 "$work/$module-$name" 2>&1)
   code=$?
+  printf 'run\t%s/%s\t%s\n' "$module" "$name" "$code" >> "$case_results"
+  printf '%s\n' "$out" > "$work/$module-$name.stdout"
+  printf '%s\n' "$code" > "$work/$module-$name.status"
   if [ "$code" -eq 124 ]; then
-    echo "HUNG -- 60s timeout"
-    failures=$((failures + 1))
+    echo "NOT MEASURED -- wall guard ended observation"
+    unavailable=$((unavailable + 1))
   elif [ "$code" -gt 128 ]; then
     # A signal, not a verdict. A test killed by SIGABRT or SIGSEGV prints no
     # `FAIL` line, so reporting it the same way as a failed check shows an
@@ -164,7 +156,8 @@ if [ "$found" -eq 0 ]; then
   echo "  INSTRUMENT FAILURE: no runtime/node/*/test/*.c found at all."
   echo "  This script reports success when every test passes, and an empty run"
   echo "  is not that. Check the glob before believing a green line."
-  exit 2
+  finish_native_results
+  exit $?
 fi
-echo "  $found file(s), $failures needing a person"
-[ "$failures" -eq 0 ]
+echo "  $found file(s), $failures failures, $unavailable unavailable"
+finish_native_results

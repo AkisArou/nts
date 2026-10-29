@@ -31,6 +31,7 @@
  * forces the timeout to 0. The two properties are independent, which is the
  * only reason one handle can be split off from the other this way.
  */
+#include "../internal/nts_node.h"
 #include <stdint.h>
 #include <uv.h>
 
@@ -55,7 +56,7 @@ static bool nts_timers_handles_ready = false;
 static bool nts_timers_timer_refed = true;
 static bool nts_timers_immediate_refed = true;
 
-static uv_loop_t *nts_timers_loop(void) { return uv_default_loop(); }
+static uv_loop_t *nts_timers_loop(void) { return nts_node_loop(); }
 
 /* The same cast the emitter makes at every closure call site, and the same one
  * `nts_callback_call` makes in the runtime -- the method table stores untyped

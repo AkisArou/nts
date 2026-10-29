@@ -3666,34 +3666,26 @@ export default defineConfig({
 });
 "#;
 
-/// A `pkg-config` claim reaches the link line, and its absence does not.
-///
-/// **Both arms, because a build that links nothing extra also exits zero.** The
-/// positive arm asserts `libz` is in the dynamic table; the negative arm is the
-/// same program with the claim removed, and it must not be. Without the second
-/// half this passes for a build that ignores `dependencies` entirely -- a check
-/// whose answer does not depend on its input is not a check.
-///
-/// `zlib` rather than the fixture's `libnotify`: it is what a machine with a
-/// compiler has, and the question here is whether the flags arrive, not which
-/// library they name.
+/// An owned package claim selects bundled source and notices, never system libz.
+/// The same project without that claim must select neither.
 #[test]
 fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
-    let has = Command::new("pkg-config")
-        .args(["--exists", "zlib"])
-        .status()
-        .is_ok_and(|status| status.success());
-    if !available() || !has {
-        skip("clang, zlib's pkg-config entry");
+    if !available() {
+        skip("node, clang");
         return;
     }
-    let needed = |artifact: &Path| {
+    let selected = |artifact: &Path| {
         let shown = Command::new("readelf")
             .arg("-d")
             .arg(artifact)
             .output()
             .expect("readelf");
-        String::from_utf8_lossy(&shown.stdout).contains("libz.so")
+        assert!(!String::from_utf8_lossy(&shown.stdout).contains("libz.so"));
+        artifact
+            .parent()
+            .expect("artifact directory")
+            .join("notices/node-deps/zlib/LICENSE")
+            .is_file()
     };
 
     let project = fixture("build-pkgconfig", ZLIB_DEPENDENCY);
@@ -3702,7 +3694,7 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
     let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
     assert!(artifact.is_file(), "no library at {}", artifact.display());
     assert!(
-        needed(&artifact),
+        selected(&artifact),
         "the claim did not reach the link:\n{}",
         run.stdout
     );
@@ -3717,8 +3709,8 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
     );
     let artifact = bare.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
     assert!(
-        !needed(&artifact),
-        "the control links zlib too, so the assertion above is not about the claim"
+        !selected(&artifact),
+        "the control selects zlib too, so the assertion above is not about the claim"
     );
 }
 
@@ -3764,31 +3756,34 @@ fn binding_fixture(name: &str, config: &str, package: Option<&str>) -> PathBuf {
 /// claim of the package does, and the project need not repeat it.
 ///
 /// **Four arms, each one difference from the first.** The tag with no claim
-/// links libz; the same module without the tag leaves `zlibCompileFlags`
+/// links bundled zlib; the same module without the tag leaves `zlibCompileFlags`
 /// undefined, which the link refuses, so the tag is what brought it; a tag
 /// naming a package nobody has fails before linking, naming the tag and its
 /// module; and the package both tagged and claimed is asked once and linked
 /// once.
 #[test]
 fn a_binding_modules_package_reaches_the_link() {
-    let has = Command::new("pkg-config")
-        .args(["--exists", "zlib"])
-        .status()
-        .is_ok_and(|status| status.success());
-    if !available() || !has {
-        skip("clang, zlib's pkg-config entry");
+    if !available() {
+        skip("node, clang");
         return;
     }
     let needed = |project: &Path| {
-        let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+        let output = project.join(".nts/build/acme/linux-gnu-x86_64");
         let shown = Command::new("readelf")
             .arg("-d")
-            .arg(&artifact)
+            .arg(output.join("libacme.so"))
             .output()
             .expect("readelf");
-        String::from_utf8_lossy(&shown.stdout)
-            .lines()
-            .filter(|line| line.contains("libz.so"))
+        assert!(!String::from_utf8_lossy(&shown.stdout).contains("libz.so"));
+        let metadata: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(output.join("node-deps.json")).expect("bundled dependency metadata"),
+        )
+        .expect("dependency JSON");
+        metadata["libraries"]
+            .as_array()
+            .expect("archive closure")
+            .iter()
+            .filter(|name| name.as_str() == Some("libzlib.a"))
             .count()
     };
 
@@ -4162,21 +4157,179 @@ export default defineConfig({
 });
 "#;
 
-/// A cross build that needs libuv says so, rather than failing inside clang.
-///
-/// **What this replaced is the point.** A program that awaits anything links the
-/// libuv host, `zig cc` bundles a libc for the target and nothing else, and the
-/// build died forty lines in with `fatal error: 'uv.h' file not found` -- a
-/// message naming a file the reader never wrote, about a dependency nobody
-/// told them they had.
-///
-/// **The control is `a_windows_target_produces_a_windows_dll` above**: the same
-/// target and the same cross toolchain, built as a *library*, and it still
-/// succeeds. Only the executable path emits the libuv host -- `main.c` includes
-/// it -- so the pair separates "this refuses a Windows build that needs libuv"
-/// from "this refuses Windows".
+/// Linux ABI and architecture select the same bundled plan for both emitters.
+/// The musl builds also execute under qemu, without any lane header/archive.
 #[test]
-fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler() {
+fn linux_cross_libc_selects_bundled_plans_and_static_musl_runs() {
+    if !available()
+        || !Command::new("zig")
+            .arg("version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+        || !Command::new("qemu-aarch64-static")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    {
+        skip("clang, zig and qemu-aarch64-static");
+        return;
+    }
+    for libc in ["gnu", "musl"] {
+        let project = linux_cross_fixture(libc);
+        let output = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("build")
+            .arg(project.join("tsconfig.json"))
+            .env_remove("CC")
+            .env("NTS_LINUX_ROOT", project.join("poisoned-linux-root"))
+            .env("NTS_LINUX_ARCH", "x86_64")
+            .output()
+            .expect("build");
+        assert!(
+            output.status.success(),
+            "{libc}: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_linux_cross_executables(&project, libc);
+        assert_linux_cross_shared_exports(&project, libc);
+    }
+}
+
+fn linux_cross_fixture(libc: &str) -> PathBuf {
+    let config = format!(
+        r"
+import {{ app, library, defineConfig, target }} from '@nts/config';
+export default defineConfig({{ products: {{
+  c: app({{ kind: 'executable', entry: './src/main.ts', targets: [target.linux({{ arch: 'aarch64', libc: '{libc}', backend: 'c' }})] }}),
+  llvm: app({{ kind: 'executable', entry: './src/main.ts', targets: [target.linux({{ arch: 'aarch64', libc: '{libc}', backend: 'llvm' }})] }}),
+  cShared: library.native({{ entry: './src/library.ts', targets: [target.linux({{ arch: 'aarch64', libc: '{libc}', backend: 'c' }})] }}),
+  llvmShared: library.native({{ entry: './src/library.ts', targets: [target.linux({{ arch: 'aarch64', libc: '{libc}', backend: 'llvm' }})] }})
+}} }});
+"
+    );
+    let project = fixture(&format!("build-linux-{libc}-arm64"), &config);
+    let config_path = project.join("tsconfig.json");
+    let mut types: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&config_path).expect("type configuration"))
+            .expect("JSON");
+    types["files"] = serde_json::json!([Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../runtime/native/libc.d.ts")
+        .canonicalize()
+        .expect("native scalar root")]);
+    std::fs::write(&config_path, serde_json::to_vec(&types).expect("JSON"))
+        .expect("type configuration");
+    std::fs::write(project.join("src/main.ts"), "console.log(7);\n").expect("source");
+    std::fs::write(
+        project.join("src/uv.d.ts"),
+        r"
+/** @ntsHeader uv.h
+ * @ntsPackage libuv
+ */
+declare module 'c:bundled-uv' {
+  import type { c_uint } from '@nts/scalars';
+  export function uv_version(): c_uint;
+}
+",
+    )
+    .expect("native declaration");
+    std::fs::write(project.join("src/library.ts"),
+        "import { uv_version } from 'c:bundled-uv';\nexport function bundledUvVersion(): number { return Number(uv_version()); }\n").expect("library source");
+    let poison = project.join("poisoned-linux-root/aarch64-musl");
+    std::fs::create_dir_all(poison.join("include")).expect("poison headers");
+    std::fs::create_dir_all(poison.join("lib")).expect("poison archives");
+    std::fs::write(poison.join("include/uv.h"), "#error lane header used\n").expect("header");
+    std::fs::write(poison.join("lib/libuv.a"), "invalid archive\n").expect("archive");
+    project
+}
+
+fn assert_linux_cross_executables(project: &Path, libc: &str) {
+    for backend in ["c", "llvm"] {
+        let directory = project.join(format!(".nts/build/{backend}/linux-{libc}-aarch64"));
+        let binary = directory.join(backend);
+        let format = Command::new("file")
+            .arg("-b")
+            .arg(&binary)
+            .output()
+            .expect("format");
+        let format = String::from_utf8_lossy(&format.stdout);
+        assert!(
+            format.contains("ELF") && format.contains("ARM aarch64"),
+            "{format}"
+        );
+        let metadata: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(directory.join("node-deps.json")).expect("metadata"),
+        )
+        .expect("JSON");
+        assert_eq!(metadata["target"], format!("aarch64-unknown-linux-{libc}"));
+        let dynamic = Command::new("nm")
+            .args(["-D", "--defined-only"])
+            .arg(&binary)
+            .output()
+            .expect("dynamic symbols");
+        assert!(
+            dynamic.status.success(),
+            "nm failed: {}",
+            String::from_utf8_lossy(&dynamic.stderr)
+        );
+        assert!(
+            !String::from_utf8_lossy(&dynamic.stdout)
+                .lines()
+                .any(|line| line
+                    .split_whitespace()
+                    .last()
+                    .is_some_and(|symbol| symbol.starts_with("uv_"))),
+            "bundled libuv symbols escaped the executable export contract"
+        );
+        if libc == "musl" {
+            assert!(format.contains("statically linked"), "{format}");
+            let ran = Command::new("qemu-aarch64-static")
+                .arg(binary)
+                .output()
+                .expect("qemu");
+            assert!(
+                ran.status.success(),
+                "{}",
+                String::from_utf8_lossy(&ran.stderr)
+            );
+            assert_eq!(ran.stdout, b"7\n");
+        }
+    }
+}
+
+fn assert_linux_cross_shared_exports(project: &Path, libc: &str) {
+    for backend in ["c", "llvm"] {
+        let product = format!("{backend}Shared");
+        let binary = project.join(format!(
+            ".nts/build/{product}/linux-{libc}-aarch64/lib{product}.so"
+        ));
+        let symbols = Command::new("nm")
+            .args(["-D", "--defined-only"])
+            .arg(&binary)
+            .output()
+            .expect("shared symbols");
+        assert!(
+            symbols.status.success(),
+            "nm failed for {}: {}",
+            binary.display(),
+            String::from_utf8_lossy(&symbols.stderr)
+        );
+        let names: BTreeSet<_> = String::from_utf8_lossy(&symbols.stdout)
+            .lines()
+            .filter_map(|line| line.split_whitespace().last().map(str::to_owned))
+            .collect();
+        assert_eq!(
+            names,
+            BTreeSet::from(["bundledUvVersion".to_owned()]),
+            "the declared public function must survive while bundled libuv stays private"
+        );
+    }
+}
+
+/// A Windows executable uses embedded libuv even if the old lane installation
+/// contains invalid headers and an invalid archive. The unchanged executable
+/// acceptance below checks the final format and imported system DLLs.
+#[test]
+fn a_windows_executable_uses_embedded_libuv_despite_a_poisoned_lane_installation() {
     let zig = Command::new("zig")
         .arg("version")
         .output()
@@ -4186,23 +4339,31 @@ fn a_cross_build_that_needs_libuv_names_it_rather_than_failing_in_the_compiler()
         return;
     }
     let project = fixture("build-windows-libuv", WINDOWS_EXECUTABLE);
-    // **An empty root, because this machine may have a real one.** The lane
-    // cross-builds libuv into `~/.cache/nts/windows`, and with it there this
-    // test built an `.exe` and failed for having succeeded.
-    let empty = project.join("no-windows-root");
-    std::fs::create_dir_all(&empty).expect("empty root");
-    let run = build_for_windows(&project, &empty);
-    assert!(!run.ok, "it built without libuv:\n{}", run.stdout);
+    let poison = project.join("poisoned-windows-root");
+    let lane = poison.join("x86_64");
+    std::fs::create_dir_all(lane.join("include")).expect("poison header directory");
+    std::fs::create_dir_all(lane.join("lib")).expect("poison archive directory");
+    std::fs::write(
+        lane.join("include/uv.h"),
+        "#error lane libuv must not be used\n",
+    )
+    .expect("poison header");
+    std::fs::write(lane.join("lib/libuv.a"), "not an archive\n").expect("poison archive");
+    let run = build_for_windows(&project, &poison);
     assert!(
-        run.stderr.contains("`uv.h` is not reachable") && run.stderr.contains("libuv"),
-        "the refusal does not name what it measured:\n{}",
-        run.stderr
+        run.ok,
+        "the bundled build failed:\n{}{}",
+        run.stdout, run.stderr
     );
-    assert!(
-        !run.stderr.contains("uv.h' file not found"),
-        "it still reports the compiler's error rather than its own:\n{}",
-        run.stderr
-    );
+    let directory = project.join(".nts/build/tool/windows-x86_64");
+    assert!(directory.join("tool.exe").is_file());
+    let metadata: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(directory.join("node-deps.json")).expect("bundled dependency metadata"),
+    )
+    .expect("dependency metadata JSON");
+    assert_eq!(metadata["target"], "x86_64-pc-windows-gnu");
+    assert_eq!(metadata["node"], nts_build::node_deps::bundle().node);
+    assert_eq!(metadata["libraries"], serde_json::json!(["liblibuv.a"]));
 }
 
 /// `nts build` for Windows, run with `NTS_WINDOWS_ROOT` pointing at `root`.
@@ -4419,26 +4580,11 @@ fn host_is_apple() -> bool {
     std::env::consts::OS == "macos"
 }
 
-/// The libuv probe answers differently when libuv is reachable.
-///
-/// **The arm that makes the other one a check.** A test asserting a refusal
-/// passes for a probe that refuses unconditionally, and that is what the first
-/// version was: it asked `-fsyntax-only`, which `zig cc` does not honour --
-/// it reports `error: FileNotFound` against line 1 column 1 whatever the file
-/// says -- so every cross build reaching it was refused whether or not `uv.h`
-/// was there. The refusal test could not see it and the library control never
-/// reached the probe.
-///
-/// So this puts a `uv.h` somewhere *only a dependency claim names*, which also
-/// pins the second half: the probe compiles with the include path the real
-/// compile uses, not a narrower one. A header arriving through `--cflags` is
-/// exactly the case the probe's own comment says it exists to permit.
-///
-/// It gets past the probe and fails later in the compile, because the header is
-/// a stub with none of libuv's types in it. That is the assertion -- not that
-/// the build succeeds, but that it no longer stops *here*.
+/// A foreign dependency may name its own include directory, but its empty
+/// uv.h cannot replace the header of the bundled runtime dependency. No lane
+/// libuv is available to make the build pass accidentally.
 #[test]
-fn the_libuv_probe_sees_a_header_that_only_a_dependency_claim_names() {
+fn a_dependency_claim_cannot_shadow_the_bundled_libuv_headers() {
     let zig = Command::new("zig")
         .arg("version")
         .output()
@@ -4471,12 +4617,19 @@ fn the_libuv_probe_sees_a_header_that_only_a_dependency_claim_names() {
         .arg("build")
         .arg(project.join("tsconfig.json"))
         .env("PKG_CONFIG_PATH", &pc)
+        .env("NTS_WINDOWS_ROOT", project.join("no-lane-root"))
         .output()
         .expect("running nts build");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        !stderr.contains("`uv.h` is not reachable"),
-        "the probe refused a header its own dependency claim names:\n{stderr}"
+        output.status.success(),
+        "a foreign header shadowed the bundled dependency:\n{}\n{stderr}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        project
+            .join(".nts/build/tool/windows-x86_64/tool.exe")
+            .is_file()
     );
 }
 

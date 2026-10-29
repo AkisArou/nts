@@ -3,7 +3,7 @@
  * # Why a private loop
  *
  * The synchronous family must not run anything else while it waits. Spawning on
- * `uv_default_loop()` would pump every other handle the process has open --
+ * `nts_node_loop()` would pump every other handle the process has open --
  * `net` sockets, `fs` watchers, timers -- and `execSync` would then deliver
  * callbacks to unrelated modules in the middle of a call that is supposed to
  * block. A loop created here, run to completion and closed, cannot.
@@ -18,6 +18,7 @@
  * reaped, so waiting on the loop itself is what waits for all three.
  */
 
+#include "../internal/nts_node.h"
 #include "nts_child_process.h"
 
 #include <stdlib.h>
@@ -387,7 +388,7 @@ double nts_child_process_spawn(const NtsString *file, NtsHeader *args,
     Child *child = &children[(int)claimed];
     child->on_exit = on_exit;
 
-    uv_loop_t *loop = uv_default_loop();
+    uv_loop_t *loop = nts_node_loop();
     const int mode_in = ((int)stdio_mode) & 3;
     const int mode_out = (((int)stdio_mode) >> 2) & 3;
     const int mode_err = (((int)stdio_mode) >> 4) & 3;

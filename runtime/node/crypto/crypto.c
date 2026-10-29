@@ -8,6 +8,7 @@
  * reaches which `EVP_MD`, how an XOF's default length is chosen, when an
  * invalid output length is refused, the empty-key rule for HMAC, the zero salt
  * for HKDF, and the order in which OpenSSL's errors are read. */
+#include "../internal/nts_node.h"
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -844,7 +845,7 @@ static Job *job_new(JobKind kind, size_t length, NtsHeader *done) {
 /* `uv_queue_work` refuses only a request with no work callback, which this
  * never is; a refusal is still delivered, so `done` is called exactly once. */
 static void job_queue(Job *job) {
-    int queued = uv_queue_work(uv_default_loop(), &job->request, job_run, job_after);
+    int queued = uv_queue_work(nts_node_loop(), &job->request, job_run, job_after);
     if (queued != 0) job_after(&job->request, queued);
 }
 

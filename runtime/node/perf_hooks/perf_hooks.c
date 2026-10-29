@@ -1,3 +1,4 @@
+#include "../internal/nts_node.h"
 #include "nts_perf_hooks.h"
 
 #include <stdint.h>
@@ -43,7 +44,7 @@ static void nts_perf_hooks_loop_started(uv_prepare_t *handle) {
 }
 
 static uv_loop_t *nts_perf_hooks_loop(void) {
-    uv_loop_t *loop = uv_default_loop();
+    uv_loop_t *loop = nts_node_loop();
     if (!loop_observed) {
         loop_observed = true;
         /* Harmless when it is already on, as it is in node. */

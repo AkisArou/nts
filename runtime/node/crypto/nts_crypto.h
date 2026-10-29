@@ -9,11 +9,10 @@
  *
  * # Which OpenSSL
  *
- * The machine's. Node vendors its own under `deps/openssl` and this checkout
- * does not carry that tree, so `process.versions.openssl` and this module can
- * name different releases. Digests, MACs and KDFs are specified functions, so
- * a release difference changes no output here; it can change the set
- * `getHashes()` lists and the wording of an OpenSSL error string.
+ * The static OpenSSL from the Node source pin in `.tool-versions`. Bootstrap
+ * verifies the source archive and resolves Node's own generated configuration
+ * into the committed native dependency recipe. Every build path uses that
+ * recipe's headers and archives; there is no system OpenSSL fallback.
  *
  * # Contexts are handles, and a handle is freed by its last operation
  *

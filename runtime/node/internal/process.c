@@ -170,9 +170,27 @@ void nts_process_really_exit(double code) { _Exit((int)code); }
 
 /* Set once by the addon's `NAPI_MODULE_INIT`, before the module body runs.
  * Null in a standalone binary, which is the case the stderr sink below is for. */
-static napi_env nts_host_env = NULL;
+static _Thread_local napi_env nts_host_env = NULL;
 
-void nts_napi_set_env(void *env) { nts_host_env = (napi_env)env; }
+static void clear_host_loop(void *origin) {
+    if (nts_host_env != (napi_env)origin) return;
+    nts_node_set_loop(NULL);
+    nts_host_env = NULL;
+}
+
+void nts_napi_set_env(void *raw) {
+    napi_env env = (napi_env)raw;
+    if (nts_host_env == env) return;
+    if (env != NULL) {
+        uv_loop_t *loop = NULL;
+        if (napi_get_uv_event_loop(env, &loop) != napi_ok || loop == NULL) abort();
+        if (napi_add_env_cleanup_hook(env, clear_host_loop, env) != napi_ok) abort();
+        nts_node_set_loop(loop);
+    } else {
+        nts_node_set_loop(NULL);
+    }
+    nts_host_env = env;
+}
 
 /* `process.cwd()` through the host, so a JS-level replacement is honoured.
  *

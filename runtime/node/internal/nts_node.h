@@ -63,6 +63,13 @@ void nts_process_emit_warning_object(NtsString *message, NtsString *name,
  * falls back to stderr when it is not. */
 void nts_napi_set_env(void *env);
 
+/* C-only loop selection. An addon uses its N-API environment's host loop;
+ * standalone code uses the process's own libuv default loop. This never raises
+ * an nts exception; an invalid installed host environment is a fatal contract
+ * violation rather than a silent second loop. */
+struct uv_loop_s *nts_node_loop(void);
+void nts_node_set_loop(struct uv_loop_s *loop);
+
 /* Enqueue a compiled callback as a microtask. Named apart from the runtime's
  * `nts_enqueue_microtask`, which takes an `NtsTask` rather than a callback --
  * declaring a binding of that name with a callback parameter is what produced

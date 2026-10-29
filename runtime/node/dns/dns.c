@@ -1,4 +1,5 @@
 /* The native half of `node:dns`, over libuv. See `nts_dns.h`. */
+#include "../internal/nts_node.h"
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
@@ -8,7 +9,7 @@
 /* `loop`, `utf8` and `cstring` are `static` in `net.c` rather than shared, so
  * this file carries its own. Three lines each, and making them shared would put
  * a header between two modules that otherwise have no relationship. */
-static uv_loop_t *loop(void) { return uv_default_loop(); }
+static uv_loop_t *loop(void) { return nts_node_loop(); }
 
 static NtsString *utf8(const char *text) {
     return nts_string_from_utf8(text, text == NULL ? 0 : strlen(text));

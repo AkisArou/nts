@@ -1,3 +1,4 @@
+import {bundledDependencies} from './node-deps.mjs';
 import { vmToolFlags } from "../jvm/vm-flags.ts";
 // The minimal reproductions, re-measured against whatever compiler is current.
 //
@@ -485,7 +486,7 @@ for (const name of worker ? [worker.name] : []) {
       "-I", join(ROOT, "runtime/c"),
       "-I", join(ROOT, "runtime/node/internal"),
       "-I", NAPI,
-      "-I", join(ROOT, "third_party/node/deps/uv/include"),
+      ...bundled.include_flags,
       "-o", "/dev/null",
     ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
     return `${cc.stdout ?? ""}${cc.stderr ?? ""}`.split("\n").filter((l) => l.includes("error:"));
@@ -533,13 +534,14 @@ for (const name of worker ? [worker.name] : []) {
     const internal = readdirSync(join(ROOT, "runtime/node/internal"))
       .filter((f) => f.endsWith(".c"))
       .map((f) => join(ROOT, "runtime/node/internal", f));
+    const bundled = bundledDependencies(compiler);
     const link = spawnSync("clang", [
       "-std=c11", "-O0", "-D_GNU_SOURCE", "-fPIC", "-shared", "-fvisibility=hidden",
       "-I", dir,
       "-I", NAPI,
-      "-I", join(ROOT, "third_party/node/deps/uv/include"),
+      ...bundled.include_flags,
       "-I", join(ROOT, "runtime/node/internal"),
-      "-o", addon, ...sources, ...internal, "-luv", "-lm",
+      "-o", addon, ...sources, ...internal, ...bundled.link_flags, "-lm",
     ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
     if (link.status !== 0) {
       const text = `${link.stdout ?? ""}${link.stderr ?? ""}`;
@@ -606,7 +608,7 @@ for (const name of worker ? [worker.name] : []) {
         "-I", join(ROOT, "runtime/c"),
         "-I", join(ROOT, "runtime/node/internal"),
         "-I", NAPI,
-        "-I", join(ROOT, "third_party/node/deps/uv/include"),
+        ...bundled.include_flags,
         "-o", "/dev/null",
       ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
       const text = `${cc.stdout ?? ""}${cc.stderr ?? ""}`;

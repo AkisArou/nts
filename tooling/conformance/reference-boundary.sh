@@ -166,11 +166,11 @@ if [ ! -f "$work/out/addon.c" ]; then
 fi
 
 napi="${NTS_NAPI_INCLUDE:-$root/third_party/node/src}"
-uv_include="${NTS_UV_INCLUDE:-$root/third_party/node/deps/uv/include}"
-if ! clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
-  -I"$work/out" -I"$napi" -I"$uv_include" -I"$root/runtime/node/internal" \
+if ! node "$root/tooling/conformance/native-link.mjs" "$compiler" clang \
+  -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
+  -I"$work/out" -I"$napi" -I"$root/runtime/node/internal" \
   -o "$work/probe.node" "$work"/out/*.c "$root"/runtime/node/internal/*.c \
-  -luv -lm >"$work/link.log" 2>&1; then
+  -lm >"$work/link.log" 2>&1; then
   echo "  INSTRUMENT FAILURE: the probe did not link"
   grep -E 'error' "$work/link.log" | head -5; exit 3
 fi
