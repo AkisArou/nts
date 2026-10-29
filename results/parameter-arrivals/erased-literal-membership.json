@@ -207,5 +207,95 @@
       "matrix/stderr": "e5693cd5ace2450d4ca5f05f992260cffb3e0a906a538f2aa170afa95163fe61",
       "node-controls.json": "2355c5094ce9b56157bacb558fb2a219fe6e60e1296718ef4793929c7e975887"
     }
+  },
+  "arrival_fixture_integration": {
+    "fixture": "tests/programs/a-declared-value-is-not-an-arrival-proof",
+    "fixture_source_sha256": "fe3e5ffad0b365ffed92d5dd9dc0472abf10171947fc34fa83b1dd3a2c5101da",
+    "validated_source": "940cb0d60807",
+    "purpose": "Narrow only the incoming numeric tag before a typed literal assertion, preserving unproved numeric arrivals; erased membership is tested separately.",
+    "comparisons": {
+      "c": {
+        "main-original": {
+          "compared": 453,
+          "expected": 453,
+          "declined": 0,
+          "sha256": "5e165e14d7f8c750c08f046fc640e7edc77ba99c8e86e43d8aec44fb0901fe56"
+        },
+        "membership-original": {
+          "compared": 253,
+          "expected": 453,
+          "declined": 17,
+          "sha256": "60558c879a8f67d72636de465d5016ff2f44b4acd2c0972d315d42b606b5a564"
+        },
+        "fixed": {
+          "compared": 453,
+          "expected": 453,
+          "declined": 0,
+          "sha256": "5e165e14d7f8c750c08f046fc640e7edc77ba99c8e86e43d8aec44fb0901fe56"
+        }
+      },
+      "llvm": {
+        "main-original": {
+          "compared": 453,
+          "expected": 453,
+          "declined": 0,
+          "sha256": "5e165e14d7f8c750c08f046fc640e7edc77ba99c8e86e43d8aec44fb0901fe56"
+        },
+        "membership-original": {
+          "compared": 253,
+          "expected": 453,
+          "declined": 17,
+          "sha256": "60558c879a8f67d72636de465d5016ff2f44b4acd2c0972d315d42b606b5a564"
+        },
+        "fixed": {
+          "compared": 453,
+          "expected": 453,
+          "declined": 0,
+          "sha256": "5e165e14d7f8c750c08f046fc640e7edc77ba99c8e86e43d8aec44fb0901fe56"
+        }
+      },
+      "jvm": {
+        "main-original": {
+          "compared": 453,
+          "expected": 453,
+          "declined": 0,
+          "sha256": "5e165e14d7f8c750c08f046fc640e7edc77ba99c8e86e43d8aec44fb0901fe56"
+        },
+        "membership-original": {
+          "compared": 253,
+          "expected": 453,
+          "declined": 17,
+          "sha256": "60558c879a8f67d72636de465d5016ff2f44b4acd2c0972d315d42b606b5a564"
+        },
+        "fixed": {
+          "compared": 453,
+          "expected": 453,
+          "declined": 0,
+          "sha256": "5e165e14d7f8c750c08f046fc640e7edc77ba99c8e86e43d8aec44fb0901fe56"
+        }
+      }
+    },
+    "example_steps": {
+      "llvm": {
+        "agreed": 847,
+        "expected": 847,
+        "partial_projects": 10,
+        "sha256": "6aabf2181528153c88d8b536875dc357280ae25acc391c21b58b75992940421c"
+      },
+      "llvm-rc": {
+        "agreed": 847,
+        "expected": 847,
+        "partial_projects": 10,
+        "sha256": "7d18007c96cfc0138baeb938f25a33adc71a73c50e17cd1d4199d446138ffea9"
+      },
+      "jvm": {
+        "agreed": 847,
+        "expected": 847,
+        "partial_projects": 10,
+        "sha256": "58188576a73d3c82e1a8ee027cf50cd33ca84b7eb8bc8b1c763798a98101f4b0"
+      }
+    },
+    "evidence": "/home/akisarou/.cache/nts-scratch/compiler/membership-population1",
+    "precheck_only": "Immutable NTS_BIN pin; canonical verdict remains owed by the landing train."
   }
 }
