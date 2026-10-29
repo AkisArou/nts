@@ -19,6 +19,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Debug)]
 pub struct JvmProgram<'a> {
     program: &'a Program,
+    pub(crate) strings: crate::builder::Plan<'a>,
     guarded_members: FxHashMap<usize, crate::guarded_members::Member>,
     /// Every type a split face's layout holds; see [`crate::split_faces`].
     split: FxHashSet<TypeId>,
@@ -234,6 +235,7 @@ impl<'a> JvmProgram<'a> {
         }
         let mut facts = Self {
             program,
+            strings: crate::builder::Plan::new(program),
             guarded_members: FxHashMap::default(),
             split: FxHashSet::default(),
             members: FxHashMap::default(),

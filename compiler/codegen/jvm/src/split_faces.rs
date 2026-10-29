@@ -665,7 +665,7 @@ fn slot_body(
     let parameters = nts_jvm_emitter::descriptor::parameters(descriptor).unwrap_or_default();
     let mut locals = vec![VType::Object(class)];
     for parameter in &parameters {
-        locals.push(vtype_of(parameter));
+        locals.push(vtype_of(parameter, origin)?);
     }
     let slots: u16 = locals.iter().map(VType::slots).sum();
     let mut code = Code::new(locals, slots);
@@ -772,7 +772,7 @@ fn field_body(
     let owner_class = types::class_name(package, owner);
     let mut locals = vec![VType::Object(class)];
     if writes {
-        locals.push(vtype_of(&wanted));
+        locals.push(vtype_of(&wanted, origin)?);
     }
     let slots: u16 = locals.iter().map(VType::slots).sum();
     let mut code = Code::new(locals, slots);
@@ -812,7 +812,7 @@ pub(crate) fn refusing(
     let parameters = nts_jvm_emitter::descriptor::parameters(descriptor).unwrap_or_default();
     let mut locals = vec![VType::Object(class.to_owned())];
     for parameter in &parameters {
-        locals.push(vtype_of(parameter));
+        locals.push(vtype_of(parameter, origin)?);
     }
     let slots: u16 = locals.iter().map(VType::slots).sum();
     let mut code = Code::new(locals, slots);
@@ -840,15 +840,14 @@ fn kind_of(descriptor: &str) -> Kind {
     }
 }
 
-fn vtype_of(descriptor: &str) -> VType {
-    match descriptor.as_bytes().first() {
-        Some(b'J') => VType::Long,
-        Some(b'F') => VType::Float,
-        Some(b'D') => VType::Double,
-        Some(b'L') => VType::Object(descriptor[1..descriptor.len() - 1].to_owned()),
-        Some(b'[') => VType::Object(descriptor.to_owned()),
-        _ => VType::Integer,
-    }
+fn vtype_of(descriptor: &str, origin: &nts_semantic_schema::Origin) -> Result<VType, Diagnostic> {
+    nts_jvm_emitter::descriptor::verification_type(descriptor).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS4003",
+            format!("a field descriptor without a verification type: `{descriptor}`"),
+            origin.location,
+        )
+    })
 }
 
 fn returned(descriptor: &str) -> Option<Kind> {

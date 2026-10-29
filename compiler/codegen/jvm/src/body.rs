@@ -426,17 +426,17 @@ fn held_values(
     program: &JvmProgram<'_>,
     func: &Func,
     plan: &crate::widen::Plan,
-) -> Held {
-    Held {
+) -> Result<Held, Diagnostic> {
+    Ok(Held {
         unboxed: crate::unbox::unboxable(func),
         fused: crate::fuse::fused(func),
         unboxed_operands: crate::fuse::unboxed_operands(func),
-        accumulated: crate::builder::accumulators(func),
+        accumulated: program.strings.values(func)?,
         narrowed: crate::intcall::narrowed(func),
         joined: crate::closures::joined(package, program, func),
         widened: plan.values_in(func),
         widened_fields: plan.fields().clone(),
-    }
+    })
 }
 
 #[derive(Debug)]
@@ -493,7 +493,7 @@ impl<'a> Emitter<'a> {
 
         let order = block_order(func);
 
-        let plans = held_values(package, program, func, plan);
+        let plans = held_values(package, program, func, plan)?;
         let crosses = crossing_values(program, func, &plans.unboxed_operands);
         let mut slots = vec![None; func.values.len()];
         let mut locals = Vec::new();
@@ -505,9 +505,12 @@ impl<'a> Emitter<'a> {
         // reads them: the JVM places arguments there and a gap would shift
         // every later one.
         let mut param_slot = Vec::with_capacity(func.params.len());
-        for param in &func.params {
-            let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty)
-            else {
+        for (index, param) in func.params.iter().enumerate() {
+            let Some(vtype) = crate::builder::parameter_type(
+                types::Shape::packaged(program, package),
+                func,
+                index,
+            ) else {
                 return Err(refuse(func, "a parameter with no verification type"));
             };
             param_slot.push(u16::try_from(next).unwrap_or(u16::MAX));
@@ -908,8 +911,12 @@ pub fn method_name(raw: &str) -> String {
 pub fn signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Option<String> {
     let shape = types::Shape::packaged(program, package);
     let mut params = Vec::new();
-    for param in &func.params {
-        params.extend(crate::optional::parameters(shape, &param.ty)?);
+    for (index, param) in func.params.iter().enumerate() {
+        if program.strings.parameter(func) == Some(index) {
+            params.push(crate::builder::DESCRIPTOR.to_owned());
+        } else {
+            params.extend(crate::optional::parameters(shape, &param.ty)?);
+        }
     }
     if let Some(element) = crate::optional::scratch_element(&func.return_type) {
         params.push(format!("[{element}"));
@@ -917,7 +924,11 @@ pub fn signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Option
     let borrowed: Vec<&str> = params.iter().map(String::as_str).collect();
     Some(nts_jvm_emitter::descriptor::method(
         &borrowed,
-        &types::return_descriptor(types::Shape::packaged(program, package), &func.return_type)?,
+        &if program.strings.parameter(func).is_some() {
+            crate::builder::DESCRIPTOR.to_owned()
+        } else {
+            types::return_descriptor(shape, &func.return_type)?
+        },
     ))
 }
 

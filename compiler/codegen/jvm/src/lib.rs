@@ -358,11 +358,12 @@ fn emit_program(
                 } else {
                     0
                 };
-                let access = if helpers.contains(&func.name) {
-                    access::PRIVATE | access::STATIC | access::SYNTHETIC
-                } else {
-                    access::PUBLIC | access::STATIC | synthetic
-                };
+                let access =
+                    if helpers.contains(&func.name) || program.strings.parameter(func).is_some() {
+                        access::PRIVATE | access::STATIC | access::SYNTHETIC
+                    } else {
+                        access::PUBLIC | access::STATIC | synthetic
+                    };
                 publish(
                     package,
                     &mut builder,
@@ -915,13 +916,14 @@ fn declined_stub(
     {
         return;
     }
-    let shape = types::Shape::packaged(program, package);
-    let Some(locals) = func
-        .params
-        .iter()
-        .map(|p| types::vtype(shape, &p.ty))
-        .collect::<Option<Vec<_>>>()
-    else {
+    // The final descriptor is the physical ABI, including optional defined
+    // components and caller scratch arrays. A source parameter list loses both.
+    let Some(locals) = nts_jvm_emitter::descriptor::parameters(&signature).and_then(|parameters| {
+        parameters
+            .into_iter()
+            .map(nts_jvm_emitter::descriptor::verification_type)
+            .collect::<Option<Vec<_>>>()
+    }) else {
         return;
     };
     let slots: u16 = locals.iter().map(VType::slots).sum();
@@ -943,7 +945,12 @@ fn declined_stub(
     code.athrow(&origin);
     if let Ok(stub) = code.finish(pool) {
         builder.method(
-            access::PUBLIC | access::STATIC | access::SYNTHETIC,
+            (if program.strings.parameter(func).is_some() {
+                access::PRIVATE
+            } else {
+                access::PUBLIC
+            }) | access::STATIC
+                | access::SYNTHETIC,
             name,
             signature,
             Some(stub),

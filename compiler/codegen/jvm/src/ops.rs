@@ -7935,7 +7935,7 @@ impl Emitter<'_> {
         }
         let parameters = nts_jvm_emitter::descriptor::parameters(&signature).unwrap_or_default();
         for (at, &arg) in args.iter().enumerate() {
-            self.load(code, pool, arg)?;
+            self.string_argument(code, pool, target, at, arg)?;
             if let Some(want) = parameters.get(at) {
                 self.unerase_layoutless(code, pool, arg, want, origin);
             }
@@ -7948,6 +7948,9 @@ impl Emitter<'_> {
             &method,
             &signature,
         );
+        if let Some(placed) = self.string_result(code, target, value)? {
+            return Ok(placed);
+        }
         // The callee's descriptor says what *it* returns; the IR says what this
         // call site gets, and for a method returning `this` those differ. A
         // `Counter.bump()` called on a `Labelled` is typed `Labelled` by the
@@ -8007,6 +8010,17 @@ impl Emitter<'_> {
                         // on a pointer-cast backend is a heap write past the
                         // end of the allocation.
                         self.assignable_types(self.ty(*value), &self.func.return_type.clone())?;
+                        if self.program.strings.parameter(self.func).is_some() {
+                            if !self.accumulated.contains(value) {
+                                return Err(refuse(
+                                    self.func,
+                                    "a shared string return absent from the frozen proof",
+                                ));
+                            }
+                            self.load_held(code, pool, *value)?;
+                            code.ret(&origin, Some(Kind::Ref));
+                            return Ok(());
+                        }
                         if self.optional_return(code, pool, *value)? {
                             return Ok(());
                         }

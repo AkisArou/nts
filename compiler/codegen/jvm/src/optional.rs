@@ -379,11 +379,11 @@ impl Emitter<'_> {
     ) -> Result<Placed, Diagnostic> {
         let result = &self.func.value(id).ty;
         let o = &self.func.value(id).origin;
-        for (&arg, param) in args.iter().zip(&target.params) {
+        for (index, (&arg, param)) in args.iter().zip(&target.params).enumerate() {
             // Signature compatibility is checked by the core verifier. Do not
             // treat an equal Java carrier as proof that payload types agree.
             self.assignable_types(self.ty(arg), &param.ty)?;
-            self.load(code, pool, arg)?;
+            self.string_argument(code, pool, target, index, arg)?;
             if split(&param.ty) {
                 code.load(o, Kind::Int, self.flag_slot(arg)?);
             }
@@ -400,6 +400,9 @@ impl Emitter<'_> {
             &crate::body::method_name(&target.name),
             &descriptor,
         );
+        if let Some(placed) = self.string_result(code, target, id)? {
+            return Ok(placed);
+        }
         if let HirType::PossiblyUndefined(payload) = result {
             self.optional_call_result(code, pool, id, payload, o)
         } else {

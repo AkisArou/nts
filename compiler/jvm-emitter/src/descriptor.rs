@@ -117,6 +117,24 @@ pub fn is_field(descriptor: &str) -> bool {
     field_length(descriptor.as_bytes()).is_some_and(|(length, _)| length == descriptor.len())
 }
 
+/// The local verification entry of exactly one non-void field descriptor.
+/// Physical descriptors include hidden arguments; logical source parameters
+/// are insufficient to reconstruct their initial frame.
+#[must_use]
+pub fn verification_type(descriptor: &str) -> Option<crate::VType> {
+    if !is_field(descriptor) {
+        return None;
+    }
+    Some(match descriptor.as_bytes().first()? {
+        b'B' | b'C' | b'I' | b'S' | b'Z' => crate::VType::Integer,
+        b'J' => crate::VType::Long,
+        b'F' => crate::VType::Float,
+        b'D' => crate::VType::Double,
+        b'L' | b'[' => crate::VType::Object(class_operand(descriptor)),
+        _ => return None,
+    })
+}
+
 /// The descriptor of an array of `element`.
 #[must_use]
 pub fn array_of(element: &str) -> String {
@@ -204,5 +222,39 @@ mod tests {
         assert_eq!(class_operand("Lnts/gen/Point;"), "nts/gen/Point");
         assert_eq!(class_operand("[D"), "[D");
         assert_eq!(class_operand("[Ljava/lang/String;"), "[Ljava/lang/String;");
+    }
+    #[test]
+    fn verification_types_require_one_complete_nonvoid_field() {
+        use crate::VType;
+        for (field, expected) in [
+            ("Z", VType::Integer),
+            ("B", VType::Integer),
+            ("C", VType::Integer),
+            ("S", VType::Integer),
+            ("I", VType::Integer),
+            ("J", VType::Long),
+            ("F", VType::Float),
+            ("D", VType::Double),
+            (
+                "Ljava/lang/String;",
+                VType::Object("java/lang/String".into()),
+            ),
+            ("[[D", VType::Object("[[D".into())),
+        ] {
+            assert_eq!(verification_type(field), Some(expected));
+        }
+        for malformed in [
+            "",
+            "V",
+            "[V",
+            "[",
+            "L;",
+            "Ljava/lang/String",
+            "DD",
+            "()V",
+            "Q",
+        ] {
+            assert_eq!(verification_type(malformed), None, "{malformed}");
+        }
     }
 }
