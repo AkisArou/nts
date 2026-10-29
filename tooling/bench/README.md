@@ -1,3 +1,45 @@
+# Immutable run records and comparators
+
+`nts-bench` publishes through `run-record.ts`, the same typed authority used by
+comparator sittings. It validates the inventory and every cell, derives policy v1
+from [The bar](../../docs/README.md#the-bar), and creates one immutable JSON file
+under `results/benchmarks/runs/`. Each native backend faces every comparator
+independently. The rendered `full.md` uses the newest complete run; partial runs
+remain records of their own. A row's own-best is per backend and requires matching
+machine, exact source/input inventory and timing contract, with its compiler and
+run record shown. Invalid and unverified cells never supply an own-best.
+
+The standing engine columns are node, Bun JIT, Bun AOT and ScriptC. `comparators.json`
+declares their versions, commits and artifact checksums. Installed inputs are read
+from `NTS_BENCH_COMPARATOR_CACHE` (default `~/.cache/nts-comparators`). Measurement
+never downloads or builds an engine. A missing artifact is an absent cell with a
+reason; an installed artifact with the wrong checksum is an instrument error.
+Bun JIT and AOT use the same verified binary; AOT runs an executable made by
+`bun build --compile --aot`. ScriptC always receives `--node-islands=off`, with no
+explicit Node bridges. Refusals, aborts, build failures, CPU-budget exhaustion and
+hangs retain their status and command receipts rather than a timing.
+
+All four engines execute one typed projection of the canonical JS timer. The
+projection changes types only; every call reloads the exact input bits through
+atomic storage and consumes the accumulated result after timing. Each column
+keeps five process attempts, its spread, checksum, exact commands and build cost.
+Cold process launch through the first completed workload is measured separately
+from warm throughput. Builds exclude CPUs 4–5; timed launches use CPU 4 under the
+ordinary measurement lock, with sibling counters and machine conditions retained.
+
+The workload inventory comes from the snapshot already captured by `case()`:
+normalized URI, the native producer's `xxh3-128-le-checked-utf8-v1` content digest
+and transform identity, sorted and framed with exact input bits. This is checked
+UTF-8 source text after native decoding and overlays, not a digest of disk encoding
+or a later reread. Declarations remain in that graph; their inventory, build recipes and toolchains
+have separately retained provenance. The compiler artifact is hashed and its build commit is recorded.
+
+Each completed run is published atomically and followed by a results-only commit.
+The index must be clean; only the new record and generated page are staged.
+`--render` regenerates the page without restamping an old observation. Historical
+imports use explicit one-way adapters in `legacy-record.ts`; unknown facts remain
+null and pre-correction invalid timings stay invalid.
+
 # Optional C++ reference libraries
 
 A case may put library names in `ref.link` beside `ref.cpp`, in link order:

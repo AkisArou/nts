@@ -573,6 +573,27 @@ export function renderFull(runs: RunRecord[]): string {
   );
   return header + "\n" + table.join("\n") + "\n\n" + notes.join("\n") + "\n";
 }
+export function consoleHeader(): string {
+  return [
+    "case",
+    ...COLUMNS,
+    ...["nts C", "nts LLVM"].flatMap((b) => COMPARATORS.map((c) => b + "/" + c)),
+  ].join("\t");
+}
+export function consoleRow(row: Row): string {
+  return [
+    row.name,
+    ...COLUMNS.map((c) =>
+      row.cells[c].status === "OK" ? time(row.cells[c].nanoseconds!) : row.cells[c].status,
+    ),
+    ...["nts C", "nts LLVM"].flatMap((b) =>
+      COMPARATORS.map((c) => {
+        const v = row.verdicts[b as Backend][c];
+        return (v.ratio === null ? "" : v.ratio.toFixed(3) + "× ") + v.kind;
+      }),
+    ),
+  ].join("\t");
+}
 function git(root: string, args: string[]): string {
   const r = spawnSync("git", args, { cwd: root, encoding: "utf8" });
   check(r.status === 0, "git " + args.join(" ") + ": " + r.stderr);

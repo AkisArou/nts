@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "node": "v24.20.0",
+  "bun": {
+    "version": "1.4.4-canary.1+3a9ea0043",
+    "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+    "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c",
+    "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+    "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21"
+  },
+  "scriptc": {
+    "version": "0.4.5",
+    "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+    "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+    "command": "packages/cli/dist/main.js",
+    "files": [
+      {
+        "path": "packages/cli/dist/main.js",
+        "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+      },
+      {
+        "path": "packages/compiler/dist/index.js",
+        "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+      },
+      {
+        "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+        "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+      },
+      {
+        "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+        "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+      }
+    ],
+    "nodeIslands": "off",
+    "argvPrefix": false
+  }
+}

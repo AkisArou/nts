@@ -35,6 +35,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use serde::{Deserialize, Serialize};
 
+mod capture;
 mod cli;
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
 mod execution;
@@ -217,117 +218,6 @@ fn other_compilers() -> Vec<u32> {
 /// machine. Each of them publishes a table describing something other than what
 /// the header says, and the first two were already refused here while the third
 /// was only noted.
-fn publish(
-    root: &Utf8Path,
-    rows: &[Row],
-    cases: &[Utf8PathBuf],
-    requested: &[String],
-    spoiled: &[String],
-    lanes: Option<&[String]>,
-) -> Result<()> {
-    // A run of some lanes has `--` where the others would be, over every case
-    // as readily as over a few, and it wrote those into the table until this.
-    if let Some(lanes) = lanes {
-        println!(
-            "\nfull table not updated: NTS_BENCH_LANES measured only {}.",
-            lanes.join(", ")
-        );
-        return Ok(());
-    }
-    // Only a full run may rewrite the full table. A filtered one would leave the
-    // table describing a mixture of two machines and two revisions, which is
-    // worse than a stale table because it does not look stale.
-    //
-    // A run that noted load is the same mixture and was published anyway. On
-    // 2026-09-06 a forty-minute publish had another session's `cargo build`
-    // running from `generic-classes` onward -- **twenty-eight of fifty cases
-    // carried the note** -- and this wrote the README regardless. The per-case
-    // note is the right call for the console, where a person reads it beside
-    // the number; it is not a substitute for refusing to publish, because the
-    // README carries the number and not the note.
-    //
-    // What saved that run was the publish being made from a pinned worktree, so
-    // the polluted table landed in a tree nobody reads and shipping it needed a
-    // deliberate copy. That is luck arranged in advance rather than a check,
-    // which is what this is.
-    if !spoiled.is_empty() && requested.is_empty() {
-        println!(
-            "\nfull table not updated: {} of {} cases were measured while something \
-             else ran -- {}",
-            spoiled.len(),
-            cases.len(),
-            spoiled.join(", ")
-        );
-        return Ok(());
-    }
-    if requested.is_empty()
-        && rows.len() == cases.len()
-        && let Some(drift) = refusal_drift(rows, REFUSES_TODAY)
-    {
-        println!("\nfull table not updated: {drift}");
-        return Ok(());
-    }
-    if requested.is_empty() && rows.len() == cases.len() {
-        let written = write_full_table(root, rows)?;
-        println!("\nwrote {written}");
-    } else if !requested.is_empty() {
-        println!("\nfull table not updated: a filtered run measures only part of the table.");
-    } else {
-        println!("\n{}", lost_case_decline(rows, cases));
-    }
-    Ok(())
-}
-
-/// Why a full run declined to publish, when what it lost was a case.
-///
-/// **The third decline reason, and it used to be the silent one.** `publish`'s
-/// comment says the three sit together so a reader meets them in one place; two
-/// of them printed and this one returned without a word. A full sweep that lost
-/// a case wrote nothing to the README and said nothing about not writing, so it
-/// read as a publish that had simply not changed anything -- the only trace a
-/// `failed:` line for one case, forty rows above, inside the table the eye takes
-/// as the result.
-///
-/// That cost twenty-eight minutes of watching a finished run on 2026-09-15. The
-/// case was `json-stringify-doc`, whose `work` a lowering refusal had dropped
-/// since the last publish: `emit-c` printed `NTS1001`, **exited zero**, wrote C
-/// with no entry point, and the failure surfaced as `undefined reference to
-/// 'work'` from the linker, with nothing connecting it to the refusal five lines
-/// above.
-///
-/// A separate function so it can be asserted rather than watched: the branch it
-/// serves is reachable only from a full sweep that loses a case, which is forty
-/// minutes to provoke and not something to leave untested on that account.
-///
-/// Names the cases rather than counting them, because which one it is decides
-/// what to do next -- a case that lost its reference and a case this compiler
-/// can no longer lower produce the identical line here and nothing else
-/// separates them.
-fn lost_case_decline(rows: &[Row], cases: &[Utf8PathBuf]) -> String {
-    let measured: std::collections::HashSet<&str> = rows
-        .iter()
-        .map(|row| row.case.strip_suffix(" (rc)").unwrap_or(&row.case))
-        .collect();
-    let lost: Vec<&str> = cases
-        .iter()
-        .filter_map(|case| case.file_name())
-        .filter(|name| !measured.contains(name))
-        .collect();
-    format!(
-        "full table not updated: {} of {} cases produced no row -- {}. A table \
-         missing a row it used to carry is not a smaller table, it is one that \
-         answers a different question, so this declines rather than publishing \
-         the rest.",
-        lost.len(),
-        cases.len(),
-        if lost.is_empty() {
-            "and not one of them could be named, which is a bug in this function".to_owned()
-        } else {
-            lost.join(", ")
-        }
-    )
-}
-
 /// Refuse to begin, or warn about the row that was measured anyway.
 ///
 /// A benchmark wants a quiet machine and the measurement lock does not give it
@@ -455,17 +345,7 @@ fn main() -> Result<()> {
         cli::Command::Measure(cases) => cases,
         cli::Command::Help | cli::Command::Count => unreachable!("handled before setup"),
     };
-    let cases_dir = root.join("benchmarks/cases");
-
-    let mut cases: Vec<Utf8PathBuf> = std::fs::read_dir(&cases_dir)
-        .with_context(|| format!("reading {cases_dir}"))?
-        .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok())
-        .filter(|path| path.is_dir())
-        .collect();
-    cases.sort();
-    if !requested.is_empty() {
-        cases.retain(|case| requested.iter().any(|want| case.file_name() == Some(want)));
-    }
+    let cases = selected_cases(&root, &requested)?;
 
     let out = root.join("target/bench");
     std::fs::create_dir_all(&out).context("creating the build directory")?;
@@ -485,15 +365,16 @@ fn main() -> Result<()> {
             .with_context(|| format!("writing {}", file.name))?;
     }
 
-    println!(
-        "case\tC++\tnts C\tnts LLVM\tnts JVM\tJava\tnts f64\tnode\tbun\tnts/C++\tnts/node\tnts/bun\tjvm/Java"
-    );
+    println!("{}", results::command(&root, "header", &[])?);
 
+    let metadata = results::begin(&root)?;
     let lanes = wanted_lanes();
     let mut rows = Vec::new();
     let mut measured = Vec::new();
     let mut spoiled = Vec::new();
     let mut failed = Vec::new();
+    let mut conditions = std::collections::BTreeMap::new();
+    let mut row_failures = std::collections::BTreeMap::new();
     for case in &cases {
         // Before each case rather than once at the start: a sweep begun while
         // the suite is halfway through spoils the rows after it and none
@@ -506,19 +387,51 @@ fn main() -> Result<()> {
         // A row that fails its checks keeps its measurements: `--render` judges
         // them again, which is the point of saving them.
         let name = case.file_name().unwrap_or("?");
-        if let Some(measurements) = accept_result(name, run_case(&root, case, &out), &mut failed) {
-            if let Some(row) = accept_result(
-                &measurements.shown,
-                assemble(&measurements, lanes.is_some()),
-                &mut failed,
-            ) {
+        let before = results::conditions(&root)?;
+        let computed = run_case(&root, case, &out);
+        if let Err(error) = &computed {
+            row_failures.insert(
+                name.to_owned(),
+                RowFailure {
+                    kind: FailureKind::BuildFailed,
+                    reason: format!("{error:#}"),
+                },
+            );
+        }
+        if let Some(measurements) = accept_result(name, computed, &mut failed) {
+            let assembled = assemble(&measurements, lanes.is_some());
+            if let Err(error) = &assembled {
+                row_failures.insert(
+                    name.to_owned(),
+                    RowFailure {
+                        kind: FailureKind::Invalid,
+                        reason: format!("{error:#}"),
+                    },
+                );
+            }
+            if let Some(row) = accept_result(&measurements.shown, assembled, &mut failed) {
                 rows.push(row);
             }
+            results::print_row(
+                &root,
+                &metadata,
+                &measurements,
+                lanes.as_deref(),
+                row_failures.get(name),
+            )?;
             measured.push(measurements);
         }
+        let after = results::conditions(&root)?;
+        conditions.insert(
+            name.to_owned(),
+            serde_json::json!({"before":before,"after":after}),
+        );
     }
 
     let run = Run {
+        metadata: Some(metadata),
+        conditions,
+        row_failures,
         lanes: lanes.clone(),
         requested: requested.clone(),
         cases: cases
@@ -532,526 +445,58 @@ fn main() -> Result<()> {
     finish(&root, &run, &rows, &cases)
 }
 
-/// Save a run, record what it measured, and rewrite the full table if it may.
-///
-/// Every run records its cells, whether or not it may rewrite the full table;
-/// `--render` re-reads an old run and records nothing, since its cells were
-/// measured at another time and commit.
-fn finish(root: &Utf8Path, run: &Run, rows: &[Row], cases: &[Utf8PathBuf]) -> Result<()> {
+/// Resolve the requested inventory before any compilation or measurement.
+fn selected_cases(root: &Utf8Path, requested: &[String]) -> Result<Vec<Utf8PathBuf>> {
+    let cases_dir = root.join("benchmarks/cases");
+
+    let mut cases: Vec<Utf8PathBuf> = std::fs::read_dir(&cases_dir)
+        .with_context(|| format!("reading {cases_dir}"))?
+        .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok())
+        .filter(|path| path.is_dir())
+        .collect();
+    cases.sort();
+    if !requested.is_empty() {
+        cases.retain(|case| requested.iter().any(|want| case.file_name() == Some(want)));
+    }
+
+    for name in requested {
+        if !cases
+            .iter()
+            .any(|case| case.file_name() == Some(name.as_str()))
+        {
+            bail!("unknown benchmark case `{name}`");
+        }
+    }
+    Ok(cases)
+}
+
+/// Save every attempted row, then let the shared authority publish one immutable run.
+fn finish(root: &Utf8Path, run: &Run, rows: &[Row], _cases: &[Utf8PathBuf]) -> Result<()> {
     let saved = run_file(root);
     std::fs::write(&saved, serde_json::to_string(run)?)
         .with_context(|| format!("writing {saved}"))?;
-    let (when, commit) = results::stamp(root);
-    results::record(
-        root,
-        rows,
-        &results::Run {
-            measured: when,
-            commit,
-            lanes: run.lanes.as_deref(),
-            spoiled: &run.spoiled,
-        },
-    )?;
-    require_valid_rows(&run.failed)?;
-    publish(
-        root,
-        rows,
-        cases,
-        &run.requested,
-        &run.spoiled,
-        run.lanes.as_deref(),
-    )
+    if let Some(drift) = refusal_drift(rows, REFUSES_TODAY) {
+        eprintln!("note: {drift}");
+    }
+    println!("{}", results::command(root, "finish", &[saved.as_str()])?);
+    require_valid_rows(&run.failed)
 }
 
-/// The full benchmark table, every case and every column, written whole as
-/// `results/benchmarks/full.md`.
-///
-/// Written by a program and never by hand: a table typed out by a person is a
-/// table that drifts from the machine that produced it. It was a section of the
-/// README between markers until 2026-10-23, when the README became a short
-/// description of the project and every measured number moved under `results/`.
-/// How to read a ratio that moved, which the shape of the table hides.
-///
-/// Split from [`legend`] for the length limit, and it is a real seam: the rest
-/// of the legend says what each column *is*, and this says what a *change* in
-/// one does and does not mean.
-///
-/// Both paragraphs come from the same day. A streaming rewrite made
-/// `json-stringify-doc` 1.26x faster and moved its `nts/V8` from 2.24x to
-/// 3.00x, because node gained 1.7x on the same change -- so the row reads as a
-/// 34% loss and is a win. Nothing in a ratio can say that, and the lane that
-/// wrote the improvement had to say it by hand.
-fn reading_a_ratio() -> &'static str {
-    "\n\
-        **A ratio moving is not this compiler moving.** Every column is \
-        measured in the same run, so a row can worsen while the program gets \
-        faster — and did: `json-stringify-doc` went from 6.01 ms to 4.78 ms on \
-        one change while its `nts/V8` went from 2.24x to **3.00x**, because the \
-        same change bought node 1.7x against our 1.26x. Nothing regressed; V8 \
-        exploits the streaming shape better than we do, and the ratio reports \
-        that gap rather than the program. Compare a row against the previous \
-        run's *absolute* numbers before reading its ratio as a direction.\n\n\
-        And where two rows are one algorithm written two ways, the hosts \
-        disagree about which way is better: on `json-stringify-typed` against \
-        `json-stringify-inline`, Bun prefers the factored source and this \
-        compiler prefers the inlined one, in opposite directions on the same \
-        pair. **No single source is optimal for every column**, so those rows \
-        measure a tradeoff rather than a result, and they are kept as a pair \
-        for exactly that reason.\n"
-}
-
-/// What a reader has to know before the numbers mean anything.
-///
-/// Split from [`write_readme`] because the two are different kinds of thing:
-/// one is the measurements, the other is the argument that they are
-/// measurements of what the heading says.
-const FIELD_IDIOM_LEGEND: &str = "\n\
-    **Some `nts/V8` rows are V8 paying for a TypeScript idiom, not this \
-    compiler winning.** The cases target ESNext, so a class field declared \
-    without an initializer (`x: number;`) is defined as `undefined` when the \
-    object is built, and node runs it so, as the semantics say. V8 then types \
-    the field for any value rather than for the numbers it will hold, and a \
-    double stored into it is a freshly allocated number. The same programs \
-    with `declare x: number;` instead -- or as JavaScript, which declares no \
-    fields -- run on node 7.5x faster on `awfy-nbody`, 3.4x on \
-    `user-iterable`, 1.3x on `instanceof` and 1.2x on `awfy-bounce` (node \
-    24.20, a quiet machine, 2026-10-15). The sources stay as a TypeScript programmer writes \
-    them, so those rows' `nts/V8` is quoted twice: as measured, and divided \
-    by the factor, against the node a JavaScript programmer would run. The \
-    second is the one that says where this compiler stands -- \
-    `user-iterable`'s 1.60x as measured is about 5.4x against the declared \
-    shape, one of the worst rows rather than a mild one. `objects` is the \
-    exception that keeps this from being a rule: declared, node runs it 1.2x \
-    *slower*. `awfy-permute` pays 1.07x, and the other ten cases with such \
-    fields nothing measurable.\n";
-
-fn legend(root: &Utf8Path) -> String {
-    let legend = "\n\
-        Every ratio is nts divided by the other, so **lower is better and 1.00 is \
-        parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and \
-        `nts/Bun` under 1.00 beat those engines.\n\n\
-        There are two backends and both are measured, in the same run on the \
-        same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM \
-        one, which is the primary target and is still learning constructs. A \
-        `--` there is a program it refuses, not a program it gets wrong — every \
-        variant that *does* run must produce the same checksum as every other, \
-        so a bench run is a cross-backend correctness check as well as a \
-        measurement.\n\n\
-        **The ratios are the LLVM backend's**, because a ratio is a claim about \
-        what a program compiled by this compiler costs, and that is the backend \
-        a program will be compiled by. Where it refuses one, the ratio is `--` \
-        rather than quietly reporting the other backend's number under the same \
-        heading.\n\n\
-        The suite also measures the same TypeScript with number specialization \
-        switched off — one program compiled two ways, which is what makes a \
-        speedup a measurement rather than a claim. `cargo run -p nts-bench` \
-        prints it; it is not published here, because it answers a question about \
-        this compiler's insides rather than about how fast the result is.\n\n\
-        `C++` is one hand-written reference per case, being what a C++ programmer \
-        would actually write for that program; each `ref.cpp` says why in a \
-        comment. Every variant returns a checksum and the runner refuses to report \
-        a case whose variants disagree, so a backend cannot win by computing the \
-        wrong answer quickly.\n\n\
-        **The table keeps the cases this compiler loses.** A benchmark suite that \
-        held only its wins would be an advertisement rather than an instrument, and \
-        the rows above 1.50x are the work queue: each is a shape where the emitted \
-        code costs more than the C++ a person would write, and the reason is worth \
-        finding rather than hiding.\n\n\
-        `nts (JVM)` is the same TypeScript compiled to class files and run by \
-        `java`. `refused` means compilation was declined; `aborted` means the \
-        compiled program terminated without a checksum. Its termination and \
-        exact stderr are retained in the per-column outcome in `cells.tsv`, \
-        and the row's note prints the runtime's message. Independent references \
-        and engines still run, and every column that completes must agree.\n\n\
-        `Java` is a hand-written reference for the same benchmark, on the same \
-        JVM in the same run — the only reference here written in the language \
-        the column beside it compiles to, which is what makes `nts (JVM)/Java` \
-        a statement about codegen with the runtime divided out. Every other \
-        ratio in this table mixes a codegen difference with an engine \
-        difference and cannot separate them. On the `awfy-*` rows it is Are We \
-        Fast Yet's **own** Java, unchanged; everywhere else it is a `ref.java` \
-        beside the case, whose comment says what a competent Java programmer \
-        would write and why. A reference must decline anything that costs one \
-        lane and not the other — no boxing where the subject boxes nothing, no \
-        field narrower than the f64 a TypeScript `number` is — and four of \
-        these were corrected for exactly that, in both directions.\n\n\
-        **Below about 1.10x, this column is at its resolution and should be \
-        read with the fixed-count driver rather than from here.** The number is \
-        a best-of-five, which is the right statistic against a tight \
-        distribution and a kind one against a wide one — and where a JIT \
-        settles two ways, ours is the wide one. `tooling/bench/counted.sh` \
-        calls a case's own entry point N times and again at 2N and subtracts, \
-        which removes startup and warmup and reports a median; records 0154 \
-        and 0155 are three rows that read differently under it, in both \
-        directions, one of them a loss published as a win. The spread table \
-        below catches a row that is unstable *within* one invocation and \
-        cannot catch one that settles differently between them.\n\n\
-        **The JVM column excludes startup, deliberately and at this lane's own \
-        cost.** It is timed inside its own process after the same 20,000 warmup \
-        iterations bounded by 300 ms that `V8` and `Bun` get, then calibrated, \
-        then best-of-five. A JIT's first iterations measure the compiler rather \
-        than the code, so including them would report how long HotSpot took to \
-        decide, not what it decided. The honest consequence is that **cold \
-        start is absent from this table and is the one number where this lane \
-        loses by two orders of magnitude** — it belongs in a column of its own \
-        rather than smuggled into these.\n\n\
-        `V8` is node and `Bun` is JavaScriptCore, both running the *same* \
-        TypeScript source the compiler consumes — the harness imports the `.ts` \
-        directly, so there is no second copy of the program to drift. Both are \
-        timed inside their own process after 20,000 warmup iterations, so \
-        neither startup nor a cold JIT is in either column, and both must \
-        produce the same checksum as everything else. Bun is skipped where it \
-        is not installed.\n";
-
-    // The commit the numbers are a function of. Benchmarks run from a worktree
-    // pinned to a hash precisely so that they are quotable later; a table that
-    // did not say which hash would be a measurement of a tree nobody can check
-    // out, which is the failure the pinned gate exists to catch one floor up.
-    let commit = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .current_dir(root)
-        .output()
-        .ok()
-        .filter(|out| out.status.success())
-        .map_or_else(
-            || "an unknown commit".to_owned(),
-            |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
-        );
-    let legend = format!("{legend}{FIELD_IDIOM_LEGEND}{}", reading_a_ratio());
-    // **Which tree's binary wrote this, beside which commit it measured.**
-    //
-    // The sha answers "what was measured" and had been the whole of the
-    // provenance. The question a reader actually arrives with is different, and
-    // it is the one `repository_root` warns about: this destination comes from
-    // `CARGO_MANIFEST_DIR`, baked in at *compile* time, so a binary built in the
-    // main checkout rewrites the main checkout's `results/benchmarks/` however it is invoked --
-    // from a sealed worktree included.
-    //
-    // On 2026-09-15 two sessions spent an exchange working out whose uncommitted
-    // README edit it was, and the answer was that a *program* had written it.
-    // `nts-suite` carries a doc comment recording the same thing happening
-    // before, and both of us had read one of the two copies. A comment lives
-    // with the code that writes; the person who needs it is looking at a diff in
-    // a file with no code in it, and the recognisable moment -- "this changed
-    // and I do not know who changed it" -- happens to the reader. So the answer
-    // goes in the artefact rather than beside the writer.
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    let legend = format!(
-        "{legend}\nMeasured at `{commit}`, one case at a time, on cores pinned away from \
-         the other sessions sharing this checkout, with the benchmark lock held so nothing \
-         else was running. Written by `nts-bench` built in `{manifest}`, which is also what \
-         decided *this* file: the destination is the binary's `CARGO_MANIFEST_DIR`, fixed \
-         when it was compiled rather than when it was run.\n"
-    );
-
-    legend
-}
-
-/// The rows whose own five passes disagreed, rendered where they are quoted.
-///
-/// The console printed these and the README carried none of them, so a reader
-/// of the table met a coin flip as a fact. `awfy-sieve` is the case that forced
-/// it: 5.74, 5.74 and 5.38 us on one sitting and 4.49, 4.44 and 4.48 on
-/// another, out of one class file. That is 1.27x or 1.03x against Java, and
-/// **whichever the publishing run happens to get looks entirely plausible in a
-/// table** -- there is nothing in the number itself to say it was a flip.
-///
-/// Empty when nothing varied, so a stable run adds no section rather than a
-/// heading saying "none", which would go stale as reassurance.
-fn spreads(rows: &[Row]) -> String {
-    use std::fmt::Write as _;
-    let mut lines = String::new();
-    for row in rows {
-        for (label, spread) in &row.varied {
-            let _ = writeln!(
-                lines,
-                "| {} | {label} | {spread:.2}x | this run |",
-                row.case
-            );
-        }
-        // **And the ones a lucky run does not see.** `varied` is what *this*
-        // sitting observed, so a row that flips one time in six publishes a bare
-        // number on the five sittings that did not catch it -- which is exactly
-        // the failure this section was written to prevent, arriving through the
-        // section itself.
-        //
-        // The JVM lane found it from outside: `tooling/bench` publishes
-        // `awfy-sieve` at 0.94x and their device harness reads 1.32x and 1.33x
-        // on two sittings, with every other shared row agreeing. Two instruments
-        // differing by 40% on one row, reproducibly.
-        for (case, label, spread, seen, basis) in KNOWN_BIMODAL {
-            if row.case == *case && !row.varied.iter().any(|(at, _)| at == label) {
-                let _ = writeln!(
-                    lines,
-                    "| {case} | {label} | {spread:.2}x | {seen} — {} |",
-                    basis.shown()
-                );
-            }
-        }
-    }
-    if lines.is_empty() {
-        return String::new();
-    }
-    format!(
-        "\n**These rows disagreed with themselves.** Measured five times from the \
-         same binary, their passes did not agree, so each published number says \
-         which shape the JIT settled into rather than how fast the program is, \
-         and a rerun may land on another shape. They are listed because the table \
-         cannot show it: a flipped row and a solid one are the same number on the \
-         page.\n\n\
-         | case | column | spread | observed |\n\
-         | --- | --- | ---: | --- |\n{lines}"
-    )
-}
-
-/// The mark on a ratio against node that measures work nts does not do.
-const ASYMMETRIC: char = '\u{b6}';
-
-/// `cell` with `mark` after it where `marked` holds; a `--` stays bare.
-fn marked(cell: String, marked: bool, mark: char) -> String {
-    if marked && cell != "--" {
-        format!("{cell}{mark}")
-    } else {
-        cell
-    }
-}
-
-/// What the `ASYMMETRIC` mark means, for each case that carries it.
-fn asymmetric(rows: &[Row]) -> String {
-    use std::fmt::Write as _;
-    let mut said = String::new();
-    for row in rows {
-        if let Some(why) = row.asymmetry() {
-            let _ = write!(said, "\n{ASYMMETRIC} `{}`: {why}.\n", row.case);
-        }
-    }
-    said
-}
-
-fn write_full_table(root: &Utf8Path, rows: &[Row]) -> Result<Utf8PathBuf> {
-    use std::fmt::Write as _;
-    let mut table = String::new();
-    let with_bun = rows.iter().any(|row| row.bun.is_some());
-    // `nts f64` is measured on every run and printed by the tool; it is not
-    // published. It answers "what does the analysis buy", which is a question
-    // about this compiler's insides rather than about how fast the thing is,
-    // and a reader comparing against V8 does not need a column for it.
-    let mut headers = vec![
-        "case",
-        "C++",
-        "nts (C)",
-        "nts (LLVM)",
-        "nts (JVM)",
-        "Java",
-        "V8",
-    ];
-    if with_bun {
-        headers.push("Bun");
-    }
-    headers.extend(["nts/C++", "nts/V8"]);
-    if with_bun {
-        headers.push("nts/Bun");
-    }
-    headers.push("nts (JVM)/Java");
-    let _ = writeln!(table, "| {} |", headers.join(" | "));
-    let _ = writeln!(table, "| {} |", vec!["---:"; headers.len()].join(" | "));
-    for row in rows {
-        let mut cells = vec![
-            row.case.clone(),
-            row.cpp.map_or_else(|| "--".to_owned(), human),
-            row.nts.map_or_else(|| "--".to_owned(), human),
-            format!("**{}**", row.llvm.map_or_else(|| "--".to_owned(), human)),
-            jvm_cell(row.jvm, row.jvm_absence),
-            row.java.map_or_else(|| "--".to_owned(), human),
-            human(row.node),
-        ];
-        if with_bun {
-            cells.push(row.bun.map_or_else(|| "--".to_owned(), human));
-        }
-        cells.push(row.quotable(row.against(row.cpp), ["nts (C)", "C++"]));
-        cells.push(marked(
-            row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
-            row.asymmetry().is_some(),
-            ASYMMETRIC,
-        ));
-        if with_bun {
-            cells.push(row.against(row.bun));
-        }
-        cells.push(row.quotable(row.jvm_against_java(), ["nts (JVM)", "Java"]));
-        let _ = writeln!(table, "| {} |", cells.join(" | "));
-    }
-
-    let legend = legend(root);
-    let mut spreads = spreads(rows);
-    for row in rows {
-        if let Some(reason) = &row.cpp_absence {
-            use std::fmt::Write as _;
-            let _ = writeln!(spreads, "\n{}: {reason}.", row.case);
-        }
-    }
-    // The dagger is only worth printing where one was, and a legend line that
-    // explains a mark nothing carries reads as a warning about the whole table.
-    let daggered = rows.iter().any(|row| {
-        ["nts (C)", "C++", "node", "nts (JVM)", "Java"]
-            .iter()
-            .any(|label| row.unstable(label))
-    });
-    // The mark travels with the number. `spreads` below says *what* moved and
-    // by how much; this says which ratios one may not quote, in the cell a
-    // reader copies.
-    let mark = if daggered {
-        "\n\u{2020} one half of this ratio is known to move — see the table below.          **A ratio is unquotable when either half moves**, whichever half it is:          the bar is ours over theirs, so a moving denominator moves the bar.\n"
-    } else {
-        ""
-    };
-    let marks = asymmetric(rows);
-    let dir = root.join("results/benchmarks");
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
-    let path = dir.join("full.md");
-    let written = format!(
-        "# Every case, every column\n\nWritten by `nts-bench` from a clean full run \
-         only: every case, every lane, nothing else running. The per-target tables \
-         beside it (`c.md`, `llvm.md`, `jvm.md`) record every run.\n\n\
-         {table}{mark}{marks}{legend}{spreads}"
-    );
-    std::fs::write(&path, written).with_context(|| format!("writing {path}"))?;
-    Ok(path)
-}
-
-/// One case's timings, kept so the full table can be written from the same numbers
-/// the terminal showed.
+/// The numeric observations needed by the existing cross-column workload checks.
 struct Row {
     case: String,
-    /// The hand-written reference. `None` where the case has no `ref.cpp`,
-    /// which real-world code taken from elsewhere generally will not: writing
-    /// a second implementation of it in C++ to have something to divide by is
-    /// a correctness burden rather than a reference.
     cpp: Option<f64>,
-    /// Optional reference dependencies that were unavailable on this host.
     cpp_absence: Option<String>,
     outcomes: std::collections::BTreeMap<execution::Column, execution::Outcome>,
-    /// This compiler's primary lane. **`None` where it refused the program.**
-    ///
-    /// Non-optional until 2026-09-15, which meant "this compiler cannot compile
-    /// this case" had no representation and necessarily became a *lost row* --
-    /// and a lost row stops the whole full table from being published, because a
-    /// table missing a row it used to carry answers a different question.
-    ///
-    /// So one correct refusal took the entire table down. `json-stringify-doc`
-    /// is the case: `c9f3d3a0` refuses a structural-to-subclass pointer cast
-    /// that used to be a SIGSEGV, that case's `work` reaches `options.replacer`
-    /// on an anonymous type not declaring it, and lowering drops the function.
-    /// The refusal is right; losing every other row over it is not.
-    ///
-    /// The README already had the vocabulary -- its legend says a `--` in a
-    /// backend column is "a program it refuses" -- and only this type could not
-    /// say it.
     nts: Option<f64>,
-    unspecialized: Option<f64>,
     node: f64,
-    /// The same program through the second backend. `None` where it refused
-    /// the program, which is most of them today and is the honest answer.
     llvm: Option<f64>,
-    /// The same program as class files, run by `java`. `None` where the JVM
-    /// backend refused it, which is most of them today.
-    ///
-    /// **Not comparable to the native columns without saying so.** A JVM and a
-    /// JS engine are both warm JITs and this number excludes startup entirely,
-    /// where the native ones have none to exclude. The ratio worth taking here
-    /// is against hand-written Java, which is a column this table does not have
-    /// -- which it now does, as `Java`.
     jvm: Option<f64>,
-    /// Why [`Self::jvm`] is empty, where it is.
-    jvm_absence: Option<JvmAbsence>,
-    /// Are We Fast Yet's **own** hand-written Java for the same benchmark, on
-    /// the same JVM in the same run.
-    ///
-    /// The only reference in this table written in the language the column
-    /// being measured compiles to, which is what makes `jvm/Java` a statement
-    /// about codegen with the runtime divided out. Every other ratio here mixes
-    /// a codegen difference with an engine difference and cannot separate them.
-    ///
-    /// `None` for every case that is not a port of one of theirs, which is all
-    /// but the `awfy-*` rows.
     java: Option<f64>,
-    /// Bun, where it is installed. `None` skips the column rather than
-    /// reporting a zero that reads like a win.
     bun: Option<f64>,
-    /// Columns whose own five passes disagreed, and by how much.
-    ///
-    /// These were an `eprintln!` and nothing else, so they reached a person
-    /// watching the run and never the file the numbers get quoted from. The
-    /// legend already said "the `varied` notes above", which is true of the
-    /// console and false of the README, where there is nothing above -- so the
-    /// published text pointed at a warning a published reader could not see.
-    varied: Vec<(String, f64)>,
 }
 
 impl Row {
-    /// What the ratios are taken against: the **LLVM** backend, which is the
-    /// primary target, and `None` where it refuses the program.
-    ///
-    /// The C backend is the one that renders every case, so it was the obvious
-    /// column to divide by -- and the wrong one. A ratio is a claim about what
-    /// a program compiled by this compiler costs, and the backend a program
-    /// will be compiled by is the LLVM one. Where it refuses, the row says so
-    /// rather than quietly reporting the other backend's number under the same
-    /// heading.
-    fn primary(&self) -> Option<f64> {
-        self.llvm
-    }
-
-    /// How this case compares against another runtime: lower is better, 1.00 is
-    /// parity, `--` is a program the primary backend does not render yet.
-    fn against(&self, other: Option<f64>) -> String {
-        match (self.primary(), other) {
-            (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
-            _ => "--".to_owned(),
-        }
-    }
-
-    /// Whether a named column is known to be unstable — this sitting, or a
-    /// previous one.
-    fn unstable(&self, label: &str) -> bool {
-        self.varied.iter().any(|(at, _)| at == label)
-            || KNOWN_BIMODAL
-                .iter()
-                .any(|(case, at, ..)| *case == self.case && *at == label)
-    }
-
-    /// A ratio, marked where **either half** of it is known to move.
-    ///
-    /// The JVM lane's sentence, and it took a retraction to arrive at: *a ratio
-    /// is unquotable when either half moves*. `number-format-double` was
-    /// promoted to "the best-supported number in the table" on the reasoning
-    /// that its flag was on the *Java* side — the reference varied, not us — so
-    /// a note about the reference was making our own stable number unquotable.
-    /// That identifies the unstable half correctly and draws the opposite
-    /// conclusion: the bar is ours **over** theirs, so a moving denominator
-    /// moves the bar.
-    ///
-    /// Marked where the number is read, not in a section below it. `spreads`
-    /// already exists and was not enough — a reader quotes the cell.
-    fn quotable(&self, ratio: String, halves: [&str; 2]) -> String {
-        if ratio == "--" || !halves.iter().any(|label| self.unstable(label)) {
-            return ratio;
-        }
-        format!("{ratio}\u{2020}")
-    }
-
-    /// The JVM lane against hand-written Java, which is the one ratio in this
-    /// table with the runtime divided out.
-    ///
-    /// Deliberately not `against`: that one divides the *primary* column, which
-    /// is the C backend, and dividing a native binary by a JVM number would be
-    /// a ratio about `HotSpot` rather than about anything this compiler decided.
-    fn jvm_against_java(&self) -> String {
-        match (self.jvm, self.java) {
-            (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
-            _ => "--".to_owned(),
-        }
-    }
-
     /// Why node's column measures work nts does not do, where it does.
     fn asymmetry(&self) -> Option<&'static str> {
         let case = self.case.strip_suffix(" (rc)").unwrap_or(&self.case);
@@ -1152,7 +597,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
     let rendered = out.join(format!("{name}.specialized.ll"));
     // Capture once for both the source contract and the first compilation.
     // Drop the checker snapshot before any timed child runs.
-    let (workload, specialized_text) = {
+    let (workload, source_capture, specialized_text) = {
         let snapshot = capture_snapshot(&tsconfig)?;
         let custom = ["driver.cpp", "driver.java", "driver.mjs"]
             .iter()
@@ -1166,7 +611,8 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
             nts_codegen_common::Backend::C,
         )?;
         let text = emit_program(&program, false);
-        (workload, text)
+        let source_capture = capture::Capture::of(&snapshot, root, case)?;
+        (workload, source_capture, text)
     };
     let entry = &workload.roots;
     if let Ok(numeric) = workload.numeric() {
@@ -1220,9 +666,13 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
         emission,
         &workload,
     )?;
-    let (node, bun) = measure_hosts(case, out, name, &workload)?;
+    let hosts = measure_hosts(root, case, out, name, &workload)?;
+    let node = results::host_measured(&hosts, "node")?;
+    let bun = results::host_measured(&hosts, "Bun JIT")?;
     Ok(Measurements {
         workload: Some(workload),
+        source_capture: Some(source_capture),
+        hosts: Some(hosts),
         shown,
         results,
         absences,
@@ -1596,12 +1046,28 @@ struct Measurements {
     /// Absent only in saved runs predating this contract.
     #[serde(default)]
     workload: Option<workload::Workload>,
+    #[serde(default)]
+    source_capture: Option<capture::Capture>,
+    #[serde(default)]
+    hosts: Option<serde_json::Value>,
     shown: String,
     results: Vec<Option<Measured>>,
     absences: Absences,
     lowers: bool,
-    node: Measured,
+    node: Option<Measured>,
     bun: Option<Measured>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FailureKind {
+    BuildFailed,
+    Invalid,
+}
+#[derive(Serialize, Deserialize)]
+struct RowFailure {
+    kind: FailureKind,
+    reason: String,
 }
 
 /// A run, as `target/bench/run.json` keeps it: what was asked, what was
@@ -1609,6 +1075,12 @@ struct Measurements {
 /// exactly as the run did, from the same facts.
 #[derive(Serialize, Deserialize)]
 struct Run {
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    row_failures: std::collections::BTreeMap<String, RowFailure>,
+    #[serde(default)]
+    conditions: std::collections::BTreeMap<String, serde_json::Value>,
     lanes: Option<Vec<String>>,
     requested: Vec<String>,
     cases: Vec<String>,
@@ -1656,37 +1128,18 @@ fn run_file(root: &Utf8Path) -> Utf8PathBuf {
 /// assembled again by today's code from the measurements as they were taken,
 /// so a change to how a row is judged reaches the table without re-timing it.
 fn render(root: &Utf8Path, path: &Utf8Path) -> Result<()> {
-    let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
-    let run: Run = serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
-    let filtered = run.lanes.is_some();
-    let mut rows = Vec::new();
-    let mut failed = run.failed.clone();
-    for measured in &run.measured {
-        if let Some(row) = accept_result(&measured.shown, assemble(measured, filtered), &mut failed)
-        {
-            rows.push(row);
-        }
-    }
-    require_valid_rows(&failed)?;
-    let cases_dir = root.join("benchmarks/cases");
-    let cases: Vec<Utf8PathBuf> = run.cases.iter().map(|case| cases_dir.join(case)).collect();
-    publish(
-        root,
-        &rows,
-        &cases,
-        &run.requested,
-        &run.spoiled,
-        run.lanes.as_deref(),
-    )
+    println!("{}", results::command(root, "render", &[path.as_str()])?);
+    Ok(())
 }
 
-/// node, and bun where it runs, over the case's own harness.
+/// The standing engines use one typed loop, verified pins and one input protocol.
 fn measure_hosts(
+    root: &Utf8Path,
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
     workload: &workload::Workload,
-) -> Result<(Measured, Option<Measured>)> {
+) -> Result<serde_json::Value> {
     let harness = node_harness(case, out, name, workload)?;
     let input: Vec<_> = workload
         .numeric()
@@ -1694,30 +1147,20 @@ fn measure_hosts(
         .map(workload::Numeric::input)
         .into_iter()
         .collect();
-    let node = measure(
-        std::process::Command::new("node")
-            .arg(&harness)
-            .args(&input),
-    )?;
-    // The same source on the other engine. Bun runs `.ts` natively too, so it
-    // imports the identical file rather than a copy that could drift.
-    // node always runs: it is the oracle every other lane's checksum is compared
-    // against, and losing it would turn a filtered run into an unchecked one.
-    // bun is a column rather than a check, so a filter may drop it.
-    let bun = if wanted_lanes().is_some() {
-        None
-    } else {
-        bun_binary()
-            .map(|binary| {
-                measure(
-                    std::process::Command::new(binary)
-                        .arg(&harness)
-                        .args(&input),
-                )
-            })
-            .transpose()?
-    };
-    Ok((node, bun))
+    let output = std::process::Command::new("node")
+        .arg(root.join("tooling/bench/host-columns.ts"))
+        .args([root.as_str(), name, harness.as_str(), out.as_str()])
+        .args(input)
+        .current_dir(root)
+        .output()
+        .context("running the standing comparators")?;
+    if !output.status.success() {
+        bail!(
+            "host instrument failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    serde_json::from_slice(&output.stdout).context("invalid host observation frame")
 }
 
 /// A case's row, from its measurements: the checks a row must pass, and the
@@ -1726,7 +1169,7 @@ fn measure_hosts(
 /// Say which cells of a row are not a steady state, beside the row: a cell
 /// whose passes disagree past `SPREAD_WORTH_SAYING`, and a JVM cell whose
 /// warm-up reached its cap still compiling (`Bench.settle`).
-fn note_unsteady_cells(shown: &str, results: &[Option<Measured>], row: &mut Row) {
+fn note_unsteady_cells(shown: &str, results: &[Option<Measured>]) {
     // A row whose own passes disagree has no single number, and printing one of
     // them as though it were the answer is the failure this table exists to
     // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
@@ -1744,7 +1187,6 @@ fn note_unsteady_cells(shown: &str, results: &[Option<Measured>], row: &mut Row)
                  take six invocations before reading this as unquotable",
                 shown, label, measured.spread, RUNS
             );
-            row.varied.push((label.to_owned(), measured.spread));
         }
         if let Some(Some(measured)) = measured
             && measured.warm_capped
@@ -1778,6 +1220,9 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
             bail!("{} has both a runtime abort and a timing", column.key());
         }
     }
+    let node = node
+        .as_ref()
+        .context("node oracle did not complete; observations retained without a timed verdict")?;
     agreed(results, bun.as_ref(), node)?;
 
     // A lane that must run, unless a filter deliberately excluded it. Under
@@ -1811,20 +1256,18 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op)
     };
-    let mut row = Row {
+    required(1)?;
+    let row = Row {
         case: shown.to_owned(),
         cpp: optional(2),
         cpp_absence: absences.cpp.clone(),
         outcomes: absences.outcomes.clone(),
         nts: required(0)?,
-        unspecialized: required(1)?,
         node: node.ns_per_op,
         llvm: optional(3),
         jvm: optional(4),
-        jvm_absence: absences.jvm,
         java: optional(5),
         bun: bun.as_ref().map(|result| result.ns_per_op),
-        varied: Vec::new(),
     };
 
     if let Some(reason) = &row.cpp_absence {
@@ -1833,26 +1276,13 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
     for (column, outcome) in &row.outcomes {
         println!("note: {shown:<16} {} {outcome}", column.key());
     }
-    note_unsteady_cells(shown, results, &mut row);
+    note_unsteady_cells(shown, results);
 
     work_agrees(&row)?;
+    if let Some(note) = row.asymmetry() {
+        eprintln!("note: {shown}: {note}");
+    }
 
-    println!(
-        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-        row.case,
-        row.cpp.map_or_else(|| "--".to_owned(), human),
-        row.nts.map_or_else(|| "--".to_owned(), human),
-        row.llvm.map_or_else(|| "--".to_owned(), human),
-        jvm_cell(row.jvm, row.jvm_absence),
-        row.java.map_or_else(|| "--".to_owned(), human),
-        row.unspecialized.map_or_else(|| "--".to_owned(), human),
-        human(row.node),
-        row.bun.map_or_else(|| "--".to_owned(), human),
-        row.against(row.cpp),
-        row.against(Some(row.node)),
-        row.against(row.bun),
-        row.jvm_against_java(),
-    );
     Ok(row)
 }
 
@@ -1890,64 +1320,6 @@ fn agreed(results: &[Option<Measured>], bun: Option<&Measured>, node: &Measured)
 /// `NTS_BUN` first, then whatever is on `PATH`, then the directory bun's own
 /// installer uses -- which is not on a non-interactive `PATH`, so looking only
 /// at `PATH` reports "not installed" on a machine where it plainly is.
-fn bun_binary() -> Option<Utf8PathBuf> {
-    if let Ok(named) = std::env::var("NTS_BUN") {
-        return Some(Utf8PathBuf::from(named));
-    }
-    if std::process::Command::new("bun")
-        .arg("--version")
-        .output()
-        .is_ok_and(|out| out.status.success())
-    {
-        return Some(Utf8PathBuf::from("bun"));
-    }
-    let home = std::env::var("HOME").ok()?;
-    let installed = Utf8PathBuf::from(home).join(".bun/bin/bun");
-    installed.is_file().then_some(installed)
-}
-
-/// What the harnesses call, read off the case itself.
-///
-/// The checker supplies one numeric entry and its static numeric seed before
-/// lowering. Legacy cases with a sole numeric export keep that entry name.
-///
-/// # Why every driver is generated rather than written
-///
-/// Every case states its workload once, in `case.ts`: the numeric `work` function is
-/// what to call and `export const seed` is the argument. Every lane's driver --
-/// the native `bench_run`, the JVM `Case.java`, the node harness -- comes from
-/// those two facts, so a column cannot measure a different workload than the
-/// column beside it. The workload is the same by construction rather than by
-/// inspection.
-///
-/// This used to read `nts.cpp`, which made the *JVM* lane's driver a product of
-/// parsing C++: the inputs had to be `volatile` scalars on their own lines and
-/// the call a single-line `return`. Two lanes coupled through a text format
-/// neither cared about, and a JVM number that moved if the C++ was reformatted.
-///
-/// Unsupported or ambiguous contracts fail before a driver is compiled.
-/// The `nts (JVM)` cell, which says *which kind* of missing it is.
-///
-/// `refused` is a construct this lane declines by name and is the compiler's;
-/// `no driver` is this harness being unable to *call* the program and is not.
-/// Only the first is a gap in the backend.
-///
-/// One function because the console and the README are two renderings of one
-/// table, and they had drifted: the README distinguished the two states and the
-/// console printed `--` for both. Three blanks in that column once turned out to
-/// be a refusal, a harness limit, and a `NullPointerException`, and the one that
-/// was a bug looked exactly like the two that were not -- so the triage started
-/// from the rendering that had thrown the distinction away.
-fn jvm_cell(time: Option<f64>, absence: Option<JvmAbsence>) -> String {
-    match (time, absence) {
-        (Some(time), _) => human(time),
-        (None, Some(JvmAbsence::NoDriver)) => "no driver".to_owned(),
-        (None, Some(JvmAbsence::NotRun)) => "not run".to_owned(),
-        (None, Some(JvmAbsence::RuntimeAbort)) => "aborted".to_owned(),
-        (None, _) => "refused".to_owned(),
-    }
-}
-
 /// How to compile a case, which is the same answer for all of them.
 ///
 /// A `tsconfig.json` beside a case is still honoured, so one that needs
@@ -3029,44 +2401,6 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
 /// JVM is stable to 7.4% -- so they belong to the code this backend emits.
 const SPREAD_WORTH_SAYING: f64 = 1.10;
 
-/// What is known about a row's instability, beyond what this sitting saw.
-///
-/// **Two modes and one move are different claims** and the table must not
-/// render them the same way. A confirmed flip says the figure is a draw from a
-/// distribution; a single observed move says only that two sittings disagreed,
-/// which the machine can cause on its own — four rows moved 8% or more in one
-/// survey *together with their own programs*, and their ratios held to 0.02.
-#[derive(Clone, Copy)]
-enum Basis {
-    /// Two modes seen out of one binary, repeatedly. The published figure says
-    /// which mode the run landed in.
-    Bimodal,
-    /// Two sittings disagreed about this column and the other half of the row
-    /// did not move with it. Suggestive, and not two modes until a third
-    /// sitting says so.
-    Moved,
-}
-
-impl Basis {
-    fn shown(self) -> &'static str {
-        match self {
-            Self::Bimodal => "confirmed: two modes out of one binary",
-            Self::Moved => "observed to move; cause unknown",
-        }
-    }
-}
-
-/// Rows whose instability is known from *previous* sittings, carried whether or
-/// not this one sees it.
-///
-/// A row that flips one time in six is stable on five sittings, and on each of
-/// those the table prints a bare number. `spreads` was written because "a
-/// flipped row and a solid one are the same number on the page" — and it had
-/// exactly that hole, because it reported only what the publishing run happened
-/// to observe.
-///
-/// Entries are removed when a **cause** is found, not when a run comes back
-/// clean: a clean run is what this table exists to disbelieve.
 /// The cases this compiler is known to refuse, and why each one.
 ///
 /// **A count rather than a condition, which is the negative arm for free.**
@@ -3101,9 +2435,8 @@ const REFUSES_TODAY: &[(&str, &str)] = &[(
 
 /// Whether the cases that refused are the cases expected to refuse.
 ///
-/// Returns the sentence to print, or `None` when the set matches. Separate from
-/// `publish` so it can be asserted rather than watched -- the same reason
-/// `lost_case_decline` is.
+/// Returns the sentence to print, or `None` when the set matches. New refusals
+/// remain visible observations and never suppress the immutable run record.
 fn refusal_drift(rows: &[Row], known: &[(&str, &str)]) -> Option<String> {
     use std::fmt::Write as _;
     let mut refused: Vec<&str> = rows
@@ -3157,85 +2490,6 @@ const KNOWN_ASYMMETRIC: &[(&str, &str)] = &[(
      so its ratios against them measure the trace",
 )];
 
-const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
-    // 5.74, 5.74 and 5.38 us on one sitting against 4.49, 4.44 and 4.48 on
-    // another, out of one class file — and the *reference* is the bimodal half,
-    // not us. From outside: this file publishes 0.94x where
-    // `tooling/android/times-on-device.sh` reads 1.32x and 1.33x across two
-    // sittings on the same machine and the same HotSpot, every other shared row
-    // agreeing. The arithmetic closes on the reference's mode alone: that
-    // harness measured the reference at 4359 and 4441 ns, squarely the fast
-    // mode, where 0.94x needs it near 5740. Both harnesses honest, habitually
-    // landing in different modes. `benchmarks/jvm-rows.md` carries the row as a
-    // range rather than a number.
-    // **Both halves, which took a control to find.** The reference's two modes
-    // were recorded first and looked like the whole story. Then the JVM lane
-    // drove *our* artefact through both harnesses, alternating, on a quiet
-    // machine: they agree within 3%, so neither the timing arm nor the
-    // classpath nor the driver is the fork — and our own side swings 4428 to
-    // 5685 ns out of one class file, 1.28x, at what look like the same two
-    // levels the reference sits at.
-    //
-    // So the ratio is the quotient of two independently bimodal halves and can
-    // land anywhere from about 0.79x to about 1.28x with nothing wrong
-    // anywhere. 0.94, 1.32 and 1.33 are all inside it.
-    //
-    // Two *different* programs — this compiler's output and Are We Fast Yet's
-    // hand-written Java — flipping between the same two levels on one machine is
-    // not about either program. The workload is a `boolean[5000]` sieve and a
-    // flip that size out of one class file is the shape of a decision made once
-    // per process. Named with the measurement rather than chased.
-    // 1.33x across five passes of one class file on 2026-09-15, and the row
-    // published 1.24x that sitting against **0.94x in two earlier ones** with
-    // our own side steady. Java read 6.31us here and about 8.3us before, so the
-    // reference is the moving half -- the same finding this file already
-    // records for `awfy-sieve`, on a row that had never been flagged.
-    //
-    // Two of the eight AWFY references now behave this way, which is worth more
-    // than either entry: the bar is "at or under hand-written Java", and on
-    // those rows hand-written Java is not one number.
-    (
-        "awfy-list",
-        "Java",
-        1.33,
-        "five passes of one binary, against two earlier sittings",
-        Basis::Bimodal,
-    ),
-    (
-        "awfy-sieve",
-        "Java",
-        1.27,
-        "a previous sitting, and a second harness",
-        Basis::Bimodal,
-    ),
-    (
-        "awfy-sieve",
-        "nts (JVM)",
-        1.28,
-        "a control run, both harnesses",
-        Basis::Bimodal,
-    ),
-    // The reference got 13% and 12% faster across two sittings while our side
-    // did not move — which is the `awfy-sieve` shape and smaller, and two
-    // sittings are a move rather than two modes. `number-format-double` is a row
-    // real effort has gone into at 1.15x and then 0.95x, and both are suspect
-    // from the reference's side rather than from ours.
-    (
-        "number-format-double",
-        "Java",
-        1.13,
-        "two sittings, reference only",
-        Basis::Moved,
-    ),
-    (
-        "symbol-keyed-map",
-        "Java",
-        1.12,
-        "two sittings, reference only",
-        Basis::Moved,
-    ),
-];
-
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     let output = command.output().context("running a benchmark")?;
     if !output.status.success() {
@@ -3281,11 +2535,8 @@ fn human(ns: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        REFUSES_TODAY, Row, driver_entries, lost_case_decline, missing_entry, refusal_drift,
-    };
+    use super::{REFUSES_TODAY, Row, driver_entries, missing_entry, refusal_drift};
     use anyhow::Context;
-    use camino::Utf8PathBuf;
 
     #[test]
     fn default_measurement_cpus_never_widen_the_inherited_set() {
@@ -3366,21 +2617,17 @@ mod tests {
             cpp_absence: None,
             outcomes: std::collections::BTreeMap::new(),
             nts: Some(1.0),
-            unspecialized: Some(1.0),
             node: 1.0,
             llvm: None,
             jvm: None,
-            jvm_absence: None,
             java: None,
             bun: None,
-            varied: Vec::new(),
         }
     }
 
     fn refused_row(case: &str) -> Row {
         Row {
             nts: None,
-            unspecialized: None,
             ..row(case)
         }
     }
@@ -3413,6 +2660,8 @@ mod tests {
         };
         let mut observation = super::Measurements {
             workload: None,
+            source_capture: None,
+            hosts: None,
             shown: "runtime-abort-control".to_owned(),
             results: vec![None, None, Some(measured(10.0)), None, None, None],
             absences: super::Absences {
@@ -3424,7 +2673,7 @@ mod tests {
                     .collect(),
             },
             lowers: true,
-            node: measured(20.0),
+            node: Some(measured(20.0)),
             bun: Some(measured(19.0)),
         };
         // The saved run retains the typed observation and all independent work.
@@ -3440,33 +2689,6 @@ mod tests {
             None,
             "a runtime abort is distinct from a compile refusal"
         );
-        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
-            "../../target/bench-abort-cells-{}",
-            std::process::id()
-        ));
-        super::results::record(
-            &root,
-            &[row],
-            &super::results::Run {
-                measured: "test".to_owned(),
-                commit: "test".to_owned(),
-                lanes: None,
-                spoiled: &[],
-            },
-        )?;
-        let cells = std::fs::read_to_string(root.join("results/benchmarks/cells.tsv"))?;
-        let native = cells
-            .lines()
-            .find(|line| line.contains("\tnts_c\t"))
-            .context("missing native cell")?;
-        let fields: Vec<_> = native.split('\t').collect();
-        assert_eq!(fields[2], "aborted");
-        assert_eq!(
-            serde_json::from_str::<Option<Outcome>>(fields[6])?,
-            Some(abort)
-        );
-        assert!(cells.lines().any(|line| line.contains("\tnode\t20.0\t")));
-        assert!(cells.lines().any(|line| line.contains("\tcpp\t10.0\t")));
         // Missing timings cannot hide a disagreement between columns that ran.
         observation.results[2]
             .as_mut()
@@ -3481,7 +2703,6 @@ mod tests {
                 .to_string()
                 .contains("both a runtime abort and a timing")
         );
-        std::fs::remove_dir_all(root)?;
         Ok(())
     }
 
@@ -3491,6 +2712,8 @@ mod tests {
     fn a_saved_run_assembles_the_same_rows() {
         let measurements = super::Measurements {
             workload: None,
+            source_capture: None,
+            hosts: None,
             shown: "fib".to_owned(),
             results: vec![
                 Some(measured(10.0)),
@@ -3504,7 +2727,7 @@ mod tests {
                 cpp: None,
             },
             lowers: true,
-            node: measured(30.0),
+            node: Some(measured(30.0)),
             bun: None,
         };
         let fresh = super::assemble(&measurements, false).expect("a row");
@@ -3516,7 +2739,10 @@ mod tests {
             (again.nts, again.cpp, again.llvm, again.node)
         );
         assert_eq!(again.nts, Some(10.0));
-        assert!(matches!(again.jvm_absence, Some(super::JvmAbsence::NotRun)));
+        assert!(matches!(
+            saved.absences.jvm,
+            Some(super::JvmAbsence::NotRun)
+        ));
     }
 
     #[test]
@@ -3524,6 +2750,8 @@ mod tests {
         let absent = "optional C++ libraries unavailable: missing; C++ column is --";
         let measurements = super::Measurements {
             workload: None,
+            source_capture: None,
+            hosts: None,
             shown: "optional-link-control".to_owned(),
             results: vec![
                 Some(measured(1.0)),
@@ -3537,7 +2765,7 @@ mod tests {
                 cpp: Some(absent.to_owned()),
             },
             lowers: true,
-            node: measured(1.0),
+            node: Some(measured(1.0)),
             bun: Some(measured(1.0)),
         };
         let json = serde_json::to_string(&measurements).expect("valid missing-reference row");
@@ -3549,92 +2777,6 @@ mod tests {
         assert_eq!(row.node, 1.0);
         assert_eq!(row.bun, Some(1.0));
         super::work_agrees(&row).expect("valid missing-reference row");
-    }
-
-    #[test]
-    fn a_rejected_work_row_survives_in_json_and_fails_finish_and_render() {
-        for rejected in [true, false] {
-            let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-                .expect("UTF-8 temporary directory")
-                .join(format!(
-                    "nts-bench-rejection-{}-{rejected}",
-                    std::process::id()
-                ));
-            std::fs::create_dir_all(root.join("target/bench")).expect("output directory");
-            std::fs::create_dir_all(root.join("results/benchmarks")).expect("results directory");
-            let table = root.join("results/benchmarks/full.md");
-            std::fs::write(&table, "old table\n").expect("old full table");
-            let measurements = super::Measurements {
-                workload: None,
-                shown: "work-guard-control".to_owned(),
-                results: vec![
-                    Some(measured(1.5)),
-                    Some(measured(10.0)),
-                    None,
-                    Some(measured(1.5)),
-                    Some(measured(if rejected { 11_000.0 } else { 2.0 })),
-                ],
-                absences: super::Absences {
-                    outcomes: std::collections::BTreeMap::new(),
-                    jvm: None,
-                    cpp: None,
-                },
-                lowers: true,
-                node: measured(30.0),
-                bun: None,
-            };
-            let mut failed = Vec::new();
-            let rows: Vec<_> = super::accept_result(
-                &measurements.shown,
-                super::assemble(&measurements, false),
-                &mut failed,
-            )
-            .into_iter()
-            .collect();
-            let run = super::Run {
-                lanes: None,
-                requested: vec![measurements.shown.clone()],
-                cases: vec![measurements.shown.clone()],
-                spoiled: Vec::new(),
-                failed,
-                measured: vec![measurements],
-            };
-            let cases = vec![root.join("benchmarks/cases/work-guard-control")];
-            let result = super::finish(&root, &run, &rows, &cases);
-            assert_eq!(result.is_err(), rejected);
-            if let Err(error) = result {
-                assert!(
-                    error.to_string().contains("this compiler's backends"),
-                    "{error:#}"
-                );
-            }
-            let saved = super::run_file(&root);
-            let text = std::fs::read_to_string(&saved).expect("failed run still saved");
-            let restored: super::Run = serde_json::from_str(&text).expect("saved run");
-            assert_eq!(restored.failed.len(), usize::from(rejected));
-            assert_eq!(
-                restored.measured.len(),
-                1,
-                "raw rejected measurements survive"
-            );
-            let rendered = super::render(&root, &saved);
-            assert_eq!(rendered.is_err(), rejected);
-            if let Err(error) = rendered {
-                assert!(error.to_string().starts_with("1 benchmark case(s) failed:"));
-            }
-            // Runs saved by the old runner have no failed field. Reassembly
-            // must catch their rejected work too, rather than trusting it.
-            let mut old: serde_json::Value = serde_json::from_str(&text).expect("JSON");
-            old.as_object_mut().expect("object").remove("failed");
-            std::fs::write(&saved, serde_json::to_string(&old).expect("old JSON"))
-                .expect("old run");
-            assert_eq!(super::render(&root, &saved).is_err(), rejected);
-            assert_eq!(
-                std::fs::read_to_string(&table).expect("full table"),
-                "old table\n"
-            );
-            std::fs::remove_dir_all(&root).expect("cleaned up");
-        }
     }
 
     #[test]
@@ -3652,26 +2794,6 @@ mod tests {
         assert!(error.to_string().contains("broken-build"));
     }
 
-    /// A run of some lanes never reaches the full table, over every case as
-    /// over a few.
-    #[test]
-    fn a_lane_filtered_run_leaves_the_full_table_alone() {
-        let root = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
-            .expect("a UTF-8 temporary directory")
-            .join(format!("nts-bench-lanes-{}", std::process::id()));
-        let table = root.join("results/benchmarks/full.md");
-        std::fs::create_dir_all(table.parent().expect("a directory")).expect("a root");
-        std::fs::write(&table, "old\n").expect("a table");
-        let rows = vec![row("fib")];
-        let cases = vec![root.join("benchmarks/cases/fib")];
-        super::publish(&root, &rows, &cases, &[], &[], Some(&["c".to_owned()]))
-            .expect("declines quietly");
-        let after = std::fs::read_to_string(&table).expect("still there");
-        std::fs::remove_dir_all(&root).expect("cleaned up");
-        assert_eq!(after, "old\n");
-    }
-
-    /// The set that matches is the only quiet answer.
     #[test]
     fn the_expected_refusals_are_not_drift() {
         let rows: Vec<Row> = KNOWN.iter().map(|(case, _)| refused_row(case)).collect();
@@ -3717,41 +2839,6 @@ mod tests {
         assert!(said.contains("accumulate"), "{said}");
     }
 
-    fn cases(names: &[&str]) -> Vec<Utf8PathBuf> {
-        names
-            .iter()
-            .map(|name| Utf8PathBuf::from(format!("/benches/cases/{name}")))
-            .collect()
-    }
-
-    /// The line the silent branch did not print, asserted rather than watched.
-    ///
-    /// This is the shape of 2026-09-15: a full sweep, one case lost to a
-    /// lowering refusal, and a `publish` that returned without a word.
-    #[test]
-    fn a_lost_case_is_named_in_the_decline() {
-        let message = lost_case_decline(
-            &[row("fib"), row("objects (rc)")],
-            &cases(&["fib", "objects", "json-stringify-doc"]),
-        );
-        assert!(
-            message.contains("json-stringify-doc"),
-            "the lost case has to be named, not counted: {message}"
-        );
-        assert!(message.contains("1 of 3"), "{message}");
-        // The two that *were* measured must not be reported lost -- and
-        // `objects` is the one that proves the `(rc)` suffix is handled, since
-        // its row is spelled `objects (rc)` and its directory is `objects`.
-        assert!(!message.contains("objects"), "{message}");
-        assert!(!message.contains("fib"), "{message}");
-    }
-
-    /// The shape that took the README table down: a declaration and no body.
-    ///
-    /// This is `json-stringify-doc`'s generated C exactly -- lowering refused the
-    /// function, `emit-c` exited zero, the prototype stayed because the driver
-    /// is emitted from the same entry list, and the first thing to notice was
-    /// the linker.
     #[test]
     fn a_declared_but_undefined_entry_is_a_refusal() {
         let entry = vec!["work".to_owned()];
@@ -3828,14 +2915,5 @@ mod tests {
             Some("work".to_owned()),
             "`nts_work` is not `work`"
         );
-    }
-
-    /// A sweep that lost nothing never reaches this branch; if it somehow does,
-    /// the message must not claim a clean run declined for a named case.
-    #[test]
-    fn nothing_lost_says_so_rather_than_naming_a_case() {
-        let message = lost_case_decline(&[row("fib")], &cases(&["fib"]));
-        assert!(message.contains("0 of 1"), "{message}");
-        assert!(message.contains("bug in this function"), "{message}");
     }
 }
