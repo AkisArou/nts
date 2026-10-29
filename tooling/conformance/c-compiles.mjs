@@ -12,7 +12,6 @@
 // compiled bodies, but a failed or empty emission is NOT MEASURED, never a pass.
 // Exit 0: every project compiles. 1: rejection or not measured. 2: setup failed.
 
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,  } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -20,20 +19,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
+import { activeCommand } from "../gate/active-command.ts";
+import { publishHung, publishToolingFailure, ToolingInstrumentError } from "../gate/step-result.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FLAGS = ["-std=c11", "-fsyntax-only"];
 
-function run(command, args, root, env) {
-  return new Promise((done) => {
-    const child = spawn(command, args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    child.stdout.on("data", (data) => { out += data; });
-    child.stderr.on("data", (data) => { out += data; });
-    const timer = setTimeout(() => child.kill("SIGKILL"), 180_000);
-    child.on("error", (error) => { clearTimeout(timer); done({ error, out }); });
-    child.on("close", (status, signal) => { clearTimeout(timer); done({ status, signal, out }); });
-  });
+function run(command, args, root, env, activity) {
+  return activeCommand(command,args,{...activity,cwd:root,env});
 }
 
 function size(path) {
@@ -50,11 +43,12 @@ export function cachedEmission(project, base, hash) {
   return read(join(base, `${name}.status`)) === "0" ? join(base, name) : null;
 }
 
-export async function measure({ project, root, compiler, env, work, cached, cc }) {
+export async function measure({ project, root, compiler, env, work, cached, cc, activity }) {
   const out = cached ?? work;
   if (!cached) {
     mkdirSync(out, { recursive: true });
-    const emit = await run(compiler, ["emit-c", project, "--out", out, "--napi"], root, env);
+    const emit = await run(compiler, ["emit-c", project, "--out", out, "--napi"], root, env, activity);
+    if (emit.hung) return { category: "hung", why: emit.hung };
     if (emit.error || emit.signal || emit.status !== 0) {
       return { category: "not-measured", why: `emit-c ${emit.signal ?? emit.error?.message ?? `exit ${emit.status}`}: ${emit.out.trim().split("\n").pop()}` };
     }
@@ -62,7 +56,8 @@ export async function measure({ project, root, compiler, env, work, cached, cc }
   const source = join(out, "program.c");
   const bytes = size(source);
   if (bytes === 0) return { category: "not-measured", why: "emit-c wrote no nonempty program.c" };
-  const compiled = await run(cc, [...FLAGS, "-I", out, source], root, env);
+  const compiled = await run(cc, [...FLAGS, "-I", out, source], root, env, activity);
+  if (compiled.hung) return { category: "hung", why: compiled.hung };
   if (compiled.error || compiled.signal) {
     return { category: "not-measured", why: `${cc}: ${compiled.signal ?? compiled.error.message}` };
   }
@@ -104,11 +99,12 @@ async function main() {
   const timed = {};
   const results = new Map();
   let next = 0;
+  let held;
   const workers = Number(process.env.NTS_C_COMPILES_JOBS ?? process.env.NTS_GATE_JOBS ?? 4);
   if (!Number.isInteger(workers) || workers < 1) throw new Error("NTS_C_COMPILES_JOBS must be a positive integer");
   const started = Date.now();
   await Promise.all(Array.from({ length: Math.min(workers, queue.length) }, async () => {
-    while (next < queue.length) {
+    while (!held && next < queue.length) {
       const index = next++;
       const project = queue[index];
       const began = Date.now();
@@ -117,6 +113,7 @@ async function main() {
         work: join(scratch, String(index)), cached: cachedEmission(project, cached, hash),
       }));
       results.set(project, result);
+      if (result.category === "hung") held = `${project}: ${result.why}`;
       timed[project] = (Date.now() - began) / 1000;
     }
   }));
@@ -127,10 +124,11 @@ async function main() {
   for (const [project, result] of [...results].sort()) {
     if (result.category !== "compiles") console.log(`  ${result.category === "rejected" ? "DOES NOT COMPILE" : "NOT MEASURED"}  ${project}: ${result.why}`);
   }
+  if (held) { publishHung(held,env); return 2; }
   return compiled.length === projects.length ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try { process.exitCode = await main(); }
-  catch (error) { console.error(`  NOT MEASURED: ${error.message}`); process.exitCode = 2; }
+  catch (error) { if(error instanceof ToolingInstrumentError)publishToolingFailure(error); console.error(`  NOT MEASURED: ${error.message}`); process.exitCode = 2; }
 }

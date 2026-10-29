@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { cachedEmission, measure } from "../conformance/c-compiles.mjs";
+import { readStepInstrument } from "./step-result.ts";
 
 const clang = spawnSync("clang", ["--version"]);
 
@@ -66,4 +67,16 @@ test("a failed or silent emitter cannot pass the C check", async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("an idle emission stays NOT RUN rather than becoming a C verdict", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "nts-c-compiles-idle-"));
+  try {
+    const compiler=join(dir,"compiler");
+    writeFileSync(compiler,"#!/bin/sh\nexec sleep 600\n");chmodSync(compiler,0o755);
+    const env={...process.env,NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"idle-emission",NTS_GATE_STEP_RESULT:join(dir,"result.json")};
+    const result=await measure({project:"fixture",root:dir,compiler,work:join(dir,"out"),cached:null,cc:"clang",env,activity:{idleMs:2000,pollMs:50}});
+    assert.equal(result.category,"hung");
+    assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","idle-emission").verdict,"NOT RUN");
+  } finally { rmSync(dir,{recursive:true,force:true}); }
 });
