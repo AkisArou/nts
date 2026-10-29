@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "17 case(s) the compiled program declined",
+  "node": null,
+  "measured_with": "a2ae91d52b354777",
+  "source": "measured"
+}
