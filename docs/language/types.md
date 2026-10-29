@@ -89,6 +89,8 @@ representation, and checks it where it can:
 |---|---|
 | between concrete types: an upcast, a class to an interface it satisfies | nothing at run time; the value keeps its identity |
 | an erased value to `number`, `string`, `boolean`, `bigint` or `symbol` | tests the tag |
+| an erased value to a literal type or an `enum` | tests the tag and the value |
+| a typed value to a literal type it may not hold, as `n as 64` where `n` is a `number` | nothing at run time, as in node; the value keeps its storage, and the compiler takes no fact from the literal type |
 | an erased value to a class | tests the class, as `instanceof` against it and its subclasses |
 | an erased value to an interface or an object type | no test at the cast; a field access through the result compiles only where every class the value could be supplies that field, and is refused otherwise |
 | `x!` where `x` is a reference | tests for `null` and `undefined` |
@@ -194,6 +196,17 @@ Until each case meets the policy, a wrong answer that runs is recorded under
   one exception:** an erased value (from `any`, `unknown`, JSON or foreign
   code) asserted to a type it does not have throws a catchable `TypeError`
   (10-27, [log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+- **A literal type is tested where an erased value enters it, and is never a
+  proof:** an erased value asserted to a literal type or an `enum` tests its
+  value as well as its tag, and a mismatch is the same catchable `TypeError`. A
+  typed value cast to a literal type (`n as 64`) is not tested, as in node,
+  since its storage is unchanged and TypeScript admits such values without a
+  cast too, through method parameters. The compiler takes a value, a range or
+  a bound only from a proof over every value that arrives, never from a
+  declared type (10-29,
+  [log](../records/notebooks/decisions-log.md#language-10-29)). Not built: the
+  value test; the compiler on `main` still reads declared literal types as
+  facts.
 - **A container's narrow representation is licensed by proof, never by its
   static type:** a value read out of a `Map` or `Set` keeps its run-time type
   unless the compiler proves that every writer of that collection stores the

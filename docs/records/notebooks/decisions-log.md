@@ -714,3 +714,21 @@ From the open-questions audit; each is the register's recommendation.
   invisible, live otherwise, through a cached wrapper; typed-array bytes are
   borrowed; never a silent copy
   ([record 0356](../0356-objects-cross-an-exported-boundary-by-proof-copied-where-invisible-live-otherwise.md)).
+
+## Language (10-29)
+
+- **A literal type is tested where an erased value enters it, and is never a
+  proof.** Found when the parameter-arrival fix showed `claimed(value: 64)`
+  returning 65 for every input, and a local array indexed by a `0 | 1 | 2 | 3`
+  parameter skipping its bounds check under ASan. The user decided that an
+  erased value (from `any`, `unknown`, JSON or foreign code) asserted to a
+  literal type or an `enum` tests its value as well as its tag, as
+  `JSON.parse(text) as T` already does: "yes, make erased values test the
+  literal value". Asked about `number as 64`, the coordinator recommended no
+  test, as in node: the value keeps its storage, method parameters admit such
+  values without a cast, and the compiler takes values, ranges and bounds only
+  from a proof over every arrival. Casts that change storage (a union member,
+  a subclass) already test and throw. ScriptC draws the same line: it
+  validates casts from run-time-typed values and between program classes, and
+  documents no check for a cast between static types. Recorded in
+  [types.md](../../language/types.md#decisions).
