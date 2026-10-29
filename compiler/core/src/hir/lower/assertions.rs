@@ -10,11 +10,21 @@ use super::{
 };
 use crate::hir::tags;
 
+mod literals;
+
 #[derive(Debug, Clone)]
 enum Check {
-    Primitive { target: HirType, tag: u32 },
+    Primitive {
+        target: HirType,
+        tag: u32,
+    },
     Class(TypeId),
     Present,
+    Literals {
+        target: HirType,
+        members: Vec<nts_semantic_schema::LiteralValue>,
+    },
+    LiteralBudget,
 }
 
 /// The check an assertion needs before its payload is read.
@@ -39,6 +49,18 @@ fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
         return None;
     }
     let target = probe.type_of(id)?;
+    let source = *probe.children(id).first()?;
+    // The assertion's *source* decides whether this is an erased boundary.
+    // Recovery of an earlier Erase may remove a representation round trip,
+    // but cannot remove the membership obligation of `unknown as 64`.
+    if probe.type_of(source) == Some(HirType::Erased) {
+        let ty = *probe.snapshot.node_types.get(&id)?;
+        match literals::members(probe.snapshot, ty) {
+            Ok(Some(members)) => return Some(Check::Literals { target, members }),
+            Err(()) => return Some(Check::LiteralBudget),
+            Ok(None) => {}
+        }
+    }
     let tag = match &target {
         HirType::Bool => tags::BOOLEAN,
         HirType::BigInt => tags::BIGINT,
@@ -80,6 +102,7 @@ pub(super) fn can_throw(probe: &FuncBuilder<'_>, id: NodeId) -> bool {
         return false;
     };
     match check(probe, id) {
+        Some(Check::Literals { .. } | Check::LiteralBudget) => true,
         Some(Check::Primitive { target, .. }) => {
             probe.type_of(inner) != Some(target) || removes_absence(probe, inner, id)
         }
@@ -122,9 +145,12 @@ pub(super) fn lower(
         return Ok(value);
     }
     let source = builder.children(id).first().copied().unwrap_or(id);
+    let plan = check(builder, id);
     // Widening to unknown preserves the runtime type instead of using the
     // assertion's checker type as evidence for a later cast.
-    if builder.type_of(id) == Some(HirType::Erased) {
+    if builder.type_of(id) == Some(HirType::Erased)
+        && !matches!(plan, Some(Check::Literals { .. } | Check::LiteralBudget))
+    {
         if actual_is_unerasable(builder, value) {
             return Err(builder.unsupported(
                 id,
@@ -133,22 +159,11 @@ pub(super) fn lower(
         }
         return builder.coerce(value, &HirType::Erased, source);
     }
-    // Only a check that reads the value's tag needs it erased. A non-null
-    // assertion tests the value's own absence -- for a host handle, a pointer
-    // compared with NULL -- and a handle has no erased form to refuse over
-    // (blockers/a-non-null-assertion-on-a-host-handle-is-refused).
-    if matches!(
-        check(builder, id),
-        Some(Check::Primitive { .. } | Check::Class(_))
-    ) && actual_is_unerasable(builder, value)
-    {
-        return Err(builder.unsupported(
-            id,
-            "a checked assertion from a value with no erased representation",
-        ));
-    }
-    let plan = check(builder, id);
-    let deferred = super::access::defer_presence(builder, id, value);
+    ensure_erasable(builder, id, value, plan.as_ref())?;
+    // A membership check belongs to the cast itself. An access that follows
+    // it must not delay its failure until after an index or RHS side effect.
+    let deferred = !matches!(plan, Some(Check::Literals { .. } | Check::LiteralBudget))
+        && super::access::defer_presence(builder, id, value);
     let mut allowed = builder.absences_of(id).unwrap_or_default();
     if deferred {
         // A null receiver is rejected by the access after its index/RHS has
@@ -167,6 +182,15 @@ pub(super) fn lower(
         return recovered;
     }
     match plan {
+        Some(Check::LiteralBudget) => {
+            return Err(builder.unsupported(
+                id,
+                "a literal assertion whose membership exceeds the checked type-graph budget",
+            ));
+        }
+        Some(Check::Literals { target, members }) => {
+            return literals::lower(builder, id, value, target, members, &allowed);
+        }
         Some(Check::Primitive { target, tag }) => {
             let origin = builder.origin(id);
             let erased = builder.coerce(value, &HirType::Erased, source)?;
@@ -435,5 +459,28 @@ pub(super) fn decline_when(
         builder.terminate(super::super::Terminator::Unreachable);
     }
     builder.switch_to(accepted);
+    Ok(())
+}
+
+fn ensure_erasable(
+    builder: &FuncBuilder<'_>,
+    id: NodeId,
+    value: ValueId,
+    plan: Option<&Check>,
+) -> Result<(), Diagnostic> {
+    // Only a check that reads the value's tag needs it erased. A non-null
+    // assertion tests the value's own absence -- for a host handle, a pointer
+    // compared with NULL -- and a handle has no erased form to refuse over
+    // (blockers/a-non-null-assertion-on-a-host-handle-is-refused).
+    if matches!(
+        plan,
+        Some(Check::Primitive { .. } | Check::Class(_) | Check::Literals { .. })
+    ) && actual_is_unerasable(builder, value)
+    {
+        return Err(builder.unsupported(
+            id,
+            "a checked assertion from a value with no erased representation",
+        ));
+    }
     Ok(())
 }
