@@ -337,13 +337,20 @@ add, in order:
 
 1. **Correctness, before any speedup they suggest:**
    - a **validation build** that re-checks at run time each fact the compiler
-     used to remove a check (removed bounds checks become named traps,
-     narrowed integers are compared with a double recomputation, unreachable
-     paths trap by name), run over the differential corpus and the five
-     test262 records with sabotage controls that must fire. Prototyped by
-     hand on emitted C first; if it is clean and its overhead fits the
-     nightly full run, it becomes an `nts build` mode run there (compiler,
-     after the erased-literal test);
+     used to remove a check:
+     - removed bounds checks become named traps;
+     - each narrowed number is checked where it is defined, against the
+       original double operation recomputed from operands already checked
+       (the inductive oracle, chosen over a full double shadow);
+     - unreachable paths trap by name.
+
+     The hand prototype on emitted C is clean: every sabotage control traps
+     by its name, and it caught the merge-bound bug that ASan let through. It
+     becomes an `nts build` mode (compiler). The mode records each rewritten
+     operation's original recipe, keeps its checks out of the facts the
+     optimizer trusts, and places its failure edges before reference
+     counting. It runs over the differential corpus and the five test262
+     records, and their cost decides its place in the nightly full run;
    - the adversarial routes as fixtures with one-difference controls on every
      backend: Bun's method-bivariance and covariant-array cases and ScriptC's
      variance case (helper2). A bivariant method receiving an erased argument

@@ -778,3 +778,22 @@ From the open-questions audit; each is the register's recommendation.
   ScriptC runs with its automatic Node islands off, so every column compares
   native code. The coordinator noted that Bun's author reports AOT losing to
   its JIT in places, so the JIT may be the stronger rival on some rows.
+- **The validation build checks numbers inductively** (10-29, the
+  coordinator, on the compiler lane's prototype). Three ways to check
+  narrowed numbers were measured by hand on emitted C under the production
+  flags: re-checking the removed bounds checks only; a full double shadow of
+  every number; and the inductive oracle, which checks each narrowed value
+  where it is defined against the original double operation recomputed from
+  operands already checked. Instructions per normal build, on the arrays,
+  elementwise and sieve workloads:
+  - bounds only: 5.1, 10.0 and 1.0 times;
+  - full shadow: 17.2, 94.1 and 11.4 times;
+  - inductive: 5.2, 52.8 and 3.3 times.
+
+  The inductive oracle checks every narrowed number at a fraction of the
+  shadow's cost, and every sabotage control (a bypassed entry, corrupted
+  `i32`, `i64` and phi values, a lost bit above 2^53, an `INT64_MIN - 1`
+  overflow) traps by its name. The prototype also caught the merge-bound bug
+  on main by its trap, where ASan read allocator padding without complaint.
+  Its corpus cost is not yet known; it decides the mode's place in the
+  nightly run ([plan](../../plan.md#from-the-bun-and-scriptc-studies)).
