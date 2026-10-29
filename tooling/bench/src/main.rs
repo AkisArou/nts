@@ -210,14 +210,6 @@ fn other_compilers() -> Vec<u32> {
     found
 }
 
-/// Whether this run may rewrite the full table (`results/benchmarks/full.md`),
-/// and why not when it may not.
-///
-/// Split out from `main` so the three reasons to decline sit together: a
-/// filtered run, a run that lost a case, and a run that was not alone on the
-/// machine. Each of them publishes a table describing something other than what
-/// the header says, and the first two were already refused here while the third
-/// was only noted.
 /// Refuse to begin, or warn about the row that was measured anyway.
 ///
 /// A benchmark wants a quiet machine and the measurement lock does not give it

@@ -6,7 +6,16 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostname, cpus } from "node:os";
-import { COLUMNS, POLICY, parseRun, publishRun, renderRuns, type Json } from "./run-record.ts";
+import {
+  COLUMNS,
+  consoleHeader,
+  consoleRow,
+  POLICY,
+  parseRun,
+  publishRun,
+  renderRuns,
+  type Json,
+} from "./run-record.ts";
 import { fromNts, type Metadata } from "./run-producers.ts";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
 function command(root: string, program: string, args: string[]): string {
