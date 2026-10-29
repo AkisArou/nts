@@ -229,12 +229,16 @@ exhaustion cannot publish facts from an unfinished iteration.
   joins reject that region. Unsupported exactness domains retain floating code.
 - At most one additional version of an original function's selected loop
   region, never a version of a version. Copy at most 256 live HIR operations
-  per function and at most eight loop regions per program.
+  per function. There is no program-wide count of admitted loop regions.
 - The program-wide added-operation budget, including predicates, conversions,
   block-argument transport and copies, is at most
   `max(256, original live operations / 20)`. The small-program allowance admits
   the measured two-loop program; the proportional bound controls large builds.
-  All limits count from the original graph, before any rewrite.
+  All limits count from the original graph, before any rewrite. If the growth
+  budget binds, consider candidates deterministically: innermost loop first,
+  then source order (with original function/block/value identity as a stable
+  tie-break for generated sites). Report every skipped region and its reason
+  in the census; do not silently admit whichever functions a hash map visits.
 - Candidate discovery and no-candidate handling share existing analysis work;
   no extra whole-program fixpoint runs just to discover that nothing applies.
   Any necessary refresh uses the existing flow driver, not a second solver.
