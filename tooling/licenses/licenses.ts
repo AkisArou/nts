@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkBenchmarkInputs } from "./benchmark-inputs.ts";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(directory, "../..");
@@ -26,6 +27,7 @@ function licenseInput(path: string): Buffer {
 const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const args = process.argv.slice(2);
 if (args.length !== 1 || !["--update", "--check"].includes(args[0])) throw new Error("use --update or --check");
+const benchmarkInputs = checkBenchmarkInputs(root);
 type Package = { name: string; version: string; source?: string; checksum?: string; dependencies: string[] };
 type Attribution = { name: string; version: string; source: string; checksum: string; license: string; repository: string | null; texts: { upstream: string; sha256: string }[] };
 type Text = Attribution["texts"][number];
@@ -323,3 +325,4 @@ if (args[0] === "--check") {
   );
 }
 process.stdout.write(`compiler attributions: ${registry.length} registry packages, ${vendorPackages.length} vendored crates in ${projects.length} projects, ${data.length} vendored data inputs, ${components.length} embedded components, ${textFiles.size} verbatim texts verified\n`);
+process.stdout.write(`CC-BY benchmark inputs: ${benchmarkInputs.inputs} inventories, ${benchmarkInputs.files} data files; no compilation or product reach\n`);
