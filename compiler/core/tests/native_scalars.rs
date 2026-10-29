@@ -1784,9 +1784,9 @@ fn enum_parameters_keep_their_written_c_kind_and_oblige_each_caller() {
     for (label, kind, signature, operation) in [
         (
             "gettext-category",
-            "Category & c_int",
+            "c_int",
             "declare function native(value: c_int): void;",
-            "function forward(value: Category & c_int): void { native(value); }",
+            "function forward(value: c_int): void { native(value); }",
         ),
         (
             "gtk-enum-override",

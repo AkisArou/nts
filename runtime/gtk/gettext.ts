@@ -38,7 +38,7 @@ export enum LocaleCategory {
 // and these call libc's of the same name.
 
 /** Set the locale of `category`, `""` for the environment's; the locale set, or `null`. */
-function setLocale(category: LocaleCategory & c_int, locale: string | null): string | null {
+function setLocale(category: c_int, locale: string | null): string | null {
   return stringFrom(setlocale(category, locale));
 }
 
@@ -63,7 +63,7 @@ export function dgettext(domain: string | null, msgid: string): string {
   return g_dgettext(domain, msgid);
 }
 
-export function dcgettext(domain: string | null, msgid: string, category: LocaleCategory & c_int): string {
+export function dcgettext(domain: string | null, msgid: string, category: c_int): string {
   return g_dcgettext(domain, msgid, category);
 }
 
