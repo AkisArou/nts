@@ -218,8 +218,8 @@ pub fn resume_name(function: &str) -> String {
 /// `p`, what is live is whatever leaves `b` plus whatever the rest of `b`
 /// reads, minus whatever `b` defines at or after `p` -- that last part being
 /// the values that do not exist yet when the suspension happens.
-fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
-    let live = super::liveness::analyze(func);
+fn crossing(func: &Func) -> Result<rustc_hash::FxHashSet<ValueId>, super::liveness::Failure> {
+    let live = super::liveness::analyze(func)?;
     let mut crossing = rustc_hash::FxHashSet::default();
     for (index, block) in func.blocks.iter().enumerate() {
         for (at, value) in block.ops.iter().enumerate() {
@@ -295,7 +295,7 @@ fn crossing(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
             }
         }
     }
-    crossing
+    Ok(crossing)
 }
 
 /// Whether a function needs a frame, including generators with no yields.
@@ -694,6 +694,7 @@ fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, D
         }
     }
     let mut spilled: Vec<ValueId> = crossing(func)
+        .map_err(|failure| failure.diagnostic(func))?
         .into_iter()
         .filter(|value| !slot_of.contains_key(value))
         .collect();

@@ -7829,23 +7829,25 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis], roots: rea
     elements::narrow(program, &widths);
 }
 
-#[must_use]
 /// What the provider inserts: reference counting's retains and releases, or,
 /// without counting, the sink that keeps a floating `GObject` the program's
 /// rather than the first container's (`floating`).
-fn provide(program: &mut Program, provider: Memory) -> (rc::Report, contents::Report) {
+fn provide(
+    program: &mut Program,
+    provider: Memory,
+) -> Result<(rc::Report, contents::Report), nts_diagnostics::Diagnostic> {
     match provider {
         Memory::ReferenceCounting => {
             let old_lengths: Vec<_> = program.funcs.iter().map(|func| func.values.len()).collect();
-            let mut counted = rc::insert(program);
+            let mut counted = rc::insert(program)?;
             let contents = contents::elide(program, &old_lengths);
             counted.retains -= contents.inserted_retains_removed;
             counted.releases -= contents.inserted_releases_removed;
-            (counted, contents)
+            Ok((counted, contents))
         }
         Memory::NoGc => {
             floating::sink(program);
-            (rc::Report::default(), contents::Report::default())
+            Ok((rc::Report::default(), contents::Report::default()))
         }
         Memory::HostGc => {
             // Lowering also records native frame lifetimes (`for await`).
@@ -7864,7 +7866,7 @@ fn provide(program: &mut Program, provider: Memory) -> (rc::Report, contents::Re
                     });
                 }
             }
-            (rc::Report::default(), contents::Report::default())
+            Ok((rc::Report::default(), contents::Report::default()))
         }
     }
 }
@@ -8157,7 +8159,10 @@ fn prepare_lowered(
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
-    let (counting, contents) = provide(&mut program, options.provider);
+    let (counting, contents) = provide(&mut program, options.provider).unwrap_or_else(|failure| {
+        rejected.push(failure);
+        (rc::Report::default(), contents::Report::default())
+    });
     // Recorded on the program rather than left in the options, because a
     // backend is handed the program alone and one of them has to act on this.
     // Set here, beside the pass it describes, so the two cannot drift.
@@ -8429,7 +8434,18 @@ fn undominated_names(
     layouts: &[Layout],
     stores: &liveness::CalleeStores<'_>,
 ) -> rustc_hash::FxHashSet<ValueId> {
-    let names = liveness::object_names_with(func, stores);
+    let Ok(names) =
+        liveness::object_names_with(func, stores).map_err(liveness::Failure::for_optional)
+    else {
+        // Without the complete name relation no frame lifetime is proved.
+        return func
+            .values
+            .iter()
+            .enumerate()
+            .filter(|(_, op)| matches!(op.kind, OpKind::ObjectNew { .. }))
+            .map(|(at, _)| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
+            .collect();
+    };
     if names.is_empty() {
         return rustc_hash::FxHashSet::default();
     }

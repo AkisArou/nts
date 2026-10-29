@@ -1223,7 +1223,7 @@ fn judge(program: &Program) -> (Report, Vec<Site>) {
     let mut report = Report::default();
     let mut sites = Vec::new();
     for (caller, func) in program.funcs.iter().enumerate() {
-        let mut flow: Option<Flow> = None;
+        let mut flow: Option<Result<Flow, super::liveness::Failure>> = None;
         for block in &func.blocks {
             for call in &block.ops {
                 let op = &func.values[call.0 as usize];
@@ -1262,8 +1262,15 @@ fn judge(program: &Program) -> (Report, Vec<Site>) {
                         })
                 });
                 let read = read.and_then(|read| {
-                    let flow = flow.get_or_insert_with(|| Flow::of(func));
-                    flow.holds(*call, &read)
+                    let flow = flow.get_or_insert_with(|| {
+                        Flow::of(func).map_err(super::liveness::Failure::for_optional)
+                    });
+                    flow.as_ref()
+                        .map_err(|failure| Refusal {
+                            reason: failure.to_string(),
+                            function: func.name.clone(),
+                        })?
+                        .holds(*call, &read)
                         .map(|holds| (read, holds))
                         .map_err(|reason| Refusal {
                             reason: reason.to_owned(),
@@ -1320,7 +1327,7 @@ enum Hold {
 }
 
 impl Flow {
-    fn of(func: &Func) -> Self {
+    fn of(func: &Func) -> Result<Self, super::liveness::Failure> {
         let reachable = super::verify::reachable_blocks(func);
         let mut block_of = FxHashMap::default();
         for (index, block) in func.blocks.iter().enumerate() {
@@ -1328,8 +1335,8 @@ impl Flow {
                 block_of.insert(*op, index);
             }
         }
-        Self {
-            live: super::liveness::analyze(func),
+        Ok(Self {
+            live: super::liveness::analyze(func)?,
             idom: super::verify::dominators(func, &reachable),
             block_of,
             handed_on: func
@@ -1346,7 +1353,7 @@ impl Flow {
                 }
                 into
             },
-        }
+        })
     }
 
     /// Whether something read out of the result outlives a block: live out of

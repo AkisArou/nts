@@ -623,7 +623,20 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
     let repeated = repeats(func);
-    let live = liveness::analyze(func);
+    let Ok(live) = liveness::analyze(func).map_err(liveness::Failure::for_optional) else {
+        // No unfinished lifetime proof may place an allocation in the frame
+        // or publish a held-contents/return summary.
+        let all: FxHashSet<_> = (0..func.values.len())
+            .filter_map(|at| u32::try_from(at).ok().map(ValueId))
+            .collect();
+        return Escapes {
+            values: all.clone(),
+            contents_leave: all,
+            contents_returned: (0..func.params.len())
+                .filter_map(|slot| u32::try_from(slot).ok())
+                .collect(),
+        };
+    };
 
     for block in &func.blocks {
         for value in &block.ops {
@@ -2094,7 +2107,7 @@ mod tests {
             .push(op(OpKind::ObjectNew { frame: false }, object()));
         body.blocks[0].ops.push(initial);
         let repeated = repeats(&body);
-        let live = liveness::analyze(&body);
+        let live = liveness::analyze(&body).expect("complete liveness");
         let carried = [(ValueId(1), ValueId(0)), (ValueId(1), ValueId(0))];
         let mut normal = Escapes::default();
         escape_reused_instances(

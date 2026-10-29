@@ -456,7 +456,11 @@ fn read_as_an_accumulation(func: &Func, members: &BTreeSet<ValueId>) -> bool {
 /// refused inside a `try`, so a variant's callee that throws ends the program
 /// before anything reads the builder.
 fn one_storage(func: &Func, members: &BTreeSet<ValueId>) -> bool {
-    let liveness = super::liveness::analyze(func);
+    let Ok(liveness) =
+        super::liveness::analyze(func).map_err(super::liveness::Failure::for_optional)
+    else {
+        return false;
+    };
     func.blocks.iter().enumerate().all(|(index, block)| {
         let id = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
         let mut live: BTreeSet<ValueId> = liveness

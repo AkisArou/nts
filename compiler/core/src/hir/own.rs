@@ -3347,7 +3347,7 @@ fn handed_by_every_caller(
     stored: &rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
     mut appended: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
 ) -> rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>> {
-    let mut lives: rustc_hash::FxHashMap<usize, liveness::Liveness> =
+    let mut lives: rustc_hash::FxHashMap<usize, Result<liveness::Liveness, liveness::Failure>> =
         rustc_hash::FxHashMap::default();
     loop {
         let mut consumes = stored.clone();
@@ -3396,10 +3396,14 @@ fn handed_by_every_caller(
                         let Some(&argument) = args.get(slot as usize) else {
                             continue;
                         };
-                        let live = lives.entry(at).or_insert_with(|| liveness::analyze(func));
+                        let live = lives.entry(at).or_insert_with(|| {
+                            liveness::analyze(func).map_err(liveness::Failure::for_optional)
+                        });
                         let handed = !clone
                             && args.iter().filter(|arg| **arg == argument).count() == 1
-                            && dies_at(func, live, index, position, argument)
+                            && live
+                                .as_ref()
+                                .is_ok_and(|live| dies_at(func, live, index, position, argument))
                             && fresh(
                                 func,
                                 argument,
@@ -4493,7 +4497,7 @@ mod tests {
         assert!(summaries.consumes("inert").is_none());
         assert!(!summaries.hands_back("inert"));
         let inert = &program.funcs[0];
-        let mut live = super::liveness::analyze(inert);
+        let mut live = super::liveness::analyze(inert).expect("complete liveness");
         let ownership = super::analyze(inert, &program.layouts, &summaries, &mut live);
         // The unused Param is outside executable block ops, so its local map
         // needs no ownership at all. The borrowed calling convention is the
@@ -4687,7 +4691,7 @@ mod tests {
                 .iter()
                 .find(|func| func.name == name)
                 .expect("a caller in the summary fixture");
-            let mut live = super::liveness::analyze(func);
+            let mut live = super::liveness::analyze(func).expect("complete liveness");
             let ownership = super::analyze(func, &program.layouts, &summaries, &mut live);
             assert_eq!(ownership.of(super::ValueId(1)), want, "{name}");
         }

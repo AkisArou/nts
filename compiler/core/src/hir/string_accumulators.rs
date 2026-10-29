@@ -522,9 +522,13 @@ fn shared<const LIMITED: bool>(
         return Some(Vec::new());
     }
     let live = if LIMITED {
-        super::liveness::analyze_limited(func, &mut |units| control.take(units).is_some())?
+        super::liveness::analyze_limited(func, &mut |units| control.take(units).is_some())
+            .map_err(super::liveness::Failure::for_optional)
+            .ok()?
     } else {
         super::liveness::analyze(func)
+            .map_err(super::liveness::Failure::for_optional)
+            .ok()?
     };
 
     let mut shared = Vec::new();

@@ -32,14 +32,11 @@
 //! mistake shows up as a release the verifier rejects rather than as anything
 //! subtle — but only once a program carries an object around a loop.
 
+use std::collections::VecDeque;
+
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{BlockId, Callee, Func, OpKind, Terminator, ValueId};
-
-/// A hard bound on the fixpoint. Liveness converges in at most one pass per
-/// block over a reducible graph; reaching this means a bug, and looping forever
-/// would hide it.
-const ROUND_CAP: usize = 1024;
 
 /// Which values are live where.
 #[derive(Debug, Clone)]
@@ -125,8 +122,7 @@ impl Liveness {
 }
 
 /// Compute liveness for a function.
-#[must_use]
-pub fn analyze(func: &Func) -> Liveness {
+pub fn analyze(func: &Func) -> Result<Liveness, Failure> {
     analyze_with(func, &|_| None)
 }
 
@@ -139,52 +135,90 @@ pub(super) type CalleeStores<'a> = dyn Fn(&Callee) -> Option<Vec<(u32, u32)>> + 
 /// [`analyze`], told what each callee stores where, so a frame object passed
 /// to a call is named by the argument it goes into rather than by all of them.
 /// See [`object_names_with`].
-#[must_use]
-#[expect(
-    clippy::expect_used,
-    reason = "the unbounded control never rejects a charge"
-)]
-pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
-    analyze_using(func, stores, &mut Control::<false> { charge: None })
-        .expect("unbounded liveness cannot exhaust a work budget")
+pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Result<Liveness, Failure> {
+    analyze_using(func, stores, &mut Control { charge: None })
 }
 
-/// The same analysis, with conservative graph/set work charged before it runs.
-/// Exhaustion or a non-converged fixed point is Unknown, never partial liveness.
-/// A unit reserves at most one element visit or set-membership comparison;
-/// charges may overestimate work, and are not instruction or CPU counts.
-#[must_use]
-pub fn analyze_limited(func: &Func, charge: &mut dyn FnMut(usize) -> bool) -> Option<Liveness> {
+/// The same solver, with caller charges for optional work only. Exhaustion
+/// returns Unknown, never partial liveness. Required analyses use only the
+/// structural worklist bound; no valid function can exhaust that bound.
+pub fn analyze_limited(
+    func: &Func,
+    charge: &mut dyn FnMut(usize) -> bool,
+) -> Result<Liveness, Failure> {
     analyze_using(
         func,
         &|_| None,
-        &mut Control::<true> {
+        &mut Control {
             charge: Some(charge),
         },
     )
 }
 
-struct Control<'a, const LIMITED: bool> {
-    charge: Option<&'a mut dyn FnMut(usize) -> bool>,
+/// No incomplete answer can license a release, spill omission or optimization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Failure {
+    /// An optional caller declined more graph/set work.
+    Budget,
+    /// The monotone solver exceeded its proven finite-lattice bound. This is
+    /// a compiler bug, never a size limit on a valid input.
+    StructuralInvariant(&'static str),
 }
-impl<const LIMITED: bool> Control<'_, LIMITED> {
-    fn take(&mut self, units: usize) -> Option<()> {
-        if !LIMITED {
-            return Some(());
-        }
-        if self.charge.as_mut().is_none_or(|charge| charge(units)) {
-            Some(())
-        } else {
-            None
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Budget => f.write_str("liveness: optional work budget exhausted"),
+            Self::StructuralInvariant(phase) => write!(
+                f,
+                "compiler bug: liveness {phase} exceeded its structural work bound"
+            ),
         }
     }
 }
 
-fn analyze_using<const LIMITED: bool>(
+impl std::error::Error for Failure {}
+
+impl Failure {
+    /// Optional work may decline a budget. A broken structural invariant is
+    /// a compiler bug: assert in diagnostic builds and in optimized unit tests,
+    /// then retain the conservative release fallback.
+    pub(super) fn for_optional(self) -> Self {
+        #[cfg(any(debug_assertions, test))]
+        assert!(matches!(self, Self::Budget), "{self}");
+        self
+    }
+
+    pub(super) fn diagnostic(self, func: &Func) -> nts_diagnostics::Diagnostic {
+        nts_diagnostics::Diagnostic::error("NTS1000", self.to_string(), func.origin.location)
+    }
+}
+
+struct Control<'a> {
+    charge: Option<&'a mut dyn FnMut(usize) -> bool>,
+}
+impl Control<'_> {
+    fn take(&mut self, units: usize) -> Result<(), Failure> {
+        if self.charge.as_mut().is_none_or(|charge| charge(units)) {
+            Ok(())
+        } else {
+            Err(Failure::Budget)
+        }
+    }
+}
+
+fn step(remaining: &mut u128, phase: &'static str) -> Result<(), Failure> {
+    *remaining = remaining
+        .checked_sub(1)
+        .ok_or(Failure::StructuralInvariant(phase))?;
+    Ok(())
+}
+
+fn analyze_using(
     func: &Func,
     stores: &CalleeStores<'_>,
-    control: &mut Control<'_, LIMITED>,
-) -> Option<Liveness> {
+    control: &mut Control<'_>,
+) -> Result<Liveness, Failure> {
     let count = func.blocks.len();
     let values = func.values.len();
     control.take(
@@ -216,19 +250,7 @@ fn analyze_using<const LIMITED: bool>(
     // its own either (`own::views_borrow`): the same rule, for the same
     // reason. Where the view does take one, the handle living longer costs a
     // later release and nothing else.
-    let viewed: FxHashMap<ValueId, ValueId> = func
-        .values
-        .iter()
-        .enumerate()
-        .filter_map(|(at, op)| match op.kind {
-            OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }
-                if func.values[operand.0 as usize].ty.counting().is_some() =>
-            {
-                Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
-            }
-            _ => None,
-        })
-        .collect();
+    let viewed = counted_views(func);
     let mut frame_named_by: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
     for (alias, roots) in &names {
         let framed: Vec<ValueId> = roots
@@ -246,66 +268,77 @@ fn analyze_using<const LIMITED: bool>(
         }
     }
 
-    let mut converged = false;
-    for _ in 0..ROUND_CAP {
-        let mut changed = false;
-        // Backward, so a block's successors are usually settled before it.
-        for index in (0..count).rev() {
-            // Successor unions, live/used/defined sets, and every possible
-            // frame-name relation are bounded by this function's value set.
-            control.take(
-                values
-                    .saturating_mul(values)
-                    .saturating_add(values.saturating_mul(12))
-                    .saturating_add(1),
-            )?;
-            let mut out = FxHashSet::default();
-            for successor in func.blocks[index].terminator.successors() {
-                out.extend(live_in[successor.0 as usize].iter().copied());
-            }
-
-            let mut entering = out.clone();
-            entering.extend(used[index].iter().copied());
-            // A frame object is kept alive by whatever names it, and a name is
-            // not a reference here.
-            //
-            // The gap this closes is one `throw` wide. `throw new
-            // RangeError("Invalid code point " + n)` puts the error in the
-            // frame, packs it into an erased value to throw, and the erased
-            // value is what the `catch` reads -- so the object died at the
-            // `Erase` and `rc::release_value` gave its message string back
-            // while the handler was still about to concatenate it. Under
-            // `NTS_RC=1` the next allocation reused the freed buffer and the
-            // answer came back `range:range:d code point 2147483647` where node
-            // says `range:Invalid code point 2147483647`. Six cases, in the one
-            // lane that counts, and nothing in the corpus reached it: the shape
-            // needs a computed message, a frame-placed error, and a `catch`
-            // that reads it back.
-            for value in entering.iter().copied().collect::<Vec<_>>() {
-                if let Some(named) = frame_named_by.get(&value) {
-                    entering.extend(named.iter().copied());
-                }
-                if let Some(handle) = viewed.get(&value) {
-                    entering.insert(*handle);
-                }
-            }
-            for value in &defined[index] {
-                entering.remove(value);
-            }
-
-            if out != live_out[index] || entering != live_in[index] {
-                live_out[index] = out;
-                live_in[index] = entering;
-                changed = true;
-            }
-        }
-        if !changed {
-            converged = true;
-            break;
+    let mut predecessors = vec![Vec::new(); count];
+    let mut edges = 0u128;
+    for (index, block) in func.blocks.iter().enumerate() {
+        for successor in block.terminator.successors() {
+            control.take(1)?;
+            predecessors[successor.0 as usize].push(index);
+            edges += 1;
         }
     }
-    if LIMITED && !converged {
-        return None;
+    let mut pending: VecDeque<usize> = (0..count).rev().collect();
+    let mut queued = vec![true; count];
+    // Every live_in set only grows, at most V times per block. A change
+    // schedules each predecessor once. Initial work adds B. u128 also covers
+    // the product of the addressable usize-sized edge and value inventories.
+    let mut remaining = count as u128 + edges * values as u128;
+    while let Some(index) = pending.pop_front() {
+        step(&mut remaining, "backward propagation")?;
+        queued[index] = false;
+        // Successor unions, live/used/defined sets, and every possible
+        // frame-name relation are bounded by this function's value set.
+        control.take(
+            values
+                .saturating_mul(values)
+                .saturating_add(values.saturating_mul(12))
+                .saturating_add(1),
+        )?;
+        let mut out = FxHashSet::default();
+        for successor in func.blocks[index].terminator.successors() {
+            out.extend(live_in[successor.0 as usize].iter().copied());
+        }
+
+        let mut entering = out.clone();
+        entering.extend(used[index].iter().copied());
+        // A frame object is kept alive by whatever names it, and a name is
+        // not a reference here.
+        //
+        // The gap this closes is one `throw` wide. `throw new
+        // RangeError("Invalid code point " + n)` puts the error in the
+        // frame, packs it into an erased value to throw, and the erased
+        // value is what the `catch` reads -- so the object died at the
+        // `Erase` and `rc::release_value` gave its message string back
+        // while the handler was still about to concatenate it. Under
+        // `NTS_RC=1` the next allocation reused the freed buffer and the
+        // answer came back `range:range:d code point 2147483647` where node
+        // says `range:Invalid code point 2147483647`. Six cases, in the one
+        // lane that counts, and nothing in the corpus reached it: the shape
+        // needs a computed message, a frame-placed error, and a `catch`
+        // that reads it back.
+        for value in entering.iter().copied().collect::<Vec<_>>() {
+            if let Some(named) = frame_named_by.get(&value) {
+                entering.extend(named.iter().copied());
+            }
+            if let Some(handle) = viewed.get(&value) {
+                entering.insert(*handle);
+            }
+        }
+        for value in &defined[index] {
+            entering.remove(value);
+        }
+
+        live_out[index] = out;
+        if entering != live_in[index] {
+            live_in[index] = entering;
+            for &predecessor in &predecessors[index] {
+                control.take(1)?;
+                if !queued[predecessor] {
+                    queued[predecessor] = true;
+                    pending.push_back(predecessor);
+                }
+            }
+        }
     }
 
     let available = (0..count)
@@ -316,11 +349,27 @@ fn analyze_using<const LIMITED: bool>(
         })
         .collect();
 
-    Some(Liveness {
+    Ok(Liveness {
         live_in,
         live_out,
         available,
     })
+}
+
+/// A borrowed native view keeps its counted handle alive.
+fn counted_views(func: &Func) -> FxHashMap<ValueId, ValueId> {
+    func.values
+        .iter()
+        .enumerate()
+        .filter_map(|(at, op)| match op.kind {
+            OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }
+                if func.values[operand.0 as usize].ty.counting().is_some() =>
+            {
+                Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// Values a block reads, including the arguments its terminator passes on.
@@ -358,197 +407,182 @@ fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
 /// [`analyze`] uses it to keep a *frame* object live for as long as anything
 /// can still reach it; [`super::undominated_names`] uses it to find the objects
 /// for which that is impossible.
-#[expect(
-    clippy::expect_used,
-    reason = "the unbounded control never rejects a charge"
-)]
 pub(super) fn object_names_with(
     func: &Func,
     callee_stores: &CalleeStores<'_>,
-) -> FxHashMap<ValueId, Vec<ValueId>> {
-    object_names_using(func, callee_stores, &mut Control::<false> { charge: None })
-        .expect("unbounded aliases cannot exhaust a work budget")
+) -> Result<FxHashMap<ValueId, Vec<ValueId>>, Failure> {
+    object_names_using(func, callee_stores, &mut Control { charge: None })
 }
 
-fn object_names_using<const LIMITED: bool>(
+fn object_names_using(
     func: &Func,
     callee_stores: &CalleeStores<'_>,
-    control: &mut Control<'_, LIMITED>,
-) -> Option<FxHashMap<ValueId, Vec<ValueId>>> {
-    let mut named: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
-
-    let mut converged = false;
-    for _ in 0..ROUND_CAP {
-        let mut changed = false;
-        for block in &func.blocks {
-            control.take(
-                block
-                    .ops
-                    .len()
-                    .saturating_add(block.params.len())
-                    .saturating_add(1),
-            )?;
-            for value in &block.ops {
-                let op = &func.values[value.0 as usize];
-                match &op.kind {
-                    OpKind::Erase { value: inner, .. }
-                    | OpKind::Unerase { value: inner, .. }
-                    | OpKind::FieldView { value: inner, .. }
-                    | OpKind::Convert(inner) => {
-                        changed |= note_name(func, &mut named, *value, *inner, control)?;
-                    }
-                    OpKind::FieldSet {
-                        object: container,
-                        value: stored,
-                        ..
-                    }
-                    | OpKind::ArraySet {
-                        array: container,
-                        value: stored,
-                        ..
-                    } => {
-                        changed |= note_name(func, &mut named, *container, *stored, control)?;
-                    }
-                    OpKind::FieldGet {
-                        object: container, ..
-                    }
-                    | OpKind::ArrayGet {
-                        array: container, ..
-                    } if op.ty.may_hold_a_reference() => {
-                        changed |= note_name(func, &mut named, *value, *container, control)?;
-                    }
-                    // **A store a callee makes is a store too.** See
-                    // [`names_through_a_call`].
-                    OpKind::Call { callee, args, .. }
-                        if !matches!(callee, Callee::External(_) | Callee::Native(_)) =>
-                    {
-                        changed |= names_through_a_call(
-                            func,
-                            &mut named,
-                            (*value, callee, args),
-                            callee_stores,
-                            control,
-                        )?;
-                    }
-                    _ => {}
-                }
+    control: &mut Control<'_>,
+) -> Result<FxHashMap<ValueId, Vec<ValueId>>, Failure> {
+    let edges = name_edges(func, callee_stores, control)?;
+    let mut named: FxHashMap<ValueId, FxHashSet<ValueId>> = FxHashMap::default();
+    let mut pending = VecDeque::new();
+    for (at, op) in func.values.iter().enumerate() {
+        if matches!(op.kind, OpKind::ObjectNew { .. }) {
+            let root = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+            // Root seeds are events, not names: the public relation need not
+            // contain a reflexive root unless a real alias cycle reaches it.
+            pending.push_back((root, root));
+        }
+    }
+    // Each (value, root) is inserted and queued once, plus one seed per root.
+    // This is a structural bug backstop, not an optimization budget.
+    let mut remaining = pending.len() as u128 * (func.values.len() as u128 + 1);
+    while let Some((of, root)) = pending.pop_front() {
+        step(&mut remaining, "alias propagation")?;
+        control.take(edges[of.0 as usize].len())?;
+        for &alias in &edges[of.0 as usize] {
+            if named.entry(alias).or_default().insert(root) {
+                pending.push_back((alias, root));
             }
-            let edges: Vec<(BlockId, &Vec<ValueId>)> = match &block.terminator {
-                Terminator::Jump { target, args } => vec![(*target, args)],
-                Terminator::Branch {
-                    then_target,
-                    then_args,
-                    else_target,
-                    else_args,
+        }
+    }
+    for roots in named.values() {
+        control.take(roots.len().saturating_mul(roots.len()).saturating_add(1))?;
+    }
+    Ok(named
+        .into_iter()
+        .map(|(alias, roots)| {
+            let mut roots: Vec<_> = roots.into_iter().collect();
+            roots.sort_unstable_by_key(|root| root.0);
+            (alias, roots)
+        })
+        .collect())
+}
+
+fn name_edges(
+    func: &Func,
+    callee_stores: &CalleeStores<'_>,
+    control: &mut Control<'_>,
+) -> Result<Vec<FxHashSet<ValueId>>, Failure> {
+    // Build the actual alias edges once. A call's store summary is immutable
+    // during this analysis, so it need not be read again during propagation.
+    control.take(func.values.len())?;
+    let mut edges = vec![FxHashSet::default(); func.values.len()];
+    for block in &func.blocks {
+        control.take(
+            block
+                .ops
+                .len()
+                .saturating_add(block.params.len())
+                .saturating_add(1),
+        )?;
+        for &value in &block.ops {
+            let op = &func.values[value.0 as usize];
+            match &op.kind {
+                OpKind::Erase { value: inner, .. }
+                | OpKind::Unerase { value: inner, .. }
+                | OpKind::FieldView { value: inner, .. }
+                | OpKind::Convert(inner) => {
+                    edges[inner.0 as usize].insert(value);
+                }
+                OpKind::FieldSet {
+                    object: container,
+                    value: stored,
                     ..
-                } => vec![(*then_target, then_args), (*else_target, else_args)],
-                Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {
-                    Vec::new()
                 }
-            };
-            for (target, args) in edges {
-                for (slot, argument) in args.iter().enumerate() {
-                    let Some(param) = func.blocks[target.0 as usize].params.get(slot) else {
-                        continue;
-                    };
-                    changed |= note_name(func, &mut named, *param, *argument, control)?;
+                | OpKind::ArraySet {
+                    array: container,
+                    value: stored,
+                    ..
+                } => {
+                    edges[stored.0 as usize].insert(*container);
                 }
+                OpKind::FieldGet {
+                    object: container, ..
+                }
+                | OpKind::ArrayGet {
+                    array: container, ..
+                } if op.ty.may_hold_a_reference() => {
+                    edges[container.0 as usize].insert(value);
+                }
+                // A store a callee makes is a store too. Known store slots
+                // connect only those arguments; otherwise any argument may
+                // go into any reference-holding argument. A reference result
+                // may name every argument. External/native retained arguments
+                // escape instead, and are never frame-local.
+                OpKind::Call { callee, args, .. }
+                    if !matches!(callee, Callee::External(_) | Callee::Native(_)) =>
+                {
+                    call_name_edges(
+                        func,
+                        &mut edges,
+                        value,
+                        callee,
+                        args,
+                        callee_stores,
+                        control,
+                    )?;
+                }
+                _ => {}
             }
         }
-        if !changed {
-            converged = true;
-            break;
+        let incoming: Vec<(BlockId, &[ValueId])> = match &block.terminator {
+            Terminator::Jump { target, args } => vec![(*target, args)],
+            Terminator::Branch {
+                then_target,
+                then_args,
+                else_target,
+                else_args,
+                ..
+            } => vec![(*then_target, then_args), (*else_target, else_args)],
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
+        };
+        for (target, args) in incoming {
+            control.take(args.len())?;
+            for (&param, &argument) in func.blocks[target.0 as usize].params.iter().zip(args) {
+                edges[argument.0 as usize].insert(param);
+            }
         }
     }
-    if LIMITED && !converged {
-        return None;
-    }
-    Some(named)
+
+    Ok(edges)
 }
 
-/// Record that `alias` names whatever `of` is or names. Whether it grew.
-fn note_name<const LIMITED: bool>(
+fn call_name_edges(
     func: &Func,
-    named: &mut FxHashMap<ValueId, Vec<ValueId>>,
-    alias: ValueId,
-    of: ValueId,
-    control: &mut Control<'_, LIMITED>,
-) -> Option<bool> {
-    let roots = named
-        .get(&of)
-        .map_or(1, |roots| roots.len().saturating_add(1));
-    let existing = named.get(&alias).map_or(0, Vec::len);
-    control.take(roots.saturating_mul(existing.saturating_add(roots).saturating_add(2)))?;
-    let mut roots = named.get(&of).cloned().unwrap_or_default();
-    if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. }) && !roots.contains(&of) {
-        roots.push(of);
-    }
-    if roots.is_empty() {
-        return Some(false);
-    }
-    let here = named.entry(alias).or_default();
-    let mut grew = false;
-    for root in roots {
-        if !here.contains(&root) {
-            here.push(root);
-            grew = true;
-        }
-    }
-    Some(grew)
-}
-
-/// The names a call into a body this program has makes. Whether any grew.
-///
-/// **A store a callee makes is a store too.** `new Holder(item)` runs
-/// `this.value = item` inside the constructor, so the holder names the item
-/// exactly as a `FieldSet` here would -- and `holder.value.name` read after the
-/// item's last direct use was a read of a frame object whose fields had already
-/// been given back. The argument a callee stores another into names it
-/// (`callee_stores`); where that is not known, every argument that can hold a
-/// reference names what the others name. A result that can hold one names
-/// every argument -- a result is made at the call, after all of them, so this
-/// only lengthens a life and never names an object before it exists.
-///
-/// Only a call into a body this program has: a runtime helper or a native
-/// function says which arguments it keeps (`escape::kept_slots`), and what it
-/// keeps escapes, so is never in the frame for this to protect.
-fn names_through_a_call<const LIMITED: bool>(
-    func: &Func,
-    named: &mut FxHashMap<ValueId, Vec<ValueId>>,
-    (result, callee, args): (ValueId, &Callee, &[ValueId]),
+    edges: &mut [FxHashSet<ValueId>],
+    value: ValueId,
+    callee: &Callee,
+    args: &[ValueId],
     callee_stores: &CalleeStores<'_>,
-    control: &mut Control<'_, LIMITED>,
-) -> Option<bool> {
+    control: &mut Control<'_>,
+) -> Result<(), Failure> {
     control.take(
         args.len()
             .saturating_mul(args.len())
-            .saturating_add(args.len())
-            .saturating_add(1),
+            .saturating_add(args.len()),
     )?;
-    let pairs: Vec<(usize, usize)> = match callee_stores(callee) {
-        Some(pairs) => pairs
-            .into_iter()
-            .map(|(what, into)| (what as usize, into as usize))
-            .collect(),
-        None => (0..args.len())
-            .flat_map(|what| (0..args.len()).map(move |into| (what, into)))
-            .filter(|(what, into)| what != into)
-            .collect(),
-    };
-    let mut changed = false;
-    for (what, into) in pairs {
-        if let (Some(kept), Some(container)) = (args.get(what), args.get(into))
-            && func.values[container.0 as usize].ty.may_hold_a_reference()
-        {
-            changed |= note_name(func, named, *container, *kept, control)?;
+    if let Some(pairs) = callee_stores(callee) {
+        control.take(pairs.len())?;
+        for (what, into) in pairs {
+            if let (Some(kept), Some(container)) =
+                (args.get(what as usize), args.get(into as usize))
+                && func.values[container.0 as usize].ty.may_hold_a_reference()
+            {
+                edges[kept.0 as usize].insert(*container);
+            }
+        }
+    } else {
+        for (what, &kept) in args.iter().enumerate() {
+            for (into, &container) in args.iter().enumerate() {
+                if what != into && func.values[container.0 as usize].ty.may_hold_a_reference() {
+                    edges[kept.0 as usize].insert(container);
+                }
+            }
         }
     }
-    if func.values[result.0 as usize].ty.may_hold_a_reference() {
+    if func.values[value.0 as usize].ty.may_hold_a_reference() {
         for kept in args {
-            changed |= note_name(func, named, result, *kept, control)?;
+            edges[kept.0 as usize].insert(value);
         }
     }
-    Some(changed)
+    Ok(())
 }
 
 /// Values a block defines: its operations and its own parameters.
@@ -658,9 +692,9 @@ pub(in crate::hir) mod tests {
     }
 
     #[test]
-    fn bounded_liveness_matches_the_same_unbounded_analysis() {
+    fn optional_charges_do_not_change_a_completed_analysis() {
         let func = branching();
-        let expected = analyze(&func);
+        let expected = analyze(&func).expect("complete liveness");
         let mut charged = 0usize;
         let actual = analyze_limited(&func, &mut |units| {
             charged = charged.checked_add(units).expect("small control");
@@ -672,7 +706,7 @@ pub(in crate::hir) mod tests {
         assert_eq!(actual.live_out, expected.live_out);
         assert_eq!(actual.available, expected.available);
         assert!(
-            analyze_limited(&func, &mut |_| false).is_none(),
+            analyze_limited(&func, &mut |_| false).is_err(),
             "exhaustion must never return a partial answer"
         );
         let mut left = charged - 1;
@@ -684,16 +718,16 @@ pub(in crate::hir) mod tests {
                 left = remaining;
                 true
             })
-            .is_none()
+            .is_err()
         );
     }
 
     #[test]
-    fn bounded_liveness_rejects_a_non_converged_reverse_numbered_graph() {
+    fn backward_liveness_crosses_more_than_1024_reverse_numbered_blocks() {
         let mut func = branching();
         func.values.truncate(1);
         func.params.truncate(1);
-        let count = ROUND_CAP + 2;
+        let count = 1100;
         func.blocks = (0..count)
             .map(|index| Block {
                 params: Vec::new(),
@@ -715,9 +749,134 @@ pub(in crate::hir) mod tests {
                 },
             })
             .collect();
+        let live = analyze(&func).expect("finite lattice completes");
+        for block in 2..count {
+            assert!(
+                live.live_in(BlockId(u32::try_from(block).expect("small graph")))
+                    .contains(&ValueId(0))
+            );
+        }
+        assert!(live.live_out(BlockId(0)).contains(&ValueId(0)));
+        assert!(live.live_in(BlockId(0)).is_empty());
+        let charged = analyze_limited(&func, &mut |_| true).expect("same worklist");
+        assert_eq!(live.live_in, charged.live_in);
+    }
+
+    #[test]
+    fn aliases_cross_more_than_1024_reverse_ordered_conversions_and_a_cycle() {
+        let mut func = branching();
+        func.params.clear();
+        func.values = vec![op(OpKind::ObjectNew { frame: true })];
+        for at in 1..=1100 {
+            func.values.push(op(OpKind::Convert(ValueId(at - 1))));
+        }
+        let mut ops: Vec<_> = (1..=1100).rev().map(ValueId).collect();
+        ops.push(ValueId(0));
+        // A real store closes the alias cycle; only the cycle gives the root
+        // a reflexive name. Each pair still enters the queue once.
+        func.values.push(op(OpKind::FieldSet {
+            object: ValueId(0),
+            field: 0,
+            value: ValueId(1100),
+        }));
+        ops.push(ValueId(1101));
+        func.blocks = vec![Block {
+            params: Vec::new(),
+            ops,
+            terminator: Terminator::Return(Some(ValueId(1100))),
+        }];
+        let names = object_names_with(&func, &|_| None).expect("finite alias closure");
+        assert_eq!(names.len(), 1101);
+        for at in 0..=1100 {
+            assert_eq!(names.get(&ValueId(at)), Some(&vec![ValueId(0)]));
+        }
+    }
+
+    #[test]
+    fn a_verified_long_phi_chain_keeps_every_alias_of_its_frame_root() {
+        use crate::hir::{Layout, ManagedType, Program};
+        use nts_semantic_schema::TypeId;
+        let mut func = branching();
+        let object = HirType::Managed(ManagedType::Object(TypeId(0)));
+        func.params.clear();
+        func.return_type = object.clone();
+        func.values = vec![Op {
+            kind: OpKind::ObjectNew { frame: true },
+            ty: object.clone(),
+            origin: origin(),
+        }];
+        let count = 1100;
+        for _ in 1..=count {
+            func.values.push(Op {
+                kind: OpKind::BlockParam(0),
+                ty: object.clone(),
+                origin: origin(),
+            });
+        }
+        func.blocks = (0..=count)
+            .map(|at| Block {
+                params: if at == 0 {
+                    Vec::new()
+                } else {
+                    vec![ValueId(at)]
+                },
+                ops: if at == 0 {
+                    vec![ValueId(0)]
+                } else {
+                    Vec::new()
+                },
+                terminator: if at == 1 {
+                    Terminator::Return(Some(ValueId(1)))
+                } else {
+                    Terminator::Jump {
+                        target: BlockId(if at == 0 { count } else { at - 1 }),
+                        args: vec![ValueId(at)],
+                    }
+                },
+            })
+            .collect();
+        let program = Program {
+            funcs: vec![func],
+            layouts: vec![Layout {
+                types: vec![TypeId(0)],
+                name: "Root".into(),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..Program::default()
+        };
+        super::super::verify::verify(&program).expect("the forcing graph is valid SSA");
+        let func = &program.funcs[0];
+        let names = object_names_with(func, &|_| None).expect("complete aliases");
+        assert_eq!(names.get(&ValueId(1)), Some(&vec![ValueId(0)]));
+        let live = analyze(func).expect("complete liveness");
         assert!(
-            analyze_limited(&func, &mut |_| true).is_none(),
-            "a fixed-point cap is Unknown even with enough work fuel"
+            live.live_in(BlockId(1)).contains(&ValueId(0)),
+            "the last phi still reaches its frame root"
+        );
+    }
+
+    #[test]
+    fn an_optional_budget_is_a_normal_decline() {
+        assert_eq!(Failure::Budget.for_optional(), Failure::Budget);
+    }
+
+    #[test]
+    #[should_panic(expected = "compiler bug: liveness alias propagation")]
+    fn an_optional_solver_bug_is_loud_in_the_test_matrix() {
+        let _ = Failure::StructuralInvariant("alias propagation").for_optional();
+    }
+
+    #[test]
+    fn a_structural_backstop_is_a_named_compiler_bug() {
+        let error = step(&mut 0, "alias propagation").expect_err("forced bug backstop");
+        assert_eq!(error, Failure::StructuralInvariant("alias propagation"));
+        assert!(
+            error
+                .to_string()
+                .contains("compiler bug: liveness alias propagation")
         );
     }
 
@@ -813,7 +972,7 @@ pub(in crate::hir) mod tests {
 
     #[test]
     fn an_erased_value_names_the_object_inside_it() {
-        let named = object_names_with(&joining(), &|_| None);
+        let named = object_names_with(&joining(), &|_| None).expect("complete aliases");
         assert_eq!(
             named.get(&ValueId(2)).map(Vec::as_slice),
             Some(&[ValueId(1)][..])
@@ -828,7 +987,7 @@ pub(in crate::hir) mod tests {
     /// parameter, and the parameter names whatever every edge hands it.
     #[test]
     fn a_block_parameter_names_both_objects_that_reach_it() {
-        let named = object_names_with(&joining(), &|_| None);
+        let named = object_names_with(&joining(), &|_| None).expect("complete aliases");
         let mut roots = named.get(&ValueId(6)).cloned().unwrap_or_default();
         roots.sort_unstable();
         assert_eq!(roots, vec![ValueId(1), ValueId(4)]);
@@ -881,6 +1040,7 @@ pub(in crate::hir) mod tests {
         }];
         let names_item = |stores: &CalleeStores<'_>, at: ValueId| {
             object_names_with(&func, stores)
+                .expect("complete aliases")
                 .get(&at)
                 .is_some_and(|roots| roots.contains(&ValueId(1)))
         };
@@ -899,7 +1059,7 @@ pub(in crate::hir) mod tests {
     /// its fields back before block 3 reads them.
     #[test]
     fn a_frame_object_outlives_the_erase_that_names_it() {
-        let live = analyze(&joining());
+        let live = analyze(&joining()).expect("complete liveness");
         assert!(live.live_out(BlockId(1)).contains(&ValueId(1)));
         assert!(live.live_in(BlockId(3)).contains(&ValueId(1)));
     }
@@ -907,7 +1067,7 @@ pub(in crate::hir) mod tests {
     #[test]
     fn a_value_is_live_along_the_path_that_reads_it() {
         let func = branching();
-        let live = analyze(&func);
+        let live = analyze(&func).expect("complete liveness");
 
         // %1 is read only in block 1, so it must survive the branch.
         assert!(live.live_out(BlockId(0)).contains(&ValueId(1)));
@@ -922,7 +1082,7 @@ pub(in crate::hir) mod tests {
     #[test]
     fn a_live_range_ends_where_the_last_read_is() {
         let func = branching();
-        let live = analyze(&func);
+        let live = analyze(&func).expect("complete liveness");
 
         // `%1` arrives live in block 1, is read there, and nothing follows.
         assert!(live.dies_in(BlockId(1), ValueId(1)));
@@ -1006,7 +1166,7 @@ pub(in crate::hir) mod tests {
             written_return_elements: Vec::new(),
         };
 
-        let live = analyze(&func);
+        let live = analyze(&func).expect("complete liveness");
         // The header parameter is read in the body and in the exit, so it is
         // live across the whole loop.
         assert!(live.live_out(BlockId(1)).contains(&ValueId(1)));

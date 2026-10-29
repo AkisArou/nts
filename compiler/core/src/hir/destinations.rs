@@ -543,7 +543,10 @@ fn gives_itself_away(
     {
         return false;
     }
-    let live = super::liveness::analyze(func);
+    let Ok(live) = super::liveness::analyze(func).map_err(super::liveness::Failure::for_optional)
+    else {
+        return false;
+    };
     super::own::dies_at(func, &live, block, at_concat, lhs)
         && super::own::fresh(func, lhs, &FxHashMap::default(), &mut FxHashSet::default())
 }

@@ -29,7 +29,7 @@ fn optional_pairs_preserve_bits_absence_null_and_conditional_ownership() {
         assert_eq!(hir::verify::verify(&program), Ok(()));
         if rc {
             program.provider = hir::Memory::ReferenceCounting;
-            hir::rc::insert(&mut program);
+            hir::rc::insert(&mut program).expect("complete RC analysis");
         }
         assert_eq!(hir::verify::verify(&program), Ok(()));
         let emitted = nts_codegen_c::emit(&program, NativeAbi::LP64);

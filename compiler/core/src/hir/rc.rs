@@ -127,7 +127,7 @@ pub struct Report {
     pub move_budget_exhaustions: usize,
 }
 
-pub fn insert(program: &mut Program) -> Report {
+pub fn insert(program: &mut Program) -> Result<Report, nts_diagnostics::Diagnostic> {
     let mut report = Report::default();
     let layouts = program.layouts.clone();
     // The *declared* type of each global, which is not the type of whatever is
@@ -153,6 +153,7 @@ pub fn insert(program: &mut Program) -> Report {
                 },
                 &summaries,
             )
+            .map_err(|failure| failure.diagnostic(func))?
         };
         report.retains += one.retains;
         report.releases += one.releases;
@@ -160,7 +161,7 @@ pub fn insert(program: &mut Program) -> Report {
         report.borrows += one.borrows;
         report.move_budget_exhaustions += one.move_budget_exhaustions;
     }
-    report
+    Ok(report)
 }
 
 /// A deterministic ordering, so one compiler on one input emits one program.
@@ -228,7 +229,11 @@ fn count_only_returns(func: &mut Func, layouts: &[Layout], summaries: &own::Summ
 // separating them puts three sets through a signature to keep two halves of one
 // rule apart.
 #[allow(clippy::too_many_lines)]
-fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summaries) -> Report {
+fn insert_into(
+    func: &mut Func,
+    declared: Declared<'_>,
+    summaries: &own::Summaries,
+) -> Result<Report, liveness::Failure> {
     let layouts = declared.layouts;
     let mut report = Report::default();
     // Read before the blocks are taken out below, because `own::analyze` needs
@@ -239,11 +244,11 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
         .map(|block| block.params.clone())
         .collect();
     let stores = |callee: &super::Callee| summaries.stores_of(callee);
-    let mut live = liveness::analyze_with(func, &stores);
+    let mut live = liveness::analyze_with(func, &stores)?;
     let map = own::analyze(func, layouts, summaries, &mut live);
     let grown = super::appended_results::consumed_left_sides(func);
     let arriving = arriving(func);
-    let frame_names = frame_names(func, &stores);
+    let frame_names = frame_names(func, &stores)?;
     let blocks = std::mem::take(&mut func.blocks);
     let mut rebuilt = Vec::with_capacity(blocks.len());
     // Blocks created to hold an edge's releases. Appended after the originals,
@@ -408,7 +413,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
 
     rebuilt.extend(split_blocks);
     func.blocks = rebuilt;
-    report
+    Ok(report)
 }
 
 /// Whether every use of a value is an `Erase` of it, or of a view of it (a
@@ -497,8 +502,8 @@ struct Block<'a> {
 fn frame_names(
     func: &Func,
     stores: &liveness::CalleeStores<'_>,
-) -> rustc_hash::FxHashMap<ValueId, Vec<ValueId>> {
-    liveness::object_names_with(func, stores)
+) -> Result<rustc_hash::FxHashMap<ValueId, Vec<ValueId>>, liveness::Failure> {
+    Ok(liveness::object_names_with(func, stores)?
         .into_iter()
         .filter_map(|(name, roots)| {
             let framed: Vec<ValueId> = roots
@@ -512,7 +517,7 @@ fn frame_names(
                 .collect();
             (!framed.is_empty()).then_some((name, framed))
         })
-        .collect()
+        .collect())
 }
 
 /// Release each value that dies in this block right after its last use, and
@@ -1810,7 +1815,7 @@ mod tests {
                 terminator: Terminator::Return(Some(ValueId(6))),
             },
         ];
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let gives_back_the_cell = |value: &ValueId| {
             matches!(
@@ -1915,7 +1920,7 @@ mod tests {
                 terminator: Terminator::Return(Some(ValueId(7))),
             },
         ];
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let gives_back_the_cell = |value: &ValueId| {
             matches!(
@@ -1968,7 +1973,7 @@ mod tests {
     #[test]
     fn a_temporary_is_released_after_its_last_use() {
         let mut program = straight(call("use", vec![ValueId(1)], number()), Vec::new());
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         assert_eq!(
             released_after(&program),
             vec![(ValueId(1), Some(ValueId(2)))]
@@ -1984,7 +1989,7 @@ mod tests {
             crate::hir::native::Scalar::Char,
         ));
         let mut program = straight(op(OpKind::Convert(ValueId(1)), pointer), vec![ValueId(2)]);
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         assert_eq!(
             released_after(&program),
             vec![(ValueId(1), Some(ValueId(3)))]
@@ -2005,7 +2010,7 @@ mod tests {
             call("nts_view_bytes", vec![ValueId(1)], bytes),
             vec![ValueId(2)],
         );
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         assert_eq!(
             released_after(&program),
             vec![(ValueId(1), Some(ValueId(3)))]
@@ -2037,7 +2042,7 @@ mod tests {
         ];
         let mut program = straight(op(OpKind::Param(0), number()), Vec::new());
         program.funcs[0].values = values;
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let releases: Vec<usize> = func.blocks[0]
             .ops
@@ -2162,7 +2167,7 @@ mod tests {
                 terminator: Terminator::Return(Some(ValueId(4))),
             },
         ];
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let ops = &func.blocks[4].ops;
         let releases: Vec<usize> = ops
@@ -2254,7 +2259,7 @@ mod tests {
                 terminator: Terminator::Return(Some(ValueId(4))),
             },
         ];
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let released_in = |block: usize| {
             func.blocks[block]
@@ -2353,7 +2358,7 @@ mod tests {
             .collect();
         program.funcs[0].blocks[0].terminator = Terminator::Return(Some(later));
         program.funcs[0].values = values;
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let func = &program.funcs[0];
         let ops = &func.blocks[0].ops;
         // The object, by either name: an erasure at its last use takes its
@@ -2426,7 +2431,7 @@ mod tests {
     #[test]
     fn an_erasure_of_a_dying_value_is_a_move() {
         let mut program = straight(erasure_of_the_string(), vec![ValueId(2)]);
-        let report = insert(&mut program);
+        let report = insert(&mut program).expect("complete RC analysis");
         assert_eq!(
             released_after(&program),
             vec![(ValueId(2), Some(ValueId(3)))]
@@ -2445,7 +2450,7 @@ mod tests {
     #[test]
     fn a_counted_copy_does_not_hold_the_original() {
         let mut program = straight(erasure_of_the_string(), vec![ValueId(2), ValueId(1)]);
-        insert(&mut program);
+        insert(&mut program).expect("complete RC analysis");
         let kinds = counted_kinds(&program);
         let retained = kinds
             .iter()
@@ -2501,7 +2506,7 @@ mod tests {
             ];
             func.blocks[0].ops = (0..7).map(ValueId).collect();
             func.blocks[0].terminator = Terminator::Return(Some(ValueId(6)));
-            insert(&mut program);
+            insert(&mut program).expect("complete RC analysis");
             let kinds = counted_kinds(&program);
             let retained = kinds
                 .iter()
