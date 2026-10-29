@@ -317,3 +317,76 @@ fn measured_native_and_gtk_declarations_match_the_old_scan() {
         "full Gtk surface must be checked"
     );
 }
+
+fn query_symbol(
+    snapshot: &mut SemanticSnapshot,
+    name: &str,
+    flags: nts_semantic_schema::SymbolFlags,
+    declaration: NodeId,
+) -> nts_semantic_schema::SymbolId {
+    let id = nts_semantic_schema::SymbolId(u32::try_from(snapshot.symbols.len()).unwrap());
+    snapshot.symbols.push(nts_semantic_schema::SymbolRecord {
+        name: name.into(),
+        flags,
+        builtin: None,
+        declarations: vec![declaration],
+        declaration_sites: Vec::new(),
+        ty: None,
+        aliased: None,
+        library: None,
+    });
+    id
+}
+
+#[test]
+fn a_declared_base_is_found_after_more_than_64_class_children() {
+    for members in [8, 80] {
+        let mut snapshot = SemanticSnapshot::default();
+        let base = node(
+            &mut snapshot,
+            NodeKind::Syntax(syntax::CLASS_DECLARATION),
+            None,
+        );
+        let symbol = query_symbol(
+            &mut snapshot,
+            "Base",
+            nts_semantic_schema::SymbolFlags::CLASS,
+            base,
+        );
+        let child = node(
+            &mut snapshot,
+            NodeKind::Syntax(syntax::CLASS_DECLARATION),
+            None,
+        );
+        let heritage = node(
+            &mut snapshot,
+            NodeKind::Syntax(syntax::HERITAGE_CLAUSE),
+            Some(child),
+        );
+        let applied = node(
+            &mut snapshot,
+            NodeKind::Syntax(syntax::EXPRESSION_WITH_TYPE_ARGUMENTS),
+            Some(heritage),
+        );
+        let named = node(
+            &mut snapshot,
+            NodeKind::Syntax(syntax::IDENTIFIER),
+            Some(applied),
+        );
+        snapshot.nodes[named.0 as usize].symbol = Some(symbol);
+        for _ in 0..members {
+            node(
+                &mut snapshot,
+                NodeKind::Syntax(syntax::METHOD_DECLARATION),
+                Some(child),
+            );
+        }
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let probe = FuncBuilder::probe(&indexed);
+        assert_eq!(
+            super::declared_base_class(&snapshot, &probe, child),
+            Some(symbol.0),
+            "{members} members"
+        );
+    }
+}

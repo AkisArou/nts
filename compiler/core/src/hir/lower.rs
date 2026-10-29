@@ -6413,8 +6413,11 @@ fn declared_base_class(
         return None;
     }
     let mut pending: Vec<NodeId> = probe.children(declaration);
-    for _ in 0..64 {
-        let at = pending.pop()?;
+    let mut seen = rustc_hash::FxHashSet::default();
+    while let Some(at) = pending.pop() {
+        if !seen.insert(at) {
+            continue;
+        }
         match probe.kind_of(at) {
             Some(syntax::HERITAGE_CLAUSE | syntax::EXPRESSION_WITH_TYPE_ARGUMENTS) => {
                 pending.extend(probe.children(at));
