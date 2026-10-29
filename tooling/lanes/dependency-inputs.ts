@@ -145,8 +145,9 @@ export async function acquireRevision(root:string,repo:string,revision:string):P
       if(existsSync(record)) {
         const previous=JSON.parse(readFileSync(record,"utf8"));
         if(previous.version!==1||previous.acquired!==true||JSON.stringify(previous.identity)!==JSON.stringify(id))throw failure("dependency identity record changed");
-        return id.key;
       }
+      // A record is provenance, not proof that regenerable content still
+      // exists. pnpm validates the store and acquires any missing bytes.
       await pnpm(tree,["fetch","--frozen-lockfile","--ignore-scripts","--verify-store-integrity","--fetch-retries=0","--store-dir",storeAt(root,id),"--reporter=append-only"]);
       const after=await identity(tree);
       if(after.key!==id.key) {

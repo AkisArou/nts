@@ -108,3 +108,16 @@ test("scoped workspace links bind to the frozen tree while registry content stay
   const linked=join(fixture.frozen,"test/new-importer/node_modules/@nts/fixture-workspace");assert.equal(realpathSync(linked),join(fixture.frozen,"test/supplier"));
   const probe=await command(process.execPath,[join(fixture.frozen,"test/new-importer/workspace-probe.mjs")],fixture.frozen);assert.equal(probe.status,0,probe.stderr);assert.equal(probe.stdout.trim(),new URL("test/supplier/index.js",pathToFileURL(fixture.frozen+"/")).href);assert.equal(treeIdentity(fixture.main),fixture.mainIdentity);
 });
+
+test("submission preparation reacquires deleted content despite a retained identity record",async t=>{
+  const fixture=await registryInputsFixture(t,async fixture=>{
+    const cache=dependencyCache(fixture.main);t.after(()=>rmSync(cache,{recursive:true,force:true}));
+    await acquireRevision(fixture.main,fixture.candidate,"HEAD");
+    for(const name of readdirSync(cache))if(name.startsWith("pnpm-"))rmSync(join(cache,name),{recursive:true,force:true});
+    const before=fixture.registryRequests.filter(path=>path.endsWith("/-/package.tgz")).length;
+    await acquireRevision(fixture.main,fixture.candidate,"HEAD");
+    assert.equal(fixture.registryRequests.filter(path=>path.endsWith("/-/package.tgz")).length-before,1);
+  });
+  const result=await prepare(fixture);assert.equal(result.status,0,result.stdout+result.stderr);
+  const probe=await command(process.execPath,[join(fixture.frozen,"test/new-importer/probe.mjs")],fixture.frozen);assert.equal(probe.status,0,probe.stderr);assert.equal(probe.stdout.trim(),REGISTRY_FIXTURE_MARKER);assert.equal(treeIdentity(fixture.main),fixture.mainIdentity);
+});

@@ -107,7 +107,7 @@ export async function registryInputsFixture(t: TestContext,
     packageManager: "pnpm@10.15.0" }));
   writeFileSync(join(main, "pnpm-workspace.yaml"), "packages:\n  - test/*\n");
   writeFileSync(join(main, ".gitignore"), "node_modules/\n");
-  writeFileSync(join(main, ".npmrc"), `registry=${origin}/\nstore-dir=${store}\nverify-store-integrity=true\n`);
+  writeFileSync(join(main, ".npmrc"), `registry=${origin}/\nstore-dir=${store}\ncache-dir=${join(root,"metadata-cache")}\nstate-dir=${join(root,"state")}\nverify-store-integrity=true\n`);
   const git = (cwd: string, args: string[]) => checked("git", ["-c", "commit.gpgsign=false",
     "-c", "core.hooksPath=/dev/null", "-c", "user.name=Registry input fixture",
     "-c", "user.email=fixture@example.invalid", ...args], cwd);
